@@ -24,6 +24,7 @@
   "office_address",
   "working_since"
  ],
+ "search_fields": "first_name,email",
  "fields": [
   {
    "fieldname": "personal_section",
@@ -112,9 +113,14 @@
   }
  ],
  "index_web_pages_for_search": 1,
- "links": [],
- "modified": "2026-04-14 12:15:43.457239",
- "modified_by": "varun@sevamrita.org",
+ "links": [
+  {
+   "link_doctype": "Participation",
+   "link_fieldname": "Volunteer"
+  }
+ ],
+ "modified": "2026-04-14 19:00:46.333031",
+ "modified_by": "Administrator",
  "module": "Volunteering",
  "name": "Volunteer",
  "naming_rule": "Expression",
@@ -136,5 +142,6 @@
  "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": []
+ "states": [],
+ "title_field": "first_name"
 }
