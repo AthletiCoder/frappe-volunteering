@@ -24,7 +24,6 @@
   "office_address",
   "working_since"
  ],
- "search_fields": "first_name,email",
  "fields": [
   {
    "fieldname": "personal_section",
@@ -74,7 +73,7 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
-   "options": "Active\nInactive\nBlacklisted"
+   "options": "Active\nStar\nInactive"
   },
   {
    "fieldname": "employment_section",
@@ -119,7 +118,7 @@
    "link_fieldname": "Volunteer"
   }
  ],
- "modified": "2026-04-14 19:00:46.333031",
+ "modified": "2026-04-14 21:05:25.223438",
  "modified_by": "Administrator",
  "module": "Volunteering",
  "name": "Volunteer",
@@ -140,6 +139,7 @@
   }
  ],
  "row_format": "Dynamic",
+ "search_fields": "first_name,email",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],

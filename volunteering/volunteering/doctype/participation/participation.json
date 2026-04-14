@@ -9,24 +9,30 @@
   "participation_section",
   "volunteer",
   "event",
-  "status",
+  "screenshot",
   "column_break_jilv",
-  "form_placeholder",
+  "status",
+  "logging",
+  "hours_logged",
   "registration_info_section",
   "temp_full_name",
+  "temp_company",
   "temp_phone",
   "temp_email",
-  "temp_employee_id",
-  "temp_company",
+  "kits_requested",
+  "column_break_hnnv",
   "comments",
-  "column_break_hnnv"
+  "temp_employee_id",
+  "form_placeholder"
  ],
  "fields": [
   {
    "fieldname": "volunteer",
    "fieldtype": "Link",
    "label": "Volunteer",
-   "options": "Volunteer"
+   "options": "Volunteer",
+   "reqd": 1,
+   "search_index": 1
   },
   {
    "fieldname": "event",
@@ -34,13 +40,14 @@
    "in_list_view": 1,
    "label": "Event",
    "options": "NGO Event",
-   "reqd": 1
+   "reqd": 1,
+   "search_index": 1
   },
   {
    "default": "Registered",
    "fieldname": "status",
    "fieldtype": "Select",
-   "label": "Status",
+   "label": "Attendance",
    "options": "Registered\nAttended\nNo Show"
   },
   {
@@ -96,10 +103,31 @@
   {
    "fieldname": "column_break_hnnv",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "screenshot",
+   "fieldtype": "Attach",
+   "label": "Screenshot"
+  },
+  {
+   "fieldname": "logging",
+   "fieldtype": "Select",
+   "label": "Logging",
+   "options": "Not Responding\nLogged"
+  },
+  {
+   "fieldname": "hours_logged",
+   "fieldtype": "Float",
+   "label": "Hours Logged"
+  },
+  {
+   "fieldname": "kits_requested",
+   "fieldtype": "Int",
+   "label": "Kits Requested"
   }
  ],
  "links": [],
- "modified": "2026-04-14 18:35:09.882015",
+ "modified": "2026-04-14 21:25:33.372872",
  "modified_by": "Administrator",
  "module": "Volunteering",
  "name": "Participation",
