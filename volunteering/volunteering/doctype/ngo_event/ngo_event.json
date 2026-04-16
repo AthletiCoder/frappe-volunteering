@@ -117,9 +117,13 @@
   {
    "link_doctype": "Participation",
    "link_fieldname": "Event"
+  },
+  {
+   "link_doctype": "Gift Hamper",
+   "link_fieldname": "Event"
   }
  ],
- "modified": "2026-04-14 21:18:11.494467",
+ "modified": "2026-04-15 16:07:31.365983",
  "modified_by": "Administrator",
  "module": "Volunteering",
  "name": "NGO Event",

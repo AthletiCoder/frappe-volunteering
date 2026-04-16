@@ -4,7 +4,8 @@ from frappe.model.document import Document
 class Participation(Document):
     def before_insert(self):
         # Triggered when Web Form submits new record
-        self.event = frappe.db.get_value("NGO Event", {"name": self.form_placeholder}, "name")
+        if not self.event:
+            self.event = frappe.db.get_value("NGO Event", {"name": self.form_placeholder}, "name")
         if self.temp_phone:
             self.link_volunteer()
 
