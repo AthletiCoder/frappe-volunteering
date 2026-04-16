@@ -1,0 +1,78 @@
+{
+  "actions": [],
+  "allow_rename": 1,
+  "autoname": "GIFT-{event}-{volunteer}",
+  "creation": "2026-04-15 12:10:00.000000",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "fields": [
+    {
+      "fieldname": "volunteer",
+      "fieldtype": "Link",
+      "label": "Volunteer",
+      "options": "Volunteer",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "event",
+      "fieldtype": "Link",
+      "label": "Event",
+      "options": "NGO Event",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "participation",
+      "fieldtype": "Link",
+      "label": "Participation",
+      "options": "Participation"
+    },
+    { "fieldname": "col_break", "fieldtype": "Column Break" },
+    {
+      "fieldname": "gift_hamper",
+      "fieldtype": "Link",
+      "label": "Gift Hamper",
+      "options": "Gift Hamper",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "label": "Status",
+      "options": "Pending\nShipped\nDelivered",
+      "default": "Pending",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "shipped_date",
+      "fieldtype": "Date",
+      "label": "Shipped Date"
+    },
+    { "fieldname": "sb_meta", "fieldtype": "Section Break" },
+    {
+      "fieldname": "stock_entry",
+      "fieldtype": "Link",
+      "label": "Stock Entry",
+      "options": "Stock Entry",
+      "read_only": 1
+    },
+    { "fieldname": "comments", "fieldtype": "Small Text", "label": "Comments" }
+  ],
+  "module": "Volunteering",
+  "name": "Reciprocation",
+  "permissions": [
+    {
+      "create": 1,
+      "delete": 1,
+      "email": 1,
+      "export": 1,
+      "print": 1,
+      "read": 1,
+      "report": 1,
+      "role": "System Manager",
+      "share": 1,
+      "write": 1
+    }
+  ]
+}

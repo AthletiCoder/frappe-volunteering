@@ -1,0 +1,66 @@
+{
+  "actions": [],
+  "autoname": "field:hamper_name",
+  "creation": "2026-04-15 12:05:00.000000",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "fields": [
+    {
+      "fieldname": "hamper_name",
+      "fieldtype": "Data",
+      "label": "Hamper Name",
+      "unique": 1,
+      "reqd": 1
+    },
+    {
+      "fieldname": "tier",
+      "fieldtype": "Select",
+      "label": "Tier",
+      "options": "Standard\nReminder\nDeluxe",
+      "reqd": 1
+    },
+    {
+      "fieldname": "event",
+      "fieldtype": "Link",
+      "label": "Linked Event",
+      "options": "NGO Event"
+    },
+    { 
+      "fieldname": "sb_items",
+      "fieldtype": "Section Break",
+      "label": "Items"
+    },
+    {
+      "fieldname": "items",
+      "fieldtype": "Table",
+      "label": "Hamper Items",
+      "options": "Gift Hamper Item"
+    },
+    {
+      "fieldname": "sb_cost",
+      "fieldtype": "Section Break"
+    },
+    {
+      "fieldname": "total_cost",
+      "fieldtype": "Currency",
+      "label": "Total Hamper Cost",
+      "read_only": 1
+    }
+  ],
+  "module": "Volunteering",
+  "name": "Gift Hamper",
+  "permissions": [
+    {
+      "create": 1,
+      "delete": 1,
+      "email": 1,
+      "export": 1,
+      "print": 1,
+      "read": 1,
+      "report": 1,
+      "role": "System Manager",
+      "share": 1,
+      "write": 1
+    }
+  ]
+}

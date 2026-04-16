@@ -1,0 +1,151 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "EVNT-.YYYY.-.#####",
+ "creation": "2026-04-14 12:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "event_details_section",
+  "title",
+  "startdate",
+  "enddate",
+  "col_break_1",
+  "event_type",
+  "status",
+  "project",
+  "location_section",
+  "location_name",
+  "latitude",
+  "longitude",
+  "col_break_2",
+  "address",
+  "description_section",
+  "description"
+ ],
+ "fields": [
+  {
+   "fieldname": "event_details_section",
+   "fieldtype": "Section Break",
+   "label": "Event Details"
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Event Title",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "event_type",
+   "fieldtype": "Select",
+   "label": "Event Type",
+   "options": "Workshop\nFundraiser\nField Work\nOther"
+  },
+  {
+   "fieldname": "startdate",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Start Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "enddate",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "End Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Planned",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Planned\nRegistrations\nShipping\nFollowup\nClosed"
+  },
+  {
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "label": "Link to Project",
+   "options": "Project"
+  },
+  {
+   "fieldname": "location_section",
+   "fieldtype": "Section Break",
+   "label": "Location"
+  },
+  {
+   "fieldname": "location_name",
+   "fieldtype": "Data",
+   "label": "Location Name"
+  },
+  {
+   "fieldname": "latitude",
+   "fieldtype": "Float",
+   "label": "Latitude"
+  },
+  {
+   "fieldname": "longitude",
+   "fieldtype": "Float",
+   "label": "Longitude"
+  },
+  {
+   "fieldname": "col_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "address",
+   "fieldtype": "Small Text",
+   "label": "Full Address"
+  },
+  {
+   "fieldname": "description_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Text Editor",
+   "label": "Description"
+  }
+ ],
+ "links": [
+  {
+   "link_doctype": "Participation",
+   "link_fieldname": "Event"
+  },
+  {
+   "link_doctype": "Gift Hamper",
+   "link_fieldname": "Event"
+  }
+ ],
+ "modified": "2026-04-15 16:07:31.365983",
+ "modified_by": "Administrator",
+ "module": "Volunteering",
+ "name": "NGO Event",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "title",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
