@@ -120,6 +120,19 @@ app_license = "mit"
 # -----------
 # Permissions evaluated in scripted ways
 
+# Permission Query Conditions
+# This restricts which records appear in List View/Search
+permission_query_conditions = {
+    "Volunteer": "volunteering.volunteering.doctype.volunteer.volunteer.get_permission_query_conditions",
+    "Participation": "volunteering.volunteering.doctype.participation.participation.get_permission_query_conditions",
+    "Reciprocation": "volunteering.volunteering.doctype.reciprocation.reciprocation.get_permission_query_conditions",
+}
+
+# Override "Has Permission" logic for specific row-level updates
+has_permission = {
+    "Volunteer": "volunteering.volunteering.doctype.volunteer.volunteer.has_permission",
+}
+
 # permission_query_conditions = {
 # 	"Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
 # }
@@ -250,3 +263,17 @@ app_license = "mit"
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
 
+fixtures = [
+    {
+        "dt": "Role", 
+        "filters": [
+            [
+                "name",
+                "in", 
+                [
+                    "NGO Admin", "NGO Coordinator", "NGO Member"
+                ]
+            ]
+        ]
+    },
+]
