@@ -84,7 +84,7 @@
    "fieldname": "employer",
    "fieldtype": "Select",
    "label": "Employer",
-   "options": "Microsoft\nNvidia\nDell"
+   "options": "Microsoft\nDell\nNvidia\nMicron\nVirtusa\nOthers"
   },
   {
    "fieldname": "designation",
@@ -118,7 +118,7 @@
    "link_fieldname": "Volunteer"
   }
  ],
- "modified": "2026-04-14 21:05:25.223438",
+ "modified": "2026-04-19 18:19:52.765491",
  "modified_by": "Administrator",
  "module": "Volunteering",
  "name": "Volunteer",

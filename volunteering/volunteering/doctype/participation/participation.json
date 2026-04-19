@@ -77,8 +77,9 @@
   },
   {
    "fieldname": "temp_company",
-   "fieldtype": "Data",
-   "label": "Company"
+   "fieldtype": "Select",
+   "label": "Company",
+   "options": "Microsoft\nDell\nNvidia\nMicron\nVirtusa\nOthers"
   },
   {
    "fieldname": "comments",
@@ -127,7 +128,7 @@
   }
  ],
  "links": [],
- "modified": "2026-04-14 21:25:33.372872",
+ "modified": "2026-04-19 18:19:29.594989",
  "modified_by": "Administrator",
  "module": "Volunteering",
  "name": "Participation",
