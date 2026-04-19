@@ -264,16 +264,6 @@ has_permission = {
 # ignore_translatable_strings_from = []
 
 fixtures = [
-    {
-        "dt": "Role", 
-        "filters": [
-            [
-                "name",
-                "in", 
-                [
-                    "NGO Admin", "NGO Coordinator", "NGO Member"
-                ]
-            ]
-        ]
-    },
+    {"dt": "Role", "filters": [["name", "in", ["NGO Admin", "NGO Coordinator", "NGO Member"]]]},
+    {"dt": "Web Form", "filters": [["module", "=", "Volunteering"]]}
 ]
