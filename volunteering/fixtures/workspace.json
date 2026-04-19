@@ -1,0 +1,39 @@
+[
+ {
+  "app": "volunteering",
+  "charts": [],
+  "content": "[{\"id\":\"zvmKy_WHTb\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Volunteering Workspace</span>\",\"col\":12}},{\"id\":\"kWszOKPEFa\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"Recent Events\",\"col\":4}}]",
+  "custom_blocks": [],
+  "docstatus": 0,
+  "doctype": "Workspace",
+  "external_link": null,
+  "for_user": null,
+  "hide_custom": 0,
+  "icon": "hand-heart",
+  "indicator_color": "green",
+  "is_hidden": 0,
+  "label": "Volunteering",
+  "link_to": null,
+  "link_type": "DocType",
+  "links": [],
+  "modified": "2026-04-14 14:51:22.192055",
+  "module": "Volunteering",
+  "name": "Volunteering",
+  "number_cards": [],
+  "parent_page": null,
+  "public": 1,
+  "quick_lists": [
+   {
+    "document_type": "NGO Event",
+    "label": "Recent Events",
+    "quick_list_filter": "[]"
+   }
+  ],
+  "restrict_to_domain": null,
+  "roles": [],
+  "sequence_id": 0.0,
+  "shortcuts": [],
+  "title": "Volunteering",
+  "type": "Workspace"
+ }
+]
