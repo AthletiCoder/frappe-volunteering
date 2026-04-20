@@ -45,7 +45,8 @@
   {
    "fieldname": "mobile_number",
    "fieldtype": "Phone",
-   "label": "Mobile Number"
+   "label": "Mobile Number",
+   "reqd": 1
   },
   {
    "fieldname": "email",
@@ -118,7 +119,7 @@
    "link_fieldname": "Volunteer"
   }
  ],
- "modified": "2026-04-19 18:19:52.765491",
+ "modified": "2026-04-20 14:31:18.302038",
  "modified_by": "Administrator",
  "module": "Volunteering",
  "name": "Volunteer",

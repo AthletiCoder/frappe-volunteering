@@ -41,7 +41,7 @@
    "fieldname": "event_type",
    "fieldtype": "Select",
    "label": "Event Type",
-   "options": "Workshop\nFundraiser\nField Work\nOther"
+   "options": "Distribution\nFundraiser\nField Work\nOther"
   },
   {
    "fieldname": "startdate",
