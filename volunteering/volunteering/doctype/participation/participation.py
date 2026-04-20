@@ -22,7 +22,8 @@ class Participation(Document):
                 "email": self.temp_email,
                 "mobile_number": self.temp_phone,
                 "employee_id": self.temp_employee_id,
-                "employer": self.temp_company
+                "employer": self.temp_company,
+                "address": self.temp_address
             })
             vol.insert(ignore_permissions=True)
             print("Created new volunteer")

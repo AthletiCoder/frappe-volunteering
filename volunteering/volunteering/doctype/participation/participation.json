@@ -14,16 +14,18 @@
   "status",
   "logging",
   "hours_logged",
+  "extra_details_section",
+  "extra_details",
   "registration_info_section",
   "temp_full_name",
   "temp_company",
+  "temp_employee_id",
   "temp_phone",
   "temp_email",
-  "kits_requested",
+  "form_placeholder",
   "column_break_hnnv",
-  "comments",
-  "temp_employee_id",
-  "form_placeholder"
+  "temp_address",
+  "comments"
  ],
  "fields": [
   {
@@ -49,6 +51,17 @@
    "fieldtype": "Select",
    "label": "Attendance",
    "options": "Registered\nAttended\nNo Show"
+  },
+  {
+   "fieldname": "extra_details_section",
+   "fieldtype": "Section Break",
+   "label": "Event Specific Details"
+  },
+  {
+   "fieldname": "extra_details",
+   "fieldtype": "Table",
+   "label": "Extra Details",
+   "options": "Participation Extra Detail"
   },
   {
    "fieldname": "registration_info_section",
@@ -122,13 +135,13 @@
    "label": "Hours Logged"
   },
   {
-   "fieldname": "kits_requested",
-   "fieldtype": "Int",
-   "label": "Kits Requested"
+   "fieldname": "temp_address",
+   "fieldtype": "Small Text",
+   "label": "Address"
   }
  ],
  "links": [],
- "modified": "2026-04-19 18:19:29.594989",
+ "modified": "2026-04-20 14:30:17.829507",
  "modified_by": "Administrator",
  "module": "Volunteering",
  "name": "Participation",
