@@ -1,168 +1,199 @@
 {
- "actions": [],
- "allow_rename": 1,
- "autoname": "PRTN-.YYYY.-.#####",
- "creation": "2026-04-14 12:00:00",
- "doctype": "DocType",
- "engine": "InnoDB",
- "field_order": [
-  "participation_section",
-  "volunteer",
-  "event",
-  "screenshot",
-  "column_break_jilv",
-  "status",
-  "logging",
-  "hours_logged",
-  "extra_details_section",
-  "extra_details",
-  "registration_info_section",
-  "temp_full_name",
-  "temp_company",
-  "temp_employee_id",
-  "temp_phone",
-  "temp_email",
-  "form_placeholder",
-  "column_break_hnnv",
-  "temp_address",
-  "comments"
- ],
- "fields": [
-  {
-   "fieldname": "volunteer",
-   "fieldtype": "Link",
-   "label": "Volunteer",
-   "options": "Volunteer",
-   "reqd": 1,
-   "search_index": 1
-  },
-  {
-   "fieldname": "event",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Event",
-   "options": "NGO Event",
-   "reqd": 1,
-   "search_index": 1
-  },
-  {
-   "default": "Registered",
-   "fieldname": "status",
-   "fieldtype": "Select",
-   "label": "Attendance",
-   "options": "Registered\nAttended\nNo Show"
-  },
-  {
-   "fieldname": "extra_details_section",
-   "fieldtype": "Section Break",
-   "label": "Event Specific Details"
-  },
-  {
-   "fieldname": "extra_details",
-   "fieldtype": "Table",
-   "label": "Extra Details",
-   "options": "Participation Extra Detail"
-  },
-  {
-   "fieldname": "registration_info_section",
-   "fieldtype": "Section Break",
-   "label": "Registration Info (Web Form)"
-  },
-  {
-   "fieldname": "temp_full_name",
-   "fieldtype": "Data",
-   "label": "Full Name"
-  },
-  {
-   "fieldname": "temp_phone",
-   "fieldtype": "Phone",
-   "label": "Phone"
-  },
-  {
-   "fieldname": "temp_email",
-   "fieldtype": "Data",
-   "label": "Email"
-  },
-  {
-   "fieldname": "temp_employee_id",
-   "fieldtype": "Data",
-   "label": "Employee ID"
-  },
-  {
-   "fieldname": "temp_company",
-   "fieldtype": "Select",
-   "label": "Company",
-   "options": "Microsoft\nDell\nNvidia\nMicron\nVirtusa\nOthers"
-  },
-  {
-   "fieldname": "comments",
-   "fieldtype": "Small Text",
-   "label": "Comments"
-  },
-  {
-   "fieldname": "participation_section",
-   "fieldtype": "Section Break",
-   "label": "Participation"
-  },
-  {
-   "fieldname": "column_break_jilv",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "form_placeholder",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Form Placeholder"
-  },
-  {
-   "fieldname": "column_break_hnnv",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "screenshot",
-   "fieldtype": "Attach",
-   "label": "Screenshot"
-  },
-  {
-   "fieldname": "logging",
-   "fieldtype": "Select",
-   "label": "Logging",
-   "options": "Not Responding\nLogged"
-  },
-  {
-   "fieldname": "hours_logged",
-   "fieldtype": "Float",
-   "label": "Hours Logged"
-  },
-  {
-   "fieldname": "temp_address",
-   "fieldtype": "Small Text",
-   "label": "Address"
-  }
- ],
- "links": [],
- "modified": "2026-04-20 14:30:17.829507",
- "modified_by": "Administrator",
- "module": "Volunteering",
- "name": "Participation",
- "naming_rule": "Expression",
- "owner": "Administrator",
- "permissions": [
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
-  }
- ],
- "row_format": "Dynamic",
- "sort_field": "creation",
- "sort_order": "DESC",
- "states": []
+  "actions": [],
+  "allow_rename": 1,
+  "autoname": "PRTN-.YYYY.-.#####",
+  "creation": "2026-04-14 12:00:00",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "field_order": [
+    "participation_section",
+    "volunteer",
+    "event",
+    "screenshot",
+    "column_break_jilv",
+    "status",
+    "logging",
+    "hours_logged",
+    "extra_details_section",
+    "extra_details",
+    "registration_info_section",
+    "temp_full_name",
+    "temp_company",
+    "temp_employee_id",
+    "temp_phone",
+    "temp_email",
+    "form_placeholder",
+    "column_break_hnnv",
+    "temp_address",
+    "comments"
+  ],
+  "fields": [
+    {
+      "fieldname": "volunteer",
+      "fieldtype": "Link",
+      "label": "Volunteer",
+      "options": "Volunteer",
+      "reqd": 1,
+      "search_index": 1
+    },
+    {
+      "fieldname": "event",
+      "fieldtype": "Link",
+      "in_list_view": 1,
+      "label": "Event",
+      "options": "NGO Event",
+      "reqd": 1,
+      "search_index": 1
+    },
+    {
+      "default": "Registered",
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "label": "Attendance",
+      "options": "Registered\nAttended\nNo Show"
+    },
+    {
+      "fieldname": "extra_details_section",
+      "fieldtype": "Section Break",
+      "label": "Event Specific Details"
+    },
+    {
+      "fieldname": "extra_details",
+      "fieldtype": "Table",
+      "label": "Extra Details",
+      "options": "Participation Extra Detail"
+    },
+    {
+      "fieldname": "registration_info_section",
+      "fieldtype": "Section Break",
+      "label": "Registration Info (Web Form)"
+    },
+    {
+      "fieldname": "temp_full_name",
+      "fieldtype": "Data",
+      "label": "Full Name"
+    },
+    {
+      "fieldname": "temp_phone",
+      "fieldtype": "Phone",
+      "label": "Phone"
+    },
+    {
+      "fieldname": "temp_email",
+      "fieldtype": "Data",
+      "label": "Email"
+    },
+    {
+      "fieldname": "temp_employee_id",
+      "fieldtype": "Data",
+      "label": "Employee ID"
+    },
+    {
+      "fieldname": "temp_company",
+      "fieldtype": "Select",
+      "label": "Company",
+      "options": "Microsoft\nDell\nNvidia\nMicron\nVirtusa\nOthers"
+    },
+    {
+      "fieldname": "comments",
+      "fieldtype": "Small Text",
+      "label": "Comments"
+    },
+    {
+      "fieldname": "participation_section",
+      "fieldtype": "Section Break",
+      "label": "Participation"
+    },
+    {
+      "fieldname": "column_break_jilv",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "form_placeholder",
+      "fieldtype": "Data",
+      "hidden": 1,
+      "label": "Form Placeholder"
+    },
+    {
+      "fieldname": "column_break_hnnv",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "screenshot",
+      "fieldtype": "Attach",
+      "label": "Screenshot"
+    },
+    {
+      "fieldname": "logging",
+      "fieldtype": "Select",
+      "label": "Logging",
+      "options": "Not Responding\nLogged"
+    },
+    {
+      "fieldname": "hours_logged",
+      "fieldtype": "Float",
+      "label": "Hours Logged"
+    },
+    {
+      "fieldname": "temp_address",
+      "fieldtype": "Small Text",
+      "label": "Address"
+    }
+  ],
+  "links": [],
+  "modified": "2026-04-20 14:30:17.829507",
+  "modified_by": "Administrator",
+  "module": "Volunteering",
+  "name": "Participation",
+  "naming_rule": "Expression",
+  "owner": "Administrator",
+  "permissions": [
+    {
+      "create": 1,
+      "delete": 1,
+      "email": 1,
+      "export": 1,
+      "print": 1,
+      "read": 1,
+      "report": 1,
+      "role": "System Manager",
+      "share": 1,
+      "write": 1
+    },
+    {
+      "role": "NGO Admin",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "email": 1,
+      "print": 1,
+      "export": 1,
+      "report": 1,
+      "share": 1
+    },
+    {
+      "role": "NGO Coordinator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0,
+      "email": 1,
+      "print": 1,
+      "export": 1,
+      "report": 1,
+      "share": 1
+    },
+    {
+      "role": "NGO Member",
+      "read": 1,
+      "write": 0,
+      "if_owner": 1,
+      "description": "Members can view their own participation records but not edit them"
+    }
+  ],
+  "row_format": "Dynamic",
+  "sort_field": "creation",
+  "sort_order": "DESC",
+  "states": []
 }

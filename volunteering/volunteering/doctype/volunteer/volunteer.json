@@ -1,148 +1,179 @@
 {
- "actions": [],
- "allow_rename": 1,
- "autoname": "VLTR-.YYYY.-.#####",
- "creation": "2026-04-14 12:00:00",
- "doctype": "DocType",
- "editable_grid": 1,
- "engine": "InnoDB",
- "field_order": [
-  "personal_section",
-  "first_name",
-  "last_name",
-  "mobile_number",
-  "email",
-  "col_break_1",
-  "address",
-  "pincode",
-  "status",
-  "employment_section",
-  "employer",
-  "designation",
-  "employee_id",
-  "col_break_2",
-  "office_address",
-  "working_since"
- ],
- "fields": [
-  {
-   "fieldname": "personal_section",
-   "fieldtype": "Section Break",
-   "label": "Personal"
-  },
-  {
-   "fieldname": "first_name",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "First Name",
-   "reqd": 1
-  },
-  {
-   "fieldname": "last_name",
-   "fieldtype": "Data",
-   "label": "Last Name"
-  },
-  {
-   "fieldname": "mobile_number",
-   "fieldtype": "Phone",
-   "label": "Mobile Number",
-   "reqd": 1
-  },
-  {
-   "fieldname": "email",
-   "fieldtype": "Data",
-   "label": "Email",
-   "options": "Email",
-   "unique": 1
-  },
-  {
-   "fieldname": "col_break_1",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "address",
-   "fieldtype": "Small Text",
-   "label": "Address"
-  },
-  {
-   "fieldname": "pincode",
-   "fieldtype": "Data",
-   "label": "Pincode"
-  },
-  {
-   "default": "Active",
-   "fieldname": "status",
-   "fieldtype": "Select",
-   "label": "Status",
-   "options": "Active\nStar\nInactive"
-  },
-  {
-   "fieldname": "employment_section",
-   "fieldtype": "Section Break",
-   "label": "Employment"
-  },
-  {
-   "fieldname": "employer",
-   "fieldtype": "Select",
-   "label": "Employer",
-   "options": "Microsoft\nDell\nNvidia\nMicron\nVirtusa\nOthers"
-  },
-  {
-   "fieldname": "designation",
-   "fieldtype": "Data",
-   "label": "Designation"
-  },
-  {
-   "fieldname": "employee_id",
-   "fieldtype": "Data",
-   "label": "Employee ID"
-  },
-  {
-   "fieldname": "col_break_2",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "office_address",
-   "fieldtype": "Small Text",
-   "label": "Office Address"
-  },
-  {
-   "fieldname": "working_since",
-   "fieldtype": "Date",
-   "label": "Working since"
-  }
- ],
- "index_web_pages_for_search": 1,
- "links": [
-  {
-   "link_doctype": "Participation",
-   "link_fieldname": "Volunteer"
-  }
- ],
- "modified": "2026-04-20 14:31:18.302038",
- "modified_by": "Administrator",
- "module": "Volunteering",
- "name": "Volunteer",
- "naming_rule": "Expression",
- "owner": "Administrator",
- "permissions": [
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
-  }
- ],
- "row_format": "Dynamic",
- "search_fields": "first_name,email",
- "sort_field": "modified",
- "sort_order": "DESC",
- "states": [],
- "title_field": "first_name"
+  "actions": [],
+  "allow_rename": 1,
+  "autoname": "VLTR-.YYYY.-.#####",
+  "creation": "2026-04-14 12:00:00",
+  "doctype": "DocType",
+  "editable_grid": 1,
+  "engine": "InnoDB",
+  "field_order": [
+    "personal_section",
+    "first_name",
+    "last_name",
+    "mobile_number",
+    "email",
+    "col_break_1",
+    "address",
+    "pincode",
+    "status",
+    "employment_section",
+    "employer",
+    "designation",
+    "employee_id",
+    "col_break_2",
+    "office_address",
+    "working_since"
+  ],
+  "fields": [
+    {
+      "fieldname": "personal_section",
+      "fieldtype": "Section Break",
+      "label": "Personal"
+    },
+    {
+      "fieldname": "first_name",
+      "fieldtype": "Data",
+      "in_list_view": 1,
+      "label": "First Name",
+      "reqd": 1
+    },
+    {
+      "fieldname": "last_name",
+      "fieldtype": "Data",
+      "label": "Last Name"
+    },
+    {
+      "fieldname": "mobile_number",
+      "fieldtype": "Phone",
+      "label": "Mobile Number",
+      "reqd": 1
+    },
+    {
+      "fieldname": "email",
+      "fieldtype": "Data",
+      "label": "Email",
+      "options": "Email",
+      "unique": 1
+    },
+    {
+      "fieldname": "col_break_1",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "address",
+      "fieldtype": "Small Text",
+      "label": "Address"
+    },
+    {
+      "fieldname": "pincode",
+      "fieldtype": "Data",
+      "label": "Pincode"
+    },
+    {
+      "default": "Active",
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "label": "Status",
+      "options": "Active\nStar\nInactive"
+    },
+    {
+      "fieldname": "employment_section",
+      "fieldtype": "Section Break",
+      "label": "Employment"
+    },
+    {
+      "fieldname": "employer",
+      "fieldtype": "Select",
+      "label": "Employer",
+      "options": "Microsoft\nDell\nNvidia\nMicron\nVirtusa\nOthers"
+    },
+    {
+      "fieldname": "designation",
+      "fieldtype": "Data",
+      "label": "Designation"
+    },
+    {
+      "fieldname": "employee_id",
+      "fieldtype": "Data",
+      "label": "Employee ID"
+    },
+    {
+      "fieldname": "col_break_2",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "office_address",
+      "fieldtype": "Small Text",
+      "label": "Office Address"
+    },
+    {
+      "fieldname": "working_since",
+      "fieldtype": "Date",
+      "label": "Working since"
+    }
+  ],
+  "index_web_pages_for_search": 1,
+  "links": [
+    {
+      "link_doctype": "Participation",
+      "link_fieldname": "Volunteer"
+    }
+  ],
+  "modified": "2026-04-20 14:31:18.302038",
+  "modified_by": "Administrator",
+  "module": "Volunteering",
+  "name": "Volunteer",
+  "naming_rule": "Expression",
+  "owner": "Administrator",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "create": 1,
+      "delete": 1,
+      "email": 1,
+      "export": 1,
+      "print": 1,
+      "read": 1,
+      "report": 1,
+      "share": 1,
+      "write": 1
+    },
+    {
+      "role": "NGO Admin",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "email": 1,
+      "print": 1,
+      "export": 1,
+      "report": 1,
+      "share": 1
+    },
+    {
+      "role": "NGO Coordinator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0,
+      "email": 1,
+      "print": 1,
+      "export": 1,
+      "report": 1,
+      "share": 1
+    },
+    {
+      "role": "NGO Member",
+      "read": 1,
+      "write": 1,
+      "if_owner": 1,
+      "description": "Members can only see and edit their own Volunteer profile"
+    }
+  ],
+  "row_format": "Dynamic",
+  "search_fields": "first_name,email",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "states": [],
+  "title_field": "first_name"
 }

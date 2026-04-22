@@ -25,7 +25,7 @@
       "label": "Linked Event",
       "options": "NGO Event"
     },
-    { 
+    {
       "fieldname": "sb_items",
       "fieldtype": "Section Break",
       "label": "Items"
@@ -61,6 +61,37 @@
       "role": "System Manager",
       "share": 1,
       "write": 1
+    },
+    {
+      "role": "NGO Admin",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "email": 1,
+      "print": 1,
+      "export": 1,
+      "report": 1,
+      "share": 1
+    },
+    {
+      "role": "NGO Coordinator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0,
+      "email": 1,
+      "print": 1,
+      "export": 1,
+      "report": 1,
+      "share": 1
+    },
+    {
+      "role": "NGO Member",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "description": "Members can browse events and hampers"
     }
   ]
 }
