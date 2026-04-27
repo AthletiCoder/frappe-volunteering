@@ -1,18 +1,36 @@
 import frappe
 from frappe.model.document import Document
+from frappe import _
 
 class Participation(Document):
     def before_insert(self):
-        # Triggered when Web Form submits new record
-        if not self.event:
-            self.event = frappe.db.get_value("NGO Event", {"name": self.form_placeholder}, "name")
-        if self.temp_phone:
+        self.ensure_event()
+
+        if not self.volunteer and self.temp_phone:
             self.link_volunteer()
 
+        if not self.volunteer:
+            frappe.throw(
+                _(
+                    "Volunteer is required. Provide a volunteer or a valid phone number so we can auto-link the volunteer."
+                )
+            )
+
+    def ensure_event(self):
+        if self.event:
+            return
+
+        if self.form_placeholder and frappe.db.exists("NGO Event", self.form_placeholder):
+            self.event = self.form_placeholder
+            return
+
+        frappe.throw(_("Event is required for participation registration."))
+
     def link_volunteer(self):
+        logger = frappe.logger("volunteering")
+
         # 1. Check if volunteer exists by phone
         v_name = frappe.db.get_value("Volunteer", {"mobile_number": self.temp_phone}, "name")
-        print("Found existing volunteer")
 
         if not v_name:
             # 2. Create Volunteer record from redundant fields
@@ -26,7 +44,7 @@ class Participation(Document):
                 "address": self.temp_address
             })
             vol.insert(ignore_permissions=True)
-            print("Created new volunteer")
+            logger.info("Created volunteer from participation registration: %s", vol.name)
 
             v_name = vol.name
         

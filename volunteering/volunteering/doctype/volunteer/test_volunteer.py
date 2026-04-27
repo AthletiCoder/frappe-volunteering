@@ -1,7 +1,8 @@
 # Copyright (c) 2026, Vadiraj Tirtha Das and Contributors
 # See license.txt
 
-# import frappe
+import frappe
+from volunteering import hooks
 from frappe.tests import IntegrationTestCase
 
 
@@ -19,4 +20,6 @@ class IntegrationTestVolunteer(IntegrationTestCase):
 	Use this class for testing interactions between multiple components.
 	"""
 
-	pass
+    def test_permission_query_condition_hooks_are_importable(self):
+        for path in hooks.permission_query_conditions.values():
+            self.assertTrue(callable(frappe.get_attr(path)))
