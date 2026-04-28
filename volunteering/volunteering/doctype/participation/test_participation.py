@@ -15,10 +15,10 @@ IGNORE_TEST_RECORD_DEPENDENCIES = []  # eg. ["User"]
 
 
 class IntegrationTestParticipation(IntegrationTestCase):
-	"""
-	Integration tests for Participation.
-	Use this class for testing interactions between multiple components.
-	"""
+    """
+    Integration tests for Participation.
+    Use this class for testing interactions between multiple components.
+    """
 
     def create_event(self):
         return frappe.get_doc(

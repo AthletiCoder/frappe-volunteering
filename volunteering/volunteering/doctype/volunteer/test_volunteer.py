@@ -15,10 +15,10 @@ IGNORE_TEST_RECORD_DEPENDENCIES = []  # eg. ["User"]
 
 
 class IntegrationTestVolunteer(IntegrationTestCase):
-	"""
-	Integration tests for Volunteer.
-	Use this class for testing interactions between multiple components.
-	"""
+    """
+    Integration tests for Volunteer.
+    Use this class for testing interactions between multiple components.
+    """
 
     def test_permission_query_condition_hooks_are_importable(self):
         for path in hooks.permission_query_conditions.values():
