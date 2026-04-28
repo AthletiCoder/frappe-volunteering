@@ -9,11 +9,16 @@
   "participation_section",
   "volunteer",
   "event",
-  "screenshot",
-  "column_break_jilv",
   "status",
-  "logging",
+  "column_break_jilv",
+  "logging_status",
   "hours_logged",
+  "logging_screenshot",
+  "distribution_details_section",
+  "kits_requested",
+  "kits_delivered",
+  "column_break_ovjp",
+  "shipping_status",
   "extra_details_section",
   "extra_details",
   "registration_info_section",
@@ -120,17 +125,6 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "screenshot",
-   "fieldtype": "Attach",
-   "label": "Screenshot"
-  },
-  {
-   "fieldname": "logging",
-   "fieldtype": "Select",
-   "label": "Logging",
-   "options": "Not Responding\nLogged"
-  },
-  {
    "fieldname": "hours_logged",
    "fieldtype": "Float",
    "label": "Hours Logged"
@@ -145,10 +139,46 @@
    "fieldtype": "Link",
    "label": "Referred By",
    "options": "Volunteer"
+  },
+  {
+   "fieldname": "shipping_status",
+   "fieldtype": "Select",
+   "label": "Shipping Status",
+   "options": "Shipped\nDelivered"
+  },
+  {
+   "fieldname": "logging_status",
+   "fieldtype": "Select",
+   "label": "Logging Status",
+   "options": "Not Responding\nLogged"
+  },
+  {
+   "fieldname": "logging_screenshot",
+   "fieldtype": "Attach",
+   "label": "Logging Screenshot"
+  },
+  {
+   "fieldname": "distribution_details_section",
+   "fieldtype": "Section Break",
+   "label": "Distribution Details"
+  },
+  {
+   "fieldname": "kits_requested",
+   "fieldtype": "Int",
+   "label": "Kits Requested"
+  },
+  {
+   "fieldname": "kits_delivered",
+   "fieldtype": "Int",
+   "label": "Kits Delivered"
+  },
+  {
+   "fieldname": "column_break_ovjp",
+   "fieldtype": "Column Break"
   }
  ],
  "links": [],
- "modified": "2026-04-23 20:57:34.442127",
+ "modified": "2026-04-28 13:44:32.194144",
  "modified_by": "Administrator",
  "module": "Volunteering",
  "name": "Participation",
