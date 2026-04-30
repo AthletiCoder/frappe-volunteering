@@ -1,0 +1,77 @@
+{
+ "app": "volunteering",
+ "creation": "2026-04-14 14:47:57.922336",
+ "docstatus": 0,
+ "doctype": "Workspace Sidebar",
+ "header_icon": "earth",
+ "idx": 0,
+ "items": [
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "layout-dashboard",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Volunteering",
+   "link_to": "Volunteering",
+   "link_type": "Workspace",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "handshake",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Participation",
+   "link_to": "Participation",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "contact",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Volunteers",
+   "link_to": "Volunteer",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "hand-heart",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Events",
+   "link_to": "NGO Event",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "handbag",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Reciprocation",
+   "link_to": "Reciprocation",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-04-30 12:44:15.404128",
+ "modified_by": "Administrator",
+ "module": "Volunteering",
+ "name": "Volunteering",
+ "owner": "Administrator",
+ "standard": 1,
+ "title": "Volunteering"
+}
