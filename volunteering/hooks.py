@@ -266,5 +266,4 @@ has_permission = {
 fixtures = [
     {"dt": "Role", "filters": [["name", "in", ["NGO Admin", "NGO Coordinator", "NGO Member"]]]},
     {"dt": "Web Form", "filters": [["module", "=", "Volunteering"]]},
-    {"dt": "Workspace", "filters": [["module", "=", "Volunteering"]]}
 ]

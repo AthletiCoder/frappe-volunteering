@@ -56,7 +56,7 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Attendance",
-   "options": "Registered\nAttended\nNo Show"
+   "options": "\nRegistered\nAttended\nNo Show"
   },
   {
    "fieldname": "extra_details_section",
@@ -98,7 +98,7 @@
    "fieldname": "temp_company",
    "fieldtype": "Select",
    "label": "Company",
-   "options": "Microsoft\nDell\nNvidia\nMicron\nVirtusa\nOthers"
+   "options": "\nMicrosoft\nDell\nNvidia\nMicron\nVirtusa\nOthers"
   },
   {
    "fieldname": "comments",
@@ -144,13 +144,13 @@
    "fieldname": "shipping_status",
    "fieldtype": "Select",
    "label": "Shipping Status",
-   "options": "Shipped\nDelivered"
+   "options": "\nShipped\nDelivered"
   },
   {
    "fieldname": "logging_status",
    "fieldtype": "Select",
    "label": "Logging Status",
-   "options": "Not Responding\nLogged"
+   "options": "\nReminded\nNot Responding\nLogged"
   },
   {
    "fieldname": "logging_screenshot",

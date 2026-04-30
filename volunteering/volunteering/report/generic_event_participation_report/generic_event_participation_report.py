@@ -2,7 +2,7 @@
 # For license information, please see license.txt
 
 import frappe
-from frappe.utils import scrub
+from frappe import scrub
 
 
 def execute(filters=None):
