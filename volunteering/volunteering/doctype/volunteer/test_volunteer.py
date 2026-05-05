@@ -23,3 +23,14 @@ class IntegrationTestVolunteer(IntegrationTestCase):
     def test_permission_query_condition_hooks_are_importable(self):
         for path in hooks.permission_query_conditions.values():
             self.assertTrue(callable(frappe.get_attr(path)))
+
+    def test_mobile_number_is_normalized_on_save(self):
+        volunteer = frappe.get_doc(
+            {
+                "doctype": "Volunteer",
+                "first_name": "Normalize Phone",
+                "mobile_number": "0009876543210",
+            }
+        ).insert(ignore_permissions=True)
+
+        self.assertEqual(volunteer.mobile_number, "9876543210")

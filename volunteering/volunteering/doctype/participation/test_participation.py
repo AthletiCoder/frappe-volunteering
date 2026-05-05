@@ -57,3 +57,41 @@ class IntegrationTestParticipation(IntegrationTestCase):
                     "temp_full_name": "No Phone Volunteer",
                 }
             ).insert(ignore_permissions=True)
+
+    def test_before_insert_links_existing_volunteer_with_leading_zero_phone(self):
+        event = self.create_event()
+        base_phone = f"98{frappe.generate_hash(length=8, chars='0123456789')}"
+
+        volunteer = frappe.get_doc(
+            {
+                "doctype": "Volunteer",
+                "first_name": "Existing Volunteer",
+                "mobile_number": base_phone,
+            }
+        ).insert(ignore_permissions=True)
+
+        participation = frappe.get_doc(
+            {
+                "doctype": "Participation",
+                "event": event.name,
+                "temp_full_name": "Temp Volunteer",
+                "temp_phone": f"0{base_phone}",
+                "temp_email": f"lead-zero-{frappe.generate_hash(length=6)}@example.com",
+            }
+        ).insert(ignore_permissions=True)
+
+        self.assertEqual(participation.volunteer, volunteer.name)
+        self.assertEqual(participation.temp_phone, base_phone)
+
+    def test_before_insert_rejects_all_zero_phone(self):
+        event = self.create_event()
+
+        with self.assertRaises(frappe.ValidationError):
+            frappe.get_doc(
+                {
+                    "doctype": "Participation",
+                    "event": event.name,
+                    "temp_full_name": "All Zero Phone",
+                    "temp_phone": "000000",
+                }
+            ).insert(ignore_permissions=True)
