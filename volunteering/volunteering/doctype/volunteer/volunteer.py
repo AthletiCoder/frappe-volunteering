@@ -9,3 +9,7 @@ def normalize_mobile_number(raw_mobile):
     digits = "".join(ch for ch in str(raw_mobile).strip() if ch.isdigit())
     normalized = digits.lstrip("0")
     return normalized or None
+
+
+class Volunteer(Document):
+    pass
