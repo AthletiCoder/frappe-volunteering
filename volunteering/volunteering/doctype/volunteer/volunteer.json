@@ -12,6 +12,7 @@
   "last_name",
   "mobile_number",
   "email",
+  "relationship_manager",
   "col_break_1",
   "address",
   "pincode",
@@ -111,6 +112,12 @@
    "fieldname": "working_since",
    "fieldtype": "Date",
    "label": "Working since"
+  },
+  {
+   "fieldname": "relationship_manager",
+   "fieldtype": "Link",
+   "label": "Relationship Manager",
+   "options": "User"
   }
  ],
  "index_web_pages_for_search": 1,
@@ -120,7 +127,7 @@
    "link_fieldname": "Volunteer"
   }
  ],
- "modified": "2026-05-01 17:50:12.438312",
+ "modified": "2026-05-26 15:50:54.944479",
  "modified_by": "Administrator",
  "module": "Volunteering",
  "name": "Volunteer",
