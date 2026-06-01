@@ -270,5 +270,13 @@ has_permission = {
 fixtures = [
     {"dt": "Role", "filters": [["name", "in", ["NGO Admin", "NGO Coordinator", "NGO Member"]]]},
     {"dt": "Web Form", "filters": [["module", "=", "Volunteering"]]},
-    {"dt": "Workspace", "filters": [["module", "=", "Volunteering"]]}
+    
+    {"doctype": "Custom Field", "filters": [["dt", "in", ["Purchase Order", "Purchase Invoice", "Expense Claim", "Payment Entry"]]]},
+    {"doctype": "Property Setter", "filters": [["doc_type", "in", ["Purchase Order", "Purchase Invoice", "Expense Claim", "Payment Entry"]]]},
+
+    {"doctype": "Workflow", "filters": [["document_type", "in", ["Purchase Order", "Purchase Invoice", "Expense Claim", "Payment Entry"]]]},
+    {"dt": "Server Script", "filters": [["module", "=", "Volunteering"]]},
+
+    "Workflow State",
+    "Workflow Action"
 ]
