@@ -149,13 +149,30 @@ has_permission = {
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+doc_events = {
+	"Purchase Order": {
+		"before_save": [
+			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
+			"volunteering.volunteering.accounting_controls.validate_project_has_cost_center",
+		],
+	},
+	"Purchase Invoice": {
+		"before_save": [
+			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
+			"volunteering.volunteering.accounting_controls.validate_project_has_cost_center",
+		],
+		"before_submit": "volunteering.volunteering.accounting_controls.validate_purchase_invoice_po_chain",
+	},
+	"Expense Claim": {
+		"before_save": [
+			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
+			"volunteering.volunteering.accounting_controls.validate_project_has_cost_center",
+		],
+	},
+	"Payment Entry": {
+		"before_submit": "volunteering.volunteering.accounting_controls.validate_payment_entry",
+	},
+}
 
 # Scheduled Tasks
 # ---------------
@@ -275,7 +292,6 @@ fixtures = [
     {"doctype": "Property Setter", "filters": [["doc_type", "in", ["Purchase Order", "Purchase Invoice", "Expense Claim", "Payment Entry"]]]},
 
     {"doctype": "Workflow", "filters": [["document_type", "in", ["Purchase Order", "Purchase Invoice", "Expense Claim", "Payment Entry"]]]},
-    {"dt": "Server Script", "filters": [["module", "=", "Volunteering"]]},
 
     "Workflow State",
     "Workflow Action"
