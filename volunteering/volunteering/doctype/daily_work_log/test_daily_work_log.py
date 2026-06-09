@@ -5,6 +5,8 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import add_days, getdate, nowdate
 
+IGNORE_TEST_RECORD_DEPENDENCIES = ["Employee", "Company", "Project"]
+
 
 class IntegrationTestDailyWorkLog(IntegrationTestCase):
 	def setUp(self):
