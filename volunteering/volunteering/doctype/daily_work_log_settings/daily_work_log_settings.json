@@ -1,0 +1,63 @@
+{
+ "actions": [],
+ "creation": "2026-06-07 12:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "backdate_limit_days",
+  "min_hours_warning",
+  "enable_attendance_job"
+ ],
+ "fields": [
+  {
+   "default": "2",
+   "fieldname": "backdate_limit_days",
+   "fieldtype": "Int",
+   "label": "Backdate Limit (Days)"
+  },
+  {
+   "default": "4",
+   "fieldname": "min_hours_warning",
+   "fieldtype": "Float",
+   "label": "Minimum Hours Warning Threshold"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_attendance_job",
+   "fieldtype": "Check",
+   "label": "Enable Attendance Job"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-06-07 12:00:00",
+ "modified_by": "Administrator",
+ "module": "Volunteering",
+ "name": "Daily Work Log Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "HR Manager",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "HR User",
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

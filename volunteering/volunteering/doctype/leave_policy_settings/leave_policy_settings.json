@@ -1,0 +1,92 @@
+{
+ "actions": [],
+ "creation": "2026-06-08 12:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "default_company",
+  "default_leave_type",
+  "default_leave_policy",
+  "default_leave_period",
+  "planned_leave_advance_days",
+  "emergency_max_consecutive_days",
+  "min_justification_length"
+ ],
+ "fields": [
+  {
+   "fieldname": "default_company",
+   "fieldtype": "Link",
+   "label": "Default Company",
+   "options": "Company"
+  },
+  {
+   "default": "Privilege Leave",
+   "fieldname": "default_leave_type",
+   "fieldtype": "Data",
+   "label": "Default Leave Type",
+   "reqd": 1
+  },
+  {
+   "fieldname": "default_leave_policy",
+   "fieldtype": "Link",
+   "label": "Default Leave Policy",
+   "options": "Leave Policy"
+  },
+  {
+   "fieldname": "default_leave_period",
+   "fieldtype": "Link",
+   "label": "Default Leave Period",
+   "options": "Leave Period"
+  },
+  {
+   "default": "14",
+   "fieldname": "planned_leave_advance_days",
+   "fieldtype": "Int",
+   "label": "Planned Leave Advance Notice (Days)"
+  },
+  {
+   "default": "2",
+   "fieldname": "emergency_max_consecutive_days",
+   "fieldtype": "Int",
+   "label": "Emergency Leave Max Consecutive Days"
+  },
+  {
+   "default": "20",
+   "fieldname": "min_justification_length",
+   "fieldtype": "Int",
+   "label": "Minimum Justification Length (Characters)"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-06-08 12:00:00",
+ "modified_by": "Administrator",
+ "module": "Volunteering",
+ "name": "Leave Policy Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "HR Manager",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "HR User",
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
