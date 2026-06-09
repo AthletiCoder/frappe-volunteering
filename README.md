@@ -34,6 +34,82 @@ Track volunteers, events, participation, and reciprocation in one focused workfl
 - **Dynamic event report**: `Generic Event Participation Report` builds columns dynamically from extra-detail questions for the selected event.
 - **Role-aware access model**: Supports `NGO Admin`, `NGO Coordinator`, and `NGO Member` with DocType-level permissions and row-level visibility controls on key records.
 
+### Volunteer ratings (for Relationship Managers)
+
+This section explains how to record and use volunteer ratings after an event.
+
+#### Who can rate
+
+- Each **Volunteer** has an assigned **Relationship Manager** (`Volunteer.relationship_manager`).
+- Only that Relationship Manager can enter or change the rating and comment on a **Participation** record.
+- **NGO Admin** and **System Manager** can also edit ratings when needed.
+
+#### When to rate
+
+Rate at the **end of the event**, after follow-up work is done:
+
+1. Complete distribution and logging details on the Participation (kits delivered, hours logged, etc.).
+2. Set **Logging Status** to **Logged**.
+3. The form will prompt you to add a **Rating** and **Relationship Manager Comment**.
+4. Save the Participation.
+
+A rating is **required** once Logging Status is **Logged**.
+
+#### What you are rating
+
+- Use the **Rating** field (1–5 stars) for **overall communication ease** with the volunteer during that event.
+- Add context in **Relationship Manager Comment** (follow-up quality, responsiveness, issues, positives).
+
+This is separate from **Volunteer Status** (Active / Star / Inactive), which is based on how often someone participates, not how easy they are to work with.
+
+#### Before you save
+
+- **Kits Delivered** must be greater than **zero** before a rating can be saved.
+- **Hours Logged** should reflect actual volunteer effort for that event.
+
+#### How expected hours and effective rating work
+
+The system compares logged hours to expected hours for the kits delivered:
+
+- **Expected hours** = `Kits Delivered` × **Hours Per Kit**
+- **Hours Per Kit** comes from the **Project** linked to the event (`NGO Event` → `Project`). If not set on the project, the default is **0.5** hours per kit.
+
+Example: 10 kits delivered, Hours Per Kit = 0.5 → expected hours = 5. If the volunteer logged 5 hours, there is no adjustment. If they logged less or more, the **Effective Rating** on that Participation may move slightly down or up (within 1–5), based on your star rating.
+
+On each Participation you will see (read-only after save):
+
+| Field | Meaning |
+|-------|---------|
+| **Expected Hours** | Target hours for kits delivered |
+| **Hours Delta** | Hours Logged minus Expected Hours |
+| **Effective Rating** | Final score for this event (1–5) after the hours adjustment |
+
+#### Volunteer profile score
+
+Open the **Volunteer** record to see the rolled-up score:
+
+| Field | Meaning |
+|-------|---------|
+| **Effective Rating** | Weighted average from the volunteer’s **last 3 rated events** (most recent event counts the most) |
+| **Rated Events Count** | How many rated events were used (1–3) |
+| **Rating Last Updated** | When the profile score was last recalculated |
+
+Weights for the last three rated events (newest first): **50%**, **30%**, **20%**. Only participations with a rating are included.
+
+#### Quick checklist per participation
+
+- [ ] Kits Delivered is correct and greater than zero
+- [ ] Hours Logged is entered
+- [ ] Logging Status = **Logged**
+- [ ] Rating (1–5) and comment added
+- [ ] Save — confirm **Effective Rating** on Participation and **Effective Rating** on Volunteer
+
+#### Tips
+
+- Set **Hours Per Kit** on the event’s **Project** if a campaign needs a different effort expectation than the default (0.5).
+- Use comments for anything the number alone cannot capture; they help future Relationship Managers and coordinators.
+- Re-save a Participation after changing kits, hours, or rating to refresh the volunteer’s profile score.
+
 ### Installation
 
 You can install this app using the [bench](https://github.com/frappe/bench) CLI:
