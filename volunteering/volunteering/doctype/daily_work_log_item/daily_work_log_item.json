@@ -1,0 +1,57 @@
+{
+ "actions": [],
+ "creation": "2026-06-07 12:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "task_title",
+  "project",
+  "description",
+  "time_spent_hours",
+  "output_link"
+ ],
+ "fields": [
+  {
+   "fieldname": "task_title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Task Title",
+   "reqd": 1
+  },
+  {
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Project",
+   "options": "Project",
+   "reqd": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Text",
+   "in_list_view": 1,
+   "label": "Description",
+   "reqd": 1
+  },
+  {
+   "fieldname": "time_spent_hours",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Time Spent (Hours)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "output_link",
+   "fieldtype": "Data",
+   "label": "Output Link"
+  }
+ ],
+ "istable": 1,
+ "module": "Volunteering",
+ "name": "Daily Work Log Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}
