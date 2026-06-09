@@ -2,7 +2,11 @@ import frappe
 from frappe.model.document import Document
 from frappe import _
 from frappe.utils import flt, now_datetime
-from volunteering.volunteering.doctype.volunteer.volunteer import normalize_mobile_number
+from volunteering.volunteering.doctype.volunteer.volunteer import (
+    find_volunteer_by_mobile,
+    format_mobile_number,
+    upgrade_volunteer_mobile_number,
+)
 
 DEFAULT_HOURS_PER_KIT = 0.5
 RATING_MAX_STARS = 5
@@ -36,10 +40,16 @@ class Participation(Document):
     def link_volunteer(self):
         logger = frappe.logger("volunteering")
 
-        # 1. Check if volunteer exists by phone
-        v_name = frappe.db.get_value("Volunteer", {"mobile_number": self.temp_phone}, "name")
+        formatted_phone = format_mobile_number(self.temp_phone)
+        if not formatted_phone:
+            return
 
-        if not v_name:
+        self.temp_phone = formatted_phone
+        v_name = find_volunteer_by_mobile(formatted_phone)
+
+        if v_name:
+            upgrade_volunteer_mobile_number(v_name, formatted_phone)
+        elif not v_name:
             # 2. Create Volunteer record from redundant fields
             vol = frappe.get_doc({
                 "doctype": "Volunteer",
@@ -63,20 +73,40 @@ class Participation(Document):
         self._validate_rating_inputs()
         self._compute_effective_rating()
 
+    def after_insert(self):
+        self._refresh_volunteer_rating_rollups()
+
     def on_update(self):
+        self._refresh_volunteer_rating_rollups()
+
+    def on_trash(self):
+        self._refresh_volunteer_rating_rollups(exclude_participation=self.name)
+
+    def _refresh_volunteer_rating_rollups(self, exclude_participation=None):
+        volunteer_names = set()
         if self.volunteer:
-            update_volunteer_rating_rollup(self.volunteer)
+            volunteer_names.add(self.volunteer)
+
+        previous_doc = self.get_doc_before_save()
+        if previous_doc and previous_doc.volunteer:
+            volunteer_names.add(previous_doc.volunteer)
+
+        for volunteer_name in volunteer_names:
+            update_volunteer_rating_rollup(
+                volunteer_name, exclude_participation=exclude_participation
+            )
 
     def _validate_rating_permissions(self):
-        previous_doc = self.get_doc_before_save()
-        if not previous_doc:
-            return
-
         rating_fields = ("rm_rating", "rm_comment")
-        rating_changed = any(
-            self.get(field) != previous_doc.get(field) for field in rating_fields
-        )
-        if not rating_changed:
+        previous_doc = self.get_doc_before_save()
+
+        if previous_doc:
+            rating_changed = any(
+                self.get(field) != previous_doc.get(field) for field in rating_fields
+            )
+            if not rating_changed:
+                return
+        elif not any(self.get(field) for field in rating_fields):
             return
 
         if _is_rating_editor_allowed(self.volunteer):
@@ -163,9 +193,15 @@ def _get_hours_per_kit(event_name):
     return factor if factor > 0 else DEFAULT_HOURS_PER_KIT
 
 
-def update_volunteer_rating_rollup(volunteer_name):
+def update_volunteer_rating_rollup(volunteer_name, exclude_participation=None):
+    filters = [volunteer_name]
+    exclude_clause = ""
+    if exclude_participation:
+        exclude_clause = "AND p.name != %s"
+        filters.append(exclude_participation)
+
     rows = frappe.db.sql(
-        """
+        f"""
         SELECT
             p.effective_rating
         FROM `tabParticipation` p
@@ -173,10 +209,11 @@ def update_volunteer_rating_rollup(volunteer_name):
         WHERE
             p.volunteer = %s
             AND IFNULL(p.effective_rating, 0) > 0
+            {exclude_clause}
         ORDER BY COALESCE(e.enddate, e.startdate, p.modified) DESC
         LIMIT 3
         """,
-        (volunteer_name,),
+        tuple(filters),
         as_dict=True,
     )
 
@@ -186,7 +223,7 @@ def update_volunteer_rating_rollup(volunteer_name):
             "Volunteer",
             volunteer_name,
             {
-                "effective_rating": None,
+                "effective_rating": 0,
                 "rating_sample_size": 0,
                 "rating_last_updated": now_datetime(),
             },

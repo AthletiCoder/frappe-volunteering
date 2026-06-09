@@ -44,15 +44,15 @@ class DailyWorkLog(Document):
 				frappe.throw(_("Row {0}: Description must be more than 10 characters.").format(idx))
 
 	def validate_duplicate_log(self):
-		if frappe.db.exists(
-			"Daily Work Log",
-			{
-				"employee": self.employee,
-				"date": self.date,
-				"name": ["!=", self.name],
-				"docstatus": ["<", 2],
-			},
-		):
+		filters = {
+			"employee": self.employee,
+			"date": self.date,
+			"docstatus": ["<", 2],
+		}
+		if not self.is_new():
+			filters["name"] = ["!=", self.name]
+
+		if frappe.db.exists("Daily Work Log", filters):
 			frappe.throw(_("A Daily Work Log already exists for this employee on {0}.").format(self.date))
 
 	def validate_backdate(self):

@@ -6,6 +6,10 @@ from frappe.tests import IntegrationTestCase
 from frappe.utils import add_days, nowdate
 
 from volunteering.volunteering.attendance_service import process_employee_attendance
+from volunteering.volunteering.test_utils import (
+	ensure_holiday_list_for_employee,
+	get_or_create_allocatable_leave_type,
+)
 
 
 class IntegrationTestAttendanceService(IntegrationTestCase):
@@ -14,6 +18,7 @@ class IntegrationTestAttendanceService(IntegrationTestCase):
 		self.attendance_date = add_days(nowdate(), -2)
 		self.employee = self._get_or_create_employee()
 		self.project = self._get_or_create_project()
+		ensure_holiday_list_for_employee(self.employee, self.attendance_date)
 		self._cleanup()
 
 	def tearDown(self):
@@ -91,6 +96,34 @@ class IntegrationTestAttendanceService(IntegrationTestCase):
 				"company": company,
 			}
 		).insert(ignore_permissions=True).name
+
+	def _ensure_leave_allocation(self, leave_type, leave_date=None):
+		leave_date = leave_date or self.attendance_date
+		existing = frappe.db.exists(
+			"Leave Allocation",
+			{
+				"employee": self.employee,
+				"leave_type": leave_type,
+				"docstatus": 1,
+				"from_date": ["<=", leave_date],
+				"to_date": [">=", leave_date],
+			},
+		)
+		if existing:
+			return
+
+		allocation = frappe.get_doc(
+			{
+				"doctype": "Leave Allocation",
+				"employee": self.employee,
+				"leave_type": leave_type,
+				"from_date": add_days(leave_date, -30),
+				"to_date": add_days(leave_date, 30),
+				"new_leaves_allocated": 10,
+			}
+		)
+		allocation.insert(ignore_permissions=True)
+		allocation.submit()
 
 	def _get_attendance_status(self):
 		return frappe.db.get_value(
@@ -178,36 +211,26 @@ class IntegrationTestAttendanceService(IntegrationTestCase):
 		self.assertEqual(self._get_attendance_status(), "Absent")
 
 	def test_approved_leave_marks_on_leave(self):
-		leave_type = frappe.db.get_value("Leave Type", {}, "name")
-		if not leave_type:
-			leave_type = frappe.get_doc(
-				{
-					"doctype": "Leave Type",
-					"leave_type_name": "_Test Attendance Leave",
-				}
-			).insert(ignore_permissions=True).name
-
-		allocation = frappe.get_doc(
-			{
-				"doctype": "Leave Allocation",
-				"employee": self.employee,
-				"leave_type": leave_type,
-				"from_date": add_days(self.attendance_date, -30),
-				"to_date": add_days(self.attendance_date, 30),
-				"new_leaves_allocated": 10,
-			}
+		leave_date = nowdate()
+		ensure_holiday_list_for_employee(self.employee, leave_date)
+		leave_type = frappe.db.get_value(
+			"Leave Type",
+			{"is_lwp": 0, "name": ["not in", ["Leave Without Pay"]]},
+			"name",
 		)
-		allocation.insert(ignore_permissions=True)
-		allocation.submit()
+		if not leave_type:
+			leave_type = get_or_create_allocatable_leave_type("_Test Attendance Leave")
+
+		self._ensure_leave_allocation(leave_type, leave_date)
 
 		leave = frappe.get_doc(
 			{
 				"doctype": "Leave Application",
 				"employee": self.employee,
 				"leave_type": leave_type,
-				"leave_category": "Sick",
-				"from_date": self.attendance_date,
-				"to_date": self.attendance_date,
+				"leave_category": "Emergency",
+				"from_date": leave_date,
+				"to_date": leave_date,
 				"status": "Approved",
 			}
 		)
@@ -218,9 +241,22 @@ class IntegrationTestAttendanceService(IntegrationTestCase):
 			"Attendance",
 			{
 				"employee": self.employee,
-				"attendance_date": self.attendance_date,
+				"attendance_date": leave_date,
 			},
 		)
 
-		process_employee_attendance(self.employee, self.attendance_date)
-		self.assertEqual(self._get_attendance_status(), "On Leave")
+		process_employee_attendance(self.employee, leave_date)
+		self.assertEqual(
+			frappe.db.get_value(
+				"Attendance",
+				{
+					"employee": self.employee,
+					"attendance_date": leave_date,
+					"docstatus": 1,
+				},
+				"status",
+			),
+			"On Leave",
+		)
+
+		frappe.db.delete("Leave Application", {"name": leave.name})

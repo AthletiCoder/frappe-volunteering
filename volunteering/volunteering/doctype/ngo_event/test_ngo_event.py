@@ -7,13 +7,14 @@ from frappe.tests import IntegrationTestCase
 from volunteering.volunteering.report.generic_event_participation_report.generic_event_participation_report import (
     execute,
 )
+from volunteering.volunteering.test_utils import unique_mobile
 
 
 # On IntegrationTestCase, the doctype test records and all
 # link-field test record dependencies are recursively loaded
 # Use these module variables to add/remove to/from that list
 EXTRA_TEST_RECORD_DEPENDENCIES = []  # eg. ["User"]
-IGNORE_TEST_RECORD_DEPENDENCIES = []  # eg. ["User"]
+IGNORE_TEST_RECORD_DEPENDENCIES = ["Project", "Company"]
 
 
 
@@ -38,7 +39,7 @@ class IntegrationTestNGOEvent(IntegrationTestCase):
             {
                 "doctype": "Volunteer",
                 "first_name": "Report Volunteer",
-                "mobile_number": f"88888{frappe.generate_hash(length=5)}",
+                "mobile_number": unique_mobile("88"),
                 "email": f"report-{frappe.generate_hash(length=6)}@example.com",
             }
         ).insert(ignore_permissions=True)
