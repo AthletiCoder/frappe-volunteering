@@ -149,13 +149,9 @@ has_permission = {
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+after_migrate = [
+	"volunteering.volunteering.workspace_setup.ensure_defaults",
+]
 
 # Scheduled Tasks
 # ---------------
@@ -270,6 +266,5 @@ has_permission = {
 fixtures = [
     {"dt": "Role", "filters": [["name", "in", ["NGO Admin", "NGO Coordinator", "NGO Member"]]]},
     {"dt": "Web Form", "filters": [["module", "=", "Volunteering"]]},
-    {"dt": "Workspace", "filters": [["module", "=", "Volunteering"]]},
     {"doctype": "Custom Field", "filters": [["dt", "=", "Project"], ["fieldname", "=", "hours_per_kit"]]},
 ]
