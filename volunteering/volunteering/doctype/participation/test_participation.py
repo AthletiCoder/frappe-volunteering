@@ -5,12 +5,14 @@ import frappe
 from frappe.utils import nowdate
 from frappe.tests import IntegrationTestCase
 
+from volunteering.volunteering.test_utils import make_test_phone
+
 
 # On IntegrationTestCase, the doctype test records and all
 # link-field test record dependencies are recursively loaded
 # Use these module variables to add/remove to/from that list
 EXTRA_TEST_RECORD_DEPENDENCIES = []  # eg. ["User"]
-IGNORE_TEST_RECORD_DEPENDENCIES = []  # eg. ["User"]
+IGNORE_TEST_RECORD_DEPENDENCIES = ["Volunteer", "NGO Event"]
 
 
 
@@ -38,7 +40,7 @@ class IntegrationTestParticipation(IntegrationTestCase):
                 "doctype": "Participation",
                 "event": event.name,
                 "temp_full_name": "Test Volunteer",
-                "temp_phone": f"99999{frappe.generate_hash(length=5)}",
+                "temp_phone": make_test_phone(),
                 "temp_email": f"vol-{frappe.generate_hash(length=6)}@example.com",
             }
         ).insert(ignore_permissions=True)
@@ -60,7 +62,7 @@ class IntegrationTestParticipation(IntegrationTestCase):
 
     def test_before_insert_links_existing_volunteer_with_leading_zero_phone(self):
         event = self.create_event()
-        base_phone = f"98{frappe.generate_hash(length=8, chars='0123456789')}"
+        base_phone = make_test_phone("9876543210")
 
         volunteer = frappe.get_doc(
             {
@@ -75,7 +77,7 @@ class IntegrationTestParticipation(IntegrationTestCase):
                 "doctype": "Participation",
                 "event": event.name,
                 "temp_full_name": "Temp Volunteer",
-                "temp_phone": f"0{base_phone}",
+                "temp_phone": base_phone.replace("-", "-0", 1),
                 "temp_email": f"lead-zero-{frappe.generate_hash(length=6)}@example.com",
             }
         ).insert(ignore_permissions=True)
@@ -92,6 +94,6 @@ class IntegrationTestParticipation(IntegrationTestCase):
                     "doctype": "Participation",
                     "event": event.name,
                     "temp_full_name": "All Zero Phone",
-                    "temp_phone": "000000",
+                    "temp_phone": "+91-000000",
                 }
             ).insert(ignore_permissions=True)

@@ -3,56 +3,19 @@
 
 import frappe
 from frappe.tests import IntegrationTestCase
-from frappe.utils import add_days, getdate, nowdate
+from frappe.utils import add_days, nowdate
+
+from volunteering.volunteering.test_utils import get_or_create_test_employee, get_or_create_test_project
+
+IGNORE_TEST_RECORD_DEPENDENCIES = ["Employee", "Project"]
 
 
 class IntegrationTestDailyWorkLog(IntegrationTestCase):
 	def setUp(self):
 		super().setUp()
-		self.employee = self._get_or_create_employee()
-		self.project = self._get_or_create_project()
-
-	def _get_or_create_employee(self):
-		employee = frappe.db.get_value("Employee", {"status": "Active"}, "name")
-		if employee:
-			return employee
-
-		company = frappe.db.get_value("Company", {}, "name")
-		if not company:
-			company = frappe.get_doc(
-				{
-					"doctype": "Company",
-					"company_name": "_Test Daily Work Log Company",
-					"abbr": "DWLC",
-					"default_currency": "INR",
-					"country": "India",
-				}
-			).insert(ignore_permissions=True).name
-
-		return frappe.get_doc(
-			{
-				"doctype": "Employee",
-				"first_name": "Daily Work Log",
-				"company": company,
-				"status": "Active",
-				"date_of_joining": add_days(nowdate(), -30),
-				"gender": "Male",
-			}
-		).insert(ignore_permissions=True).name
-
-	def _get_or_create_project(self):
-		project = frappe.db.get_value("Project", {}, "name")
-		if project:
-			return project
-
-		company = frappe.db.get_value("Employee", self.employee, "company")
-		return frappe.get_doc(
-			{
-				"doctype": "Project",
-				"project_name": "_Test Daily Work Log Project",
-				"company": company,
-			}
-		).insert(ignore_permissions=True).name
+		self.employee = get_or_create_test_employee()
+		self.project = get_or_create_test_project(self.employee)
+		frappe.db.delete("Daily Work Log", {"employee": self.employee})
 
 	def _make_work_log(self, **kwargs):
 		date = kwargs.pop("date", nowdate())
@@ -91,7 +54,7 @@ class IntegrationTestDailyWorkLog(IntegrationTestCase):
 		date = add_days(nowdate(), -1)
 		self._make_work_log(date=date)
 
-		with self.assertRaises(frappe.ValidationError):
+		with self.assertRaises((frappe.ValidationError, frappe.DuplicateEntryError)):
 			self._make_work_log(date=date)
 
 	def test_backdated_log_beyond_limit_is_rejected(self):

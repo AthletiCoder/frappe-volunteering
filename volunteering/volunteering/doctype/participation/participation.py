@@ -1,11 +1,14 @@
 import frappe
 from frappe.model.document import Document
 from frappe import _
-from volunteering.volunteering.doctype.volunteer.volunteer import normalize_mobile_number
+from volunteering.volunteering.doctype.volunteer.volunteer import format_mobile_number
 
 class Participation(Document):
     def before_insert(self):
         self.ensure_event()
+
+        if self.temp_phone:
+            self.temp_phone = format_mobile_number(self.temp_phone)
 
         if not self.volunteer and self.temp_phone:
             self.link_volunteer()

@@ -6,6 +6,7 @@
  "field_order": [
   "backdate_limit_days",
   "min_hours_warning",
+  "attendance_section",
   "enable_attendance_job"
  ],
  "fields": [
@@ -20,6 +21,11 @@
    "fieldname": "min_hours_warning",
    "fieldtype": "Float",
    "label": "Minimum Hours Warning Threshold"
+  },
+  {
+   "fieldname": "attendance_section",
+   "fieldtype": "Section Break",
+   "label": "Attendance Automation"
   },
   {
    "default": "1",

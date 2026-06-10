@@ -10,7 +10,7 @@ from frappe.tests import IntegrationTestCase
 # link-field test record dependencies are recursively loaded
 # Use these module variables to add/remove to/from that list
 EXTRA_TEST_RECORD_DEPENDENCIES = []  # eg. ["User"]
-IGNORE_TEST_RECORD_DEPENDENCIES = []  # eg. ["User"]
+IGNORE_TEST_RECORD_DEPENDENCIES = ["User"]
 
 
 
@@ -29,8 +29,8 @@ class IntegrationTestVolunteer(IntegrationTestCase):
             {
                 "doctype": "Volunteer",
                 "first_name": "Normalize Phone",
-                "mobile_number": "0009876543210",
+                "mobile_number": "+91-0009876543210",
             }
         ).insert(ignore_permissions=True)
 
-        self.assertEqual(volunteer.mobile_number, "9876543210")
+        self.assertEqual(volunteer.mobile_number, "+91-9876543210")
