@@ -1,3 +1,5 @@
+import random
+
 import frappe
 from frappe.utils import add_days, get_year_ending, get_year_start, getdate, nowdate
 
@@ -5,6 +7,10 @@ HOLIDAY_LIST_NAME = "_Test Volunteering Holiday List"
 TEST_LEAVE_TYPE = "_Test Volunteering Leave"
 TEST_PROJECT_NAME = "_Test Volunteering Project"
 TEST_EMPLOYEE_EMAIL = "volunteering_test@example.com"
+
+
+def unique_mobile(prefix="98"):
+    return f"+91-{prefix}{random.randint(10**7, 10**8 - 1)}"
 
 
 def get_test_company():
@@ -46,6 +52,44 @@ def ensure_employee_holiday_list(employee, company=None):
 	holiday_list = ensure_holiday_list(company)
 	_ensure_holiday_list_assignment("Employee", employee, holiday_list, company)
 	return holiday_list
+
+
+def ensure_holiday_list_for_employee(employee, as_on_date):
+	"""Ensure the employee has a holiday list assignment valid on as_on_date."""
+	as_on_date = getdate(as_on_date)
+	company = frappe.db.get_value("Employee", employee, "company")
+	holiday_list_name = f"_Test Holidays {frappe.scrub(employee)}"
+
+	if not frappe.db.exists("Holiday List", holiday_list_name):
+		frappe.get_doc(
+			{
+				"doctype": "Holiday List",
+				"holiday_list_name": holiday_list_name,
+				"from_date": add_days(as_on_date, -365),
+				"to_date": add_days(as_on_date, 365),
+			}
+		).insert(ignore_permissions=True)
+
+	if not frappe.db.exists(
+		"Holiday List Assignment",
+		{
+			"applicable_for": "Employee",
+			"assigned_to": employee,
+			"docstatus": 1,
+		},
+	):
+		assignment = frappe.get_doc(
+			{
+				"doctype": "Holiday List Assignment",
+				"applicable_for": "Employee",
+				"assigned_to": employee,
+				"holiday_list": holiday_list_name,
+				"from_date": add_days(as_on_date, -365),
+				"employee_company": company,
+			}
+		)
+		assignment.insert(ignore_permissions=True)
+		assignment.submit()
 
 
 def _ensure_holiday_list_assignment(applicable_for, assigned_to, holiday_list, company):
@@ -121,8 +165,6 @@ def get_or_create_test_employee():
 
 
 def make_test_phone(local_number=None):
-	import random
-
 	from volunteering.volunteering.doctype.volunteer.volunteer import format_mobile_number
 
 	if local_number is None:

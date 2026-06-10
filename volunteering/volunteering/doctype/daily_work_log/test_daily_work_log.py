@@ -9,6 +9,8 @@ from volunteering.volunteering.test_utils import get_or_create_test_employee, ge
 
 IGNORE_TEST_RECORD_DEPENDENCIES = ["Employee", "Project"]
 
+IGNORE_TEST_RECORD_DEPENDENCIES = ["Employee", "Company", "Project"]
+
 
 class IntegrationTestDailyWorkLog(IntegrationTestCase):
 	def setUp(self):

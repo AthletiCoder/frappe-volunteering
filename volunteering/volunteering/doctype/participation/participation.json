@@ -14,6 +14,13 @@
   "logging_status",
   "hours_logged",
   "logging_screenshot",
+  "rating_section",
+  "rm_rating",
+  "expected_hours",
+  "delta_hours",
+  "column_break_rating",
+  "rm_comment",
+  "effective_rating",
   "distribution_details_section",
   "kits_requested",
   "kits_delivered",
@@ -160,6 +167,44 @@
    "label": "Logging Screenshot"
   },
   {
+   "fieldname": "rating_section",
+   "fieldtype": "Section Break",
+   "label": "Relationship Manager Review"
+  },
+  {
+   "fieldname": "rm_rating",
+   "fieldtype": "Rating",
+   "label": "Rating",
+   "options": "5"
+  },
+  {
+   "fieldname": "expected_hours",
+   "fieldtype": "Float",
+   "label": "Expected Hours",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_rating",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "rm_comment",
+   "fieldtype": "Small Text",
+   "label": "Relationship Manager Comment"
+  },
+  {
+   "fieldname": "delta_hours",
+   "fieldtype": "Float",
+   "label": "Hours Delta",
+   "read_only": 1
+  },
+  {
+   "fieldname": "effective_rating",
+   "fieldtype": "Float",
+   "label": "Effective Rating",
+   "read_only": 1
+  },
+  {
    "fieldname": "distribution_details_section",
    "fieldtype": "Section Break",
    "label": "Distribution Details"
@@ -180,7 +225,7 @@
   }
  ],
  "links": [],
- "modified": "2026-05-01 17:50:36.654826",
+ "modified": "2026-06-02 21:32:38.625849",
  "modified_by": "Administrator",
  "module": "Volunteering",
  "name": "Participation",

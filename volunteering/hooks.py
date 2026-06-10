@@ -166,6 +166,7 @@ doc_events = {
 
 after_migrate = [
 	"volunteering.volunteering.leave_setup.after_migrate",
+	"volunteering.volunteering.workspace_setup.ensure_defaults",
 ]
 
 # Scheduled Tasks
@@ -269,5 +270,5 @@ override_doctype_dashboards = {
 fixtures = [
     {"dt": "Role", "filters": [["name", "in", ["NGO Admin", "NGO Coordinator", "NGO Member"]]]},
     {"dt": "Web Form", "filters": [["module", "=", "Volunteering"]]},
-    {"dt": "Workspace", "filters": [["module", "=", "Volunteering"]]}
+    {"doctype": "Custom Field", "filters": [["dt", "=", "Project"], ["fieldname", "=", "hours_per_kit"]]},
 ]

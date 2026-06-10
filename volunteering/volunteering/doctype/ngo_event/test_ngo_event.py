@@ -15,7 +15,7 @@ from volunteering.volunteering.report.generic_event_participation_report.generic
 # link-field test record dependencies are recursively loaded
 # Use these module variables to add/remove to/from that list
 EXTRA_TEST_RECORD_DEPENDENCIES = []  # eg. ["User"]
-IGNORE_TEST_RECORD_DEPENDENCIES = ["Project"]
+IGNORE_TEST_RECORD_DEPENDENCIES = ["Project", "Company"]
 
 
 
