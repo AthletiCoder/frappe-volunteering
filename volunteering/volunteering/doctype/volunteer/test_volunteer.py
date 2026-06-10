@@ -47,7 +47,7 @@ class IntegrationTestVolunteer(IntegrationTestCase):
             {
                 "doctype": "Volunteer",
                 "first_name": "Normalize Phone",
-                "mobile_number": "0009876543210",
+                "mobile_number": "+91-0009876543210",
             }
         ).insert(ignore_permissions=True)
 

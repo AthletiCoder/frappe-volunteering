@@ -4,10 +4,11 @@
 import frappe
 from frappe.utils import nowdate
 from frappe.tests import IntegrationTestCase
+
+from volunteering.volunteering.test_utils import make_test_phone
 from volunteering.volunteering.report.generic_event_participation_report.generic_event_participation_report import (
     execute,
 )
-from volunteering.volunteering.test_utils import unique_mobile
 
 
 # On IntegrationTestCase, the doctype test records and all
@@ -39,7 +40,7 @@ class IntegrationTestNGOEvent(IntegrationTestCase):
             {
                 "doctype": "Volunteer",
                 "first_name": "Report Volunteer",
-                "mobile_number": unique_mobile("88"),
+                "mobile_number": make_test_phone(),
                 "email": f"report-{frappe.generate_hash(length=6)}@example.com",
             }
         ).insert(ignore_permissions=True)

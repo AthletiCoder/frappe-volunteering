@@ -5,14 +5,14 @@ import frappe
 from frappe.utils import nowdate
 from frappe.tests import IntegrationTestCase
 
-from volunteering.volunteering.test_utils import unique_mobile
+from volunteering.volunteering.test_utils import make_test_phone, unique_mobile
 
 
 # On IntegrationTestCase, the doctype test records and all
 # link-field test record dependencies are recursively loaded
 # Use these module variables to add/remove to/from that list
 EXTRA_TEST_RECORD_DEPENDENCIES = []  # eg. ["User"]
-IGNORE_TEST_RECORD_DEPENDENCIES = ["Project", "Company", "User"]
+IGNORE_TEST_RECORD_DEPENDENCIES = ["Volunteer", "NGO Event", "Project", "Company", "User"]
 
 
 
@@ -40,7 +40,7 @@ class IntegrationTestParticipation(IntegrationTestCase):
                 "doctype": "Participation",
                 "event": event.name,
                 "temp_full_name": "Test Volunteer",
-                "temp_phone": unique_mobile("99"),
+                "temp_phone": make_test_phone(),
                 "temp_email": f"vol-{frappe.generate_hash(length=6)}@example.com",
             }
         ).insert(ignore_permissions=True)
@@ -98,7 +98,7 @@ class IntegrationTestParticipation(IntegrationTestCase):
 
     def test_before_insert_links_existing_volunteer_with_leading_zero_phone(self):
         event = self.create_event()
-        base_phone = unique_mobile("98")
+        base_phone = make_test_phone("9876543210")
 
         volunteer = frappe.get_doc(
             {
@@ -130,7 +130,7 @@ class IntegrationTestParticipation(IntegrationTestCase):
                     "doctype": "Participation",
                     "event": event.name,
                     "temp_full_name": "All Zero Phone",
-                    "temp_phone": "000000",
+                    "temp_phone": "+91-000000",
                 }
             ).insert(ignore_permissions=True)
 

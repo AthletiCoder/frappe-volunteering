@@ -17,6 +17,9 @@ class Participation(Document):
     def before_insert(self):
         self.ensure_event()
 
+        if self.temp_phone:
+            self.temp_phone = format_mobile_number(self.temp_phone)
+
         if not self.volunteer and self.temp_phone:
             self.link_volunteer()
 

@@ -5,10 +5,16 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import add_days, nowdate
 
-from volunteering.volunteering.attendance_service import process_employee_attendance
+from volunteering.volunteering.attendance_service import (
+	is_attendance_day_in_progress,
+	process_daily_attendance,
+	process_employee_attendance,
+)
 from volunteering.volunteering.test_utils import (
-	ensure_holiday_list_for_employee,
+	ensure_leave_allocation,
 	get_or_create_allocatable_leave_type,
+	get_or_create_test_employee,
+	get_or_create_test_project,
 )
 
 
@@ -16,9 +22,8 @@ class IntegrationTestAttendanceService(IntegrationTestCase):
 	def setUp(self):
 		super().setUp()
 		self.attendance_date = add_days(nowdate(), -2)
-		self.employee = self._get_or_create_employee()
-		self.project = self._get_or_create_project()
-		ensure_holiday_list_for_employee(self.employee, self.attendance_date)
+		self.employee = get_or_create_test_employee()
+		self.project = get_or_create_test_project(self.employee)
 		self._cleanup()
 
 	def tearDown(self):
@@ -54,76 +59,6 @@ class IntegrationTestAttendanceService(IntegrationTestCase):
 				"from_date": self.attendance_date,
 			},
 		)
-
-	def _get_or_create_employee(self):
-		employee = frappe.db.get_value("Employee", {"status": "Active"}, "name")
-		if employee:
-			return employee
-
-		company = frappe.db.get_value("Company", {}, "name")
-		if not company:
-			company = frappe.get_doc(
-				{
-					"doctype": "Company",
-					"company_name": "_Test Attendance Service Company",
-					"abbr": "ASC",
-					"default_currency": "INR",
-					"country": "India",
-				}
-			).insert(ignore_permissions=True).name
-
-		return frappe.get_doc(
-			{
-				"doctype": "Employee",
-				"first_name": "Attendance Service",
-				"company": company,
-				"status": "Active",
-				"date_of_joining": add_days(nowdate(), -60),
-				"gender": "Male",
-			}
-		).insert(ignore_permissions=True).name
-
-	def _get_or_create_project(self):
-		project = frappe.db.get_value("Project", {}, "name")
-		if project:
-			return project
-
-		company = frappe.db.get_value("Employee", self.employee, "company")
-		return frappe.get_doc(
-			{
-				"doctype": "Project",
-				"project_name": "_Test Attendance Service Project",
-				"company": company,
-			}
-		).insert(ignore_permissions=True).name
-
-	def _ensure_leave_allocation(self, leave_type, leave_date=None):
-		leave_date = leave_date or self.attendance_date
-		existing = frappe.db.exists(
-			"Leave Allocation",
-			{
-				"employee": self.employee,
-				"leave_type": leave_type,
-				"docstatus": 1,
-				"from_date": ["<=", leave_date],
-				"to_date": [">=", leave_date],
-			},
-		)
-		if existing:
-			return
-
-		allocation = frappe.get_doc(
-			{
-				"doctype": "Leave Allocation",
-				"employee": self.employee,
-				"leave_type": leave_type,
-				"from_date": add_days(leave_date, -30),
-				"to_date": add_days(leave_date, 30),
-				"new_leaves_allocated": 10,
-			}
-		)
-		allocation.insert(ignore_permissions=True)
-		allocation.submit()
 
 	def _get_attendance_status(self):
 		return frappe.db.get_value(
@@ -210,18 +145,89 @@ class IntegrationTestAttendanceService(IntegrationTestCase):
 		process_employee_attendance(self.employee, self.attendance_date)
 		self.assertEqual(self._get_attendance_status(), "Absent")
 
+	def test_rerun_does_not_create_duplicate_attendance(self):
+		process_employee_attendance(self.employee, self.attendance_date)
+		first_count = frappe.db.count(
+			"Attendance",
+			{
+				"employee": self.employee,
+				"attendance_date": self.attendance_date,
+				"docstatus": ["<", 2],
+			},
+		)
+
+		process_employee_attendance(self.employee, self.attendance_date)
+		second_count = frappe.db.count(
+			"Attendance",
+			{
+				"employee": self.employee,
+				"attendance_date": self.attendance_date,
+				"docstatus": ["<", 2],
+			},
+		)
+
+		self.assertEqual(first_count, 1)
+		self.assertEqual(first_count, second_count)
+
+	def test_manual_process_daily_attendance_marks_absent(self):
+		summary = process_daily_attendance(attendance_date=self.attendance_date, manual=True)
+
+		self.assertFalse(summary.get("skipped"))
+		self.assertEqual(self._get_attendance_status(), "Absent")
+
+	def test_missing_log_does_not_mark_absent_for_today(self):
+		today = nowdate()
+		frappe.db.delete(
+			"Attendance",
+			{
+				"employee": self.employee,
+				"attendance_date": today,
+			},
+		)
+
+		process_employee_attendance(self.employee, today)
+
+		self.assertTrue(is_attendance_day_in_progress(today))
+		self.assertIsNone(
+			frappe.db.get_value(
+				"Attendance",
+				{
+					"employee": self.employee,
+					"attendance_date": today,
+					"docstatus": 1,
+				},
+				"status",
+			)
+		)
+
 	def test_approved_leave_marks_on_leave(self):
 		leave_date = nowdate()
-		ensure_holiday_list_for_employee(self.employee, leave_date)
-		leave_type = frappe.db.get_value(
-			"Leave Type",
-			{"is_lwp": 0, "name": ["not in", ["Leave Without Pay"]]},
-			"name",
+		leave_type = (
+			frappe.db.get_single_value("Leave Policy Settings", "default_leave_type")
+			or "Privilege Leave"
 		)
-		if not leave_type:
-			leave_type = get_or_create_allocatable_leave_type("_Test Attendance Leave")
+		get_or_create_allocatable_leave_type(leave_type)
+		ensure_leave_allocation(
+			self.employee,
+			leave_type,
+			from_date=add_days(leave_date, -30),
+			to_date=add_days(leave_date, 30),
+		)
 
-		self._ensure_leave_allocation(leave_type, leave_date)
+		frappe.db.delete(
+			"Leave Application",
+			{
+				"employee": self.employee,
+				"from_date": leave_date,
+			},
+		)
+		frappe.db.delete(
+			"Attendance",
+			{
+				"employee": self.employee,
+				"attendance_date": leave_date,
+			},
+		)
 
 		leave = frappe.get_doc(
 			{
@@ -237,14 +243,6 @@ class IntegrationTestAttendanceService(IntegrationTestCase):
 		leave.insert(ignore_permissions=True)
 		leave.submit()
 
-		frappe.db.delete(
-			"Attendance",
-			{
-				"employee": self.employee,
-				"attendance_date": leave_date,
-			},
-		)
-
 		process_employee_attendance(self.employee, leave_date)
 		self.assertEqual(
 			frappe.db.get_value(
@@ -259,4 +257,11 @@ class IntegrationTestAttendanceService(IntegrationTestCase):
 			"On Leave",
 		)
 
-		frappe.db.delete("Leave Application", {"name": leave.name})
+		leave.cancel()
+		frappe.db.delete(
+			"Attendance",
+			{
+				"employee": self.employee,
+				"attendance_date": leave_date,
+			},
+		)

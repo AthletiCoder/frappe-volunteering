@@ -12,7 +12,21 @@ def normalize_mobile_number(raw_mobile):
 
 
 def format_mobile_number(raw_mobile):
-    normalized = normalize_mobile_number(raw_mobile)
+    if not raw_mobile:
+        return None
+
+    raw = str(raw_mobile).strip()
+    local_part = raw
+
+    if raw.startswith("+"):
+        if "-" in raw:
+            _, local_part = raw.split("-", 1)
+        elif raw.startswith("+91") and len(raw) > 3:
+            local_part = raw[3:]
+        else:
+            local_part = raw[1:]
+
+    normalized = normalize_mobile_number(local_part)
     if not normalized:
         return None
 
