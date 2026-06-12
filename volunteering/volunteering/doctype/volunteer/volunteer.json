@@ -17,6 +17,10 @@
   "address",
   "pincode",
   "status",
+  "rating_section",
+  "effective_rating",
+  "rating_sample_size",
+  "rating_last_updated",
   "employment_section",
   "employer",
   "designation",
@@ -77,6 +81,29 @@
    "fieldtype": "Select",
    "label": "Status",
    "options": "Active\nStar\nInactive"
+  },
+  {
+   "fieldname": "rating_section",
+   "fieldtype": "Section Break",
+   "label": "Rating Summary"
+  },
+  {
+   "fieldname": "effective_rating",
+   "fieldtype": "Float",
+   "label": "Effective Rating",
+   "read_only": 1
+  },
+  {
+   "fieldname": "rating_sample_size",
+   "fieldtype": "Int",
+   "label": "Rated Events Count",
+   "read_only": 1
+  },
+  {
+   "fieldname": "rating_last_updated",
+   "fieldtype": "Datetime",
+   "label": "Rating Last Updated",
+   "read_only": 1
   },
   {
    "fieldname": "employment_section",

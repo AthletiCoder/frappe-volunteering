@@ -8,7 +8,7 @@ app_license = "mit"
 # Apps
 # ------------------
 
-# required_apps = []
+required_apps = ["hrms"]
 
 # Each item in the list will be shown as an app in the apps page
 # add_to_apps_screen = [
@@ -48,6 +48,10 @@ doctype_list_js = {
     "Participation": [
         "volunteering/doctype/participation/participation_list.js",
     ],
+}
+doctype_js = {
+    "Employee": "volunteering/doctype/daily_work_log/employee_daily_work_log.js",
+    "Leave Application": "public/js/leave_application.js",
 }
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -130,11 +134,13 @@ permission_query_conditions = {
     "Volunteer": "volunteering.volunteering.volunteer_permissions.get_permission_query_conditions",
     "Participation": "volunteering.volunteering.participation_permissions.get_permission_query_conditions",
     "Reciprocation": "volunteering.volunteering.reciprocation_permissions.get_permission_query_conditions",
+    "Daily Work Log": "volunteering.volunteering.daily_work_log_permissions.get_permission_query_conditions",
 }
 
 # Override "Has Permission" logic for specific row-level updates
 has_permission = {
     "Volunteer": "volunteering.volunteering.volunteer_permissions.has_permission",
+    "Daily Work Log": "volunteering.volunteering.daily_work_log_permissions.has_permission",
 }
 
 # permission_query_conditions = {
@@ -172,28 +178,27 @@ doc_events = {
 	"Payment Entry": {
 		"before_submit": "volunteering.volunteering.accounting_controls.validate_payment_entry",
 	},
+	"Leave Application": {
+		"validate": "volunteering.volunteering.leave_policy.validate_leave_application",
+	},
+	"Employee": {
+		"after_insert": "volunteering.volunteering.leave_setup.assign_default_leave_policy",
+	},
 }
+
+after_migrate = [
+	"volunteering.volunteering.leave_setup.after_migrate",
+	"volunteering.volunteering.workspace_setup.ensure_defaults",
+]
 
 # Scheduled Tasks
 # ---------------
 
-# scheduler_events = {
-# 	"all": [
-# 		"volunteering.tasks.all"
-# 	],
-# 	"daily": [
-# 		"volunteering.tasks.daily"
-# 	],
-# 	"hourly": [
-# 		"volunteering.tasks.hourly"
-# 	],
-# 	"weekly": [
-# 		"volunteering.tasks.weekly"
-# 	],
-# 	"monthly": [
-# 		"volunteering.tasks.monthly"
-# 	],
-# }
+scheduler_events = {
+	"daily": [
+		"volunteering.volunteering.attendance_service.process_daily_attendance",
+	],
+}
 
 # Testing
 # -------
@@ -218,9 +223,9 @@ doc_events = {
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,
 # along with any modifications made in other Frappe apps
-# override_doctype_dashboards = {
-# 	"Task": "volunteering.task.get_dashboard_data"
-# }
+override_doctype_dashboards = {
+	"Employee": "volunteering.volunteering.dashboard_overrides.get_dashboard_for_employee",
+}
 
 # exempt linked doctypes from being automatically cancelled
 #
@@ -287,12 +292,10 @@ doc_events = {
 fixtures = [
     {"dt": "Role", "filters": [["name", "in", ["NGO Admin", "NGO Coordinator", "NGO Member"]]]},
     {"dt": "Web Form", "filters": [["module", "=", "Volunteering"]]},
-    
     {"doctype": "Custom Field", "filters": [["dt", "in", ["Purchase Order", "Purchase Invoice", "Expense Claim", "Payment Entry"]]]},
     {"doctype": "Property Setter", "filters": [["doc_type", "in", ["Purchase Order", "Purchase Invoice", "Expense Claim", "Payment Entry"]]]},
-
     {"doctype": "Workflow", "filters": [["document_type", "in", ["Purchase Order", "Purchase Invoice", "Expense Claim", "Payment Entry"]]]},
-
     "Workflow State",
-    "Workflow Action"
+    "Workflow Action",
+    {"doctype": "Custom Field", "filters": [["dt", "=", "Project"], ["fieldname", "=", "hours_per_kit"]]},
 ]
