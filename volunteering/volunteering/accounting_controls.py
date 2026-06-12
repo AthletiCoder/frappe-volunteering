@@ -13,8 +13,14 @@ def set_cost_center_from_project(doc, method=None):
 		return
 
 	cost_center = frappe.db.get_value("Project", doc.project, "cost_center")
-	if cost_center:
-		doc.cost_center = cost_center
+	if not cost_center:
+		return
+
+	doc.cost_center = cost_center
+	if doc.doctype == "Expense Claim":
+		for row in doc.get("expenses") or []:
+			if not row.get("cost_center"):
+				row.cost_center = cost_center
 
 
 def validate_project_has_cost_center(doc, method=None):

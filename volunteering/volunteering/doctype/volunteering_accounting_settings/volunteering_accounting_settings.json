@@ -1,0 +1,86 @@
+{
+ "actions": [],
+ "creation": "2026-06-12 12:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "approval_thresholds_section",
+  "tier_1_limit",
+  "tier_2_limit",
+  "post_facto_section",
+  "enable_post_facto_po",
+  "post_facto_max_days",
+  "post_facto_max_per_month"
+ ],
+ "fields": [
+  {
+   "fieldname": "approval_thresholds_section",
+   "fieldtype": "Section Break",
+   "label": "Approval Thresholds (INR, tax-inclusive)"
+  },
+  {
+   "default": "2000",
+   "fieldname": "tier_1_limit",
+   "fieldtype": "Currency",
+   "label": "Tier 1 Limit (Department Head / Accounts Manager)",
+   "reqd": 1
+  },
+  {
+   "default": "10000",
+   "fieldname": "tier_2_limit",
+   "fieldtype": "Currency",
+   "label": "Tier 2 Limit (Board Member)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "post_facto_section",
+   "fieldtype": "Section Break",
+   "label": "Post-Facto Purchase (future use)"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_post_facto_po",
+   "fieldtype": "Check",
+   "label": "Enable Post-Facto PO"
+  },
+  {
+   "default": "7",
+   "fieldname": "post_facto_max_days",
+   "fieldtype": "Int",
+   "label": "Post-Facto Max Days After Invoice"
+  },
+  {
+   "default": "2",
+   "fieldname": "post_facto_max_per_month",
+   "fieldtype": "Int",
+   "label": "Post-Facto Max Per Employee Per Month"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-06-12 12:00:00",
+ "modified_by": "Administrator",
+ "module": "Volunteering",
+ "name": "Volunteering Accounting Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Accounts Manager",
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
