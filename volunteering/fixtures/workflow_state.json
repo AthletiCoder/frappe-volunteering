@@ -1,0 +1,74 @@
+[
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "remove",
+  "modified": "2026-04-13 22:36:04.543670",
+  "name": "Rejected",
+  "style": "Danger",
+  "workflow_state_name": "Rejected"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "",
+  "modified": "2026-05-30 16:31:02.717409",
+  "name": "Draft",
+  "style": "",
+  "workflow_state_name": "Draft"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "ok-sign",
+  "modified": "2026-04-13 22:36:04.539051",
+  "name": "Approved",
+  "style": "Success",
+  "workflow_state_name": "Approved"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "question-sign",
+  "modified": "2026-04-13 22:36:04.506921",
+  "name": "Pending",
+  "style": "",
+  "workflow_state_name": "Pending"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "question-sign",
+  "modified": "2026-06-12 12:00:00",
+  "name": "Pending Department Head",
+  "style": "Warning",
+  "workflow_state_name": "Pending Department Head"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "question-sign",
+  "modified": "2026-06-12 12:00:00",
+  "name": "Pending Accounts Review",
+  "style": "Warning",
+  "workflow_state_name": "Pending Accounts Review"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "question-sign",
+  "modified": "2026-06-12 12:00:00",
+  "name": "Pending Board Member",
+  "style": "Warning",
+  "workflow_state_name": "Pending Board Member"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "question-sign",
+  "modified": "2026-06-12 12:00:00",
+  "name": "Pending Board Chair",
+  "style": "Warning",
+  "workflow_state_name": "Pending Board Chair"
+ }
+]

@@ -156,6 +156,36 @@ has_permission = {
 # Hook on document methods and events
 
 doc_events = {
+	"Purchase Invoice": {
+		"before_save": [
+			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
+			"volunteering.volunteering.accounting_controls.validate_project_has_cost_center",
+		],
+		"before_submit": "volunteering.volunteering.accounting_controls.validate_purchase_invoice_po_chain",
+	},
+	"Expense Claim": {
+		"before_save": [
+			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
+			"volunteering.volunteering.accounting_controls.validate_project_has_cost_center",
+			"volunteering.volunteering.approval_routing.before_accounting_document_save",
+		],
+		"before_submit": [
+			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
+			"volunteering.volunteering.approval_routing.sync_expense_claim_approval_status_before_submit",
+		],
+		"on_update": "volunteering.volunteering.approval_routing.on_accounting_workflow_state_change",
+	},
+	"Purchase Order": {
+		"before_save": [
+			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
+			"volunteering.volunteering.accounting_controls.validate_project_has_cost_center",
+			"volunteering.volunteering.approval_routing.before_accounting_document_save",
+		],
+		"on_update": "volunteering.volunteering.approval_routing.on_accounting_workflow_state_change",
+	},
+	"Payment Entry": {
+		"before_submit": "volunteering.volunteering.accounting_controls.validate_payment_entry",
+	},
 	"Leave Application": {
 		"validate": "volunteering.volunteering.leave_policy.validate_leave_application",
 	},
@@ -166,6 +196,7 @@ doc_events = {
 
 after_migrate = [
 	"volunteering.volunteering.leave_setup.after_migrate",
+	"volunteering.volunteering.accounting_setup.after_migrate",
 	"volunteering.volunteering.workspace_setup.ensure_defaults",
 ]
 
@@ -270,5 +301,10 @@ override_doctype_dashboards = {
 fixtures = [
     {"dt": "Role", "filters": [["name", "in", ["NGO Admin", "NGO Coordinator", "NGO Member"]]]},
     {"dt": "Web Form", "filters": [["module", "=", "Volunteering"]]},
+    {"doctype": "Custom Field", "filters": [["dt", "in", ["Purchase Order", "Purchase Invoice", "Expense Claim", "Payment Entry"]]]},
+    {"doctype": "Property Setter", "filters": [["doc_type", "in", ["Purchase Order", "Purchase Invoice", "Expense Claim", "Payment Entry"]]]},
+    {"doctype": "Workflow", "filters": [["document_type", "in", ["Purchase Order", "Purchase Invoice", "Expense Claim", "Payment Entry"]]]},
+    "Workflow State",
+    "Workflow Action",
     {"doctype": "Custom Field", "filters": [["dt", "=", "Project"], ["fieldname", "=", "hours_per_kit"]]},
 ]
