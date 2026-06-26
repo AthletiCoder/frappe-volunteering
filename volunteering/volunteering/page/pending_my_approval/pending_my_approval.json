@@ -1,0 +1,38 @@
+{
+ "content": null,
+ "creation": "2026-06-13 08:39:34.776315",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-06-13 08:39:34.776315",
+ "modified_by": "Administrator",
+ "module": "Volunteering",
+ "name": "pending-my-approval",
+ "owner": "Administrator",
+ "page_name": "pending-my-approval",
+ "roles": [
+  {
+   "role": "Employee"
+  },
+  {
+   "role": "Accounts User"
+  },
+  {
+   "role": "Accounts Manager"
+  },
+  {
+   "role": "NGO Department Head"
+  },
+  {
+   "role": "NGO Board Member"
+  },
+  {
+   "role": "NGO Board Chairperson"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "My Approval"
+}

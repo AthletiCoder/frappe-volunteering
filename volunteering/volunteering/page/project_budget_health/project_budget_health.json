@@ -1,0 +1,19 @@
+{
+ "creation": "2026-06-13 12:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-06-13 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Volunteering",
+ "name": "project-budget-health",
+ "owner": "Administrator",
+ "page_name": "project-budget-health",
+ "roles": [
+  {"role": "Accounts User"},
+  {"role": "Accounts Manager"},
+  {"role": "NGO Coordinator"}
+ ],
+ "standard": "Yes",
+ "title": "Budget Health"
+}

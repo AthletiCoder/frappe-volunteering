@@ -48,6 +48,9 @@ def after_migrate():
 	ensure_departments()
 	ensure_accounting_settings()
 	sync_workflow_submit_permissions()
+	from volunteering.volunteering.accounting_dashboard.setup import ensure_accounting_pages
+
+	ensure_accounting_pages()
 
 
 def ensure_workflow_actions():

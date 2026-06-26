@@ -240,3 +240,83 @@ def make_expense_claim(employee, project, amount=1500, owner=None):
 	claim.insert(ignore_permissions=True)
 	attach_test_receipt(claim)
 	return claim
+
+
+def get_or_create_supplier():
+	supplier_name = "_Test Accounting Supplier"
+	existing = frappe.db.get_value("Supplier", {"supplier_name": supplier_name}, "name")
+	if existing:
+		return existing
+
+	supplier_group = frappe.db.get_value("Supplier Group", {}, "name") or "All Supplier Groups"
+	return frappe.get_doc(
+		{
+			"doctype": "Supplier",
+			"supplier_name": supplier_name,
+			"supplier_group": supplier_group,
+			"supplier_type": "Company",
+		}
+	).insert(ignore_permissions=True).name
+
+
+def get_or_create_purchase_item():
+	item_code = "_Test Accounting Item"
+	if frappe.db.exists("Item", item_code):
+		return item_code
+
+	item_group = frappe.db.get_value("Item Group", {"is_group": 0}, "name") or "All Item Groups"
+	frappe.get_doc(
+		{
+			"doctype": "Item",
+			"item_code": item_code,
+			"item_name": item_code,
+			"item_group": item_group,
+			"stock_uom": "Nos",
+			"is_stock_item": 1,
+			"is_purchase_item": 1,
+		}
+	).insert(ignore_permissions=True)
+	return item_code
+
+
+def make_purchase_order(project, amount=1500, owner=None):
+	company = frappe.db.get_value("Company", {}, "name")
+	supplier = get_or_create_supplier()
+	item_code = get_or_create_purchase_item()
+	cost_center = frappe.db.get_value("Project", project, "cost_center")
+	po = frappe.get_doc(
+		{
+			"doctype": "Purchase Order",
+			"company": company,
+			"supplier": supplier,
+			"project": project,
+			"cost_center": cost_center,
+			"transaction_date": nowdate(),
+			"schedule_date": nowdate(),
+			"currency": frappe.db.get_value("Company", company, "default_currency"),
+			"conversion_rate": 1,
+			"items": [
+				{
+					"item_code": item_code,
+					"qty": 1,
+					"rate": amount,
+					"schedule_date": nowdate(),
+				}
+			],
+		}
+	)
+	if owner:
+		po.owner = owner
+	po.insert(ignore_permissions=True)
+	return po
+
+
+def set_project_department_budget(project, department, allocated_amount):
+	project_doc = frappe.get_doc("Project", project)
+	project_doc.department_budgets = []
+	project_doc.append(
+		"department_budgets",
+		{"department": department, "allocated_amount": allocated_amount},
+	)
+	project_doc.save(ignore_permissions=True)
+	return project_doc

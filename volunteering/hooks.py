@@ -52,6 +52,8 @@ doctype_list_js = {
 doctype_js = {
     "Employee": "volunteering/doctype/daily_work_log/employee_daily_work_log.js",
     "Leave Application": "public/js/leave_application.js",
+    "Expense Claim": "public/js/accounting_workflow.js",
+    "Purchase Order": "public/js/accounting_workflow.js",
 }
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -135,12 +137,14 @@ permission_query_conditions = {
     "Participation": "volunteering.volunteering.participation_permissions.get_permission_query_conditions",
     "Reciprocation": "volunteering.volunteering.reciprocation_permissions.get_permission_query_conditions",
     "Daily Work Log": "volunteering.volunteering.daily_work_log_permissions.get_permission_query_conditions",
+    "Expense Claim": "volunteering.volunteering.expense_claim_permissions.get_permission_query_conditions",
 }
 
 # Override "Has Permission" logic for specific row-level updates
 has_permission = {
     "Volunteer": "volunteering.volunteering.volunteer_permissions.has_permission",
     "Daily Work Log": "volunteering.volunteering.daily_work_log_permissions.has_permission",
+    "Expense Claim": "volunteering.volunteering.expense_claim_permissions.has_permission",
 }
 
 # permission_query_conditions = {
@@ -160,6 +164,8 @@ doc_events = {
 		"before_save": [
 			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
 			"volunteering.volunteering.accounting_controls.validate_project_has_cost_center",
+			"volunteering.volunteering.accounting_controls.assign_department_from_owner",
+			"volunteering.volunteering.budget_service.validate_budget_on_save",
 		],
 		"before_submit": "volunteering.volunteering.accounting_controls.validate_purchase_invoice_po_chain",
 	},
@@ -167,7 +173,9 @@ doc_events = {
 		"before_save": [
 			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
 			"volunteering.volunteering.accounting_controls.validate_project_has_cost_center",
+			"volunteering.volunteering.accounting_controls.assign_department_from_employee",
 			"volunteering.volunteering.approval_routing.before_accounting_document_save",
+			"volunteering.volunteering.budget_service.validate_budget_on_save",
 		],
 		"before_submit": [
 			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
@@ -179,7 +187,9 @@ doc_events = {
 		"before_save": [
 			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
 			"volunteering.volunteering.accounting_controls.validate_project_has_cost_center",
+			"volunteering.volunteering.accounting_controls.assign_department_from_owner",
 			"volunteering.volunteering.approval_routing.before_accounting_document_save",
+			"volunteering.volunteering.budget_service.validate_budget_on_save",
 		],
 		"on_update": "volunteering.volunteering.approval_routing.on_accounting_workflow_state_change",
 	},
@@ -196,8 +206,8 @@ doc_events = {
 
 after_migrate = [
 	"volunteering.volunteering.leave_setup.after_migrate",
-	"volunteering.volunteering.accounting_setup.after_migrate",
 	"volunteering.volunteering.workspace_setup.ensure_defaults",
+	"volunteering.volunteering.accounting_setup.after_migrate",
 ]
 
 # Scheduled Tasks
@@ -206,6 +216,9 @@ after_migrate = [
 scheduler_events = {
 	"daily": [
 		"volunteering.volunteering.attendance_service.process_daily_attendance",
+	],
+	"weekly": [
+		"volunteering.volunteering.accounting_dashboard.setup.send_weekly_pending_approval_reminder",
 	],
 }
 

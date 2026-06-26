@@ -23,6 +23,30 @@ def set_cost_center_from_project(doc, method=None):
 				row.cost_center = cost_center
 
 
+def assign_department_from_employee(doc, method=None):
+	if doc.doctype != "Expense Claim" or not doc.get("employee"):
+		return
+	if doc.get("department"):
+		return
+
+	department = frappe.db.get_value("Employee", doc.employee, "department")
+	if department:
+		doc.department = department
+
+
+def assign_department_from_owner(doc, method=None):
+	if doc.doctype not in ("Purchase Order", "Purchase Invoice") or doc.get("department"):
+		return
+
+	employee = frappe.db.get_value("Employee", {"user_id": doc.owner}, "name")
+	if not employee:
+		return
+
+	department = frappe.db.get_value("Employee", employee, "department")
+	if department:
+		doc.department = department
+
+
 def validate_project_has_cost_center(doc, method=None):
 	if doc.doctype not in PROJECT_CONTROLLED_DOCTYPES:
 		return

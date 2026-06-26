@@ -117,11 +117,18 @@ Each department has a **Department Head** (user login on the Department master) 
 
 ---
 
-#### A6. Budgets *(planned)*
+#### A6. Budgets ✅
 
-Per-project and per-department budget limits with utilisation dashboard.
+Per-project and per-department budget limits with utilisation dashboard. Soft warnings when a department exceeds its allocated budget on Expense Claims, Purchase Orders, or Purchase Invoices.
 
-**URL (planned):** [Project Budget Health](https://erp.sevamrita.org/app/project-budget-health) *(desk page — not yet built)*
+**URL:** [Budget Health](https://erp.sevamrita.org/app/project-budget-health)
+
+**Steps:**
+
+1. Open a **Project** → set **Department Budgets** (department + allocated amount).
+2. When raising EC / PO / PI, **Department** auto-fills from the employee or document owner.
+3. If consumed + this document exceeds allocation, an orange **Budget Exceeded** warning appears (save is not blocked).
+4. Toggle warnings in [Volunteering Accounting Settings](https://erp.sevamrita.org/app/volunteering-accounting-settings/Volunteering%20Accounting%20Settings) → **Enable Budget Warnings**.
 
 ---
 
@@ -218,9 +225,9 @@ Attendance is processed daily from work logs, approved leave, and work-from-home
 
 | Dashboard | Purpose | URL |
 |-----------|---------|-----|
-| Pending My Approval | One list for your workflow actions | `/app/pending-my-approval` *(planned)* |
-| Pending Reimbursements | Approved expense claims awaiting payment | `/app/pending-reimbursements` *(planned)* |
-| Pending Vendor Payments | Approved invoices awaiting payment | `/app/pending-vendor-payments` *(planned)* |
+| Pending My Approval | One list for your workflow actions | `/app/pending-my-approval` |
+| Pending Reimbursements | Approved expense claims awaiting payment | `/app/pending-reimburse` |
+| Pending Vendor Payments | Approved invoices awaiting payment | `/app/pending-vendor-pay` |
 | Project Budget Health | Budget vs spent by project and department | `/app/project-budget-health` *(planned)* |
 
 ---
@@ -298,28 +305,28 @@ Attendance is processed daily from work logs, approved leave, and work-from-home
 
 **Not in Sprint 1 scope (deferred):** PO integration tests, board-member-as-requester PO happy path, Frappe Notification DocType (using `frappe.sendmail` instead).
 
-#### Accounting — Sprint 2 (UX & visibility) — **Next**
+#### Accounting — Sprint 2 (UX & visibility) — **Complete**
 
 | Feature | Status | Comments |
 |---------|--------|----------|
-| Pending My Approval desk page | 📋 Planned | Single list of open Workflow Actions for current user |
-| Pending Reimbursements dashboard | 📋 Planned | Approved ECs awaiting payment |
-| Pending Vendor Payments dashboard | 📋 Planned | Approved PIs awaiting payment |
-| Prominent workflow actions on forms | 📋 Planned | Reduce clicks; surface Approve / Reject / Escalate |
-| Department-based list permissions | 📋 Planned | Dept heads see own dept ECs only |
-| Weekly pending approvals email/report | 📋 Planned | Nudge approvers with ageing |
-| PO integration tests (tier routing) | 📋 Planned | Scenarios 8–9 from test matrix |
-| Integration tests for end-to-end happy paths | 📋 Planned | Submit → approve → (mock) payment |
+| Pending My Approval desk page | ✅ Done | `/app/pending-my-approval`; scans pending workflow states + open Workflow Actions |
+| Pending Reimbursements dashboard | ✅ Done | `/app/pending-reimburse`; approved unpaid ECs |
+| Pending Vendor Payments dashboard | ✅ Done | `/app/pending-vendor-pay`; PIs with outstanding balance |
+| Prominent workflow actions on forms | ✅ Done | `accounting_workflow.js` — Approve / Reject / Escalate on EC & PO |
+| Department-based list permissions | ✅ Done | `expense_claim_permissions.py` hooks on EC list/read |
+| Weekly pending approvals email/report | ✅ Done | Weekly scheduler + ageing in email body |
+| PO integration tests (tier routing) | ✅ Done | 6 tests in `test_accounting_po_approval.py` (scenarios 8–9) |
+| Dashboard integration tests | ✅ Done | 10 tests in `test_accounting_dashboard.py` |
 
-#### Accounting — Sprint 3 (budgets)
+#### Accounting — Sprint 3 (budgets) — **Complete**
 
 | Feature | Status | Comments |
 |---------|--------|----------|
-| Project department budget child table | 📋 Planned | Allocated / consumed / remaining |
-| Budget warn on exceed (soft) | 📋 Planned | Configurable hard block later |
-| Department field on PO / EC / PI | 📋 Planned | Default from employee |
-| Project Budget Health dashboard | 📋 Planned | Dept-wise breakdown |
-| Budget tests | 📋 Planned | |
+| Project department budget child table | ✅ Done | `Project Department Budget` on Project |
+| Budget warn on exceed (soft) | ✅ Done | `budget_service.py`; toggle via Accounting Settings |
+| Department field on PO / EC / PI | ✅ Done | Auto from employee (EC) or owner (PO/PI) |
+| Project Budget Health dashboard | ✅ Done | `/app/project-budget-health`; sidebar under **Budgets** |
+| Budget tests | ✅ Done | 3 unit + 4 integration in `test_budget_service.py`, `test_accounting_budget.py` |
 
 #### Accounting — Sprint 4 (post-facto PO)
 
@@ -383,6 +390,8 @@ Attendance is processed daily from work logs, approved leave, and work-from-home
 | Missing Daily Logs report | ✅ Done | |
 | 46 automated tests | ✅ Done | Pre-Sprint 1 baseline |
 | 63 automated tests | ✅ Done | +17 accounting tests (Sprint 1) |
+| 73 automated tests | ✅ Done | +10 dashboard tests (Sprint 2) |
+| 86 automated tests | ✅ Done | +6 PO + 7 budget tests (Sprint 2–3) |
 
 ---
 
@@ -410,29 +419,46 @@ Attendance is processed daily from work logs, approved leave, and work-from-home
 
 ---
 
-#### Sprint 2 — UX & visibility 📋 **Next**
+#### Sprint 2 — UX & visibility ✅ **Complete**
 
 **Goal:** Approvers and Accounts staff can see what needs action without hunting through lists.
 
-**Planned deliverables:**
+**Delivered:**
 
-1. **Pending My Approval** — desk page listing documents awaiting the logged-in user's workflow action (any tier).
+1. **Pending My Approval** — desk page with amount, project, age, and available actions.
 2. **Pending Reimbursements** — approved expense claims not yet paid.
-3. **Pending Vendor Payments** — approved purchase invoices not yet paid.
-4. **Form UX** — clearer workflow action buttons on EC/PO forms.
-5. **Department scoping** — dept heads see only their department's expense claims in lists.
-6. **Weekly nudge** — scheduled email or report for stale pending approvals.
-7. **Tests** — PO tier integration tests; optional payment-entry happy-path tests.
+3. **Pending Vendor Payments** — purchase invoices with outstanding balance.
+4. **Department scoping** — dept heads see only their department's expense claims in lists.
+5. **Weekly nudge** — scheduled email for stale pending approvals (links to dashboard).
+6. **Form UX** — Approve / Reject / Escalate buttons on EC & PO forms when in pending workflow states.
+7. **PO integration tests** — tier routing and accounts-manager approval (scenarios 8–9).
+8. **Tests** — 10 dashboard + 6 PO integration tests.
 
-**Success criteria:** Accounts and approvers can answer “what do I need to act on today?” from the desk home; PO tier scenarios 8–9 covered by tests.
+**Success criteria:** Accounts and approvers can answer “what do I need to act on today?” from the desk — **met**.
 
 ---
 
-#### Sprints 3–8 (unchanged priority)
+#### Sprint 3 — Budgets ✅ **Complete**
+
+**Goal:** Track per-project department budgets and surface utilisation before overspend.
+
+**Delivered:**
+
+1. **Project Department Budget** child table on Project (department + allocated amount).
+2. **Department** field on EC, PO, PI — auto-assigned from employee or document owner.
+3. **Soft budget warnings** on save when consumed + document exceeds allocation (`enable_budget_warnings` in Accounting Settings).
+4. **Budget Health** desk page — allocated / consumed / remaining / utilisation % by project and department.
+5. **Tests** — 3 unit + 4 integration tests for budget service and end-to-end EC consumption.
+
+**Success criteria:** Coordinators and Accounts can see budget health at a glance; users get warned on overspend without blocking saves — **met**.
+
+---
+
+#### Sprints 4–8 (unchanged priority)
 
 | Sprint | Theme | Key outcome |
 |--------|-------|-------------|
-| 3 | Budgets | Project/dept budget limits + Project Budget Health dashboard |
+| 3 | Budgets | ✅ Complete | Project/dept budget limits + Budget Health dashboard |
 | 4 | Post-facto PO | 7-day / 2-per-month guardrails + board minimum approval |
 | 5 | Donations | Donor → Donation → Project + 80G template |
 | 6 | FCRA | `fund_type` on Project; payment warnings by fund |
@@ -466,8 +492,8 @@ Attendance is processed daily from work logs, approved leave, and work-from-home
 | 5 | EC escalate Dept Head → Board Member | ✅ Done | `test_escalation_moves_to_board_member` |
 | 6 | EC rejected → stays Rejected → re-submit | ✅ Done | `test_rejected_claim_stays_rejected_until_resubmit` |
 | 7 | EC without receipt → blocked | ✅ Done | `test_claim_without_receipt_cannot_submit` |
-| 8 | PO tier rules mirror EC | 🚧 Partial | Workflow + unit tests; no PO integration test yet |
-| 9 | Board Member PO → another Board Member approves | 📋 Planned | Sprint 2 |
+| 8 | PO tier rules mirror EC | ✅ Done | `test_accounting_po_approval.py` |
+| 9 | Board Member PO → another Board Member approves | ✅ Done | `test_board_member_requester_routes_to_board_member` |
 | 10 | Board Chair cannot create PO/EC | ✅ Done | EC tested; PO validation same hook |
 | 11 | PI every line needs approved PO | ✅ Done | Covered by `accounting_controls` |
 | 12 | Post-facto PO within 7 days + invoice → allowed | 📋 Planned |
@@ -478,8 +504,8 @@ Attendance is processed daily from work logs, approved leave, and work-from-home
 | 17 | Employee payment with PI ref → blocked | ✅ Done | |
 | 18 | Supplier payment with EC ref → blocked | ✅ Done | |
 | 19 | Project without cost center → blocked | ✅ Done | |
-| 20 | Budget soft warn / hard block | 📋 Planned |
-| 21 | Dept Head sees only own department docs | 📋 Planned |
+| 20 | Budget soft warn / hard block | ✅ Done | Soft warn on save; hard block deferred |
+| 21 | Dept Head sees only own department docs | ✅ Done | EC list/read scoped in Sprint 2 |
 | 22 | Coordinator sees all | 📋 Planned |
 | 23 | FCRA project payment warning | 📋 Planned |
 
@@ -493,6 +519,9 @@ Attendance is processed daily from work logs, approved leave, and work-from-home
 | 12 Jun 2026 | Requirements interview completed; agile sprint plan agreed | Management |
 | 12 Jun 2026 | Created `DEVELOPMENT_PLAN.md` (this document) | Dev team |
 | 13 Jun 2026 | **Sprint 1 complete:** approval routing, escalation, Accounting Settings, EC workflows, 63 tests green | Dev team |
+| 13 Jun 2026 | **Sprint 2 (mostly):** accounting dashboards, EC dept permissions, weekly reminder, 73 tests green | Dev team |
+| 13 Jun 2026 | **Sprint 2 complete:** workflow form UX, PO integration tests | Dev team |
+| 13 Jun 2026 | **Sprint 3 complete:** dept budgets, soft warnings, Budget Health page, 86 tests green | Dev team |
 
 ---
 
@@ -512,7 +541,12 @@ Attendance is processed daily from work logs, approved leave, and work-from-home
 | `volunteering/volunteering/accounting_controls.py` | Core validation hooks (project, cost center, payment) |
 | `volunteering/volunteering/approval_routing.py` | Tier routing, escalation, receipts, notifications |
 | `volunteering/volunteering/accounting_setup.py` | after_migrate: fields, roles, departments, workflows |
-| `volunteering/volunteering/accounting_test_utils.py` | Integration test helpers for EC |
+| `volunteering/volunteering/budget_service.py` | Budget allocation, consumption, soft warnings, Budget Health API |
+| `volunteering/volunteering/accounting_dashboard/` | Pending approvals/payments pages, sidebar setup, weekly reminder |
+| `volunteering/public/js/accounting_workflow.js` | Prominent Approve/Reject/Escalate on EC & PO forms |
+| `volunteering/volunteering/test_accounting_po_approval.py` | Integration tests for PO tier routing |
+| `volunteering/volunteering/test_budget_service.py` | Unit tests for budget helpers |
+| `volunteering/volunteering/test_accounting_budget.py` | Integration tests for budget model |
 | `volunteering/volunteering/test_approval_routing.py` | Unit tests for routing logic |
 | `volunteering/volunteering/test_accounting_approval.py` | Integration tests for EC approval |
 | `volunteering/doctype/volunteering_accounting_settings/` | Configurable tier thresholds |

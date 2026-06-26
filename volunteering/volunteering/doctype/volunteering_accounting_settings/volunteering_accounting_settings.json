@@ -3,10 +3,12 @@
  "creation": "2026-06-12 12:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": [
+  "field_order": [
   "approval_thresholds_section",
   "tier_1_limit",
   "tier_2_limit",
+  "budget_section",
+  "enable_budget_warnings",
   "post_facto_section",
   "enable_post_facto_po",
   "post_facto_max_days",
@@ -31,6 +33,17 @@
    "fieldtype": "Currency",
    "label": "Tier 2 Limit (Board Member)",
    "reqd": 1
+  },
+  {
+   "fieldname": "budget_section",
+   "fieldtype": "Section Break",
+   "label": "Budget Controls"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_budget_warnings",
+   "fieldtype": "Check",
+   "label": "Enable Soft Budget Warnings"
   },
   {
    "fieldname": "post_facto_section",
