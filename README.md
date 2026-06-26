@@ -34,6 +34,16 @@ Track volunteers, events, participation, and reciprocation in one focused workfl
 - **Dynamic event report**: `Generic Event Participation Report` builds columns dynamically from extra-detail questions for the selected event.
 - **Role-aware access model**: Supports `NGO Admin`, `NGO Coordinator`, and `NGO Member` with DocType-level permissions and row-level visibility controls on key records.
 
+#### Coordinator spreadsheet editing (Desk)
+
+Coordinators can update participations without opening each record individually:
+
+1. Open an **NGO Event** and click **Manage Participations**.
+2. This opens the Participation **Report** view (spreadsheet table) filtered to that event.
+3. Click any editable cell (Attendance, Kits Delivered, Logging Status, etc.) and change the value — it auto-saves on commit (Tab, Enter, or click away).
+4. If another coordinator updates a row, your table refreshes that row automatically.
+5. For screenshots or RM ratings, open the full Participation form via the row ID link.
+
 ### Volunteer ratings (for Relationship Managers)
 
 This section explains how to record and use volunteer ratings after an event.

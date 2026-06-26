@@ -159,3 +159,112 @@ class IntegrationTestParticipation(IntegrationTestCase):
         self.assertEqual(volunteer.effective_rating, 0)
         self.assertEqual(volunteer.rating_sample_size, 0)
         self.assertEqual(participation.effective_rating, 0)
+
+    def test_update_participation_field_updates_status(self):
+        event = self.create_event()
+        volunteer = frappe.get_doc(
+            {
+                "doctype": "Volunteer",
+                "first_name": "Grid Volunteer",
+                "mobile_number": unique_mobile("98"),
+            }
+        ).insert(ignore_permissions=True)
+
+        participation = frappe.get_doc(
+            {
+                "doctype": "Participation",
+                "event": event.name,
+                "volunteer": volunteer.name,
+            }
+        ).insert(ignore_permissions=True)
+
+        from volunteering.volunteering.doctype.participation.participation import (
+            update_participation_field,
+        )
+
+        updated = update_participation_field(
+            participation.name, "status", "Attended", participation.modified
+        )
+        self.assertEqual(updated["status"], "Attended")
+        self.assertEqual(
+            frappe.db.get_value("Participation", participation.name, "status"),
+            "Attended",
+        )
+
+    def test_update_participation_field_rejects_invalid_field(self):
+        event = self.create_event()
+        volunteer = frappe.get_doc(
+            {
+                "doctype": "Volunteer",
+                "first_name": "Invalid Field Volunteer",
+                "mobile_number": unique_mobile("99"),
+            }
+        ).insert(ignore_permissions=True)
+
+        participation = frappe.get_doc(
+            {
+                "doctype": "Participation",
+                "event": event.name,
+                "volunteer": volunteer.name,
+            }
+        ).insert(ignore_permissions=True)
+
+        from volunteering.volunteering.doctype.participation.participation import (
+            update_participation_field,
+        )
+
+        with self.assertRaises(frappe.ValidationError):
+            update_participation_field(
+                participation.name, "logging_screenshot", "/files/test.png"
+            )
+
+    def test_update_participation_field_rejects_event_change(self):
+        event = self.create_event()
+        other_event = self.create_event()
+        volunteer = frappe.get_doc(
+            {
+                "doctype": "Volunteer",
+                "first_name": "Event Guard Volunteer",
+                "mobile_number": unique_mobile("95"),
+            }
+        ).insert(ignore_permissions=True)
+
+        participation = frappe.get_doc(
+            {
+                "doctype": "Participation",
+                "event": event.name,
+                "volunteer": volunteer.name,
+            }
+        ).insert(ignore_permissions=True)
+
+        from volunteering.volunteering.doctype.participation.participation import (
+            update_participation_field,
+        )
+
+        with self.assertRaises(frappe.ValidationError):
+            update_participation_field(participation.name, "event", other_event.name)
+
+    def test_update_participation_field_requires_rating_when_logged(self):
+        event = self.create_event()
+        volunteer = frappe.get_doc(
+            {
+                "doctype": "Volunteer",
+                "first_name": "Logged Status Volunteer",
+                "mobile_number": unique_mobile("94"),
+            }
+        ).insert(ignore_permissions=True)
+
+        participation = frappe.get_doc(
+            {
+                "doctype": "Participation",
+                "event": event.name,
+                "volunteer": volunteer.name,
+            }
+        ).insert(ignore_permissions=True)
+
+        from volunteering.volunteering.doctype.participation.participation import (
+            update_participation_field,
+        )
+
+        with self.assertRaises(frappe.ValidationError):
+            update_participation_field(participation.name, "logging_status", "Logged")
