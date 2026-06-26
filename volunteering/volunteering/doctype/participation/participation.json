@@ -62,6 +62,7 @@
    "default": "Registered",
    "fieldname": "status",
    "fieldtype": "Select",
+   "in_list_view": 1,
    "label": "Attendance",
    "options": "\nRegistered\nAttended\nNo Show"
   },
@@ -84,12 +85,14 @@
   {
    "fieldname": "temp_full_name",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Full Name"
   },
   {
    "fieldname": "temp_phone",
    "fieldtype": "Phone",
+   "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Phone"
   },
@@ -136,6 +139,7 @@
   {
    "fieldname": "hours_logged",
    "fieldtype": "Float",
+   "in_list_view": 1,
    "label": "Hours Logged"
   },
   {
@@ -152,12 +156,14 @@
   {
    "fieldname": "shipping_status",
    "fieldtype": "Select",
+   "in_list_view": 1,
    "label": "Shipping Status",
-   "options": "\nShipped\nDelivered"
+   "options": "\nShipped\nDelivered\nUndelivered"
   },
   {
    "fieldname": "logging_status",
    "fieldtype": "Select",
+   "in_list_view": 1,
    "label": "Logging Status",
    "options": "\nReminded\nNot Responding\nLogged"
   },
@@ -212,11 +218,13 @@
   {
    "fieldname": "kits_requested",
    "fieldtype": "Int",
+   "in_list_view": 1,
    "label": "Kits Requested"
   },
   {
    "fieldname": "kits_delivered",
    "fieldtype": "Int",
+   "in_list_view": 1,
    "label": "Kits Delivered"
   },
   {
@@ -225,7 +233,7 @@
   }
  ],
  "links": [],
- "modified": "2026-06-02 21:32:38.625849",
+ "modified": "2026-06-26 14:54:45.881465",
  "modified_by": "Administrator",
  "module": "Volunteering",
  "name": "Participation",
