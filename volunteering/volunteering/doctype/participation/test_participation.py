@@ -5,6 +5,10 @@ import frappe
 from frappe.utils import nowdate
 from frappe.tests import IntegrationTestCase
 
+from volunteering.volunteering.doctype.participation.participation import (
+    check_event_registration,
+    is_registered_for_event,
+)
 from volunteering.volunteering.test_utils import make_test_phone, unique_mobile
 
 
@@ -178,6 +182,47 @@ class IntegrationTestParticipation(IntegrationTestCase):
         self.assertEqual(volunteer.effective_rating, 0)
         self.assertEqual(volunteer.rating_sample_size, 0)
         self.assertEqual(participation.effective_rating, 0)
+
+    def test_check_event_registration_returns_false_for_unknown_phone(self):
+        event = self.create_event()
+        phone = make_test_phone()
+
+        self.assertFalse(is_registered_for_event(phone, event.name))
+        self.assertEqual(
+            check_event_registration(phone, event.name),
+            {"registered": False},
+        )
+
+    def test_duplicate_registration_is_blocked(self):
+        event = self.create_event()
+        phone = make_test_phone()
+
+        frappe.get_doc(
+            {
+                "doctype": "Participation",
+                "event": event.name,
+                "temp_full_name": "First Volunteer",
+                "temp_phone": phone,
+                "temp_email": f"dup-{frappe.generate_hash(length=6)}@example.com",
+            }
+        ).insert(ignore_permissions=True)
+
+        self.assertTrue(is_registered_for_event(phone, event.name))
+        self.assertEqual(
+            check_event_registration(phone, event.name),
+            {"registered": True},
+        )
+
+        with self.assertRaises(frappe.ValidationError):
+            frappe.get_doc(
+                {
+                    "doctype": "Participation",
+                    "event": event.name,
+                    "temp_full_name": "Duplicate Volunteer",
+                    "temp_phone": phone,
+                    "temp_email": f"dup2-{frappe.generate_hash(length=6)}@example.com",
+                }
+            ).insert(ignore_permissions=True)
 
     def test_update_participation_field_updates_status(self):
         event = self.create_event()
