@@ -8,6 +8,7 @@
  "field_order": [
   "participation_section",
   "volunteer",
+  "relationship_manager",
   "event",
   "status",
   "column_break_jilv",
@@ -48,6 +49,16 @@
    "options": "Volunteer",
    "reqd": 1,
    "search_index": 1
+  },
+  {
+   "fetch_from": "volunteer.relationship_manager",
+   "fieldname": "relationship_manager",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Relationship Manager",
+   "options": "User",
+   "read_only": 1
   },
   {
    "fieldname": "event",

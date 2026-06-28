@@ -32,6 +32,25 @@ class IntegrationTestParticipation(IntegrationTestCase):
             }
         ).insert(ignore_permissions=True)
 
+    def create_volunteer(self, relationship_manager=None, first_name="Test Volunteer"):
+        return frappe.get_doc(
+            {
+                "doctype": "Volunteer",
+                "first_name": first_name,
+                "mobile_number": make_test_phone(),
+                "relationship_manager": relationship_manager,
+            }
+        ).insert(ignore_permissions=True)
+
+    def create_participation(self, event, volunteer):
+        return frappe.get_doc(
+            {
+                "doctype": "Participation",
+                "event": event.name,
+                "volunteer": volunteer.name,
+            }
+        ).insert(ignore_permissions=True)
+
     def test_before_insert_links_volunteer_from_temp_phone(self):
         event = self.create_event()
 
@@ -268,3 +287,68 @@ class IntegrationTestParticipation(IntegrationTestCase):
 
         with self.assertRaises(frappe.ValidationError):
             update_participation_field(participation.name, "logging_status", "Logged")
+
+    def test_participation_copies_relationship_manager_on_insert(self):
+        event = self.create_event()
+        volunteer = self.create_volunteer(relationship_manager=frappe.session.user)
+        participation = self.create_participation(event, volunteer)
+
+        self.assertEqual(participation.relationship_manager, frappe.session.user)
+
+    def test_participation_copies_relationship_manager_when_volunteer_changes(self):
+        event = self.create_event()
+        volunteer_a = self.create_volunteer(
+            relationship_manager=frappe.session.user, first_name="Volunteer A"
+        )
+        volunteer_b = self.create_volunteer(first_name="Volunteer B")
+        participation = self.create_participation(event, volunteer_a)
+
+        participation.volunteer = volunteer_b.name
+        participation.save(ignore_permissions=True)
+
+        self.assertEqual(participation.relationship_manager, volunteer_b.relationship_manager)
+
+    def test_participation_relationship_manager_empty_when_volunteer_has_none(self):
+        event = self.create_event()
+        volunteer = self.create_volunteer(first_name="No RM Volunteer")
+        participation = self.create_participation(event, volunteer)
+
+        self.assertFalse(participation.relationship_manager)
+
+    def test_update_participation_field_rejects_relationship_manager(self):
+        event = self.create_event()
+        volunteer = self.create_volunteer(relationship_manager=frappe.session.user)
+        participation = self.create_participation(event, volunteer)
+
+        from volunteering.volunteering.doctype.participation.participation import (
+            update_participation_field,
+        )
+
+        with self.assertRaises(frappe.ValidationError):
+            update_participation_field(
+                participation.name, "relationship_manager", frappe.session.user
+            )
+
+    def test_backfill_participation_relationship_managers(self):
+        from volunteering.volunteering.workspace_setup import (
+            backfill_participation_relationship_managers,
+        )
+
+        event = self.create_event()
+        volunteer = self.create_volunteer(relationship_manager=frappe.session.user)
+        participation = self.create_participation(event, volunteer)
+
+        frappe.db.set_value(
+            "Participation",
+            participation.name,
+            "relationship_manager",
+            None,
+            update_modified=False,
+        )
+
+        backfill_participation_relationship_managers()
+
+        self.assertEqual(
+            frappe.db.get_value("Participation", participation.name, "relationship_manager"),
+            frappe.session.user,
+        )
