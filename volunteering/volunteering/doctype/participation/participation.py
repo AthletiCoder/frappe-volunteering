@@ -1,6 +1,7 @@
 import frappe
 from frappe.model.document import Document
 from frappe import _
+from frappe.rate_limiter import rate_limit
 from frappe.utils import flt, now_datetime
 from volunteering.volunteering.doctype.volunteer.volunteer import (
     find_volunteer_by_mobile,
@@ -11,6 +12,27 @@ from volunteering.volunteering.doctype.volunteer.volunteer import (
 DEFAULT_HOURS_PER_KIT = 0.5
 RATING_MAX_STARS = 5
 RECENT_EVENT_WEIGHTS = [0.5, 0.3, 0.2]
+
+
+def is_registered_for_event(mobile, event):
+    if not event or not frappe.db.exists("NGO Event", event):
+        return False
+
+    formatted = format_mobile_number(mobile)
+    if not formatted:
+        return False
+
+    volunteer = find_volunteer_by_mobile(formatted)
+    if not volunteer:
+        return False
+
+    return bool(frappe.db.exists("Participation", {"event": event, "volunteer": volunteer}))
+
+
+@frappe.whitelist(allow_guest=True)
+@rate_limit(key="check_event_registration", limit=20, seconds=60)
+def check_event_registration(mobile, event):
+    return {"registered": is_registered_for_event(mobile, event)}
 
 
 class Participation(Document):
@@ -29,6 +51,9 @@ class Participation(Document):
                     "Volunteer is required. Provide a volunteer or a valid phone number so we can auto-link the volunteer."
                 )
             )
+
+        if is_registered_for_event(self.temp_phone, self.event):
+            frappe.throw(_("You have already registered for this event."))
 
     def ensure_event(self):
         if self.event:
