@@ -12,6 +12,23 @@ from volunteering.volunteering.doctype.volunteer.volunteer import (
 DEFAULT_HOURS_PER_KIT = 0.5
 RATING_MAX_STARS = 5
 RECENT_EVENT_WEIGHTS = [0.5, 0.3, 0.2]
+GRID_EDITABLE_FIELDS = frozenset(
+    {
+        "status",
+        "kits_requested",
+        "kits_delivered",
+        "shipping_status",
+        "logging_status",
+        "hours_logged",
+        "temp_full_name",
+        "temp_phone",
+        "temp_email",
+        "temp_employee_id",
+        "temp_company",
+        "temp_address",
+        "comments",
+    }
+)
 
 
 def is_registered_for_event(mobile, event):
@@ -274,3 +291,35 @@ def update_volunteer_rating_rollup(volunteer_name, exclude_participation=None):
         },
         update_modified=False,
     )
+
+
+@frappe.whitelist()
+def update_participation_field(name, fieldname, value=None, modified=None):
+    """Update a single Participation field from Report View with full validation."""
+    if fieldname in frappe.model.default_fields:
+        frappe.throw(_("Cannot edit standard fields"))
+
+    if fieldname not in GRID_EDITABLE_FIELDS:
+        frappe.throw(_("Field {0} cannot be edited from the grid").format(fieldname))
+
+    meta = frappe.get_meta("Participation")
+    if not meta.has_field(fieldname):
+        frappe.throw(_("Invalid field: {0}").format(fieldname))
+
+    field = meta.get_field(fieldname)
+    if field.read_only or field.fieldtype in ("Attach", "Attach Image", "Table"):
+        frappe.throw(_("Field {0} cannot be edited from the grid").format(field.label))
+
+    doc = frappe.get_doc("Participation", name)
+    doc.check_permission("write")
+
+    if modified:
+        doc._original_modified = modified
+
+    if fieldname == "temp_phone" and value:
+        value = format_mobile_number(value)
+
+    doc.set(fieldname, value)
+    doc.save()
+
+    return doc.as_dict()

@@ -167,6 +167,7 @@ doc_events = {
 after_migrate = [
 	"volunteering.volunteering.leave_setup.after_migrate",
 	"volunteering.volunteering.workspace_setup.ensure_defaults",
+	"volunteering.volunteering.workspace_setup.backfill_participation_relationship_managers",
 ]
 
 # Scheduled Tasks
