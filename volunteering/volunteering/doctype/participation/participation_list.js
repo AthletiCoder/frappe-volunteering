@@ -19,6 +19,7 @@
 	const REPORT_ADD_FIELDS = [
 		"modified",
 		"volunteer",
+		"relationship_manager",
 		"temp_full_name",
 		"status",
 		"kits_requested",
@@ -58,7 +59,7 @@
 		if (roles.includes("System Manager") || roles.includes("NGO Admin")) {
 			return true;
 		}
-		return Boolean(doc._relationship_manager === frappe.session.user);
+		return Boolean(doc.relationship_manager === frappe.session.user);
 	};
 
 	const save_participation_field = ({ doctype, docname, fieldname, value, modified }) =>
@@ -87,52 +88,6 @@
 		listview._participation_report_setup = true;
 
 		const row_save_queues = new Map();
-		const relationship_manager_cache = new Map();
-
-		const load_relationship_managers = (docs) => {
-			const volunteer_names = [
-				...new Set(
-					docs.map((doc) => doc.volunteer).filter((name) => name && !relationship_manager_cache.has(name))
-				),
-			];
-			if (!volunteer_names.length) {
-				return Promise.resolve();
-			}
-
-			return frappe.db
-				.get_list("Volunteer", {
-					filters: { name: ["in", volunteer_names] },
-					fields: ["name", "relationship_manager"],
-					limit: volunteer_names.length,
-				})
-				.then((rows) => {
-					rows.forEach((row) => {
-						relationship_manager_cache.set(row.name, row.relationship_manager);
-					});
-				});
-		};
-
-		const enrich_row = (doc) => {
-			if (doc.volunteer) {
-				doc._relationship_manager = relationship_manager_cache.get(doc.volunteer);
-			}
-			return doc;
-		};
-
-		const original_refresh = listview.refresh.bind(listview);
-		listview.refresh = function (...args) {
-			const refresh_result = original_refresh(...args);
-			if (!refresh_result?.then) {
-				return refresh_result;
-			}
-
-			return refresh_result.then(() => {
-				if (!this.data?.length) return;
-				return load_relationship_managers(this.data).then(() => {
-					this.data.forEach(enrich_row);
-				});
-			});
-		};
 
 		const original_is_editable = listview.is_editable.bind(listview);
 		listview.is_editable = function (df, data) {
@@ -164,7 +119,6 @@
 					.then((updated_doc) => {
 						if (row) {
 							Object.assign(row, updated_doc);
-							enrich_row(row);
 						}
 						return updated_doc;
 					})

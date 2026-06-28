@@ -11,6 +11,17 @@ def ensure_defaults():
 	ensure_volunteering_sidebar()
 
 
+def backfill_participation_relationship_managers():
+	frappe.db.sql(
+		"""
+		UPDATE `tabParticipation` p
+		JOIN `tabVolunteer` v ON v.name = p.volunteer
+		SET p.relationship_manager = v.relationship_manager
+		WHERE IFNULL(p.relationship_manager, '') != IFNULL(v.relationship_manager, '')
+		"""
+	)
+
+
 def ensure_volunteering_workspace():
 	if frappe.db.exists("Workspace", WORKSPACE_NAME):
 		return
