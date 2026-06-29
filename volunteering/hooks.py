@@ -170,6 +170,8 @@ after_migrate = [
 	"volunteering.volunteering.workspace_setup.backfill_participation_relationship_managers",
 ]
 
+boot_session = "volunteering.volunteering.workspace_setup.boot_session"
+
 # Scheduled Tasks
 # ---------------
 
