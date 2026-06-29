@@ -176,7 +176,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Logging Status",
-   "options": "\nReminded\nNot Responding\nLogged"
+   "options": "\nReminded\nNot Responding 1\nNot Responding 2\nNot Responding 3\nPartially Logged\nCompleted\nRedlisted\nBlacklisted"
   },
   {
    "fieldname": "logging_screenshot",
@@ -244,7 +244,7 @@
   }
  ],
  "links": [],
- "modified": "2026-06-26 14:54:45.881465",
+ "modified": "2026-06-29 20:02:04.398160",
  "modified_by": "Administrator",
  "module": "Volunteering",
  "name": "Participation",

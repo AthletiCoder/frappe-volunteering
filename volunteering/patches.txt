@@ -4,3 +4,4 @@
 
 [post_model_sync]
 volunteering.patches.normalize_volunteer_mobile_numbers
+volunteering.patches.update_volunteering_dashboard_filters
