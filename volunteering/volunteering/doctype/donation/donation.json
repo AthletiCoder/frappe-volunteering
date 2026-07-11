@@ -1,0 +1,296 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-07-11 16:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "donor_section",
+  "full_name",
+  "mobile_number",
+  "email",
+  "column_break_donor",
+  "volunteer",
+  "referred_by",
+  "amount_section",
+  "amount",
+  "currency",
+  "column_break_amount",
+  "status",
+  "source",
+  "eighty_g_section",
+  "want_80g",
+  "pan",
+  "address",
+  "payment_section",
+  "cashfree_order_id",
+  "cf_payment_id",
+  "payment_session_id",
+  "column_break_payment",
+  "payment_entry",
+  "customer",
+  "status_token",
+  "meta_section",
+  "ip_address",
+  "user_agent",
+  "is_recurring_placeholder"
+ ],
+ "fields": [
+  {
+   "default": "DON-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Naming Series",
+   "options": "DON-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "donor_section",
+   "fieldtype": "Section Break",
+   "label": "Donor"
+  },
+  {
+   "fieldname": "full_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Full Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "mobile_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Mobile Number",
+   "reqd": 1
+  },
+  {
+   "fieldname": "email",
+   "fieldtype": "Data",
+   "label": "Email",
+   "options": "Email",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_donor",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "volunteer",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Volunteer",
+   "options": "Volunteer",
+   "search_index": 1
+  },
+  {
+   "fieldname": "referred_by",
+   "fieldtype": "Link",
+   "label": "Referred By",
+   "options": "Volunteer"
+  },
+  {
+   "fieldname": "amount_section",
+   "fieldtype": "Section Break",
+   "label": "Amount"
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Amount",
+   "non_negative": 1,
+   "options": "currency",
+   "reqd": 1
+  },
+  {
+   "default": "INR",
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_amount",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Initiated",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Initiated\nPending\nSuccess\nFailed",
+   "reqd": 1
+  },
+  {
+   "default": "Gateway",
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "label": "Source",
+   "options": "Gateway\nOffice-cash\nOffice-online"
+  },
+  {
+   "fieldname": "eighty_g_section",
+   "fieldtype": "Section Break",
+   "label": "80G"
+  },
+  {
+   "default": "0",
+   "fieldname": "want_80g",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Want 80G Certificate"
+  },
+  {
+   "depends_on": "eval:doc.want_80g",
+   "fieldname": "pan",
+   "fieldtype": "Data",
+   "label": "PAN",
+   "mandatory_depends_on": "eval:doc.want_80g"
+  },
+  {
+   "depends_on": "eval:doc.want_80g",
+   "fieldname": "address",
+   "fieldtype": "Small Text",
+   "label": "Address",
+   "mandatory_depends_on": "eval:doc.want_80g"
+  },
+  {
+   "fieldname": "payment_section",
+   "fieldtype": "Section Break",
+   "label": "Payment"
+  },
+  {
+   "fieldname": "cashfree_order_id",
+   "fieldtype": "Data",
+   "label": "Cashfree Order ID",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "cf_payment_id",
+   "fieldtype": "Data",
+   "label": "Cashfree Payment ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payment_session_id",
+   "fieldtype": "Small Text",
+   "label": "Payment Session ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_payment",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "payment_entry",
+   "fieldtype": "Link",
+   "label": "Payment Entry",
+   "options": "Payment Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "status_token",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Status Token",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "meta_section",
+   "fieldtype": "Section Break",
+   "label": "Meta"
+  },
+  {
+   "fieldname": "ip_address",
+   "fieldtype": "Data",
+   "label": "IP Address",
+   "read_only": 1
+  },
+  {
+   "fieldname": "user_agent",
+   "fieldtype": "Small Text",
+   "label": "User Agent",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Phase 2 hook — recurring not billed in v1",
+   "fieldname": "is_recurring_placeholder",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Recurring (Future)"
+  }
+ ],
+ "links": [],
+ "modified": "2026-07-11 16:00:00",
+ "modified_by": "Administrator",
+ "module": "Volunteering",
+ "name": "Donation",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "NGO Admin",
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts User"
+  }
+ ],
+ "search_fields": "full_name,mobile_number,email,pan,cashfree_order_id",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "full_name",
+ "track_changes": 1
+}

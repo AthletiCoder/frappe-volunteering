@@ -178,8 +178,22 @@ boot_session = "volunteering.volunteering.workspace_setup.boot_session"
 scheduler_events = {
 	"daily": [
 		"volunteering.volunteering.attendance_service.process_daily_attendance",
+		"volunteering.volunteering.api.digest.send_daily_donation_digest",
 	],
+	"cron": {
+		"*/15 * * * *": [
+			"volunteering.volunteering.api.reconcile.reconcile_pending_donations",
+		],
+	},
 }
+
+# CORS for Vercel donate site (also set site_config allow_cors)
+before_request = [
+	"volunteering.volunteering.api.cors.handle_donation_cors_preflight",
+]
+after_request = [
+	"volunteering.volunteering.api.cors.apply_donation_cors_headers",
+]
 
 # Testing
 # -------

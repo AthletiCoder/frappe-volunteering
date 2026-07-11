@@ -26,6 +26,8 @@ def ensure_defaults():
 	ensure_volunteering_sidebar()
 	sync_volunteering_workspace_dashboard()
 	sync_volunteering_dashboard_filters()
+	ensure_donation_workspace_widgets()
+	ensure_donation_sidebar_link()
 
 
 def backfill_participation_relationship_managers():
@@ -160,3 +162,97 @@ def _link(label, link_to, link_type, icon):
 		"keep_closed": 0,
 		"show_arrow": 0,
 	}
+
+
+DONATION_NUMBER_CARDS = (
+	"Today's Donations",
+	"Today's Donation Count",
+	"MTD Donations",
+)
+DONATION_CHART = "Daily Donation Amount"
+DONATION_MARKER = "volunteering-donations-v1"
+
+
+def ensure_donation_workspace_widgets():
+	"""Append donation cards/chart to Volunteering workspace once."""
+	if not frappe.db.exists("Workspace", WORKSPACE_NAME):
+		return
+
+	workspace = frappe.get_doc("Workspace", WORKSPACE_NAME)
+	content = workspace.content or ""
+	if DONATION_MARKER in content:
+		return
+
+	# Ensure child table rows exist
+	existing_cards = {row.number_card_name for row in workspace.number_cards}
+	for card in DONATION_NUMBER_CARDS:
+		if card not in existing_cards and frappe.db.exists("Number Card", card):
+			workspace.append(
+				"number_cards",
+				{"label": card, "number_card_name": card},
+			)
+
+	existing_charts = {row.chart_name for row in workspace.charts}
+	if DONATION_CHART not in existing_charts and frappe.db.exists("Dashboard Chart", DONATION_CHART):
+		workspace.append("charts", {"chart_name": DONATION_CHART, "label": DONATION_CHART})
+
+	try:
+		blocks = json.loads(content) if content else []
+	except json.JSONDecodeError:
+		blocks = []
+
+	blocks.append(
+		{
+			"id": DONATION_MARKER,
+			"type": "header",
+			"data": {"text": '<span class="h4">Donations</span>', "col": 12},
+		}
+	)
+	blocks.append(
+		{
+			"id": "vw-card-don-today",
+			"type": "number_card",
+			"data": {"number_card_name": "Today's Donations", "col": 4},
+		}
+	)
+	blocks.append(
+		{
+			"id": "vw-card-don-count",
+			"type": "number_card",
+			"data": {"number_card_name": "Today's Donation Count", "col": 4},
+		}
+	)
+	blocks.append(
+		{
+			"id": "vw-card-don-mtd",
+			"type": "number_card",
+			"data": {"number_card_name": "MTD Donations", "col": 4},
+		}
+	)
+	blocks.append(
+		{
+			"id": "vw-chart-donations",
+			"type": "chart",
+			"data": {"chart_name": "Daily Donation Amount", "col": 12},
+		}
+	)
+	workspace.content = json.dumps(blocks)
+	workspace.flags.ignore_links = True
+	workspace.save(ignore_permissions=True)
+
+
+def ensure_donation_sidebar_link():
+	if not frappe.db.exists("Workspace Sidebar", SIDEBAR_NAME):
+		return
+
+	sidebar = frappe.get_doc("Workspace Sidebar", SIDEBAR_NAME)
+	labels = {row.label for row in sidebar.items}
+	if "Donations" in labels:
+		return
+
+	sidebar.append(
+		"items",
+		_link("Donations", "Donation", "DocType", "money-coins-1"),
+	)
+	sidebar.flags.ignore_links = True
+	sidebar.save(ignore_permissions=True)
