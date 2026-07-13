@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from typing import Any
 
 import frappe
@@ -16,6 +17,9 @@ API_VERSION = "2023-08-01"
 SANDBOX_BASE = "https://sandbox.cashfree.com/pg"
 PRODUCTION_BASE = "https://api.cashfree.com/pg"
 
+# Namespace for deterministic idempotency keys derived from order_id
+_IDEMPOTENCY_NS = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")  # UUID DNS namespace
+
 
 def _base_url(environment: str) -> str:
 	if (environment or "").lower() == "production":
@@ -23,13 +27,24 @@ def _base_url(environment: str) -> str:
 	return SANDBOX_BASE
 
 
-def _headers(settings) -> dict[str, str]:
-	return {
+def idempotency_key_for_order(order_id: str) -> str:
+	"""
+	Cashfree requires x-idempotency-key to be a UUID (≤64 chars), header-only.
+	Derive a stable UUID5 from order_id so retries of the same create stay idempotent.
+	"""
+	return str(uuid.uuid5(_IDEMPOTENCY_NS, f"volunteering-donation:{order_id}"))
+
+
+def _headers(settings, *, idempotency_key: str | None = None) -> dict[str, str]:
+	headers = {
 		"Content-Type": "application/json",
 		"x-api-version": API_VERSION,
 		"x-client-id": settings.app_id,
 		"x-client-secret": settings.get_password("secret_key"),
 	}
+	if idempotency_key:
+		headers["x-idempotency-key"] = idempotency_key
+	return headers
 
 
 def create_order(
@@ -61,7 +76,7 @@ def create_order(
 	url = f"{_base_url(settings.environment)}/orders"
 	response = requests.post(
 		url,
-		headers={**_headers(settings), "x-idempotency-key": order_id},
+		headers=_headers(settings, idempotency_key=idempotency_key_for_order(order_id)),
 		data=json.dumps(payload),
 		timeout=30,
 	)

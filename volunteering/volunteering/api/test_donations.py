@@ -28,6 +28,19 @@ class TestDonationHelpersUnit(UnitTestCase):
 		self.assertEqual(split_full_name("Madonna"), ("Madonna", ""))
 		self.assertEqual(split_full_name("  "), ("Donor", ""))
 
+	def test_idempotency_key_is_uuid_and_stable(self):
+		from volunteering.volunteering.api.cashfree_client import idempotency_key_for_order
+
+		key = idempotency_key_for_order("DON-2026-00001")
+		self.assertEqual(len(key), 36)
+		self.assertEqual(key, idempotency_key_for_order("DON-2026-00001"))
+		self.assertNotEqual(key, idempotency_key_for_order("DON-2026-00002"))
+		# Valid UUID parse
+		import uuid
+
+		uuid.UUID(key)
+		self.assertLessEqual(len(key), 64)
+
 	def test_webhook_signature_valid(self):
 		secret = "test_secret"
 		timestamp = "1617695238078"
