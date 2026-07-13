@@ -41,6 +41,14 @@ class TestDonationHelpersUnit(UnitTestCase):
 		uuid.UUID(key)
 		self.assertLessEqual(len(key), 64)
 
+	def test_unique_cashfree_order_id(self):
+		a = donations_api._unique_cashfree_order_id("DON-2026-00001")
+		b = donations_api._unique_cashfree_order_id("DON-2026-00001")
+		self.assertTrue(a.startswith("DON-2026-00001-"))
+		self.assertNotEqual(a, b)
+		self.assertLessEqual(len(a), 50)
+		self.assertEqual(len(a.rsplit("-", 1)[1]), 8)
+
 	def test_webhook_signature_valid(self):
 		secret = "test_secret"
 		timestamp = "1617695238078"

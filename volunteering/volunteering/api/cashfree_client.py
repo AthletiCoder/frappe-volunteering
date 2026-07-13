@@ -87,9 +87,27 @@ def create_order(
 
 	if response.status_code >= 400:
 		message = data.get("message") or data.get("error") or str(data)
+		# Recover if this order_id already exists (retry / race): reuse active session
+		if _is_duplicate_order_error(message):
+			existing = _try_get_existing_order(order_id)
+			if existing and existing.get("payment_session_id"):
+				return existing
 		frappe.throw(f"Cashfree create order failed: {message}")
 
 	return data
+
+
+def _is_duplicate_order_error(message: str) -> bool:
+	text = (message or "").lower()
+	return "already present" in text or "same id" in text or "duplicate" in text
+
+
+def _try_get_existing_order(order_id: str) -> dict[str, Any] | None:
+	try:
+		return get_order(order_id)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), f"Cashfree get existing order {order_id}")
+		return None
 
 
 def get_order(order_id: str) -> dict[str, Any]:

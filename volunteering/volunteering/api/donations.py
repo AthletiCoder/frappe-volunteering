@@ -114,6 +114,17 @@ def _resolve_referred_by(ref: str | None) -> str | None:
 	return by_mobile
 
 
+def _unique_cashfree_order_id(donation_name: str) -> str:
+	"""
+	Cashfree order_id must be unique forever in the merchant account.
+	Donation name alone collides on retries / re-seeded naming series.
+	Keep ≤50 chars (Cashfree limit): DON-YYYY-#####-xxxxxxxx
+	"""
+	base = str(donation_name).replace(" ", "-")[:40]
+	suffix = frappe.generate_hash(length=8)
+	return f"{base}-{suffix}"
+
+
 def _request_args(**kwargs) -> dict:
 	"""Merge JSON body and form_dict for guest API calls from React."""
 	data = {}
@@ -189,7 +200,7 @@ def create_donation_and_order(**kwargs):
 	status_token = _make_status_token(donation.name)
 	donation.db_set("status_token", status_token, update_modified=False)
 
-	order_id = donation.name.replace(" ", "-")
+	order_id = _unique_cashfree_order_id(donation.name)
 	resolved_return = None
 	if return_url:
 		resolved_return = return_url.replace("{order_id}", order_id).replace(
@@ -359,6 +370,14 @@ def _process_webhook_payload(payload: dict[str, Any]):
 	donation_name = frappe.db.get_value("Donation", {"cashfree_order_id": order_id}, "name")
 	if not donation_name and frappe.db.exists("Donation", order_id):
 		donation_name = order_id
+	# New order ids are {Donation.name}-{8-char-hash}
+	if not donation_name and isinstance(order_id, str):
+		parts = order_id.rsplit("-", 1)
+		if len(parts) == 2 and len(parts[1]) == 8 and parts[1].isalnum():
+			maybe = parts[0]
+			if frappe.db.exists("Donation", maybe):
+				donation_name = maybe
+
 
 	if not donation_name:
 		frappe.log_error(
