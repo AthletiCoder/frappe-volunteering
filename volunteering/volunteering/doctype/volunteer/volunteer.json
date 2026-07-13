@@ -16,6 +16,7 @@
   "col_break_1",
   "address",
   "pincode",
+  "pan",
   "status",
   "rating_section",
   "effective_rating",
@@ -74,6 +75,11 @@
    "fieldname": "pincode",
    "fieldtype": "Data",
    "label": "Pincode"
+  },
+  {
+   "fieldname": "pan",
+   "fieldtype": "Data",
+   "label": "PAN"
   },
   {
    "default": "Active",
@@ -152,6 +158,10 @@
   {
    "link_doctype": "Participation",
    "link_fieldname": "Volunteer"
+  },
+  {
+   "link_doctype": "Donation",
+   "link_fieldname": "volunteer"
   }
  ],
  "modified": "2026-05-26 15:50:54.944479",
