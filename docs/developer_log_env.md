@@ -103,6 +103,16 @@ Related: [frontend_handoff_cashfree.md](./frontend_handoff_cashfree.md) · [cash
 
 Ensure `bench start` / production supervisor has the scheduler enabled.
 
+## 7. Running payment tests
+
+```bash
+bench --site sevamrita.local run-tests --app volunteering --module volunteering.volunteering.doctype.donation.test_donation
+bench --site sevamrita.local run-tests --app volunteering --module volunteering.volunteering.api.test_donations
+bench --site sevamrita.local run-tests --app volunteering --module volunteering.volunteering.api.test_payment_entry
+```
+
+Cashfree HTTP is mocked — no live gateway calls. Do not put real secrets in tests.
+
 ---
 
 ## Change log
@@ -110,4 +120,5 @@ Ensure `bench start` / production supervisor has the scheduler enabled.
 | Date | Who | Change |
 |------|-----|--------|
 | 2026-07-11 | | Sandbox Cashfree Settings + Clearing/MoP/Income; local CORS; React `REACT_APP_ERPNEXT_URL`; end-to-end donate confirmed working |
+| 2026-07-12 | | Added donation/Cashfree test suite (unit + integration, Cashfree mocked) |
 | | | |

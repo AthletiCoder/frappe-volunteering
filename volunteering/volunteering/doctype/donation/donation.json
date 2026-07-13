@@ -145,7 +145,6 @@
    "default": "0",
    "fieldname": "want_80g",
    "fieldtype": "Check",
-   "in_standard_filter": 1,
    "label": "Want 80G Certificate"
   },
   {
