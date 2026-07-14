@@ -6,10 +6,12 @@
  "field_order": [
   "default_company",
   "default_leave_type",
+  "leave_without_pay_type",
   "default_leave_policy",
   "default_leave_period",
-  "planned_leave_advance_days",
   "emergency_max_consecutive_days",
+  "director_approval_days",
+  "planned_leave_advance_days",
   "min_justification_length"
  ],
  "fields": [
@@ -27,6 +29,12 @@
    "reqd": 1
   },
   {
+   "default": "Leave Without Pay",
+   "fieldname": "leave_without_pay_type",
+   "fieldtype": "Data",
+   "label": "Leave Without Pay Type"
+  },
+  {
    "fieldname": "default_leave_policy",
    "fieldtype": "Link",
    "label": "Default Leave Policy",
@@ -39,27 +47,36 @@
    "options": "Leave Period"
   },
   {
-   "default": "14",
-   "fieldname": "planned_leave_advance_days",
-   "fieldtype": "Int",
-   "label": "Planned Leave Advance Notice (Days)"
-  },
-  {
-   "default": "2",
+   "default": "3",
    "fieldname": "emergency_max_consecutive_days",
    "fieldtype": "Int",
    "label": "Emergency Leave Max Consecutive Days"
   },
   {
+   "default": "7",
+   "fieldname": "director_approval_days",
+   "fieldtype": "Int",
+   "label": "Director Approval Threshold (Days)"
+  },
+  {
+   "default": "0",
+   "description": "Deprecated: Normal leave uses N-days notice for N-days leave",
+   "fieldname": "planned_leave_advance_days",
+   "fieldtype": "Int",
+   "label": "Planned Leave Advance Notice (Days) [Deprecated]",
+   "hidden": 1
+  },
+  {
    "default": "20",
    "fieldname": "min_justification_length",
    "fieldtype": "Int",
-   "label": "Minimum Justification Length (Characters)"
+   "label": "Minimum Justification Length (Characters)",
+   "hidden": 1
   }
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-06-08 12:00:00",
+ "modified": "2026-07-14 12:00:00",
  "modified_by": "Administrator",
  "module": "Volunteering",
  "name": "Leave Policy Settings",

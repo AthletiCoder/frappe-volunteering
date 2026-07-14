@@ -24,9 +24,12 @@ function set_default_leave_type(frm) {
 
 function update_leave_intro(frm) {
 	const hints = {
-		Planned: __("Apply at least 14 days in advance. Shorter notice needs a detailed reason."),
-		Emergency: __("For unplanned absence up to 2 consecutive days."),
-		Sick: __("For illness. Apply for today or a future date; manager approval required."),
+		Normal: __(
+			"N days of leave require N days advance notice (e.g. 3-day leave needs 3 days notice)."
+		),
+		Emergency: __(
+			"For unplanned absence up to 3 consecutive days. Retroactive applications must be filed within 48 hours of return. Counts against the same 30-day leave balance."
+		),
 	};
 
 	const hint = hints[frm.doc.leave_category];

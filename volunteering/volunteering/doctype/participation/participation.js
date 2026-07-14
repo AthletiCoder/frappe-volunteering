@@ -30,7 +30,7 @@
 		refresh(frm) {
 			const whatsapp_link = get_whatsapp_link(frm.doc.temp_phone);
 			const call_link = get_call_link(frm.doc.temp_phone);
-			const should_prompt_rating = frm.doc.logging_status === "Logged" && !frm.doc.rm_rating;
+			const should_prompt_rating = frm.doc.logging_status === "Completed" && !frm.doc.rm_rating;
 
 			if (whatsapp_link) {
 				frm.add_custom_button(
@@ -63,7 +63,7 @@
 		},
 
 		logging_status(frm) {
-			if (frm.doc.logging_status === "Logged" && !frm.doc.rm_rating) {
+			if (frm.doc.logging_status === "Completed" && !frm.doc.rm_rating) {
 				frappe.show_alert({
 					message: __(
 						"Please enter Relationship Manager rating now that logging is complete."
