@@ -58,7 +58,7 @@ class IntegrationTestParticipationRating(IntegrationTestCase):
                 "doctype": "Participation",
                 "event": event.name,
                 "volunteer": volunteer.name,
-                "logging_status": "Logged",
+                "logging_status": "Completed",
                 "kits_delivered": kits_delivered,
                 "hours_logged": hours_logged,
                 "rm_rating": rm_rating,
@@ -152,7 +152,7 @@ class IntegrationTestParticipationRating(IntegrationTestCase):
                     "doctype": "Participation",
                     "event": event.name,
                     "volunteer": volunteer.name,
-                    "logging_status": "Logged",
+                    "logging_status": "Completed",
                     "kits_delivered": 5,
                 }
             ).insert(ignore_permissions=True)
@@ -185,7 +185,7 @@ class IntegrationTestParticipationRating(IntegrationTestCase):
                         "doctype": "Participation",
                         "event": event.name,
                         "volunteer": volunteer.name,
-                        "logging_status": "Logged",
+                        "logging_status": "Completed",
                         "kits_delivered": 5,
                         "hours_logged": 2.5,
                         "rm_rating": 0.8,

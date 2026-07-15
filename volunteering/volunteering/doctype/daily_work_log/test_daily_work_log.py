@@ -81,11 +81,43 @@ class IntegrationTestDailyWorkLog(IntegrationTestCase):
 				}
 			).insert(ignore_permissions=True)
 
+	def test_total_hours_cannot_exceed_24(self):
+		with self.assertRaises(frappe.ValidationError):
+			frappe.get_doc(
+				{
+					"doctype": "Daily Work Log",
+					"employee": self.employee,
+					"date": nowdate(),
+					"items": [
+						{
+							"task_title": "Marathon A",
+							"project": self.project,
+							"description": "Unrealistically long working session A.",
+							"time_spent_hours": 13,
+						},
+						{
+							"task_title": "Marathon B",
+							"project": self.project,
+							"description": "Unrealistically long working session B.",
+							"time_spent_hours": 12,
+						},
+					],
+				}
+			).insert(ignore_permissions=True)
+
 	def test_submit_sets_status(self):
 		doc = self._make_work_log()
 		doc.submit()
 		self.assertEqual(doc.status, "Submitted")
 		self.assertEqual(doc.docstatus, 1)
+
+	def test_mark_as_reviewed_after_submit(self):
+		doc = self._make_work_log()
+		doc.submit()
+		doc.mark_as_reviewed()
+		self.assertEqual(
+			frappe.db.get_value("Daily Work Log", doc.name, "status"), "Reviewed"
+		)
 
 	def tearDown(self):
 		frappe.db.delete(

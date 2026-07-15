@@ -331,7 +331,7 @@ class IntegrationTestParticipation(IntegrationTestCase):
         )
 
         with self.assertRaises(frappe.ValidationError):
-            update_participation_field(participation.name, "logging_status", "Logged")
+            update_participation_field(participation.name, "logging_status", "Completed")
 
     def test_participation_copies_relationship_manager_on_insert(self):
         event = self.create_event()

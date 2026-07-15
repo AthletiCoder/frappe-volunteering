@@ -1,0 +1,106 @@
+{
+ "charts": [],
+ "content": "[{\"id\": \"hr_header\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">HR Dashboard</span>\", \"col\": 12}}, {\"id\": \"hr_spacer\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"mgmt_header\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Management Dashboard</span>\", \"col\": 12}}, {\"id\": \"well_header\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Wellness Dashboard (informational)</span>\", \"col\": 12}}]",
+ "creation": "2026-07-14 23:34:28.113214",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "hide_custom": 0,
+ "icon": "hr",
+ "idx": 0,
+ "indicator_color": "green",
+ "is_hidden": 0,
+ "label": "HR Accountability",
+ "link_type": "DocType",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "HR Accountability",
+   "link_count": 0,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Daily Work Log",
+   "link_count": 0,
+   "link_to": "Daily Work Log",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Attendance Regularization Request",
+   "link_count": 0,
+   "link_to": "Attendance Regularization Request",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Manager Note",
+   "link_count": 0,
+   "link_to": "Manager Note",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Attendance",
+   "link_count": 0,
+   "link_to": "Attendance",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Leave Application",
+   "link_count": 0,
+   "link_to": "Leave Application",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Missing Daily Logs Report",
+   "link_count": 0,
+   "link_to": "Missing Daily Logs Report",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-07-14 23:49:24.012468",
+ "modified_by": "Administrator",
+ "module": "Volunteering",
+ "name": "HR Accountability",
+ "number_cards": [],
+ "owner": "Administrator",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [
+  {
+   "role": "HR Manager"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
+ "sequence_id": 0.0,
+ "shortcuts": [],
+ "title": "HR Accountability",
+ "type": "Workspace"
+}

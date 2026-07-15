@@ -135,12 +135,16 @@ permission_query_conditions = {
     "Participation": "volunteering.volunteering.participation_permissions.get_permission_query_conditions",
     "Reciprocation": "volunteering.volunteering.reciprocation_permissions.get_permission_query_conditions",
     "Daily Work Log": "volunteering.volunteering.daily_work_log_permissions.get_permission_query_conditions",
+    "Manager Note": "volunteering.volunteering.manager_note_permissions.get_permission_query_conditions",
+    "Attendance Request": "volunteering.volunteering.attendance_request_permissions.get_permission_query_conditions",
 }
 
 # Override "Has Permission" logic for specific row-level updates
 has_permission = {
     "Volunteer": "volunteering.volunteering.volunteer_permissions.has_permission",
     "Daily Work Log": "volunteering.volunteering.daily_work_log_permissions.has_permission",
+    "Manager Note": "volunteering.volunteering.manager_note_permissions.has_permission",
+    "Attendance Request": "volunteering.volunteering.attendance_request_permissions.has_permission",
 }
 
 # permission_query_conditions = {
@@ -168,6 +172,7 @@ after_migrate = [
 	"volunteering.volunteering.leave_setup.after_migrate",
 	"volunteering.volunteering.workspace_setup.ensure_defaults",
 	"volunteering.volunteering.workspace_setup.backfill_participation_relationship_managers",
+	"volunteering.volunteering.hr_dashboard_setup.ensure_hr_dashboards",
 ]
 
 boot_session = "volunteering.volunteering.workspace_setup.boot_session"
@@ -177,10 +182,12 @@ boot_session = "volunteering.volunteering.workspace_setup.boot_session"
 
 scheduler_events = {
 	"daily": [
-		"volunteering.volunteering.attendance_service.process_daily_attendance",
 		"volunteering.volunteering.api.digest.send_daily_donation_digest",
 	],
 	"cron": {
+		"0 12 * * *": [
+			"volunteering.volunteering.api.attendance_digest.run_noon_attendance_jobs",
+		],
 		"*/15 * * * *": [
 			"volunteering.volunteering.api.reconcile.reconcile_pending_donations",
 		],
@@ -202,11 +209,9 @@ after_request = [
 
 # Extend DocType Class
 # ------------------------------
-#
-# Specify custom mixins to extend the standard doctype controller.
-# extend_doctype_class = {
-# 	"Task": "volunteering.custom.task.CustomTaskMixin"
-# }
+extend_doctype_class = {
+	"Attendance": ["volunteering.volunteering.attendance_override.AttendanceHolidayMixin"],
+}
 
 # Overriding Methods
 # ------------------------------
@@ -286,7 +291,22 @@ override_doctype_dashboards = {
 # ignore_translatable_strings_from = []
 
 fixtures = [
-    {"dt": "Role", "filters": [["name", "in", ["NGO Admin", "NGO Coordinator", "NGO Member"]]]},
+    {
+        "dt": "Role",
+        "filters": [
+            [
+                "name",
+                "in",
+                [
+                    "NGO Admin",
+                    "NGO Coordinator",
+                    "NGO Member",
+                    "Executive Board Member",
+                    "Executive Board Chairperson",
+                ],
+            ]
+        ],
+    },
     {"dt": "Web Form", "filters": [["module", "=", "Volunteering"]]},
     {"doctype": "Custom Field", "filters": [["dt", "=", "Project"], ["fieldname", "=", "hours_per_kit"]]},
 ]
