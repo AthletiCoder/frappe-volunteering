@@ -50,10 +50,11 @@ def process_daily_attendance(attendance_date=None, manual=False):
 
 
 def refresh_attendance_for_work_log(doc, method=None):
-	"""Recompute attendance when a Daily Work Log is submitted or updated."""
+	"""Recompute attendance when a Daily Work Log is submitted, updated, or cancelled."""
 	if not doc.employee or not doc.date:
 		return
-	if cint_docstatus(doc) != 1:
+	# Submitted (1) or Cancelled (2) — cancelled logs must recompute without their hours
+	if cint_docstatus(doc) not in (1, 2):
 		return
 
 	try:
@@ -70,19 +71,22 @@ def cint_docstatus(doc):
 
 
 def get_active_employees(attendance_date):
+	from volunteering.volunteering.employment_type import UNPAID_EMPLOYMENT_TYPE
+
 	employees = frappe.get_all(
 		"Employee",
 		filters={
 			"status": "Active",
 			"date_of_joining": ["<=", attendance_date],
 		},
-		fields=["name", "relieving_date"],
+		fields=["name", "relieving_date", "employment_type"],
 	)
 
 	return [
 		employee.name
 		for employee in employees
-		if not employee.relieving_date or getdate(employee.relieving_date) >= attendance_date
+		if employee.employment_type != UNPAID_EMPLOYMENT_TYPE
+		and (not employee.relieving_date or getdate(employee.relieving_date) >= attendance_date)
 	]
 
 

@@ -111,6 +111,19 @@ class IntegrationTestDailyWorkLog(IntegrationTestCase):
 		self.assertEqual(doc.status, "Submitted")
 		self.assertEqual(doc.docstatus, 1)
 
+	def test_system_manager_can_cancel_work_log(self):
+		doc = self._make_work_log()
+		doc.submit()
+		doc.cancel()
+		doc.reload()
+		self.assertEqual(doc.docstatus, 2)
+		self.assertEqual(doc.status, "Cancelled")
+
+	def test_cancel_permission_only_on_system_manager(self):
+		meta = frappe.get_meta("Daily Work Log")
+		cancel_roles = {p.role for p in meta.permissions if p.cancel}
+		self.assertEqual(cancel_roles, {"System Manager"})
+
 	def test_mark_as_reviewed_after_submit(self):
 		doc = self._make_work_log()
 		doc.submit()

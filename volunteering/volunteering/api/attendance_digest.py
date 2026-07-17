@@ -69,13 +69,17 @@ def _digest_recipients(settings) -> list[str]:
 
 
 def _build_rows(attendance_date):
+	from volunteering.volunteering.employment_type import UNPAID_EMPLOYMENT_TYPE
+
 	employees = frappe.get_all(
 		"Employee",
 		filters={"status": "Active", "date_of_joining": ["<=", attendance_date]},
-		fields=["name", "employee_name", "department", "relieving_date"],
+		fields=["name", "employee_name", "department", "relieving_date", "employment_type"],
 	)
 	rows = []
 	for emp in employees:
+		if emp.employment_type == UNPAID_EMPLOYMENT_TYPE:
+			continue
 		if emp.relieving_date and emp.relieving_date < attendance_date:
 			continue
 		rows.append(_row_for_employee(emp, attendance_date))
