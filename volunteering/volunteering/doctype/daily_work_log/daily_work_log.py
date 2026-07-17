@@ -33,6 +33,12 @@ class DailyWorkLog(Document):
 
 		refresh_attendance_for_work_log(self)
 
+	def on_cancel(self):
+		self.db_set("status", "Cancelled", update_modified=False)
+		from volunteering.volunteering.attendance_service import refresh_attendance_for_work_log
+
+		refresh_attendance_for_work_log(self)
+
 	def set_total_hours(self):
 		self.total_hours = sum(flt(item.time_spent_hours) for item in self.items)
 

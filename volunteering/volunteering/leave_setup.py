@@ -16,6 +16,9 @@ def after_migrate():
 	setup_custom_fields()
 	ensure_holiday_status_option()
 	try:
+		from volunteering.volunteering.employment_type import ensure_employment_type
+
+		ensure_employment_type()
 		setup_hr_masters()
 		ensure_wednesday_weekly_off()
 		assign_missing_leave_policies()
@@ -241,22 +244,40 @@ def assign_default_leave_policy(doc, method=None):
 	if doc.status != "Active":
 		return
 
+	from volunteering.volunteering.employment_type import UNPAID_EMPLOYMENT_TYPE, is_unpaid_employee
+
+	if is_unpaid_employee(doc.name) or getattr(doc, "employment_type", None) == UNPAID_EMPLOYMENT_TYPE:
+		return
+
 	assign_leave_policy_to_employee(doc.name)
 
 
 def assign_missing_leave_policies():
-	employees = frappe.get_all("Employee", filters={"status": "Active"}, pluck="name")
+	from volunteering.volunteering.employment_type import UNPAID_EMPLOYMENT_TYPE
+
+	employees = frappe.get_all(
+		"Employee",
+		filters={"status": "Active"},
+		fields=["name", "employment_type"],
+	)
 	for employee in employees:
+		if employee.employment_type == UNPAID_EMPLOYMENT_TYPE:
+			continue
 		try:
-			assign_leave_policy_to_employee(employee)
+			assign_leave_policy_to_employee(employee.name)
 		except Exception:
 			frappe.log_error(
-				title=f"Leave policy assignment failed for {employee}",
+				title=f"Leave policy assignment failed for {employee.name}",
 				message=frappe.get_traceback(),
 			)
 
 
 def assign_leave_policy_to_employee(employee):
+	from volunteering.volunteering.employment_type import is_unpaid_employee
+
+	if is_unpaid_employee(employee):
+		return
+
 	settings = get_setup_settings()
 	leave_policy = settings.get("default_leave_policy")
 	leave_period = settings.get("default_leave_period")

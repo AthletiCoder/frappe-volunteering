@@ -173,6 +173,7 @@ after_migrate = [
 	"volunteering.volunteering.workspace_setup.ensure_defaults",
 	"volunteering.volunteering.workspace_setup.backfill_participation_relationship_managers",
 	"volunteering.volunteering.hr_dashboard_setup.ensure_hr_dashboards",
+	"volunteering.volunteering.quick_links_setup.ensure_quick_links",
 ]
 
 boot_session = "volunteering.volunteering.workspace_setup.boot_session"

@@ -52,7 +52,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Status",
-   "options": "Draft\nSubmitted\nReviewed",
+   "options": "Draft\nSubmitted\nReviewed\nCancelled",
    "read_only": 1
   },
   {
@@ -95,6 +95,7 @@
  "owner": "Administrator",
  "permissions": [
   {
+   "cancel": 1,
    "create": 1,
    "delete": 1,
    "email": 1,

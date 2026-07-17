@@ -1,4 +1,7 @@
-"""Create restricted HR Accountability workspaces and shortcuts."""
+"""Create restricted HR Accountability workspaces and shortcuts.
+
+Existing workspaces are never overwritten (content/links persist across deploys).
+"""
 
 from __future__ import annotations
 
@@ -24,31 +27,40 @@ def _ensure_workspace():
 	)
 
 	if name:
-		ws = frappe.get_doc("Workspace", name)
-	else:
-		ws = frappe.new_doc("Workspace")
-		ws.label = WORKSPACE
-		ws.title = WORKSPACE
-		ws.module = "Volunteering"
-		ws.icon = "hr"
-		ws.content = json.dumps(_workspace_content())
+		_ensure_roles_only(name)
+		return
 
-	# Public workspace restricted to specific roles (standard Frappe pattern)
+	ws = frappe.new_doc("Workspace")
+	ws.label = WORKSPACE
+	ws.title = WORKSPACE
+	ws.module = "Volunteering"
+	ws.icon = "hr"
 	ws.public = 1
 	ws.for_user = None
-	ws.roles = []
+	ws.content = json.dumps(_workspace_content())
 	for role in RESTRICTED_ROLES:
 		ws.append("roles", {"role": role})
-
-	_sync_links(ws)
+	_apply_default_links(ws)
 	ws.flags.ignore_links = True
 	ws.flags.ignore_permissions = True
 	ws.flags.ignore_validate = True
+	ws.insert(ignore_permissions=True)
 
-	if ws.is_new():
-		ws.insert(ignore_permissions=True)
-	else:
-		ws.save(ignore_permissions=True)
+
+def _ensure_roles_only(name: str):
+	"""Add missing restricted roles without touching content or links."""
+	ws = frappe.get_doc("Workspace", name)
+	existing = {row.role for row in (ws.roles or [])}
+	missing = [role for role in RESTRICTED_ROLES if role not in existing]
+	if not missing:
+		return
+
+	for role in missing:
+		ws.append("roles", {"role": role})
+	ws.flags.ignore_links = True
+	ws.flags.ignore_permissions = True
+	ws.flags.ignore_validate = True
+	ws.save(ignore_permissions=True)
 
 
 def _workspace_content():
@@ -75,7 +87,7 @@ def _workspace_content():
 	]
 
 
-def _sync_links(ws):
+def _apply_default_links(ws):
 	desired = [
 		{"label": "Daily Work Log", "link_type": "DocType", "link_to": "Daily Work Log", "type": "Link"},
 		{

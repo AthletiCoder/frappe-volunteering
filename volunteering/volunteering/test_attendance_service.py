@@ -6,10 +6,12 @@ from frappe.tests import IntegrationTestCase
 from frappe.utils import add_days, getdate, nowdate
 
 from volunteering.volunteering.attendance_service import (
+	get_active_employees,
 	is_grace_period_open,
 	process_daily_attendance,
 	process_employee_attendance,
 )
+from volunteering.volunteering.employment_type import UNPAID_EMPLOYMENT_TYPE, ensure_employment_type
 from volunteering.volunteering.test_utils import (
 	ensure_leave_allocation,
 	get_or_create_allocatable_leave_type,
@@ -343,3 +345,13 @@ class IntegrationTestAttendanceService(IntegrationTestCase):
 			self.employee, add_days(nowdate(), -30), nowdate(), weekly_off_only=True
 		)
 		self.assertIsInstance(count, int)
+
+	def test_unpaid_employees_excluded_from_active_list(self):
+		ensure_employment_type()
+		previous = frappe.db.get_value("Employee", self.employee, "employment_type")
+		frappe.db.set_value("Employee", self.employee, "employment_type", UNPAID_EMPLOYMENT_TYPE)
+		try:
+			active = get_active_employees(self.attendance_date)
+			self.assertNotIn(self.employee, active)
+		finally:
+			frappe.db.set_value("Employee", self.employee, "employment_type", previous)
