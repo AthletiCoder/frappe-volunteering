@@ -1,0 +1,83 @@
+{
+ "app": "volunteering",
+ "charts": [
+  {
+   "chart_name": "Registration Timeline",
+   "label": "Registration Timeline"
+  },
+  {
+   "chart_name": "Volunteer Referral Leaderboard",
+   "label": "Volunteer Referral Leaderboard"
+  },
+  {
+   "chart_name": "Kits Distribution",
+   "label": "Kits Distribution"
+  },
+  {
+   "chart_name": "Daily Donation Amount",
+   "label": "Daily Donation Amount"
+  }
+ ],
+ "content": "[{\"id\": \"volunteering-dashboard-v2\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Volunteering Workspace</span>\", \"col\": 12}}, {\"id\": \"vw-intro\", \"type\": \"paragraph\", \"data\": {\"text\": \"Cards and charts default to the latest campaign. Use each widget's filter menu to change the event.\", \"col\": 12}}, {\"id\": \"vw-card-reg\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Total Registrations\", \"col\": 3}}, {\"id\": \"vw-card-kits\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Total Kits Requested\", \"col\": 3}}, {\"id\": \"vw-card-ship\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Consignments Shipped\", \"col\": 3}}, {\"id\": \"vw-short-report\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Event Report\", \"col\": 3}}, {\"id\": \"vw-chart-timeline\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Registration Timeline\", \"col\": 12}}, {\"id\": \"vw-chart-referral\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Volunteer Referral Leaderboard\", \"col\": 6}}, {\"id\": \"vw-chart-kits\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Kits Distribution\", \"col\": 6}}, {\"id\": \"volunteering-donations-v1\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Donations</span>\", \"col\": 12}}, {\"id\": \"vw-card-don-today\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Today's Donations\", \"col\": 4}}, {\"id\": \"vw-card-don-count\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Today's Donation Count\", \"col\": 4}}, {\"id\": \"vw-card-don-mtd\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"MTD Donations\", \"col\": 4}}, {\"id\": \"vw-chart-donations\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Daily Donation Amount\", \"col\": 12}}]",
+ "creation": "2026-06-29 20:30:00",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "hand-heart",
+ "idx": 0,
+ "indicator_color": "green",
+ "is_hidden": 0,
+ "label": "Volunteering",
+ "links": [],
+ "modified": "2026-07-11 20:37:16.977870",
+ "modified_by": "Administrator",
+ "module": "Volunteering",
+ "name": "Volunteering",
+ "number_cards": [
+  {
+   "label": "Total Registrations",
+   "number_card_name": "Total Registrations"
+  },
+  {
+   "label": "Total Kits Requested",
+   "number_card_name": "Total Kits Requested"
+  },
+  {
+   "label": "Consignments Shipped",
+   "number_card_name": "Consignments Shipped"
+  },
+  {
+   "label": "Today's Donations",
+   "number_card_name": "Today's Donations"
+  },
+  {
+   "label": "Today's Donation Count",
+   "number_card_name": "Today's Donation Count"
+  },
+  {
+   "label": "MTD Donations",
+   "number_card_name": "MTD Donations"
+  }
+ ],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "restrict_to_domain": "",
+ "roles": [],
+ "sequence_id": 0.0,
+ "shortcuts": [
+  {
+   "color": "Blue",
+   "doc_view": "",
+   "label": "Event Report",
+   "link_to": "Generic Event Participation Report",
+   "report_ref_doctype": "Participation",
+   "type": "Report"
+  }
+ ],
+ "title": "Volunteering",
+ "type": "Workspace"
+}

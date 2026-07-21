@@ -138,6 +138,8 @@ permission_query_conditions = {
     "Reciprocation": "volunteering.volunteering.reciprocation_permissions.get_permission_query_conditions",
     "Daily Work Log": "volunteering.volunteering.daily_work_log_permissions.get_permission_query_conditions",
     "Expense Claim": "volunteering.volunteering.expense_claim_permissions.get_permission_query_conditions",
+    "Manager Note": "volunteering.volunteering.manager_note_permissions.get_permission_query_conditions",
+    "Attendance Request": "volunteering.volunteering.attendance_request_permissions.get_permission_query_conditions",
 }
 
 # Override "Has Permission" logic for specific row-level updates
@@ -145,6 +147,8 @@ has_permission = {
     "Volunteer": "volunteering.volunteering.volunteer_permissions.has_permission",
     "Daily Work Log": "volunteering.volunteering.daily_work_log_permissions.has_permission",
     "Expense Claim": "volunteering.volunteering.expense_claim_permissions.has_permission",
+    "Manager Note": "volunteering.volunteering.manager_note_permissions.has_permission",
+    "Attendance Request": "volunteering.volunteering.attendance_request_permissions.has_permission",
 }
 
 # permission_query_conditions = {
@@ -207,20 +211,41 @@ doc_events = {
 after_migrate = [
 	"volunteering.volunteering.leave_setup.after_migrate",
 	"volunteering.volunteering.workspace_setup.ensure_defaults",
+	"volunteering.volunteering.workspace_setup.backfill_participation_relationship_managers",
+	"volunteering.volunteering.hr_dashboard_setup.ensure_hr_dashboards",
+	"volunteering.volunteering.quick_links_setup.ensure_quick_links",
 	"volunteering.volunteering.accounting_setup.after_migrate",
 ]
+
+boot_session = "volunteering.volunteering.workspace_setup.boot_session"
 
 # Scheduled Tasks
 # ---------------
 
 scheduler_events = {
 	"daily": [
-		"volunteering.volunteering.attendance_service.process_daily_attendance",
+		"volunteering.volunteering.api.digest.send_daily_donation_digest",
 	],
 	"weekly": [
 		"volunteering.volunteering.accounting_dashboard.setup.send_weekly_pending_approval_reminder",
 	],
+	"cron": {
+		"0 12 * * *": [
+			"volunteering.volunteering.api.attendance_digest.run_noon_attendance_jobs",
+		],
+		"*/15 * * * *": [
+			"volunteering.volunteering.api.reconcile.reconcile_pending_donations",
+		],
+	},
 }
+
+# CORS for Vercel donate site (also set site_config allow_cors)
+before_request = [
+	"volunteering.volunteering.api.cors.handle_donation_cors_preflight",
+]
+after_request = [
+	"volunteering.volunteering.api.cors.apply_donation_cors_headers",
+]
 
 # Testing
 # -------
@@ -229,18 +254,17 @@ scheduler_events = {
 
 # Extend DocType Class
 # ------------------------------
-#
-# Specify custom mixins to extend the standard doctype controller.
-# extend_doctype_class = {
-# 	"Task": "volunteering.custom.task.CustomTaskMixin"
-# }
+extend_doctype_class = {
+	"Attendance": ["volunteering.volunteering.attendance_override.AttendanceHolidayMixin"],
+}
 
 # Overriding Methods
 # ------------------------------
 #
-# override_whitelisted_methods = {
-# 	"frappe.desk.doctype.event.event.get_events": "volunteering.event.get_events"
-# }
+override_whitelisted_methods = {
+	"frappe.desk.doctype.dashboard_chart.dashboard_chart.get": "volunteering.volunteering.dashboard_chart.get",
+	"frappe.desk.doctype.number_card.number_card.get_result": "volunteering.volunteering.number_card.get_result",
+}
 #
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,
@@ -312,7 +336,22 @@ override_doctype_dashboards = {
 # ignore_translatable_strings_from = []
 
 fixtures = [
-    {"dt": "Role", "filters": [["name", "in", ["NGO Admin", "NGO Coordinator", "NGO Member"]]]},
+    {
+        "dt": "Role",
+        "filters": [
+            [
+                "name",
+                "in",
+                [
+                    "NGO Admin",
+                    "NGO Coordinator",
+                    "NGO Member",
+                    "Executive Board Member",
+                    "Executive Board Chairperson",
+                ],
+            ]
+        ],
+    },
     {"dt": "Web Form", "filters": [["module", "=", "Volunteering"]]},
     {"doctype": "Custom Field", "filters": [["dt", "in", ["Purchase Order", "Purchase Invoice", "Expense Claim", "Payment Entry"]]]},
     {"doctype": "Property Setter", "filters": [["doc_type", "in", ["Purchase Order", "Purchase Invoice", "Expense Claim", "Payment Entry"]]]},

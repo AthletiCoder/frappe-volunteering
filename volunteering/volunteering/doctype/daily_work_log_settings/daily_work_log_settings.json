@@ -6,8 +6,11 @@
  "field_order": [
   "backdate_limit_days",
   "min_hours_warning",
+  "present_hours_threshold",
   "attendance_section",
-  "enable_attendance_job"
+  "enable_attendance_job",
+  "enable_board_digest",
+  "board_digest_extra_recipients"
  ],
  "fields": [
   {
@@ -17,10 +20,17 @@
    "label": "Backdate Limit (Days)"
   },
   {
-   "default": "4",
+   "default": "6",
    "fieldname": "min_hours_warning",
    "fieldtype": "Float",
    "label": "Minimum Hours Warning Threshold"
+  },
+  {
+   "default": "6",
+   "description": "Hours required for Present attendance. Below this (but > 0) is Half Day.",
+   "fieldname": "present_hours_threshold",
+   "fieldtype": "Float",
+   "label": "Present Hours Threshold"
   },
   {
    "fieldname": "attendance_section",
@@ -32,11 +42,23 @@
    "fieldname": "enable_attendance_job",
    "fieldtype": "Check",
    "label": "Enable Attendance Job"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_board_digest",
+   "fieldtype": "Check",
+   "label": "Enable Executive Board Digest"
+  },
+  {
+   "description": "Optional comma-separated emails in addition to Executive Board Member / Chairperson users",
+   "fieldname": "board_digest_extra_recipients",
+   "fieldtype": "Small Text",
+   "label": "Extra Digest Recipients"
   }
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-06-07 12:00:00",
+ "modified": "2026-07-14 12:00:00",
  "modified_by": "Administrator",
  "module": "Volunteering",
  "name": "Daily Work Log Settings",

@@ -9,6 +9,7 @@ from volunteering.volunteering.doctype.volunteer.volunteer import (
     find_volunteer_by_mobile,
     format_mobile_number,
     mobile_lookup_key,
+    sync_participation_relationship_managers,
 )
 from volunteering.volunteering.test_utils import unique_mobile
 
@@ -73,3 +74,109 @@ class IntegrationTestVolunteer(IntegrationTestCase):
         )
 
         self.assertEqual(find_volunteer_by_mobile(formatted_phone), volunteer.name)
+
+    def create_event(self):
+        from frappe.utils import nowdate
+
+        return frappe.get_doc(
+            {
+                "doctype": "NGO Event",
+                "title": f"VolunteerEvent-{frappe.generate_hash(length=8)}",
+                "startdate": nowdate(),
+                "enddate": nowdate(),
+            }
+        ).insert(ignore_permissions=True)
+
+    def create_participation(self, event, volunteer):
+        return frappe.get_doc(
+            {
+                "doctype": "Participation",
+                "event": event.name,
+                "volunteer": volunteer.name,
+            }
+        ).insert(ignore_permissions=True)
+
+    def test_volunteer_rm_change_propagates_to_participations(self):
+        event = self.create_event()
+        volunteer = frappe.get_doc(
+            {
+                "doctype": "Volunteer",
+                "first_name": "RM Sync Volunteer",
+                "mobile_number": unique_mobile("93"),
+                "relationship_manager": frappe.session.user,
+            }
+        ).insert(ignore_permissions=True)
+        participation_one = self.create_participation(event, volunteer)
+        participation_two = self.create_participation(event, volunteer)
+
+        volunteer.relationship_manager = None
+        volunteer.save(ignore_permissions=True)
+
+        participation_one.reload()
+        participation_two.reload()
+        self.assertFalse(participation_one.relationship_manager)
+        self.assertFalse(participation_two.relationship_manager)
+
+    def test_volunteer_rm_change_does_not_affect_other_volunteers(self):
+        event = self.create_event()
+        volunteer_a = frappe.get_doc(
+            {
+                "doctype": "Volunteer",
+                "first_name": "Volunteer A",
+                "mobile_number": unique_mobile("92"),
+                "relationship_manager": frappe.session.user,
+            }
+        ).insert(ignore_permissions=True)
+        volunteer_b = frappe.get_doc(
+            {
+                "doctype": "Volunteer",
+                "first_name": "Volunteer B",
+                "mobile_number": unique_mobile("91"),
+            }
+        ).insert(ignore_permissions=True)
+        participation_a = self.create_participation(event, volunteer_a)
+        participation_b = self.create_participation(event, volunteer_b)
+
+        volunteer_a.relationship_manager = None
+        volunteer_a.save(ignore_permissions=True)
+
+        participation_a.reload()
+        participation_b.reload()
+        self.assertFalse(participation_a.relationship_manager)
+        self.assertFalse(participation_b.relationship_manager)
+
+    def test_volunteer_save_without_rm_change_skips_participation_update(self):
+        event = self.create_event()
+        volunteer = frappe.get_doc(
+            {
+                "doctype": "Volunteer",
+                "first_name": "Stable RM Volunteer",
+                "mobile_number": unique_mobile("90"),
+                "relationship_manager": frappe.session.user,
+            }
+        ).insert(ignore_permissions=True)
+        participation = self.create_participation(event, volunteer)
+
+        volunteer.first_name = "Renamed Volunteer"
+        volunteer.save(ignore_permissions=True)
+
+        participation.reload()
+        self.assertEqual(participation.relationship_manager, frappe.session.user)
+
+    def test_sync_participation_relationship_managers_helper(self):
+        event = self.create_event()
+        volunteer = frappe.get_doc(
+            {
+                "doctype": "Volunteer",
+                "first_name": "Helper Volunteer",
+                "mobile_number": unique_mobile("89"),
+            }
+        ).insert(ignore_permissions=True)
+        participation = self.create_participation(event, volunteer)
+
+        sync_participation_relationship_managers(volunteer.name, frappe.session.user)
+
+        self.assertEqual(
+            frappe.db.get_value("Participation", participation.name, "relationship_manager"),
+            frappe.session.user,
+        )

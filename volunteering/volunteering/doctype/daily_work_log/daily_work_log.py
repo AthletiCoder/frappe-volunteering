@@ -24,6 +24,20 @@ class DailyWorkLog(Document):
 
 	def on_submit(self):
 		self.db_set("status", "Submitted", update_modified=False)
+		from volunteering.volunteering.attendance_service import refresh_attendance_for_work_log
+
+		refresh_attendance_for_work_log(self)
+
+	def on_update_after_submit(self):
+		from volunteering.volunteering.attendance_service import refresh_attendance_for_work_log
+
+		refresh_attendance_for_work_log(self)
+
+	def on_cancel(self):
+		self.db_set("status", "Cancelled", update_modified=False)
+		from volunteering.volunteering.attendance_service import refresh_attendance_for_work_log
+
+		refresh_attendance_for_work_log(self)
 
 	def set_total_hours(self):
 		self.total_hours = sum(flt(item.time_spent_hours) for item in self.items)
@@ -35,9 +49,17 @@ class DailyWorkLog(Document):
 		if flt(self.total_hours) <= 0:
 			frappe.throw(_("Total hours must be greater than zero."))
 
+		if flt(self.total_hours) > 24:
+			frappe.throw(
+				_("Total hours ({0}) cannot exceed 24 hours in a day.").format(self.total_hours)
+			)
+
 		for idx, item in enumerate(self.items, start=1):
 			if flt(item.time_spent_hours) <= 0:
 				frappe.throw(_("Row {0}: Time spent must be greater than zero.").format(idx))
+
+			if flt(item.time_spent_hours) > 24:
+				frappe.throw(_("Row {0}: Time spent cannot exceed 24 hours.").format(idx))
 
 			description = (item.description or "").strip()
 			if len(description) <= 10:
@@ -119,8 +141,9 @@ class DailyWorkLog(Document):
 		if not can_review_work_log(self):
 			frappe.throw(_("Only a manager or HR user can mark this log as Reviewed."), frappe.PermissionError)
 
-		self.status = "Reviewed"
-		self.save(ignore_permissions=True)
+		# status has no allow_on_submit; write directly and leave an audit trail
+		self.db_set("status", "Reviewed")
+		self.add_comment("Info", _("Marked as Reviewed by {0}").format(frappe.session.user))
 		return self.name
 
 
@@ -130,6 +153,8 @@ def get_daily_work_log_settings():
 
 	return {
 		"backdate_limit_days": 2,
-		"min_hours_warning": 4,
+		"min_hours_warning": 6,
+		"present_hours_threshold": 6,
 		"enable_attendance_job": 1,
+		"enable_board_digest": 1,
 	}

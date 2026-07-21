@@ -1,0 +1,219 @@
+{
+ "actions": [],
+ "creation": "2026-07-11 16:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "credentials_section",
+  "environment",
+  "app_id",
+  "secret_key",
+  "webhook_secret",
+  "column_break_cred",
+  "allowed_origins",
+  "return_url",
+  "accounting_section",
+  "company",
+  "mode_of_payment",
+  "paid_to_account",
+  "column_break_acct",
+  "income_account",
+  "create_payment_entry",
+  "fraud_section",
+  "min_amount",
+  "max_amount_per_txn",
+  "max_txns_per_phone_per_hour",
+  "column_break_fraud",
+  "digest_recipients",
+  "enable_daily_digest",
+  "org_section",
+  "org_display_name",
+  "eighty_g_registration_number",
+  "twelve_a_registration_number"
+ ],
+ "fields": [
+  {
+   "fieldname": "credentials_section",
+   "fieldtype": "Section Break",
+   "label": "Cashfree Credentials"
+  },
+  {
+   "default": "sandbox",
+   "fieldname": "environment",
+   "fieldtype": "Select",
+   "label": "Environment",
+   "options": "sandbox\nproduction",
+   "reqd": 1
+  },
+  {
+   "fieldname": "app_id",
+   "fieldtype": "Data",
+   "label": "App ID",
+   "reqd": 1
+  },
+  {
+   "fieldname": "secret_key",
+   "fieldtype": "Password",
+   "label": "Secret Key",
+   "reqd": 1
+  },
+  {
+   "description": "Optional. Defaults to Secret Key for signature verification.",
+   "fieldname": "webhook_secret",
+   "fieldtype": "Password",
+   "label": "Webhook Secret"
+  },
+  {
+   "fieldname": "column_break_cred",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Comma-separated frontend origins allowed for CORS (e.g. https://www.sevamrita.org).",
+   "fieldname": "allowed_origins",
+   "fieldtype": "Small Text",
+   "label": "Allowed Origins"
+  },
+  {
+   "description": "React thank-you URL. Use {order_id} placeholder for Cashfree return_url.",
+   "fieldname": "return_url",
+   "fieldtype": "Data",
+   "label": "Return URL",
+   "options": "URL"
+  },
+  {
+   "fieldname": "accounting_section",
+   "fieldtype": "Section Break",
+   "label": "Accounting Defaults"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "mode_of_payment",
+   "fieldtype": "Link",
+   "label": "Mode of Payment",
+   "options": "Mode of Payment"
+  },
+  {
+   "description": "Cashfree Clearing bank account",
+   "fieldname": "paid_to_account",
+   "fieldtype": "Link",
+   "label": "Paid To (Clearing Account)",
+   "options": "Account"
+  },
+  {
+   "fieldname": "column_break_acct",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Used when creating Customer receivable mapping / remarks context",
+   "fieldname": "income_account",
+   "fieldtype": "Link",
+   "label": "Donation Income Account",
+   "options": "Account"
+  },
+  {
+   "default": "1",
+   "fieldname": "create_payment_entry",
+   "fieldtype": "Check",
+   "label": "Auto Create Payment Entry on Success"
+  },
+  {
+   "fieldname": "fraud_section",
+   "fieldtype": "Section Break",
+   "label": "Limits and Digests"
+  },
+  {
+   "default": "100",
+   "fieldname": "min_amount",
+   "fieldtype": "Currency",
+   "label": "Minimum Amount",
+   "non_negative": 1
+  },
+  {
+   "default": "500000",
+   "fieldname": "max_amount_per_txn",
+   "fieldtype": "Currency",
+   "label": "Max Amount Per Transaction",
+   "non_negative": 1
+  },
+  {
+   "default": "10",
+   "fieldname": "max_txns_per_phone_per_hour",
+   "fieldtype": "Int",
+   "label": "Max Txns Per Phone Per Hour",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "column_break_fraud",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Comma-separated emails. Empty = Accounts Manager + System Manager users.",
+   "fieldname": "digest_recipients",
+   "fieldtype": "Small Text",
+   "label": "Digest Recipients"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_daily_digest",
+   "fieldtype": "Check",
+   "label": "Enable Daily Donation Digest"
+  },
+  {
+   "fieldname": "org_section",
+   "fieldtype": "Section Break",
+   "label": "Organisation (Receipts)"
+  },
+  {
+   "fieldname": "org_display_name",
+   "fieldtype": "Data",
+   "label": "Organisation Display Name"
+  },
+  {
+   "fieldname": "eighty_g_registration_number",
+   "fieldtype": "Data",
+   "label": "80G Registration Number"
+  },
+  {
+   "fieldname": "twelve_a_registration_number",
+   "fieldtype": "Data",
+   "label": "12A Registration Number"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-07-11 16:00:00",
+ "modified_by": "Administrator",
+ "module": "Volunteering",
+ "name": "Cashfree Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Accounts Manager",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "NGO Admin",
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -1,6 +1,7 @@
 import frappe
 from frappe.model.document import Document
 from frappe import _
+from frappe.rate_limiter import rate_limit
 from frappe.utils import flt, now_datetime
 from volunteering.volunteering.doctype.volunteer.volunteer import (
     find_volunteer_by_mobile,
@@ -11,6 +12,44 @@ from volunteering.volunteering.doctype.volunteer.volunteer import (
 DEFAULT_HOURS_PER_KIT = 0.5
 RATING_MAX_STARS = 5
 RECENT_EVENT_WEIGHTS = [0.5, 0.3, 0.2]
+GRID_EDITABLE_FIELDS = frozenset(
+    {
+        "status",
+        "kits_requested",
+        "kits_delivered",
+        "shipping_status",
+        "logging_status",
+        "hours_logged",
+        "temp_full_name",
+        "temp_phone",
+        "temp_email",
+        "temp_employee_id",
+        "temp_company",
+        "temp_address",
+        "comments",
+    }
+)
+
+
+def is_registered_for_event(mobile, event):
+    if not event or not frappe.db.exists("NGO Event", event):
+        return False
+
+    formatted = format_mobile_number(mobile)
+    if not formatted:
+        return False
+
+    volunteer = find_volunteer_by_mobile(formatted)
+    if not volunteer:
+        return False
+
+    return bool(frappe.db.exists("Participation", {"event": event, "volunteer": volunteer}))
+
+
+@frappe.whitelist(allow_guest=True)
+@rate_limit(key="check_event_registration", limit=20, seconds=60)
+def check_event_registration(mobile, event):
+    return {"registered": is_registered_for_event(mobile, event)}
 
 
 class Participation(Document):
@@ -29,6 +68,9 @@ class Participation(Document):
                     "Volunteer is required. Provide a volunteer or a valid phone number so we can auto-link the volunteer."
                 )
             )
+
+        if is_registered_for_event(self.temp_phone, self.event):
+            frappe.throw(_("You have already registered for this event."))
 
     def ensure_event(self):
         if self.event:
@@ -120,8 +162,8 @@ class Participation(Document):
     def _validate_rating_inputs(self):
         rating_stars = _get_rm_rating_stars(self.rm_rating)
 
-        if self.logging_status == "Logged" and not rating_stars:
-            frappe.throw(_("Rating is required once Logging Status is Logged."))
+        if self.logging_status == "Completed" and not rating_stars:
+            frappe.throw(_("Rating is required once Logging Status is Completed."))
 
         if rating_stars and (self.kits_delivered or 0) <= 0:
             frappe.throw(_("Kits Delivered must be greater than zero before rating."))
@@ -249,3 +291,35 @@ def update_volunteer_rating_rollup(volunteer_name, exclude_participation=None):
         },
         update_modified=False,
     )
+
+
+@frappe.whitelist()
+def update_participation_field(name, fieldname, value=None, modified=None):
+    """Update a single Participation field from Report View with full validation."""
+    if fieldname in frappe.model.default_fields:
+        frappe.throw(_("Cannot edit standard fields"))
+
+    if fieldname not in GRID_EDITABLE_FIELDS:
+        frappe.throw(_("Field {0} cannot be edited from the grid").format(fieldname))
+
+    meta = frappe.get_meta("Participation")
+    if not meta.has_field(fieldname):
+        frappe.throw(_("Invalid field: {0}").format(fieldname))
+
+    field = meta.get_field(fieldname)
+    if field.read_only or field.fieldtype in ("Attach", "Attach Image", "Table"):
+        frappe.throw(_("Field {0} cannot be edited from the grid").format(field.label))
+
+    doc = frappe.get_doc("Participation", name)
+    doc.check_permission("write")
+
+    if modified:
+        doc._original_modified = modified
+
+    if fieldname == "temp_phone" and value:
+        value = format_mobile_number(value)
+
+    doc.set(fieldname, value)
+    doc.save()
+
+    return doc.as_dict()

@@ -1,5 +1,33 @@
 (function () {
 	const INDIA_COUNTRY_CODE = "91";
+	const RATING_FIELDS = new Set(["rm_rating", "rm_comment"]);
+	const GRID_EDITABLE_FIELDS = new Set([
+		"status",
+		"kits_requested",
+		"kits_delivered",
+		"shipping_status",
+		"logging_status",
+		"hours_logged",
+		"temp_full_name",
+		"temp_phone",
+		"temp_email",
+		"temp_employee_id",
+		"temp_company",
+		"temp_address",
+		"comments",
+	]);
+	const REPORT_ADD_FIELDS = [
+		"modified",
+		"volunteer",
+		"relationship_manager",
+		"temp_full_name",
+		"status",
+		"kits_requested",
+		"kits_delivered",
+		"shipping_status",
+		"logging_status",
+		"hours_logged",
+	];
 
 	const sanitize_phone = (raw_phone) => {
 		if (!raw_phone) return null;
@@ -26,8 +54,102 @@
 		return normalized_phone ? `tel:+${normalized_phone}` : null;
 	};
 
+	const can_edit_rating_fields = (doc) => {
+		const roles = frappe.user_roles || [];
+		if (roles.includes("System Manager") || roles.includes("NGO Admin")) {
+			return true;
+		}
+		return Boolean(doc.relationship_manager === frappe.session.user);
+	};
+
+	const save_participation_field = ({ doctype, docname, fieldname, value, modified }) =>
+		new Promise((resolve, reject) => {
+			frappe.call({
+				method:
+					"volunteering.volunteering.doctype.participation.participation.update_participation_field",
+				args: {
+					name: docname,
+					fieldname,
+					value,
+					modified,
+				},
+				callback: (response) => resolve(response.message),
+				error: (response) => reject(response || {}),
+			});
+		});
+
+	const setup_report_view_editing = (listview) => {
+		if (listview.view !== "Report" || listview._participation_report_setup) {
+			return;
+		}
+		if (typeof listview.is_editable !== "function" || typeof listview.set_control_value !== "function") {
+			return;
+		}
+		listview._participation_report_setup = true;
+
+		const row_save_queues = new Map();
+
+		const original_is_editable = listview.is_editable.bind(listview);
+		listview.is_editable = function (df, data) {
+			if (!df || !GRID_EDITABLE_FIELDS.has(df.fieldname)) {
+				return false;
+			}
+			if (!original_is_editable(df, data)) {
+				return false;
+			}
+			if (RATING_FIELDS.has(df.fieldname) && !can_edit_rating_fields(data)) {
+				return false;
+			}
+			return true;
+		};
+
+		listview.set_control_value = function (doctype, docname, fieldname, value) {
+			const row = this.data.find((doc) => doc.name === docname);
+			const modified = row?.modified;
+			const listview_ref = this;
+
+			const save_field = () =>
+				save_participation_field({
+					doctype,
+					docname,
+					fieldname,
+					value,
+					modified,
+				})
+					.then((updated_doc) => {
+						if (row) {
+							Object.assign(row, updated_doc);
+						}
+						return updated_doc;
+					})
+					.catch((error) => {
+						if (error?.exc_type === "TimestampMismatchError") {
+							frappe.show_alert({
+								message: __("This row was updated by someone else. Refreshing latest values."),
+								indicator: "orange",
+							});
+							return frappe.db.get_doc(doctype, docname).then((doc) => {
+								listview_ref.update_row(doc, false);
+								return Promise.reject(error);
+							});
+						}
+						return Promise.reject(error);
+					});
+
+			const previous = row_save_queues.get(docname) || Promise.resolve();
+			const current = previous
+				.catch(() => {})
+				.then(() => save_field());
+			row_save_queues.set(docname, current);
+			return current;
+		};
+	};
+
 	frappe.listview_settings["Participation"] = {
-		add_fields: ["temp_phone"],
+		add_fields: ["temp_phone", ...REPORT_ADD_FIELDS],
+		onload(listview) {
+			setup_report_view_editing(listview);
+		},
 		formatters: {
 			temp_phone(value, _df, doc) {
 				const phone_value = frappe.utils.escape_html(value || "");

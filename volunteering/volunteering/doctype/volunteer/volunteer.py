@@ -99,3 +99,24 @@ class Volunteer(Document):
         formatted = format_mobile_number(self.mobile_number)
         if formatted:
             self.mobile_number = formatted
+
+    def on_update(self):
+        previous_doc = self.get_doc_before_save()
+        if not previous_doc:
+            return
+
+        if previous_doc.relationship_manager == self.relationship_manager:
+            return
+
+        sync_participation_relationship_managers(self.name, self.relationship_manager)
+
+
+def sync_participation_relationship_managers(volunteer_name, relationship_manager):
+    frappe.db.sql(
+        """
+        UPDATE `tabParticipation`
+        SET relationship_manager = %s
+        WHERE volunteer = %s
+        """,
+        (relationship_manager, volunteer_name),
+    )

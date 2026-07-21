@@ -8,4 +8,10 @@ def get_dashboard_for_employee(data):
 			"items": ["Daily Work Log"],
 		}
 	)
+	data.setdefault("transactions", []).append(
+		{
+			"label": _("Accountability"),
+			"items": ["Manager Note", "Attendance Regularization Request"],
+		}
+	)
 	return data
