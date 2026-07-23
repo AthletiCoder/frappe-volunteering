@@ -353,6 +353,7 @@ def has_approved_wfh_request(employee, attendance_date):
 	)
 
 
+@frappe.whitelist()
 def has_approved_wfh_request_for_employee(employee, attendance_date):
 	return bool(has_approved_wfh_request(employee, attendance_date))
 

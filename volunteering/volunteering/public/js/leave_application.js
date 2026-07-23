@@ -1,39 +1,84 @@
 frappe.ui.form.on("Leave Application", {
+	setup(frm) {
+		lock_employee_for_non_hr(frm);
+	},
+
 	refresh(frm) {
 		set_default_leave_type(frm);
+		lock_employee_for_non_hr(frm);
+		lock_status_for_self(frm);
+		show_leave_flow_hint(frm);
 	},
 
 	leave_category(frm) {
-		update_leave_intro(frm);
+		show_leave_flow_hint(frm);
 	},
 });
 
-function set_default_leave_type(frm) {
-	if (frm.doc.leave_type) {
-		update_leave_intro(frm);
+const HR_ROLES = ["HR Manager", "HR User", "System Manager"];
+
+function is_hr_user() {
+	return frappe.user_roles.some((role) => HR_ROLES.includes(role));
+}
+
+async function lock_employee_for_non_hr(frm) {
+	if (is_hr_user()) {
+		frm.set_df_property("employee", "read_only", 0);
 		return;
 	}
 
-	frappe.db.get_single_value("Leave Policy Settings", "default_leave_type").then((leave_type) => {
-		if (leave_type) {
-			frm.set_value("leave_type", leave_type);
+	frm.set_df_property("employee", "read_only", 1);
+	if (frm.is_new() && !frm.doc.employee) {
+		const employee = (
+			await frappe.db.get_value("Employee", { user_id: frappe.session.user }, "name")
+		)?.message?.name;
+		if (employee) {
+			frm.set_value("employee", employee);
 		}
-		update_leave_intro(frm);
-	});
+	}
 }
 
-function update_leave_intro(frm) {
-	const hints = {
-		Normal: __(
-			"N days of leave require N days advance notice (e.g. 3-day leave needs 3 days notice)."
-		),
-		Emergency: __(
-			"For unplanned absence up to 3 consecutive days. Retroactive applications must be filed within 48 hours of return. Counts against the same 30-day leave balance."
-		),
-	};
-
-	const hint = hints[frm.doc.leave_category];
-	if (hint) {
-		frm.set_intro(hint);
+async function lock_status_for_self(frm) {
+	if (frm.doc.docstatus !== 0 || is_hr_user()) {
+		return;
 	}
+
+	const current = (
+		await frappe.db.get_value("Employee", { user_id: frappe.session.user }, "name")
+	)?.message?.name;
+	if (current && frm.doc.employee === current) {
+		frm.set_df_property("status", "read_only", 1);
+		if (frm.doc.status !== "Open") {
+			frm.set_value("status", "Open");
+		}
+	}
+}
+
+function show_leave_flow_hint(frm) {
+	if (frm.doc.docstatus !== 0 || is_hr_user()) {
+		frm.set_intro("");
+		return;
+	}
+	frm.set_intro(
+		__(
+			"Save with status <b>Open</b>. Your Leave Approver sets Approved/Rejected and submits. You cannot approve your own leave."
+		),
+		"blue"
+	);
+}
+
+function set_default_leave_type(frm) {
+	if (frm.doc.leave_type || !frm.is_new()) {
+		return;
+	}
+
+	frappe.call({
+		method: "volunteering.volunteering.leave_policy.get_leave_form_defaults",
+		callback(r) {
+			const leave_type = r.message && r.message.default_leave_type;
+			if (leave_type && !frm.doc.leave_type) {
+				frm.set_value("leave_type", leave_type);
+			}
+		},
+	});
 }

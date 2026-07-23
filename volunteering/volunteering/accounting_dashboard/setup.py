@@ -1,3 +1,10 @@
+# Copyright (c) 2026, Vadiraj Tirtha Das and contributors
+# For license information, please see license.txt
+
+"""Accounting desk pages (Budget Health only) + My Expenses wiring."""
+
+from __future__ import annotations
+
 import frappe
 from frappe import _
 from frappe.utils import formatdate, now_datetime
@@ -8,40 +15,19 @@ from volunteering.volunteering.accounting_dashboard.pending_approvals import (
 	_fetch_pending_rows,
 )
 
-
-PENDING_SIDEBAR_SECTION = "Pending Approvals"
+PENDING_SIDEBAR_SECTION = "Approvals"
+ACCOUNTS_OPS_SIDEBAR_SECTION = "Accounts Ops"
 BUDGET_SIDEBAR_SECTION = "Budgets"
 
-ACCOUNTING_PAGE_SPECS = (
-	{
-		"name": "pending-my-approval",
-		"title": "My Approval",
-		"sidebar_label": "My Approval",
-		"icon": "inbox",
-		"roles": [
-			"Employee",
-			"Accounts User",
-			"Accounts Manager",
-			"NGO Department Head",
-			"NGO Board Member",
-			"NGO Board Chairperson",
-		],
-	},
-	{
-		"name": "pending-reimburse",
-		"title": "Reimbursements",
-		"sidebar_label": "Reimbursements",
-		"icon": "wallet",
-		"roles": ["Accounts User", "Accounts Manager"],
-	},
-	{
-		"name": "pending-vendor-pay",
-		"title": "Vendor Payments",
-		"sidebar_label": "Vendor Payments",
-		"icon": "credit-card",
-		"roles": ["Accounts User", "Accounts Manager"],
-	},
+# Retired — delete if still on site
+RETIRED_PENDING_PAGES = (
+	"pending-my-approval",
+	"pending-reimburse",
+	"pending-vendor-pay",
 )
+
+# No longer create pending-* pages
+ACCOUNTING_PAGE_SPECS = ()
 
 BUDGET_PAGE_SPECS = (
 	{
@@ -55,9 +41,18 @@ BUDGET_PAGE_SPECS = (
 
 
 def ensure_accounting_pages():
-	for spec in ACCOUNTING_PAGE_SPECS + BUDGET_PAGE_SPECS:
+	_retire_pending_pages()
+	for spec in BUDGET_PAGE_SPECS:
 		_ensure_page(spec)
-	ensure_accounting_sidebar_links()
+	from volunteering.volunteering.accounts_workspace_setup import ensure_accounts_workspace
+
+	ensure_accounts_workspace()
+
+
+def _retire_pending_pages():
+	for name in RETIRED_PENDING_PAGES:
+		if frappe.db.exists("Page", name):
+			frappe.delete_doc("Page", name, force=True, ignore_permissions=True)
 
 
 def _ensure_page(spec):
@@ -79,42 +74,38 @@ def _ensure_page(spec):
 
 
 def ensure_accounting_sidebar_links():
-	"""Add accounting dashboard links under Pending Approvals in Volunteering sidebar."""
-	from volunteering.volunteering.workspace_setup import ensure_volunteering_workspace
+	from volunteering.volunteering.accounts_workspace_setup import ensure_accounts_workspace
 
-	if not frappe.db.exists("Workspace Sidebar", "Volunteering"):
-		return
+	ensure_accounts_workspace()
 
-	ensure_volunteering_workspace()
 
-	sidebar = frappe.get_doc("Workspace Sidebar", "Volunteering")
-	pending_page_names = {spec["name"] for spec in ACCOUNTING_PAGE_SPECS}
-	budget_page_names = {spec["name"] for spec in BUDGET_PAGE_SPECS}
-	all_page_names = pending_page_names | budget_page_names
+def _approvals_sidebar_block():
+	"""DocType links for filtered approval queues (filters live on workspace shortcuts)."""
+	items = [_section_item(PENDING_SIDEBAR_SECTION, "inbox")]
+	for label, doctype, icon in (
+		("Expense Claims Pending Me", "Expense Claim", "expense"),
+		("Advances Pending Me", "Employee Advance", "money-coins-1"),
+		("Purchase Orders Pending Me", "Purchase Order", "buying"),
+	):
+		if frappe.db.exists("DocType", doctype):
+			items.append(_doctype_sidebar_item(label, doctype, icon))
+	return items
 
-	sidebar.items = [
-		item
-		for item in sidebar.items
-		if _is_valid_sidebar_link(item)
-		and not (item.link_type == "Page" and item.link_to in all_page_names)
-		and item.label
-		not in (PENDING_SIDEBAR_SECTION, BUDGET_SIDEBAR_SECTION)
-	]
 
-	for item in _pending_sidebar_block():
-		sidebar.append("items", item)
-	for item in _budget_sidebar_block():
-		sidebar.append("items", item)
-
-	sidebar.save(ignore_permissions=True)
+def _accounts_ops_sidebar_block():
+	items = [_section_item(ACCOUNTS_OPS_SIDEBAR_SECTION, "wallet")]
+	for label, doctype, icon in (
+		("Claims to Reimburse", "Expense Claim", "expense"),
+		("Vendor Invoices to Pay", "Purchase Invoice", "file"),
+	):
+		if frappe.db.exists("DocType", doctype):
+			items.append(_doctype_sidebar_item(label, doctype, icon))
+	return items
 
 
 def _pending_sidebar_block():
-	items = [_section_item(PENDING_SIDEBAR_SECTION, "folder")]
-	for spec in ACCOUNTING_PAGE_SPECS:
-		if frappe.db.exists("Page", spec["name"]):
-			items.append(_page_item(spec))
-	return items
+	"""Back-compat name used by accounts_workspace_setup."""
+	return _approvals_sidebar_block()
 
 
 def _budget_sidebar_block():
@@ -145,6 +136,21 @@ def _page_item(spec):
 		"link_to": spec["name"],
 		"link_type": "Page",
 		"icon": spec["icon"],
+		"child": 1,
+		"collapsible": 0,
+		"indent": 1,
+		"keep_closed": 0,
+		"show_arrow": 0,
+	}
+
+
+def _doctype_sidebar_item(label, doctype, icon):
+	return {
+		"type": "Link",
+		"label": label,
+		"link_to": doctype,
+		"link_type": "DocType",
+		"icon": icon,
 		"child": 1,
 		"collapsible": 0,
 		"indent": 1,
@@ -218,9 +224,7 @@ def _send_reminder_email(user, rows):
 
 	message += (
 		"<br><br>"
-		+ _("Open your dashboard: {0}").format(
-			frappe.utils.get_url("/app/pending-my-approval")
-		)
+		+ _("Open My Expenses: {0}").format(frappe.utils.get_url("/app/my-expenses"))
 	)
 
 	frappe.sendmail(

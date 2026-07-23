@@ -1,4 +1,9 @@
-ACCOUNTING_APPROVAL_DOCTYPES = ("Expense Claim", "Purchase Order", "Purchase Invoice")
+ACCOUNTING_APPROVAL_DOCTYPES = (
+	"Expense Claim",
+	"Purchase Order",
+	"Purchase Invoice",
+	"Employee Advance",
+)
 
 ACCOUNTS_ROLES = frozenset(
 	{
@@ -13,6 +18,8 @@ BOARD_ROLES = frozenset(
 	{
 		"NGO Board Member",
 		"NGO Board Chairperson",
+		"Executive Board Member",
+		"Executive Board Chairperson",
 	}
 )
 

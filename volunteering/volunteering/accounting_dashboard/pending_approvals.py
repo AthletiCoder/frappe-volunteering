@@ -92,6 +92,8 @@ def _can_user_act(row, user, roles):
 	try:
 		frappe.set_user(user)
 		doc = frappe.get_doc(row.reference_doctype, row.reference_name)
+		if doc.get("pending_approver") == user and doc.workflow_state == "Pending Approval":
+			return True
 		for transition in frappe.model.workflow.get_transitions(doc):
 			transition = frappe._dict(transition)
 			if transition.allowed not in roles:
@@ -140,9 +142,13 @@ def _enrich_action(row, user, roles):
 	fields.append(amount_field)
 
 	if row.reference_doctype == "Expense Claim":
-		fields.extend(["employee", "expense_approver"])
+		fields.extend(["employee", "expense_approver", "pending_approver"])
+	elif row.reference_doctype == "Employee Advance":
+		fields.extend(["employee", "pending_approver"])
 	elif row.reference_doctype in ("Purchase Order", "Purchase Invoice"):
 		fields.append("supplier")
+		if frappe.db.has_column(row.reference_doctype, "pending_approver"):
+			fields.append("pending_approver")
 
 	doc = frappe.db.get_value(
 		row.reference_doctype,

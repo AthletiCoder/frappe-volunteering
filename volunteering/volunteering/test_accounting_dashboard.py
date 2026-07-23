@@ -40,6 +40,10 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 		frappe.flags.mute_emails = True
 		cls._email_patcher = patch("frappe.sendmail")
 		cls._email_patcher.start()
+		cls._gs_patcher = patch("frappe.model.document.update_global_search")
+		cls._gs_patcher.start()
+		cls._gs_queue_patcher = patch("frappe.utils.global_search.sync_value_in_queue")
+		cls._gs_queue_patcher.start()
 		setup_accounting_custom_fields()
 		frappe.clear_cache(doctype="Expense Claim")
 		reload_accounting_workflows()
@@ -71,6 +75,8 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 
 	@classmethod
 	def tearDownClass(cls):
+		cls._gs_queue_patcher.stop()
+		cls._gs_patcher.stop()
 		cls._email_patcher.stop()
 		frappe.flags.mute_emails = False
 		super().tearDownClass()
@@ -155,38 +161,55 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 
 	def test_ensure_accounting_pages_is_idempotent(self):
 		ensure_accounting_pages()
-		for page_name in (
+		self.assertTrue(frappe.db.exists("Page", "project-budget-health"))
+		for retired in (
 			"pending-my-approval",
 			"pending-reimburse",
 			"pending-vendor-pay",
-			"project-budget-health",
 		):
-			self.assertTrue(frappe.db.exists("Page", page_name))
+			self.assertFalse(frappe.db.exists("Page", retired))
 
 		ensure_accounting_pages()
-		sidebar = frappe.get_doc("Workspace Sidebar", "Volunteering")
-		sections = [
-			item.label
-			for item in sidebar.items
-			if item.type == "Section Break"
-			and item.label in ("Pending Approvals", "Budgets")
-		]
-		self.assertEqual(set(sections), {"Pending Approvals", "Budgets"})
-		child_labels = [
-			item.label
-			for item in sidebar.items
-			if item.child and item.link_type == "Page" and item.link_to.startswith("pending-")
-		]
-		self.assertEqual(
-			set(child_labels),
-			{"My Approval", "Reimbursements", "Vendor Payments"},
+		self.assertTrue(
+			frappe.db.exists("Workspace", "My Expenses")
+			or frappe.db.get_value("Workspace", {"label": "My Expenses"}, "name")
 		)
-		budget_links = [
+		self.assertTrue(frappe.db.exists("Workspace Sidebar", "My Expenses"))
+
+		expenses_sidebar = frappe.get_doc("Workspace Sidebar", "My Expenses")
+		page_links = {
 			item.link_to
-			for item in sidebar.items
-			if item.child and item.link_type == "Page" and item.link_to == "project-budget-health"
-		]
-		self.assertEqual(budget_links, ["project-budget-health"])
+			for item in expenses_sidebar.items
+			if item.link_type == "Page" and item.link_to
+		}
+		self.assertIn("project-budget-health", page_links)
+		self.assertFalse(
+			{"pending-my-approval", "pending-reimburse", "pending-vendor-pay"} & page_links
+		)
+
+		doctype_labels = {
+			item.label
+			for item in expenses_sidebar.items
+			if item.link_type == "DocType" and item.label
+		}
+		self.assertTrue(
+			{
+				"Expense Claims Pending Me",
+				"Claims to Reimburse",
+				"Vendor Invoices to Pay",
+			}
+			<= doctype_labels
+		)
+
+		if frappe.db.exists("Workspace Sidebar", "Volunteering"):
+			vol_sidebar = frappe.get_doc("Workspace Sidebar", "Volunteering")
+			vol_sections = {
+				item.label
+				for item in vol_sidebar.items
+				if item.type == "Section Break"
+				and item.label in ("Pending Approvals", "Approvals", "Accounts Ops", "Budgets")
+			}
+			self.assertEqual(vol_sections, set())
 
 	@patch("volunteering.volunteering.accounting_dashboard.setup._send_reminder_email")
 	def test_weekly_reminder_targets_users_with_pending_approvals(self, mock_send):

@@ -55,11 +55,13 @@
    "options": "Draft\nSubmitted\nReviewed\nCancelled",
    "read_only": 1
   },
-  {
+   {
    "default": "0",
    "fieldname": "is_wfh",
    "fieldtype": "Check",
-   "label": "Work From Home"
+   "hidden": 1,
+   "label": "Work From Home",
+   "read_only": 1
   },
   {
    "fieldname": "total_hours",

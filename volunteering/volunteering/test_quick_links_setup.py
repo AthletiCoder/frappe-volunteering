@@ -4,12 +4,12 @@
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from volunteering.volunteering.quick_links_setup import WORKSPACE_NAME, ensure_quick_links
+from volunteering.volunteering.quick_links_setup import WORKSPACE_NAME, ensure_my_work
 
 
-class IntegrationTestQuickLinks(IntegrationTestCase):
-	def test_ensure_quick_links_is_idempotent(self):
-		ensure_quick_links()
+class IntegrationTestMyWork(IntegrationTestCase):
+	def test_ensure_my_work_is_idempotent(self):
+		ensure_my_work()
 		self.assertTrue(
 			frappe.db.exists("Workspace", WORKSPACE_NAME)
 			or frappe.db.get_value("Workspace", {"label": WORKSPACE_NAME}, "name")
@@ -25,7 +25,7 @@ class IntegrationTestQuickLinks(IntegrationTestCase):
 		ws.flags.ignore_links = True
 		ws.save(ignore_permissions=True)
 
-		ensure_quick_links()
+		ensure_my_work()
 		ws.reload()
 		self.assertNotEqual(ws.content, original_content)
 		self.assertIn("custom", ws.content or "")

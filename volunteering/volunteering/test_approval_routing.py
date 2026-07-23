@@ -23,6 +23,14 @@ from volunteering.volunteering.doctype.volunteering_accounting_settings.voluntee
 
 
 class TestApprovalRoutingHelpers(UnitTestCase):
+	def setUp(self):
+		settings = get_accounting_settings()
+		settings.use_designation_approval = 0
+		settings.tier_1_limit = 2000
+		settings.tier_2_limit = 10000
+		settings.save(ignore_permissions=True)
+		frappe.clear_cache(doctype="Volunteering Accounting Settings")
+
 	def test_amount_tiers_use_settings(self):
 		settings = get_accounting_settings()
 		settings.tier_1_limit = 2000
@@ -43,6 +51,7 @@ class TestApprovalRoutingHelpers(UnitTestCase):
 		self.assertEqual(get_amount_approval_level(doc), 2)
 
 	def test_pending_state_mapping(self):
+		# Legacy mapping when designation approval is off
 		self.assertEqual(
 			get_pending_state_for_level("Expense Claim", 1), PENDING_EXPENSE_TIER_1
 		)

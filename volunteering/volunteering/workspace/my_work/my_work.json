@@ -1,18 +1,18 @@
 {
  "app": "volunteering",
  "charts": [],
- "content": "[{\"id\": \"eh-header\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Quick Links</span>\", \"col\": 12}}, {\"id\": \"eh-intro\", \"type\": \"paragraph\", \"data\": {\"text\": \"Quick links for daily work, attendance, WFH requests, and leave. Edit this workspace in Desk \u2014 changes persist across deployments.\", \"col\": 12}}, {\"id\": \"eh-spacer\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"eh-card\", \"type\": \"card\", \"data\": {\"card_name\": \"Self Service\", \"col\": 4}}]",
+ "content": "[{\"id\": \"eh-header\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">My Work</span>\", \"col\": 12}}, {\"id\": \"eh-intro\", \"type\": \"paragraph\", \"data\": {\"text\": \"Self-service for daily work, attendance, and leave. For Approvers shortcuts open standard lists filtered to your queue.\", \"col\": 12}}, {\"id\": \"eh-spacer\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"eh-card\", \"type\": \"card\", \"data\": {\"card_name\": \"Self Service\", \"col\": 4}}, {\"id\": \"eh-card-appr\", \"type\": \"card\", \"data\": {\"card_name\": \"For Approvers\", \"col\": 4}}, {\"id\": \"eh-short-ar\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Attendance Requests to Submit\", \"col\": 4}}, {\"id\": \"eh-short-leave\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Leaves Pending My Approval\", \"col\": 4}}]",
  "creation": "2026-07-16 10:00:00",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
  "for_user": "",
  "hide_custom": 0,
- "icon": "link",
+ "icon": "briefcase",
  "idx": 0,
  "indicator_color": "blue",
  "is_hidden": 0,
- "label": "Quick Links",
+ "label": "My Work",
  "links": [
   {
    "hidden": 0,
@@ -72,12 +72,41 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "For Approvers",
+   "link_count": 0,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Leaves Pending My Approval",
+   "link_count": 0,
+   "link_to": "Leave Application",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Attendance Requests to Submit",
+   "link_count": 0,
+   "link_to": "Attendance Request",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2026-07-16 22:36:05.131199",
+ "modified": "2026-07-23 21:01:54.632462",
  "modified_by": "Administrator",
  "module": "Volunteering",
- "name": "Quick Links",
+ "name": "My Work",
  "number_cards": [],
  "owner": "Administrator",
  "parent_page": "",
@@ -96,6 +125,9 @@
   },
   {
    "role": "System Manager"
+  },
+  {
+   "role": "Leave Approver"
   }
  ],
  "sequence_id": 0.0,
@@ -120,8 +152,24 @@
    "label": "Leave Application",
    "link_to": "Leave Application",
    "type": "DocType"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "List",
+   "label": "Leaves Pending My Approval",
+   "link_to": "Leave Application",
+   "stats_filter": "[[\"Leave Application\",\"leave_approver\",\"=\",frappe.session.user],[\"Leave Application\",\"status\",\"=\",\"Open\"],[\"Leave Application\",\"docstatus\",\"=\",0]]",
+   "type": "DocType"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "List",
+   "label": "Attendance Requests to Submit",
+   "link_to": "Attendance Request",
+   "stats_filter": "[[\"Attendance Request\",\"docstatus\",\"=\",0]]",
+   "type": "DocType"
   }
  ],
- "title": "Quick Links",
+ "title": "My Work",
  "type": "Workspace"
 }

@@ -28,6 +28,10 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 		frappe.flags.mute_emails = True
 		cls._email_patcher = patch("frappe.sendmail")
 		cls._email_patcher.start()
+		cls._gs_patcher = patch("frappe.model.document.update_global_search")
+		cls._gs_patcher.start()
+		cls._gs_queue_patcher = patch("frappe.utils.global_search.sync_value_in_queue")
+		cls._gs_queue_patcher.start()
 		setup_accounting_custom_fields()
 		reload_accounting_workflows()
 		frappe.db.set_single_value("Volunteering Accounting Settings", "enable_budget_warnings", 1)
@@ -36,12 +40,19 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 		cls.employee_email = get_or_create_user(
 			"employee-acct@example.com", ["Employee"], "Employee User"
 		)
+		cls.manager_email = get_or_create_user(
+			"budget-mgr-acct@example.com", ["Employee", "NGO Department Head"], "Budget Mgr"
+		)
 		cls.department = get_or_create_department("Operations")
+		cls.manager = get_or_create_employee(cls.manager_email, cls.department, "Budget Manager")
 		cls.employee = get_or_create_employee(cls.employee_email, cls.department)
+		frappe.db.set_value("Employee", cls.employee, "reports_to", cls.manager)
 		set_project_department_budget(cls.project, cls.department, 10000)
 
 	@classmethod
 	def tearDownClass(cls):
+		cls._gs_queue_patcher.stop()
+		cls._gs_patcher.stop()
 		cls._email_patcher.stop()
 		frappe.flags.mute_emails = False
 		super().tearDownClass()
@@ -75,6 +86,53 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 		frappe.set_user(self.employee_email)
 		claim = make_expense_claim(self.employee, self.project, amount=12000, owner=self.employee_email)
 		claim = frappe.get_doc("Expense Claim", claim.name)
+		claim.vendor_override_reason = "Urgent reimbursement; PO not feasible."
 		claim.save(ignore_permissions=True)
 		apply_workflow(claim, "Submit")
 		self.assertTrue(frappe.db.exists("Expense Claim", claim.name))
+		self.assertEqual(frappe.db.get_value("Expense Claim", claim.name, "workflow_state"), "Pending Approval")
+
+	def test_approve_over_budget_requires_exceedance_reason(self):
+		frappe.set_user(self.employee_email)
+		claim = make_expense_claim(self.employee, self.project, amount=12000, owner=self.employee_email)
+		claim = frappe.get_doc("Expense Claim", claim.name)
+		claim.vendor_override_reason = "Urgent reimbursement; PO not feasible."
+		claim.save(ignore_permissions=True)
+		apply_workflow(claim, "Submit")
+		claim.reload()
+		self.assertEqual(claim.pending_approver, self.manager_email)
+
+		frappe.set_user(self.manager_email)
+		claim = frappe.get_doc("Expense Claim", claim.name)
+		with self.assertRaises(frappe.ValidationError):
+			apply_workflow(claim, "Approve")
+
+	def test_approve_over_budget_with_reason_under_hard_limit(self):
+		# 20% over 10000 = 12000 → under 25% hard block
+		frappe.set_user(self.employee_email)
+		claim = make_expense_claim(self.employee, self.project, amount=12000, owner=self.employee_email)
+		claim = frappe.get_doc("Expense Claim", claim.name)
+		claim.vendor_override_reason = "Urgent reimbursement; PO not feasible."
+		claim.save(ignore_permissions=True)
+		apply_workflow(claim, "Submit")
+		claim.reload()
+		self.assertEqual(claim.pending_approver, self.manager_email)
+
+		frappe.set_user(self.manager_email)
+		claim = frappe.get_doc("Expense Claim", claim.name)
+		claim.budget_override_reason = "Seasonal campaign overspend approved by dept."
+		claim.save(ignore_permissions=True)
+		apply_workflow(claim, "Approve")
+		claim.reload()
+		self.assertEqual(claim.workflow_state, "Approved")
+
+	def test_form_has_approval_tab_and_budget_exceedance_label(self):
+		meta = frappe.get_meta("Expense Claim")
+		self.assertTrue(meta.has_field("approval_routing_tab"))
+		self.assertTrue(meta.has_field("budget_override_reason"))
+		df = meta.get_field("budget_override_reason")
+		self.assertEqual(df.label, "Budget Exceedance Reason")
+
+		project_meta = frappe.get_meta("Project")
+		self.assertFalse(bool(project_meta.get_field("fund_project_type")))
+		self.assertTrue(project_meta.has_field("parent_campaign"))

@@ -1,0 +1,263 @@
+{
+ "app": "volunteering",
+ "charts": [],
+ "content": "[{\"id\": \"ac-header\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">My Expenses</span>\", \"col\": 12}}, {\"id\": \"ac-intro\", \"type\": \"paragraph\", \"data\": {\"text\": \"Spend requests, approvals, reimbursements, and budgets. Edit this workspace in Desk \\u2014 changes persist across deployments.\", \"col\": 12}}, {\"id\": \"ac-spacer\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"ac-card-spend\", \"type\": \"card\", \"data\": {\"card_name\": \"My Spend\", \"col\": 4}}, {\"id\": \"ac-card-appr\", \"type\": \"card\", \"data\": {\"card_name\": \"Approvals\", \"col\": 4}}, {\"id\": \"ac-card-ops\", \"type\": \"card\", \"data\": {\"card_name\": \"Accounts Ops\", \"col\": 4}}, {\"id\": \"ac-card-bud\", \"type\": \"card\", \"data\": {\"card_name\": \"Budgets\", \"col\": 4}}, {\"id\": \"ac-short-pending-0\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Expense Claims Pending Me\", \"col\": 4}}, {\"id\": \"ac-short-pending-1\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Advances Pending Me\", \"col\": 4}}, {\"id\": \"ac-short-pending-2\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Purchase Orders Pending Me\", \"col\": 4}}, {\"id\": \"ac-short-queue-3\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Claims to Reimburse\", \"col\": 4}}, {\"id\": \"ac-short-queue-4\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Vendor Invoices to Pay\", \"col\": 4}}]",
+ "creation": "2026-07-22 08:00:00",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "expense",
+ "idx": 0,
+ "indicator_color": "green",
+ "is_hidden": 0,
+ "label": "My Expenses",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "My Spend",
+   "link_count": 0,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Expense Claim",
+   "link_count": 0,
+   "link_to": "Expense Claim",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Employee Advance",
+   "link_count": 0,
+   "link_to": "Employee Advance",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Purchase Order",
+   "link_count": 0,
+   "link_to": "Purchase Order",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Approvals",
+   "link_count": 0,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Expense Claims Pending Me",
+   "link_count": 0,
+   "link_to": "Expense Claim",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Advances Pending Me",
+   "link_count": 0,
+   "link_to": "Employee Advance",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Purchase Orders Pending Me",
+   "link_count": 0,
+   "link_to": "Purchase Order",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Accounts Ops",
+   "link_count": 0,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Claims to Reimburse",
+   "link_count": 0,
+   "link_to": "Expense Claim",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Vendor Invoices to Pay",
+   "link_count": 0,
+   "link_to": "Purchase Invoice",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Budgets",
+   "link_count": 0,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Budget Health",
+   "link_count": 0,
+   "link_to": "project-budget-health",
+   "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Project",
+   "link_count": 0,
+   "link_to": "Project",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Purchase Invoice",
+   "link_count": 0,
+   "link_to": "Purchase Invoice",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Advances with Residual",
+   "link_count": 0,
+   "link_to": "Employee Advances with Residual",
+   "link_type": "Report",
+   "onboard": 0,
+   "report_ref_doctype": "Employee Advance",
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-07-23 21:05:35.332712",
+ "modified_by": "Administrator",
+ "module": "Volunteering",
+ "name": "My Expenses",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "restrict_to_domain": "",
+ "roles": [
+  {
+   "role": "Employee"
+  },
+  {
+   "role": "Accounts User"
+  },
+  {
+   "role": "Accounts Manager"
+  },
+  {
+   "role": "NGO Coordinator"
+  },
+  {
+   "role": "NGO Department Head"
+  },
+  {
+   "role": "NGO Board Member"
+  },
+  {
+   "role": "NGO Board Chairperson"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
+ "sequence_id": 0.0,
+ "shortcuts": [
+  {
+   "color": "Blue",
+   "doc_view": "List",
+   "label": "Employee Advance",
+   "link_to": "Employee Advance",
+   "type": "DocType"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "List",
+   "label": "Expense Claims Pending Me",
+   "link_to": "Expense Claim",
+   "stats_filter": "[[\"Expense Claim\",\"pending_approver\",\"=\",frappe.session.user]]",
+   "type": "DocType"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "List",
+   "label": "Advances Pending Me",
+   "link_to": "Employee Advance",
+   "stats_filter": "[[\"Employee Advance\",\"pending_approver\",\"=\",frappe.session.user]]",
+   "type": "DocType"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "List",
+   "label": "Purchase Orders Pending Me",
+   "link_to": "Purchase Order",
+   "stats_filter": "[[\"Purchase Order\",\"pending_approver\",\"=\",frappe.session.user]]",
+   "type": "DocType"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "List",
+   "label": "Claims to Reimburse",
+   "link_to": "Expense Claim",
+   "stats_filter": "[[\"Expense Claim\",\"docstatus\",\"=\",1],[\"Expense Claim\",\"approval_status\",\"=\",\"Approved\"],[\"Expense Claim\",\"status\",\"=\",\"Unpaid\"]]",
+   "type": "DocType"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "List",
+   "label": "Vendor Invoices to Pay",
+   "link_to": "Purchase Invoice",
+   "stats_filter": "[[\"Purchase Invoice\",\"docstatus\",\"=\",1],[\"Purchase Invoice\",\"outstanding_amount\",\">\",0]]",
+   "type": "DocType"
+  }
+ ],
+ "title": "My Expenses",
+ "type": "Workspace"
+}

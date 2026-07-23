@@ -23,6 +23,9 @@ def after_migrate():
 		ensure_wednesday_weekly_off()
 		assign_missing_leave_policies()
 		_setup_attendance_request_permissions()
+		from volunteering.volunteering.leave_pending import backfill_leave_approvers_from_reports_to
+
+		backfill_leave_approvers_from_reports_to()
 	except Exception:
 		frappe.log_error(title="Leave setup after_migrate failed", message=frappe.get_traceback())
 
@@ -57,10 +60,16 @@ def configure_hr_settings():
 	if not frappe.db.exists("DocType", "HR Settings"):
 		return
 
-	hr_settings = frappe.get_single("HR Settings")
-	hr_settings.restrict_backdated_leave_application = 0
-	hr_settings.leave_approver_mandatory_in_leave_application = 1
-	hr_settings.save(ignore_permissions=True)
+	# Prefer set_single_value to avoid Property Setter / Redis side-effects on full save
+	frappe.db.set_single_value("HR Settings", "restrict_backdated_leave_application", 0)
+	frappe.db.set_single_value("HR Settings", "leave_approver_mandatory_in_leave_application", 1)
+	if frappe.db.has_column("Singles", "doctype") or True:
+		try:
+			frappe.db.set_single_value("HR Settings", "prevent_self_leave_approval", 1)
+		except Exception:
+			hr_settings = frappe.get_single("HR Settings")
+			if hasattr(hr_settings, "prevent_self_leave_approval"):
+				hr_settings.db_set("prevent_self_leave_approval", 1, update_modified=False)
 
 
 def ensure_leave_type():

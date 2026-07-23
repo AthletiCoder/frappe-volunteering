@@ -5,6 +5,7 @@ PROJECT_CONTROLLED_DOCTYPES = (
 	"Purchase Order",
 	"Purchase Invoice",
 	"Expense Claim",
+	"Employee Advance",
 )
 
 
@@ -16,7 +17,9 @@ def set_cost_center_from_project(doc, method=None):
 	if not cost_center:
 		return
 
-	doc.cost_center = cost_center
+	meta = frappe.get_meta(doc.doctype)
+	if meta.has_field("cost_center"):
+		doc.cost_center = cost_center
 	if doc.doctype == "Expense Claim":
 		for row in doc.get("expenses") or []:
 			if not row.get("cost_center"):
@@ -98,38 +101,92 @@ def validate_payment_entry(doc, method=None):
 	for ref in refs:
 		if ref.reference_doctype == "Purchase Invoice":
 			pi = frappe.get_doc("Purchase Invoice", ref.reference_name)
-			if pi.get("workflow_state") != "Approved":
+			if pi.get("workflow_state") and pi.get("workflow_state") != "Approved":
 				frappe.throw(
 					_("Payment not allowed. Invoice {0} is not approved.").format(pi.name)
 				)
-
-		if ref.reference_doctype == "Expense Claim":
-			ec = frappe.get_doc("Expense Claim", ref.reference_name)
-			if ec.get("workflow_state") != "Approved":
+		elif ref.reference_doctype == "Purchase Order":
+			po = frappe.get_doc("Purchase Order", ref.reference_name)
+			if po.get("workflow_state") and po.get("workflow_state") != "Approved":
 				frappe.throw(
-					_("Payment not allowed. Expense Claim {0} is not approved.").format(ec.name)
+					_("Payment not allowed. Purchase Order {0} is not approved.").format(po.name)
+				)
+			if po.docstatus != 1:
+				frappe.throw(
+					_("Payment not allowed. Purchase Order {0} must be submitted.").format(po.name)
 				)
 
 	if doc.party_type == "Employee":
 		if not refs:
-			frappe.throw(_("Reimbursement must be linked to an Expense Claim"))
+			frappe.throw(
+				_("Employee payments must be linked to an Expense Claim or Employee Advance.")
+			)
 
 		for ref in refs:
-			if ref.reference_doctype != "Expense Claim":
+			if ref.reference_doctype == "Expense Claim":
+				ec = frappe.get_doc("Expense Claim", ref.reference_name)
+				if ec.get("workflow_state") and ec.get("workflow_state") != "Approved":
+					frappe.throw(
+						_("Payment not allowed. Expense Claim {0} is not approved.").format(ec.name)
+					)
+			elif ref.reference_doctype == "Employee Advance":
+				ea = frappe.get_doc("Employee Advance", ref.reference_name)
+				if ea.get("workflow_state") and ea.get("workflow_state") != "Approved":
+					frappe.throw(
+						_("Payment not allowed. Employee Advance {0} is not approved.").format(
+							ea.name
+						)
+					)
+				_warn_prior_advance_residuals(ea)
+			else:
 				frappe.throw(
 					_(
-						"Employee payments must only reference Expense Claims (found {0})."
+						"Employee payments must only reference Expense Claims or Employee Advances "
+						"(found {0})."
 					).format(ref.reference_doctype)
 				)
 
 	if doc.party_type == "Supplier":
 		if not refs:
-			frappe.throw(_("Supplier payments must be linked to a Purchase Invoice"))
+			frappe.throw(
+				_("Supplier payments must be linked to a Purchase Invoice or Purchase Order.")
+			)
 
 		for ref in refs:
-			if ref.reference_doctype != "Purchase Invoice":
+			if ref.reference_doctype not in ("Purchase Invoice", "Purchase Order"):
 				frappe.throw(
 					_(
-						"Supplier payments must only reference Purchase Invoices (found {0})."
+						"Supplier payments must only reference Purchase Invoices or Purchase Orders "
+						"(found {0})."
 					).format(ref.reference_doctype)
 				)
+
+
+def _warn_prior_advance_residuals(employee_advance):
+	"""Soft warning when paying a new advance while prior residuals remain."""
+	from volunteering.volunteering.employee_advance_controls import residual_advances_for_employee
+
+	employee = employee_advance.get("employee")
+	if not employee:
+		return
+
+	residuals = [
+		r
+		for r in residual_advances_for_employee(employee)
+		if r.get("name") != employee_advance.get("name")
+	]
+	if not residuals:
+		return
+
+	parts = [
+		_("{0}: {1}").format(r["name"], frappe.format_value(r["residual"], "Currency"))
+		for r in residuals
+	]
+	frappe.msgprint(
+		_(
+			"This employee still has residual on prior advance(s): {0}. "
+			"Chase claim or return before or alongside this top-up."
+		).format("; ".join(parts)),
+		title=_("Prior Advance Residual"),
+		indicator="orange",
+	)

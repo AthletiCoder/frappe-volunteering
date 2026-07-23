@@ -1,14 +1,62 @@
 frappe.provide("volunteering.accounting_workflow");
 
-const WORKFLOW_ACTIONS = ["Approve", "Reject", "Escalate"];
+const WORKFLOW_ACTIONS = ["Approve", "Reject"];
 const IDLE_WORKFLOW_STATES = ["Draft", "Rejected", "Approved"];
 
 volunteering.accounting_workflow.setup_form = function (doctype) {
 	frappe.ui.form.on(doctype, {
 		refresh(frm) {
 			volunteering.accounting_workflow.render_actions(frm);
+			volunteering.accounting_workflow.show_spend_hints(frm);
+			volunteering.accounting_workflow.toggle_exception_fields(frm);
+		},
+		is_emergency(frm) {
+			volunteering.accounting_workflow.toggle_exception_fields(frm);
+		},
+		total_claimed_amount(frm) {
+			volunteering.accounting_workflow.toggle_exception_fields(frm);
+		},
+		grand_total(frm) {
+			volunteering.accounting_workflow.toggle_exception_fields(frm);
+		},
+		advance_amount(frm) {
+			volunteering.accounting_workflow.toggle_exception_fields(frm);
 		},
 	});
+};
+
+volunteering.accounting_workflow.show_spend_hints = function (frm) {
+	if (frm.doc.docstatus !== 0 || frm.doc.workflow_state !== "Draft") {
+		return;
+	}
+	frm.dashboard.clear_headline();
+	frm.dashboard.set_headline(
+		__(
+			'Prefer vendor payments for larger spends. See <a href="/help/accounts/how-to-spend" target="_blank">How to spend</a>.'
+		)
+	);
+};
+
+volunteering.accounting_workflow.toggle_exception_fields = function (frm) {
+	const pending = frm.doc.workflow_state === "Pending Approval";
+	const is_approver = frm.doc.pending_approver === frappe.session.user;
+	const has_reason = !!(frm.doc.budget_override_reason || "").trim();
+	const show_budget = has_reason || (pending && is_approver);
+
+	if (frm.fields_dict.budget_section) {
+		frm.set_df_property("budget_section", "hidden", show_budget ? 0 : 1);
+		frm.set_df_property("budget_section", "collapsed", show_budget ? 0 : 1);
+	}
+	if (frm.fields_dict.budget_override_reason) {
+		frm.set_df_property("budget_override_reason", "hidden", show_budget ? 0 : 1);
+		frm.toggle_reqd("budget_override_reason", false);
+	}
+
+	if (frm.doctype === "Expense Claim" && frm.fields_dict.vendor_override_reason) {
+		const show_vendor =
+			!!(frm.doc.vendor_override_reason || "").trim() || !!frm.doc.is_emergency;
+		frm.set_df_property("vendor_override_reason", "hidden", show_vendor ? 0 : 1);
+	}
 };
 
 volunteering.accounting_workflow.render_actions = function (frm) {
@@ -19,23 +67,71 @@ volunteering.accounting_workflow.render_actions = function (frm) {
 		return;
 	}
 
-	frappe.workflow.get_transitions(frm.doc).then((transitions) => {
-		const actions = (transitions || []).filter((transition) =>
-			WORKFLOW_ACTIONS.includes(transition.action)
-		);
-		if (!actions.length) {
-			return;
-		}
+	frappe
+		.xcall("volunteering.volunteering.approval_routing.get_approver_action_flags", {
+			doctype: frm.doctype,
+			name: frm.doc.name,
+		})
+		.then((flags) => {
+			if (!flags || !flags.is_pending_approver) {
+				return;
+			}
 
-		actions.forEach((transition) => {
-			const is_primary = transition.action === "Approve";
-			frm.add_custom_button(
-				__(transition.action),
-				() => volunteering.accounting_workflow.apply_action(frm, transition.action),
-				is_primary ? __("Review") : __("Review")
-			);
+			frappe.workflow.get_transitions(frm.doc).then((transitions) => {
+				const actions = (transitions || []).filter((transition) =>
+					WORKFLOW_ACTIONS.includes(transition.action)
+				);
+				const by_name = {};
+				actions.forEach((t) => {
+					by_name[t.action] = t;
+				});
+
+				if (flags.can_approve && by_name.Approve) {
+					frm.page.set_primary_action(__("Approve"), () =>
+						volunteering.accounting_workflow.apply_action(frm, "Approve")
+					);
+				}
+
+				if (by_name.Reject && flags.can_reject) {
+					frm.add_custom_button(
+						__("Reject"),
+						() => volunteering.accounting_workflow.apply_action(frm, "Reject"),
+						__("Review")
+					);
+				}
+
+				if (flags.can_escalate) {
+					frm.add_custom_button(
+						__("Escalate"),
+						() => volunteering.accounting_workflow.escalate(frm),
+						__("Review")
+					);
+				}
+			});
 		});
-	});
+};
+
+volunteering.accounting_workflow.escalate = function (frm) {
+	frappe.prompt(
+		{
+			fieldname: "escalation_reason",
+			label: __("Escalation Reason"),
+			fieldtype: "Small Text",
+			reqd: 1,
+		},
+		(values) => {
+			frappe.dom.freeze();
+			frappe
+				.xcall("volunteering.volunteering.approval_routing.escalate_document", {
+					doctype: frm.doctype,
+					name: frm.doc.name,
+					escalation_reason: values.escalation_reason,
+				})
+				.then(() => frm.reload_doc())
+				.finally(() => frappe.dom.unfreeze());
+		},
+		__("Escalate for higher approval")
+	);
 };
 
 volunteering.accounting_workflow.apply_action = function (frm, action) {
@@ -47,25 +143,16 @@ volunteering.accounting_workflow.apply_action = function (frm, action) {
 				frappe.model.sync(doc);
 				frm.refresh();
 			})
+			.catch(() => {
+				// Uncollapse budget reason if Approve failed for missing reason
+				if (action === "Approve" && frm.fields_dict.budget_section) {
+					frm.set_df_property("budget_section", "hidden", 0);
+					frm.set_df_property("budget_section", "collapsed", 0);
+					frm.set_df_property("budget_override_reason", "hidden", 0);
+				}
+			})
 			.finally(() => frappe.dom.unfreeze());
 	};
-
-	if (action === "Escalate") {
-		frappe.prompt(
-			{
-				fieldname: "escalation_reason",
-				label: __("Escalation Reason"),
-				fieldtype: "Small Text",
-				reqd: 1,
-			},
-			(values) => {
-				frm.set_value("escalation_reason", values.escalation_reason);
-				frm.save().then(apply);
-			},
-			__("Escalate for higher approval")
-		);
-		return;
-	}
 
 	if (frm.is_dirty()) {
 		frm.save().then(apply);
@@ -77,3 +164,4 @@ volunteering.accounting_workflow.apply_action = function (frm, action) {
 
 volunteering.accounting_workflow.setup_form("Expense Claim");
 volunteering.accounting_workflow.setup_form("Purchase Order");
+volunteering.accounting_workflow.setup_form("Employee Advance");
