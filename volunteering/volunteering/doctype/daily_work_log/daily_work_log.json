@@ -12,6 +12,8 @@
   "is_wfh",
   "total_hours",
   "notes",
+  "manager_section",
+  "manager_remarks",
   "items_section",
   "items"
  ],
@@ -76,6 +78,20 @@
    "label": "Notes"
   },
   {
+   "fieldname": "manager_section",
+   "fieldtype": "Section Break",
+   "label": "Manager Review",
+   "permlevel": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "manager_remarks",
+   "fieldtype": "Small Text",
+   "label": "Manager Remarks",
+   "permlevel": 1,
+   "description": "Visible only to managers and HR — not to the employee."
+  },
+  {
    "fieldname": "items_section",
    "fieldtype": "Section Break",
    "label": "Work Items"
@@ -133,6 +149,36 @@
    "role": "HR User",
    "share": 1,
    "submit": 1,
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "HR Manager",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "HR User",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Leave Approver",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "People Manager",
    "write": 1
   },
   {

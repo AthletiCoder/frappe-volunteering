@@ -137,6 +137,7 @@ def validate_payment_entry(doc, method=None):
 							ea.name
 						)
 					)
+				_validate_advance_payment_account(doc, ea)
 				_warn_prior_advance_residuals(ea)
 			else:
 				frappe.throw(
@@ -160,6 +161,39 @@ def validate_payment_entry(doc, method=None):
 						"(found {0})."
 					).format(ref.reference_doctype)
 				)
+
+
+def _validate_advance_payment_account(payment_entry, employee_advance):
+	"""Reject PE when paid_to is a customer Debtors / AR account (not Employee Advances)."""
+	paid_to = payment_entry.get("paid_to") or employee_advance.get("advance_account")
+	if not paid_to:
+		return
+
+	account = frappe.db.get_value(
+		"Account",
+		paid_to,
+		["account_type", "account_name", "root_type"],
+		as_dict=True,
+	)
+	if not account:
+		return
+
+	name_l = (account.account_name or "").lower()
+	looks_like_debtors = "debtor" in name_l or "sundry debtor" in name_l
+	is_receivable = account.account_type == "Receivable"
+
+	# Correct setup: dedicated Employee Advances receivable (party = Employee).
+	# Wrong setup: company Debtors / customer AR → GL throws "Customer is required".
+	if is_receivable and looks_like_debtors:
+		frappe.throw(
+			_(
+				"Payment Entry uses account {0}, which is a customer receivable (Debtors). "
+				"Employee Advances must use the company's Employee Advances account "
+				"(Receivable, party type Employee). Fix Company → Default Employee Advance Account "
+				"and the Employee's Advance Account, then recreate the Payment Entry."
+			).format(paid_to),
+			title=_("Wrong Advance Account"),
+		)
 
 
 def _warn_prior_advance_residuals(employee_advance):

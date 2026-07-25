@@ -134,7 +134,7 @@ class DailyWorkLog(Document):
 			)
 
 	@frappe.whitelist()
-	def mark_as_reviewed(self):
+	def mark_as_reviewed(self, manager_remarks=None):
 		if self.docstatus != 1:
 			frappe.throw(_("Only submitted logs can be marked as Reviewed."))
 
@@ -142,7 +142,10 @@ class DailyWorkLog(Document):
 			frappe.throw(_("Only a manager or HR user can mark this log as Reviewed."), frappe.PermissionError)
 
 		# status has no allow_on_submit; write directly and leave an audit trail
-		self.db_set("status", "Reviewed")
+		updates = {"status": "Reviewed"}
+		if manager_remarks is not None:
+			updates["manager_remarks"] = manager_remarks
+		self.db_set(updates)
 		self.add_comment("Info", _("Marked as Reviewed by {0}").format(frappe.session.user))
 		return self.name
 

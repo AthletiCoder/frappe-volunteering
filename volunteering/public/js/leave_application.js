@@ -8,6 +8,7 @@ frappe.ui.form.on("Leave Application", {
 		lock_employee_for_non_hr(frm);
 		lock_status_for_self(frm);
 		show_leave_flow_hint(frm);
+		setup_approver_actions(frm);
 	},
 
 	leave_category(frm) {
@@ -55,38 +56,25 @@ async function lock_status_for_self(frm) {
 }
 
 function show_leave_flow_hint(frm) {
-	if (frm.doc.docstatus !== 0 || is_hr_user()) {
+	if (frm.doc.docstatus !== 0) {
 		frm.set_intro("");
 		return;
 	}
-	// Keep only the approval-flow hint — advance-notice rules are enforced on save, not as banner text.
+	if (frm.doc.leave_approver === frappe.session.user || is_hr_user()) {
+		frm.set_intro(
+			__(
+				"Use <b>Approve & Submit</b> or <b>Reject & Submit</b> to decide in one step. You cannot approve your own leave."
+			),
+			"blue"
+		);
+		return;
+	}
 	frm.set_intro(
 		__(
 			"Save with status <b>Open</b>. Your Leave Approver sets Approved/Rejected and submits. You cannot approve your own leave."
 		),
 		"blue"
 	);
-	// #region agent log
-	fetch("http://127.0.0.1:7494/ingest/940184ed-a7d0-4e09-a421-30599350bb5d", {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-			"X-Debug-Session-Id": "4c4245",
-		},
-		body: JSON.stringify({
-			sessionId: "4c4245",
-			hypothesisId: "H2",
-			location: "leave_application.js:show_leave_flow_hint",
-			message: "intro set without advance-notice banner",
-			data: {
-				leave_category: frm.doc.leave_category,
-				docstatus: frm.doc.docstatus,
-			},
-			timestamp: Date.now(),
-			runId: "leave-ux",
-		}),
-	}).catch(() => {});
-	// #endregion
 }
 
 function set_default_leave_type(frm) {
@@ -103,4 +91,53 @@ function set_default_leave_type(frm) {
 			}
 		},
 	});
+}
+
+async function setup_approver_actions(frm) {
+	if (frm.doc.docstatus !== 0 || frm.doc.status !== "Open") {
+		return;
+	}
+
+	const is_approver = frm.doc.leave_approver === frappe.session.user || is_hr_user();
+	if (!is_approver) {
+		return;
+	}
+
+	// Block self-approval in the UI too
+	const self_emp = (
+		await frappe.db.get_value("Employee", { user_id: frappe.session.user }, "name")
+	)?.message?.name;
+	if (self_emp && frm.doc.employee === self_emp && !is_hr_user()) {
+		return;
+	}
+
+	frm.page.set_primary_action(__("Approve & Submit"), () =>
+		decide_and_submit(frm, "Approved")
+	);
+	frm.add_custom_button(__("Reject & Submit"), () => decide_and_submit(frm, "Rejected"), __(
+		"Actions"
+	));
+}
+
+function decide_and_submit(frm, status) {
+	const apply = () => {
+		frm.set_value("status", status).then(() => {
+			frappe.dom.freeze(__("Submitting…"));
+			frm
+				.save("Submit")
+				.then(() => {
+					frappe.show_alert({
+						message: status === "Approved" ? __("Leave approved") : __("Leave rejected"),
+						indicator: status === "Approved" ? "green" : "red",
+					});
+				})
+				.finally(() => frappe.dom.unfreeze());
+		});
+	};
+
+	if (frm.is_dirty()) {
+		frm.save().then(apply);
+		return;
+	}
+	apply();
 }

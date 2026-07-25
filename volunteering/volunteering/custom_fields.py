@@ -43,9 +43,11 @@ _BUDGET_REASON_DEPENDS = (
 _VENDOR_REASON_DEPENDS = "eval:doc.vendor_override_reason || doc.is_emergency"
 
 
-def _approval_routing_fields(insert_after_anchor, emergency_label="Emergency Purchase"):
+def _approval_routing_fields(
+	insert_after_anchor, emergency_label="Emergency Purchase", include_emergency=True
+):
 	"""Shared Approval tab + Exceptions + Budget sections for EC / PO / EA."""
-	return [
+	fields = [
 		{
 			"fieldname": "approval_routing_tab",
 			"fieldtype": "Tab Break",
@@ -85,31 +87,41 @@ def _approval_routing_fields(insert_after_anchor, emergency_label="Emergency Pur
 			"collapsible": 1,
 			"collapsed": 1,
 		},
-		{
-			"fieldname": "is_emergency",
-			"label": emergency_label,
-			"fieldtype": "Check",
-			"insert_after": "exceptions_section",
-			"default": "0",
-		},
-		{
-			"fieldname": "budget_section",
-			"fieldtype": "Section Break",
-			"label": "Budget Exceedance",
-			"insert_after": "is_emergency",
-			"collapsible": 1,
-			"collapsed": 1,
-			"depends_on": _BUDGET_REASON_DEPENDS,
-		},
-		{
-			"fieldname": "budget_override_reason",
-			"label": "Budget Exceedance Reason",
-			"fieldtype": "Small Text",
-			"insert_after": "budget_section",
-			"description": "Required when approving a spend that exceeds the department budget.",
-			"depends_on": _BUDGET_REASON_DEPENDS,
-		},
 	]
+	budget_after = "exceptions_section"
+	if include_emergency:
+		fields.append(
+			{
+				"fieldname": "is_emergency",
+				"label": emergency_label,
+				"fieldtype": "Check",
+				"insert_after": "exceptions_section",
+				"default": "0",
+			}
+		)
+		budget_after = "is_emergency"
+	fields.extend(
+		[
+			{
+				"fieldname": "budget_section",
+				"fieldtype": "Section Break",
+				"label": "Budget Exceedance",
+				"insert_after": budget_after,
+				"collapsible": 1,
+				"collapsed": 1,
+				"depends_on": _BUDGET_REASON_DEPENDS,
+			},
+			{
+				"fieldname": "budget_override_reason",
+				"label": "Budget Exceedance Reason",
+				"fieldtype": "Small Text",
+				"insert_after": "budget_section",
+				"description": "Required when approving a spend that exceeds the department budget.",
+				"depends_on": _BUDGET_REASON_DEPENDS,
+			},
+		]
+	)
+	return fields
 
 
 ACCOUNTING_CUSTOM_FIELDS = {
@@ -192,9 +204,11 @@ ACCOUNTING_CUSTOM_FIELDS = {
 			"fieldtype": "Link",
 			"options": "Project",
 			"insert_after": "department",
-			"reqd": 1,
+			"reqd": 0,
+			"hidden": 1,
+			"description": "Auto-set for budget tracking; hidden from employees.",
 		},
-		*_approval_routing_fields("project", emergency_label="Emergency"),
+		*_approval_routing_fields("project", include_emergency=False),
 		{
 			"fieldname": "spend_guide_section",
 			"fieldtype": "Section Break",

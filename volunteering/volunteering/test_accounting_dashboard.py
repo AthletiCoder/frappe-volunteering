@@ -161,11 +161,14 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 
 	def test_ensure_accounting_pages_is_idempotent(self):
 		ensure_accounting_pages()
-		self.assertTrue(frappe.db.exists("Page", "project-budget-health"))
+		self.assertFalse(frappe.db.exists("Page", "project-budget-health"))
+		self.assertFalse(frappe.db.exists("Page", "advance-portal"))
 		for retired in (
 			"pending-my-approval",
 			"pending-reimburse",
 			"pending-vendor-pay",
+			"project-budget-health",
+			"advance-portal",
 		):
 			self.assertFalse(frappe.db.exists("Page", retired))
 
@@ -177,14 +180,27 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 		self.assertTrue(frappe.db.exists("Workspace Sidebar", "My Expenses"))
 
 		expenses_sidebar = frappe.get_doc("Workspace Sidebar", "My Expenses")
+		url_links = {
+			(item.get("url") or item.link_to)
+			for item in expenses_sidebar.items
+			if item.link_type == "URL" and (item.get("url") or item.link_to)
+		}
+		self.assertIn("/volunteering/budget-health", url_links)
+		self.assertIn("/volunteering/advances", url_links)
 		page_links = {
 			item.link_to
 			for item in expenses_sidebar.items
 			if item.link_type == "Page" and item.link_to
 		}
-		self.assertIn("project-budget-health", page_links)
 		self.assertFalse(
-			{"pending-my-approval", "pending-reimburse", "pending-vendor-pay"} & page_links
+			{
+				"pending-my-approval",
+				"pending-reimburse",
+				"pending-vendor-pay",
+				"project-budget-health",
+				"advance-portal",
+			}
+			& page_links
 		)
 
 		doctype_labels = {

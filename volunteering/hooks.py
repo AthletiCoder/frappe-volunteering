@@ -25,8 +25,11 @@ required_apps = ["hrms"]
 # ------------------
 
 # include js, css files in header of desk.html
-# app_include_css = "/assets/volunteering/css/volunteering.css"
-# app_include_js = "/assets/volunteering/js/volunteering.js"
+# Website route for Frappe UI SPA (falls back to Desk pages if not built)
+website_route_rules = [
+	{"from_route": "/volunteering/<path:app_path>", "to_route": "volunteering"},
+	{"from_route": "/volunteering", "to_route": "volunteering"},
+]
 
 # include js, css files in header of web template
 # web_include_css = "/assets/volunteering/css/volunteering.css"
@@ -56,6 +59,7 @@ doctype_js = {
     "Expense Claim": "public/js/accounting_workflow.js",
     "Purchase Order": "public/js/accounting_workflow.js",
     "Employee Advance": "public/js/accounting_workflow.js",
+    "Purchase Invoice": "public/js/purchase_invoice.js",
 }
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -140,6 +144,7 @@ permission_query_conditions = {
     "Reciprocation": "volunteering.volunteering.reciprocation_permissions.get_permission_query_conditions",
     "Daily Work Log": "volunteering.volunteering.daily_work_log_permissions.get_permission_query_conditions",
     "Expense Claim": "volunteering.volunteering.expense_claim_permissions.get_permission_query_conditions",
+    "Employee Advance": "volunteering.volunteering.employee_advance_permissions.get_permission_query_conditions",
     "Manager Note": "volunteering.volunteering.manager_note_permissions.get_permission_query_conditions",
     "Attendance Request": "volunteering.volunteering.attendance_request_permissions.get_permission_query_conditions",
     "Attendance": "volunteering.volunteering.attendance_permissions.get_permission_query_conditions",
@@ -150,6 +155,7 @@ has_permission = {
     "Volunteer": "volunteering.volunteering.volunteer_permissions.has_permission",
     "Daily Work Log": "volunteering.volunteering.daily_work_log_permissions.has_permission",
     "Expense Claim": "volunteering.volunteering.expense_claim_permissions.has_permission",
+    "Employee Advance": "volunteering.volunteering.employee_advance_permissions.has_permission",
     "Manager Note": "volunteering.volunteering.manager_note_permissions.has_permission",
     "Attendance Request": "volunteering.volunteering.attendance_request_permissions.has_permission",
     "Attendance": "volunteering.volunteering.attendance_permissions.has_permission",
@@ -185,6 +191,7 @@ doc_events = {
 			"volunteering.volunteering.approval_routing.before_accounting_document_save",
 			"volunteering.volunteering.budget_service.validate_budget_on_save",
 			"volunteering.volunteering.spend_controls.validate_spend_controls",
+			"volunteering.volunteering.reimbursement_controls.validate_reimbursement_cap",
 		],
 		"before_submit": [
 			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
@@ -228,7 +235,11 @@ doc_events = {
 	},
 	"Employee": {
 		"after_insert": "volunteering.volunteering.leave_setup.assign_default_leave_policy",
-		"validate": "volunteering.volunteering.leave_pending.sync_leave_approver_from_reports_to",
+		"validate": [
+			"volunteering.volunteering.leave_pending.sync_leave_approver_from_reports_to",
+			"volunteering.volunteering.people_manager_setup.sync_people_manager_role",
+		],
+		"on_update": "volunteering.volunteering.people_manager_setup.sync_people_manager_role",
 	},
 	"Project": {
 		"validate": "volunteering.volunteering.budget_service.validate_project_department_budgets",

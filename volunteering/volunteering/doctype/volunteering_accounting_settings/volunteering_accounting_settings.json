@@ -16,6 +16,8 @@
   "invoice_split_window_days",
   "max_unsettled_advances",
   "advance_replenish_residual_pct",
+  "default_advance_project",
+  "monthly_reimbursement_cap",
   "budget_section",
   "enable_budget_warnings",
   "budget_hard_block_pct",
@@ -44,9 +46,10 @@
    "label": "Use Designation + Reports To Approval"
   },
   {
+   "description": "Two independent limits per designation: how much they can APPROVE for others, and how large a SELF advance they can hold.",
    "fieldname": "designation_limits",
    "fieldtype": "Table",
-   "label": "Designation Approval Limits",
+   "label": "Designation Approval & Advance Limits",
    "options": "Designation Approval Limit"
   },
   {
@@ -111,6 +114,20 @@
    "fieldtype": "Percent",
    "label": "Advance Replenish Residual %",
    "reqd": 1
+  },
+  {
+   "description": "Hidden on Employee Advance forms; auto-set when staff raise advances so budgets still track spend.",
+   "fieldname": "default_advance_project",
+   "fieldtype": "Link",
+   "label": "Default Advance Project",
+   "options": "Project"
+  },
+  {
+   "default": "0",
+   "description": "Optional. When > 0, Expense Claims for an employee in a calendar month cannot exceed this total (0 = disabled). Expense Claim = reimbursement for money you already paid.",
+   "fieldname": "monthly_reimbursement_cap",
+   "fieldtype": "Currency",
+   "label": "Monthly Reimbursement Cap (per employee)"
   },
   {
    "fieldname": "budget_section",

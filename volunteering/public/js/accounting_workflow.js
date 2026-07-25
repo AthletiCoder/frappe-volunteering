@@ -9,6 +9,13 @@ volunteering.accounting_workflow.setup_form = function (doctype) {
 			volunteering.accounting_workflow.render_actions(frm);
 			volunteering.accounting_workflow.show_spend_hints(frm);
 			volunteering.accounting_workflow.toggle_exception_fields(frm);
+			if (doctype === "Employee Advance") {
+				volunteering.accounting_workflow.lock_advance_employee(frm);
+				volunteering.accounting_workflow.hide_advance_account_fields(frm);
+			}
+			if (doctype === "Expense Claim") {
+				volunteering.accounting_workflow.show_advance_link_hints(frm);
+			}
 		},
 		is_emergency(frm) {
 			volunteering.accounting_workflow.toggle_exception_fields(frm);
@@ -22,7 +29,79 @@ volunteering.accounting_workflow.setup_form = function (doctype) {
 		advance_amount(frm) {
 			volunteering.accounting_workflow.toggle_exception_fields(frm);
 		},
+		employee(frm) {
+			if (doctype === "Expense Claim") {
+				volunteering.accounting_workflow.show_advance_link_hints(frm);
+			}
+		},
 	});
+};
+
+volunteering.accounting_workflow.lock_advance_employee = function (frm) {
+	const full_access = frappe.user.has_role([
+		"Accounts Manager",
+		"Accounts User",
+		"HR Manager",
+		"HR User",
+		"System Manager",
+		"NGO Board Member",
+		"NGO Board Chairperson",
+	]);
+	if (full_access) {
+		return;
+	}
+	frm.set_df_property("employee", "read_only", 1);
+	if (frm.is_new() && !frm.doc.employee) {
+		frappe.db.get_value("Employee", { user_id: frappe.session.user }, "name").then((r) => {
+			if (r && r.message && r.message.name) {
+				frm.set_value("employee", r.message.name);
+			}
+		});
+	}
+};
+
+volunteering.accounting_workflow.hide_advance_account_fields = function (frm) {
+	const accounts = frappe.user.has_role(["Accounts Manager", "Accounts User", "System Manager"]);
+	if (frm.fields_dict.advance_account) {
+		frm.set_df_property("advance_account", "hidden", accounts ? 0 : 1);
+	}
+	if (frm.fields_dict.project) {
+		frm.set_df_property("project", "hidden", 1);
+	}
+};
+
+volunteering.accounting_workflow.clear_advance_link_hints = function (frm) {
+	if (frm._advance_hint_comment) {
+		$(frm._advance_hint_comment).remove();
+		frm._advance_hint_comment = null;
+	}
+};
+
+volunteering.accounting_workflow.show_advance_link_hints = function (frm) {
+	volunteering.accounting_workflow.clear_advance_link_hints(frm);
+	if (!frm.doc.employee || frm.doc.docstatus !== 0) {
+		return;
+	}
+
+	// refresh + employee both fire on new forms; keep only the latest response
+	const employee = frm.doc.employee;
+	const token = (frm._advance_hint_token = (frm._advance_hint_token || 0) + 1);
+
+	frappe
+		.xcall("volunteering.volunteering.employee_advance_controls.get_linkable_advances_hint", {
+			employee,
+		})
+		.then((msg) => {
+			if (token !== frm._advance_hint_token || frm.doc.employee !== employee) {
+				return;
+			}
+			volunteering.accounting_workflow.clear_advance_link_hints(frm);
+			if (!msg) {
+				return;
+			}
+			frm._advance_hint_comment = frm.dashboard.add_comment(msg, "blue", true);
+		})
+		.catch(() => {});
 };
 
 volunteering.accounting_workflow.show_spend_hints = function (frm) {

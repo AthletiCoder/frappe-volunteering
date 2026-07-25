@@ -19,18 +19,20 @@
    "reqd": 1
   },
   {
+   "description": "Largest amount this designation can approve for OTHERS (approval routing up reports_to).",
    "fieldname": "max_approve_amount",
    "fieldtype": "Currency",
    "in_list_view": 1,
-   "label": "Max Approve Amount",
+   "label": "Max Approval Authority (for others)",
    "reqd": 1
   },
   {
    "default": "0",
+   "description": "Largest advance a person of this designation may hold for THEMSELVES.",
    "fieldname": "max_advance_amount",
    "fieldtype": "Currency",
    "in_list_view": 1,
-   "label": "Max Advance Amount"
+   "label": "Max Self Advance (own float)"
   }
  ],
  "index_web_pages_for_search": 0,

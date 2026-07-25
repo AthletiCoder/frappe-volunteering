@@ -11,7 +11,7 @@ DEFAULT_DESIGNATION_LIMITS = (
 	("Manager", 2000, 5000),
 	("Vice President", 5000, 10000),
 	("President", 10000, 15000),
-	("Director", 25000, 25000),
+	("Director", 25000, 50000),
 	("CEO", 50000, 50000),
 	("Executive Board", 100000, 100000),
 	("Board of Directors", 0, 0),  # 0 approve = unlimited when flagged below
@@ -48,9 +48,18 @@ def get_accounting_settings():
 
 
 def get_designation_limit_map(settings=None):
-	"""Return {designation_name: {max_approve_amount, max_advance_amount, unlimited}}."""
+	"""Return {designation_name: {max_approve_amount, max_advance_amount, unlimited}}.
+
+	Starts from DEFAULT_DESIGNATION_LIMITS, then overlays saved settings rows.
+	"""
 	settings = settings or get_accounting_settings()
 	limits = {}
+	for designation, max_approve, max_advance in DEFAULT_DESIGNATION_LIMITS:
+		limits[designation] = {
+			"max_approve_amount": flt(max_approve),
+			"max_advance_amount": flt(max_advance),
+			"unlimited": designation in UNLIMITED_DESIGNATIONS,
+		}
 	for row in settings.get("designation_limits") or []:
 		if not row.designation:
 			continue
@@ -75,9 +84,12 @@ def designation_can_approve(designation, amount, settings=None):
 
 def designation_advance_limit(designation, settings=None):
 	limits = get_designation_limit_map(settings)
-	if not designation or designation not in limits:
+	if not designation:
 		return 0
+	if designation not in limits:
+		# Unknown designation: do not hard-block at 0 — treat as unset
+		return None
 	row = limits[designation]
 	if row.get("unlimited"):
-		return flt("inf") if False else 10**12
+		return 10**12
 	return flt(row.get("max_advance_amount"))

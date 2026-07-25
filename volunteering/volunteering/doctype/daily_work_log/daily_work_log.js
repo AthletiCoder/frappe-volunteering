@@ -111,12 +111,29 @@ function setup_review_button(frm) {
 	}
 
 	frm.add_custom_button(__("Mark as Reviewed"), () => {
-		frappe.call({
-			method: "mark_as_reviewed",
-			doc: frm.doc,
-			callback() {
-				frm.reload_doc();
+		const d = new frappe.ui.Dialog({
+			title: __("Mark as Reviewed"),
+			fields: [
+				{
+					fieldname: "manager_remarks",
+					label: __("Manager Remarks"),
+					fieldtype: "Small Text",
+					default: frm.doc.manager_remarks || "",
+				},
+			],
+			primary_action_label: __("Mark Reviewed"),
+			primary_action(values) {
+				frappe.call({
+					method: "mark_as_reviewed",
+					doc: frm.doc,
+					args: { manager_remarks: values.manager_remarks || "" },
+					callback() {
+						d.hide();
+						frm.reload_doc();
+					},
+				});
 			},
 		});
+		d.show();
 	});
 }

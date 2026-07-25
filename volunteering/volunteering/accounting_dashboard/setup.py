@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Vadiraj Tirtha Das and contributors
 # For license information, please see license.txt
 
-"""Accounting desk pages (Budget Health only) + My Expenses wiring."""
+"""Accounting SPA links + My Expenses wiring (Desk Page UIs retired)."""
 
 from __future__ import annotations
 
@@ -19,31 +19,33 @@ PENDING_SIDEBAR_SECTION = "Approvals"
 ACCOUNTS_OPS_SIDEBAR_SECTION = "Accounts Ops"
 BUDGET_SIDEBAR_SECTION = "Budgets"
 
-# Retired — delete if still on site
+# Retired desk pages — delete if still on site
 RETIRED_PENDING_PAGES = (
 	"pending-my-approval",
 	"pending-reimburse",
 	"pending-vendor-pay",
+	"project-budget-health",
+	"advance-portal",
 )
 
-# No longer create pending-* pages
+# No longer create accounting Desk Pages (SPA owns these UIs)
 ACCOUNTING_PAGE_SPECS = ()
+BUDGET_PAGE_SPECS = ()
 
-BUDGET_PAGE_SPECS = (
-	{
-		"name": "project-budget-health",
-		"title": "Budget Health",
-		"sidebar_label": "Budget Health",
-		"icon": "pie-chart",
-		"roles": ["Accounts User", "Accounts Manager", "NGO Coordinator"],
-	},
-)
+SPA_ADVANCE_PORTAL = {
+	"label": "Advance Portal",
+	"url": "/volunteering/advances",
+	"icon": "money-coins-1",
+}
+SPA_BUDGET_HEALTH = {
+	"label": "Budget Health",
+	"url": "/volunteering/budget-health",
+	"icon": "pie-chart",
+}
 
 
 def ensure_accounting_pages():
 	_retire_pending_pages()
-	for spec in BUDGET_PAGE_SPECS:
-		_ensure_page(spec)
 	from volunteering.volunteering.accounts_workspace_setup import ensure_accounts_workspace
 
 	ensure_accounts_workspace()
@@ -56,21 +58,8 @@ def _retire_pending_pages():
 
 
 def _ensure_page(spec):
-	if frappe.db.exists("Page", spec["name"]):
-		frappe.db.set_value("Page", spec["name"], "title", spec["title"])
-		return
-
-	page = frappe.get_doc(
-		{
-			"doctype": "Page",
-			"module": "Volunteering",
-			"page_name": spec["name"],
-			"title": spec["title"],
-			"standard": "Yes",
-			"roles": [{"role": role} for role in spec["roles"]],
-		}
-	)
-	page.insert(ignore_permissions=True)
+	"""Kept for tests / callers; Desk pages are no longer provisioned."""
+	return
 
 
 def ensure_accounting_sidebar_links():
@@ -110,9 +99,7 @@ def _pending_sidebar_block():
 
 def _budget_sidebar_block():
 	items = [_section_item(BUDGET_SIDEBAR_SECTION, "pie-chart")]
-	for spec in BUDGET_PAGE_SPECS:
-		if frappe.db.exists("Page", spec["name"]):
-			items.append(_page_item(spec))
+	items.append(_url_sidebar_item(SPA_BUDGET_HEALTH))
 	return items
 
 
@@ -144,6 +131,21 @@ def _page_item(spec):
 	}
 
 
+def _url_sidebar_item(spec):
+	return {
+		"type": "Link",
+		"label": spec["label"],
+		"link_type": "URL",
+		"url": spec["url"],
+		"icon": spec.get("icon") or "external-link",
+		"child": 1,
+		"collapsible": 0,
+		"indent": 1,
+		"keep_closed": 0,
+		"show_arrow": 0,
+	}
+
+
 def _doctype_sidebar_item(label, doctype, icon):
 	return {
 		"type": "Link",
@@ -163,7 +165,7 @@ def _is_valid_sidebar_link(item):
 	if item.type in ("Section Break", "Sidebar Item Group", "Spacer"):
 		return True
 	if item.link_type == "URL":
-		return bool(item.link_to)
+		return bool(item.get("url") or item.get("link_to"))
 	if not item.link_to:
 		return False
 	return frappe.db.exists(item.link_type, item.link_to)

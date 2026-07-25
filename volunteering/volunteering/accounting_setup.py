@@ -1,5 +1,6 @@
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+from frappe.utils import flt
 
 from volunteering.volunteering.custom_fields import ACCOUNTING_CUSTOM_FIELDS
 from volunteering.volunteering.doctype.volunteering_accounting_settings.volunteering_accounting_settings import (
@@ -21,6 +22,12 @@ ACCOUNTING_ROLES = [
 	"NGO Board Member",
 	"NGO Board Chairperson",
 ]
+
+BUDGET_HEALTH_ROLES = (
+	"Accounts User",
+	"Accounts Manager",
+	"NGO Coordinator",
+)
 
 DEFAULT_DESIGNATIONS = [row[0] for row in DEFAULT_DESIGNATION_LIMITS]
 
@@ -62,6 +69,9 @@ def after_migrate():
 	ensure_departments()
 	ensure_designations()
 	ensure_accounting_settings()
+	ensure_employee_advance_accounts()
+	ensure_employee_advance_field_visibility()
+	ensure_budget_health_permissions()
 	reload_accounting_workflows()
 	sync_workflow_submit_permissions()
 	from volunteering.volunteering.accounting_dashboard.setup import ensure_accounting_pages
@@ -69,6 +79,185 @@ def after_migrate():
 
 	ensure_accounting_pages()
 	ensure_help_wikis()
+
+
+def ensure_budget_health_permissions():
+	"""Let roles allowed on Budget Health read its linked master records."""
+	from frappe.permissions import add_permission, update_permission_property
+
+	for doctype in ("Project", "Department"):
+		if not frappe.db.exists("DocType", doctype):
+			continue
+		for role in BUDGET_HEALTH_ROLES:
+			if not frappe.db.exists("Role", role):
+				continue
+			if not frappe.db.exists(
+				"Custom DocPerm",
+				{"parent": doctype, "role": role, "permlevel": 0, "if_owner": 0},
+			):
+				add_permission(doctype, role, permlevel=0, ptype="read")
+			for permission_type in ("read", "select", "report"):
+				update_permission_property(
+					doctype,
+					role,
+					0,
+					permission_type,
+					1,
+					validate=False,
+				)
+		frappe.clear_cache(doctype=doctype)
+
+
+def ensure_employee_advance_accounts():
+	"""Ensure each Company has a dedicated Employee Advances receivable and backfill Employees."""
+	if not frappe.db.exists("DocType", "Account"):
+		return
+
+	for company in frappe.get_all("Company", pluck="name"):
+		account = _ensure_employee_advance_account(company)
+		if not account:
+			continue
+		if frappe.db.has_column("Company", "default_employee_advance_account"):
+			current = frappe.db.get_value("Company", company, "default_employee_advance_account")
+			if current != account:
+				frappe.db.set_value(
+					"Company", company, "default_employee_advance_account", account, update_modified=False
+				)
+		_backfill_employee_advance_accounts(company, account)
+
+
+def _ensure_employee_advance_account(company: str) -> str | None:
+	existing = frappe.db.get_value(
+		"Account",
+		{
+			"company": company,
+			"account_name": "Employee Advances",
+			"is_group": 0,
+		},
+		"name",
+	)
+	if existing:
+		return existing
+
+	# Prefer company default if already set and looks correct
+	if frappe.db.has_column("Company", "default_employee_advance_account"):
+		default = frappe.db.get_value("Company", company, "default_employee_advance_account")
+		if default and frappe.db.exists("Account", default):
+			acc = frappe.db.get_value(
+				"Account", default, ["account_name", "account_type"], as_dict=True
+			)
+			if acc and acc.account_type == "Receivable" and "debtor" not in (acc.account_name or "").lower():
+				return default
+
+	parent = frappe.db.get_value(
+		"Account",
+		{
+			"company": company,
+			"is_group": 1,
+			"root_type": "Asset",
+			"account_type": "Receivable",
+		},
+		"name",
+		order_by="lft asc",
+	)
+	if not parent:
+		parent = frappe.db.get_value(
+			"Account",
+			{"company": company, "is_group": 1, "root_type": "Asset"},
+			"name",
+			order_by="lft asc",
+		)
+	if not parent:
+		frappe.log_error(
+			title="Employee Advances account skipped",
+			message=f"No Asset parent account for company {company}",
+		)
+		return None
+
+	doc = frappe.get_doc(
+		{
+			"doctype": "Account",
+			"account_name": "Employee Advances",
+			"company": company,
+			"parent_account": parent,
+			"is_group": 0,
+			"root_type": "Asset",
+			"report_type": "Balance Sheet",
+			"account_type": "Receivable",
+			"account_currency": frappe.db.get_value("Company", company, "default_currency"),
+		}
+	)
+	doc.insert(ignore_permissions=True)
+	return doc.name
+
+
+def _backfill_employee_advance_accounts(company: str, account: str):
+	if not frappe.db.has_column("Employee", "employee_advance_account"):
+		return
+	employees = frappe.get_all(
+		"Employee",
+		filters={"company": company, "status": "Active"},
+		fields=["name", "employee_advance_account"],
+	)
+	for row in employees:
+		current = row.employee_advance_account
+		if current == account:
+			continue
+		# Replace empty or Debtors-like accounts
+		replace = not current
+		if current:
+			acc_name = frappe.db.get_value("Account", current, "account_name") or ""
+			if "debtor" in acc_name.lower():
+				replace = True
+		if replace:
+			frappe.db.set_value(
+				"Employee", row.name, "employee_advance_account", account, update_modified=False
+			)
+
+
+def ensure_employee_advance_field_visibility():
+	"""Hide advance_account from non-Accounts; keep project hidden (auto-set)."""
+	_ensure_property_setter(
+		"Employee Advance",
+		"advance_account",
+		"hidden",
+		"1",
+		"Check",
+	)
+	_ensure_property_setter(
+		"Employee Advance",
+		"project",
+		"hidden",
+		"1",
+		"Check",
+	)
+	# Project remains required in DB; employees never see it (auto-set on save)
+	_ensure_property_setter(
+		"Employee Advance",
+		"project",
+		"reqd",
+		"0",
+		"Check",
+	)
+
+
+def _ensure_property_setter(doctype, fieldname, property_name, value, property_type):
+	name = f"{doctype}-{fieldname}-{property_name}"
+	if frappe.db.exists("Property Setter", name):
+		frappe.db.set_value("Property Setter", name, "value", value, update_modified=False)
+		return
+	frappe.get_doc(
+		{
+			"doctype": "Property Setter",
+			"doctype_or_field": "DocField",
+			"doc_type": doctype,
+			"field_name": fieldname,
+			"property": property_name,
+			"property_type": property_type,
+			"value": value,
+			"name": name,
+		}
+	).insert(ignore_permissions=True)
 
 
 PROJECT_TYPES = ("Campaign", "Event", "Admin")
@@ -86,10 +275,11 @@ def ensure_project_types():
 
 
 def remove_obsolete_accounting_custom_fields():
-	"""Drop fields superseded by native Project Type / HRMS department."""
+	"""Drop fields superseded by native Project Type / HRMS department / EA cleanup."""
 	for fieldname in (
 		"Project-fund_project_type",
 		"Expense Claim-department",
+		"Employee Advance-is_emergency",
 	):
 		if frappe.db.exists("Custom Field", fieldname):
 			frappe.delete_doc("Custom Field", fieldname, ignore_permissions=True, force=True)
@@ -221,16 +411,26 @@ def ensure_accounting_settings():
 	if not settings.get("preferred_payout_mode"):
 		settings.preferred_payout_mode = "Manual"
 
-	if not settings.get("designation_limits"):
-		for designation, max_approve, max_advance in DEFAULT_DESIGNATION_LIMITS:
-			settings.append(
-				"designation_limits",
-				{
-					"designation": designation,
-					"max_approve_amount": max_approve,
-					"max_advance_amount": max_advance,
-				},
-			)
+	# Upsert missing designation limit rows from defaults (partial tables used to skip this)
+	existing = {row.designation for row in (settings.get("designation_limits") or []) if row.designation}
+	for designation, max_approve, max_advance in DEFAULT_DESIGNATION_LIMITS:
+		if designation in existing:
+			continue
+		settings.append(
+			"designation_limits",
+			{
+				"designation": designation,
+				"max_approve_amount": max_approve,
+				"max_advance_amount": max_advance,
+			},
+		)
+
+	# Keep Director advance headroom if an older seed left it at 25k / missing
+	for row in settings.get("designation_limits") or []:
+		if row.designation == "Director" and flt(row.max_advance_amount) < 50000:
+			row.max_advance_amount = 50000
+		if row.designation == "Director" and flt(row.max_approve_amount) < 25000:
+			row.max_approve_amount = 25000
 
 	settings.save(ignore_permissions=True)
 	frappe.clear_cache(doctype="Volunteering Accounting Settings")

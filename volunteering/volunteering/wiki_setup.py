@@ -57,17 +57,32 @@ If you must reimburse above the threshold, set **Vendor Payment Override Reason*
 
 ## Employee Advance
 
-- Only Employees may receive advances
+- You can only raise advances **for yourself** (Accounts/HR may help others)
+- Project and advance account are set automatically (hidden from staff)
 - A new advance is blocked while another has residual **above** the replenish threshold (default **10%** of paid amount)
 - If residual is **at or below 10%**, you may request a replenishment advance — but you must still claim or return the leftover (not auto-written-off)
-- Settle via [Expense Claim](/app/expense-claim/new) linked to the Advance; return unused cash
+- Track status on [Advance Portal](/volunteering/advances)
+- Settle via [Expense Claim](/app/expense-claim/new) linked to the Advance (**Get Advances** only lists advances that are Submitted **and Paid**)
 - Accounts can chase leftovers on [Advances with Residual](/app/query-report/Employee%20Advances%20with%20Residual)
 
 Open: [New Employee Advance](/app/employee-advance/new)
 
 ## Reimbursement
 
-Use [Expense Claim](/app/expense-claim/new) for genuine exceptions (you already paid from pocket). Attach receipts before submit.
+**Expense Claim = “I already paid from my pocket — please pay me back.”**
+
+1. You pay the vendor / expense yourself  
+2. File an [Expense Claim](/app/expense-claim/new) with receipts  
+3. Manager / Accounts approve  
+4. Accounts creates a Payment Entry paying **you** → claim becomes Paid  
+
+There is no separate “I already paid” checkbox on Expense Claim — filing the claim *is* that declaration.
+
+Optional: Volunteering Accounting Settings → **Monthly Reimbursement Cap** (0 = off).
+
+## Vendor invoice paid outside ERPNext
+
+If a [Purchase Invoice](/app/purchase-invoice) was settled in cash/elsewhere, Accounts can use **Mark Paid (outside system)** on the invoice (creates a Payment Entry).
 
 ## Approvals
 
@@ -137,10 +152,10 @@ Every Purchase Invoice line must still link an **approved, submitted** PO. Staff
 
 ## Day-to-day ops
 
-1. [My Expenses](/app/my-expenses) — Vendor Invoices to Pay, Claims to Reimburse
+1. [My Expenses](/app/my-expenses) — Vendor Invoices to Pay, Claims to Reimburse, Advance Portal
 2. [Employee Advances with Residual](/app/query-report/Employee%20Advances%20with%20Residual)
 3. [Bank Reconciliation](/app/bank-reconciliation-tool)
-4. [Budget Health](/app/project-budget-health)
+4. [Budget Health](/volunteering/budget-health)
 5. [General Ledger](/app/query-report/General%20Ledger)
 
 ## Cashfree Clearing

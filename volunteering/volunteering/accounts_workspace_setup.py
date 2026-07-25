@@ -1,4 +1,4 @@
-"""Create-once My Expenses workspace + sidebar; strip accounting links from Volunteering."""
+"""Create / rebuild My Expenses workspace + slim sidebar."""
 
 from __future__ import annotations
 
@@ -7,16 +7,14 @@ import json
 import frappe
 
 from volunteering.volunteering.accounting_dashboard.setup import (
-	ACCOUNTS_OPS_SIDEBAR_SECTION,
-	BUDGET_PAGE_SPECS,
-	BUDGET_SIDEBAR_SECTION,
-	PENDING_SIDEBAR_SECTION,
 	RETIRED_PENDING_PAGES,
-	_accounts_ops_sidebar_block,
-	_approvals_sidebar_block,
+	SPA_ADVANCE_PORTAL,
+	SPA_BUDGET_HEALTH,
 	_budget_sidebar_block,
 	_is_valid_sidebar_link,
+	_url_sidebar_item,
 )
+from volunteering.volunteering.people_manager_setup import PEOPLE_MANAGER_ROLE
 
 WORKSPACE_NAME = "My Expenses"
 SIDEBAR_NAME = "My Expenses"
@@ -24,6 +22,18 @@ LEGACY_WORKSPACE_NAMES = ("Accounts",)
 LEGACY_SIDEBAR_NAMES = ("Accounts",)
 
 PENDING_APPROVER_FILTER = '[["{doctype}","pending_approver","=",frappe.session.user]]'
+MY_DRAFT_EC = (
+	'[["Expense Claim","docstatus","=",0],'
+	'["Expense Claim","workflow_state","in",["Draft","Rejected"]]]'
+)
+MY_DRAFT_EA = (
+	'[["Employee Advance","docstatus","=",0],'
+	'["Employee Advance","workflow_state","in",["Draft","Rejected"]]]'
+)
+MY_DRAFT_PO = (
+	'[["Purchase Order","docstatus","=",0],'
+	'["Purchase Order","workflow_state","in",["Draft","Rejected"]]]'
+)
 REIMBURSE_FILTER = (
 	'[["Expense Claim","docstatus","=",1],'
 	'["Expense Claim","approval_status","=","Approved"],'
@@ -34,9 +44,72 @@ VENDOR_PAY_FILTER = (
 	'["Purchase Invoice","outstanding_amount",">",0]]'
 )
 
+MY_SPEND_SHORTCUTS = (
+	{
+		"label": "My Expense Claims",
+		"link_to": "Expense Claim",
+		"color": "Blue",
+		"stats_filter": MY_DRAFT_EC,
+	},
+	{
+		"label": "My Advances",
+		"link_to": "Employee Advance",
+		"color": "Blue",
+		"stats_filter": MY_DRAFT_EA,
+	},
+	{
+		"label": "My Purchase Orders",
+		"link_to": "Purchase Order",
+		"color": "Blue",
+		"stats_filter": MY_DRAFT_PO,
+	},
+	{
+		"label": "Advance Portal",
+		"link_to": SPA_ADVANCE_PORTAL["url"],
+		"type": "URL",
+		"color": "Blue",
+		"stats_filter": "",
+	},
+)
+
+APPROVAL_SHORTCUTS = (
+	{
+		"label": "Expense Claims Pending Me",
+		"link_to": "Expense Claim",
+		"color": "Orange",
+		"stats_filter": PENDING_APPROVER_FILTER.format(doctype="Expense Claim"),
+	},
+	{
+		"label": "Advances Pending Me",
+		"link_to": "Employee Advance",
+		"color": "Orange",
+		"stats_filter": PENDING_APPROVER_FILTER.format(doctype="Employee Advance"),
+	},
+	{
+		"label": "Purchase Orders Pending Me",
+		"link_to": "Purchase Order",
+		"color": "Orange",
+		"stats_filter": PENDING_APPROVER_FILTER.format(doctype="Purchase Order"),
+	},
+)
+
+OPS_SHORTCUTS = (
+	{
+		"label": "Claims to Reimburse",
+		"link_to": "Expense Claim",
+		"color": "Orange",
+		"stats_filter": REIMBURSE_FILTER,
+	},
+	{
+		"label": "Vendor Invoices to Pay",
+		"link_to": "Purchase Invoice",
+		"color": "Orange",
+		"stats_filter": VENDOR_PAY_FILTER,
+	},
+)
+
 
 def ensure_accounts_workspace():
-	"""Backwards-compatible entry point."""
 	ensure_my_expenses()
 
 
@@ -45,261 +118,11 @@ def ensure_my_expenses():
 		_rename_legacy_workspace()
 		_rename_legacy_sidebar()
 		_ensure_workspace_once()
-		_ensure_staff_spend_links()
-		_ensure_approval_and_ops_shortcuts()
-		_ensure_sidebar()
+		_rebuild_workspace()
+		_rebuild_sidebar()
 		_strip_accounting_from_volunteering_sidebar()
 	except Exception:
 		frappe.log_error(title="My Expenses setup failed", message=frappe.get_traceback())
-
-
-def _ensure_staff_spend_links():
-	name = (
-		frappe.db.exists("Workspace", WORKSPACE_NAME)
-		or frappe.db.get_value("Workspace", {"label": WORKSPACE_NAME}, "name")
-	)
-	if not name:
-		return
-
-	ws = frappe.get_doc("Workspace", name)
-	existing = {(row.link_type, row.link_to) for row in ws.links if row.link_to}
-	changed = False
-
-	if ("DocType", "Purchase Invoice") not in existing and frappe.db.exists(
-		"DocType", "Purchase Invoice"
-	):
-		ws.append(
-			"links",
-			{
-				"type": "Link",
-				"label": "Purchase Invoice",
-				"link_to": "Purchase Invoice",
-				"link_type": "DocType",
-			},
-		)
-		changed = True
-
-	if ("Report", "Employee Advances with Residual") not in existing and frappe.db.exists(
-		"Report", "Employee Advances with Residual"
-	):
-		ws.append(
-			"links",
-			{
-				"type": "Link",
-				"label": "Advances with Residual",
-				"link_to": "Employee Advances with Residual",
-				"link_type": "Report",
-			},
-		)
-		changed = True
-
-	shortcut_keys = {(s.type, s.link_to, s.label) for s in ws.shortcuts or []}
-	if ("DocType", "Employee Advance", "Employee Advance") not in shortcut_keys and frappe.db.exists(
-		"DocType", "Employee Advance"
-	):
-		ws.append(
-			"shortcuts",
-			{
-				"type": "DocType",
-				"link_to": "Employee Advance",
-				"label": "Employee Advance",
-				"doc_view": "List",
-				"color": "Blue",
-			},
-		)
-		changed = True
-
-	if changed:
-		ws.flags.ignore_links = True
-		ws.flags.ignore_permissions = True
-		ws.flags.ignore_validate = True
-		ws.save(ignore_permissions=True)
-
-
-def _ensure_approval_and_ops_shortcuts():
-	name = (
-		frappe.db.exists("Workspace", WORKSPACE_NAME)
-		or frappe.db.get_value("Workspace", {"label": WORKSPACE_NAME}, "name")
-	)
-	if not name:
-		return
-
-	ws = frappe.get_doc("Workspace", name)
-	changed = False
-
-	approval_specs = [
-		("Expense Claims Pending Me", "Expense Claim", PENDING_APPROVER_FILTER.format(doctype="Expense Claim")),
-		("Advances Pending Me", "Employee Advance", PENDING_APPROVER_FILTER.format(doctype="Employee Advance")),
-		("Purchase Orders Pending Me", "Purchase Order", PENDING_APPROVER_FILTER.format(doctype="Purchase Order")),
-	]
-	ops_specs = [
-		("Claims to Reimburse", "Expense Claim", REIMBURSE_FILTER),
-		("Vendor Invoices to Pay", "Purchase Invoice", VENDOR_PAY_FILTER),
-	]
-	queue_specs = [
-		(label, doctype, stats_filter)
-		for label, doctype, stats_filter in approval_specs + ops_specs
-		if frappe.db.exists("DocType", doctype)
-		and not (
-			"pending_approver" in stats_filter
-			and not frappe.db.has_column(doctype, "pending_approver")
-		)
-	]
-
-	# Rebuild card links in canonical order (filters live on shortcuts)
-	desired_links = _canonical_workspace_links(queue_specs)
-	current_links = [
-		(row.type, row.label, row.link_type, row.link_to)
-		for row in ws.links or []
-	]
-	desired_keys = [
-		(row["type"], row["label"], row.get("link_type"), row.get("link_to"))
-		for row in desired_links
-	]
-	if current_links != desired_keys:
-		ws.set("links", [])
-		for row in desired_links:
-			ws.append("links", row)
-		changed = True
-
-	for label, doctype, stats_filter in queue_specs:
-		matched = False
-		for row in ws.shortcuts or []:
-			if row.label == label:
-				if (
-					row.type != "DocType"
-					or row.link_to != doctype
-					or row.stats_filter != stats_filter
-					or row.doc_view != "List"
-				):
-					row.type = "DocType"
-					row.link_to = doctype
-					row.doc_view = "List"
-					row.color = "Orange"
-					row.stats_filter = stats_filter
-					changed = True
-				matched = True
-				break
-		if not matched:
-			ws.append(
-				"shortcuts",
-				{
-					"type": "DocType",
-					"label": label,
-					"link_to": doctype,
-					"doc_view": "List",
-					"color": "Orange",
-					"stats_filter": stats_filter,
-				},
-			)
-			changed = True
-
-	# Drop shortcuts that still point at retired pages
-	kept_shortcuts = []
-	for row in ws.shortcuts or []:
-		if row.type == "Page" and row.link_to in RETIRED_PENDING_PAGES:
-			changed = True
-			continue
-		kept_shortcuts.append(row)
-	if len(kept_shortcuts) != len(ws.shortcuts or []):
-		ws.set("shortcuts", [])
-		for row in kept_shortcuts:
-			ws.append("shortcuts", row.as_dict() if hasattr(row, "as_dict") else row)
-
-	try:
-		blocks = json.loads(ws.content or "[]") if isinstance(ws.content, str) else list(ws.content or [])
-	except Exception:
-		blocks = []
-	existing_sc = {
-		(b.get("data") or {}).get("shortcut_name")
-		for b in blocks
-		if isinstance(b, dict) and b.get("type") == "shortcut"
-	}
-	for i, (label, _dt, _f) in enumerate(queue_specs):
-		if label not in existing_sc and any(s.label == label for s in ws.shortcuts or []):
-			blocks.append(
-				{
-					"id": f"ac-short-queue-{i}",
-					"type": "shortcut",
-					"data": {"shortcut_name": label, "col": 4},
-				}
-			)
-			changed = True
-	ws.content = json.dumps(blocks)
-
-	if changed:
-		ws.flags.ignore_links = True
-		ws.flags.ignore_permissions = True
-		ws.flags.ignore_validate = True
-		ws.save(ignore_permissions=True)
-
-
-def _canonical_workspace_links(queue_specs):
-	"""Card Breaks + links in display order for My Expenses."""
-	by_label = {label: doctype for label, doctype, _f in queue_specs}
-
-	def _link(label, link_type, link_to, **extra):
-		row = {
-			"type": "Link",
-			"label": label,
-			"link_type": link_type,
-			"link_to": link_to,
-			"hidden": 0,
-			"is_query_report": 0,
-			"onboard": 0,
-		}
-		row.update(extra)
-		return row
-
-	def _break(label):
-		return {
-			"type": "Card Break",
-			"label": label,
-			"hidden": 0,
-			"is_query_report": 0,
-			"onboard": 0,
-			"link_type": "DocType",
-		}
-
-	links = [
-		_break("My Spend"),
-		_link("Expense Claim", "DocType", "Expense Claim"),
-		_link("Employee Advance", "DocType", "Employee Advance"),
-		_link("Purchase Order", "DocType", "Purchase Order"),
-		_break("Approvals"),
-	]
-	for label in (
-		"Expense Claims Pending Me",
-		"Advances Pending Me",
-		"Purchase Orders Pending Me",
-	):
-		if label in by_label:
-			links.append(_link(label, "DocType", by_label[label]))
-
-	links.append(_break("Accounts Ops"))
-	for label in ("Claims to Reimburse", "Vendor Invoices to Pay"):
-		if label in by_label:
-			links.append(_link(label, "DocType", by_label[label]))
-
-	links.extend(
-		[
-			_break("Budgets"),
-			_link("Budget Health", "Page", "project-budget-health"),
-			_link("Project", "DocType", "Project"),
-			_link("Purchase Invoice", "DocType", "Purchase Invoice"),
-		]
-	)
-	if frappe.db.exists("Report", "Employee Advances with Residual"):
-		links.append(
-			_link(
-				"Advances with Residual",
-				"Report",
-				"Employee Advances with Residual",
-				report_ref_doctype="Employee Advance",
-			)
-		)
-	return links
-
 
 
 def _workspace_exists(name: str = WORKSPACE_NAME) -> bool:
@@ -333,9 +156,6 @@ def _rename_legacy_workspace():
 		ws.label = WORKSPACE_NAME
 		ws.title = WORKSPACE_NAME
 		ws.icon = "expense"
-		if ws.content and "Accounts" in ws.content:
-			ws.content = ws.content.replace(">Accounts<", ">My Expenses<")
-			ws.content = ws.content.replace('"Accounts"', '"My Expenses"')
 		ws.flags.ignore_links = True
 		ws.flags.ignore_permissions = True
 		ws.flags.ignore_validate = True
@@ -357,12 +177,6 @@ def _rename_legacy_sidebar():
 			continue
 		sidebar = frappe.get_doc("Workspace Sidebar", legacy)
 		sidebar.title = SIDEBAR_NAME
-		for item in sidebar.items or []:
-			if item.link_type == "Workspace" and item.link_to in LEGACY_WORKSPACE_NAMES:
-				item.link_to = WORKSPACE_NAME
-				item.label = WORKSPACE_NAME
-			if item.label == "Accounts" and item.link_type == "Workspace":
-				item.label = WORKSPACE_NAME
 		sidebar.flags.ignore_links = True
 		sidebar.save(ignore_permissions=True)
 		if sidebar.name != SIDEBAR_NAME:
@@ -375,52 +189,164 @@ def _rename_legacy_sidebar():
 def _ensure_workspace_once():
 	if _workspace_exists():
 		return
-
 	payload = _get_workspace_payload()
-	payload["links"] = [
-		row
-		for row in payload.get("links") or []
-		if row.get("type") == "Card Break"
-		or (
-			row.get("link_type") == "DocType"
-			and frappe.db.exists("DocType", row.get("link_to"))
-		)
-		or (
-			row.get("link_type") == "Page"
-			and frappe.db.exists("Page", row.get("link_to"))
-			and row.get("link_to") not in RETIRED_PENDING_PAGES
-		)
-		or (
-			row.get("link_type") == "Report"
-			and frappe.db.exists("Report", row.get("link_to"))
-		)
-	]
-	payload["shortcuts"] = [
-		row
-		for row in payload.get("shortcuts") or []
-		if (row.get("type") == "DocType" and frappe.db.exists("DocType", row.get("link_to")))
-		or (
-			row.get("type") == "Page"
-			and frappe.db.exists("Page", row.get("link_to"))
-			and row.get("link_to") not in RETIRED_PENDING_PAGES
-		)
-		or row.get("type") not in ("DocType", "Page")
-	]
-
 	workspace = frappe.get_doc(payload)
 	workspace.flags.ignore_links = True
 	workspace.insert(ignore_permissions=True)
 
 
-def _get_workspace_payload() -> dict:
-	path = frappe.get_app_path(
-		"volunteering", "volunteering", "workspace", "my_expenses", "my_expenses.json"
+def _rebuild_workspace():
+	name = (
+		frappe.db.exists("Workspace", WORKSPACE_NAME)
+		or frappe.db.get_value("Workspace", {"label": WORKSPACE_NAME}, "name")
 	)
-	with open(path, encoding="utf-8") as handle:
-		return json.load(handle)
+	if not name:
+		return
+
+	ws = frappe.get_doc("Workspace", name)
+	ws.set("shortcuts", [])
+	ws.set("links", [])
+	ws.set("roles", [])
+
+	sections = (
+		("My Spend", MY_SPEND_SHORTCUTS),
+		("Awaiting my Approval", APPROVAL_SHORTCUTS),
+		("Accounts Ops", OPS_SHORTCUTS),
+	)
+
+	for section_label, specs in sections:
+		ws.append("links", {"type": "Card Break", "label": section_label, "hidden": 0})
+		for spec in specs:
+			stype = spec.get("type") or "DocType"
+			if stype == "DocType" and not frappe.db.exists("DocType", spec["link_to"]):
+				continue
+			if stype == "Page" and not frappe.db.exists("Page", spec["link_to"]):
+				continue
+			if stype == "DocType" and "pending_approver" in (spec.get("stats_filter") or ""):
+				if not frappe.db.has_column(spec["link_to"], "pending_approver"):
+					continue
+
+			# Workspace Link only supports DocType / Page / Report — SPA routes are shortcuts only
+			if stype != "URL":
+				link_type = "Page" if stype == "Page" else "DocType"
+				ws.append(
+					"links",
+					{
+						"type": "Link",
+						"label": spec["label"],
+						"link_type": link_type,
+						"link_to": spec["link_to"],
+						"hidden": 0,
+					},
+				)
+
+			sc = {
+				"type": stype if stype in ("DocType", "Page", "URL") else "DocType",
+				"label": spec["label"],
+				"doc_view": "List",
+				"color": spec.get("color") or "Blue",
+			}
+			if stype == "URL":
+				sc["url"] = spec["link_to"]
+			else:
+				sc["link_to"] = spec["link_to"]
+				if spec.get("stats_filter"):
+					sc["stats_filter"] = spec.get("stats_filter")
+			ws.append("shortcuts", sc)
+
+	ws.append("links", {"type": "Card Break", "label": "Budgets", "hidden": 0})
+	# Residual report stays as a Workspace Link; SPA Budget Health is shortcut-only
+	if frappe.db.exists("Report", "Employee Advances with Residual"):
+		ws.append(
+			"links",
+			{
+				"type": "Link",
+				"label": "Advances with Residual",
+				"link_type": "Report",
+				"link_to": "Employee Advances with Residual",
+				"is_query_report": 1,
+				"hidden": 0,
+				"report_ref_doctype": "Employee Advance",
+			},
+		)
+	ws.append(
+		"shortcuts",
+		{
+			"type": "URL",
+			"label": SPA_BUDGET_HEALTH["label"],
+			"url": SPA_BUDGET_HEALTH["url"],
+			"color": "Green",
+		},
+	)
+
+	for role in (
+		"Employee",
+		"Accounts User",
+		"Accounts Manager",
+		"NGO Coordinator",
+		"NGO Department Head",
+		"NGO Board Member",
+		"NGO Board Chairperson",
+		"System Manager",
+		PEOPLE_MANAGER_ROLE,
+	):
+		if frappe.db.exists("Role", role):
+			ws.append("roles", {"role": role})
+
+	content = [
+		{
+			"id": "ac-header",
+			"type": "header",
+			"data": {"text": '<span class="h4">My Expenses</span>', "col": 12},
+		},
+		{
+			"id": "ac-intro",
+			"type": "paragraph",
+			"data": {
+				"text": (
+					"Your spend requests, approvals awaiting you, and accounts ops queues. "
+					"Orange cards show live pending counts — click to open the filtered list."
+				),
+				"col": 12,
+			},
+		},
+		{"id": "ac-spacer", "type": "spacer", "data": {"col": 12}},
+		{"id": "ac-card-spend", "type": "card", "data": {"card_name": "My Spend", "col": 4}},
+		{
+			"id": "ac-card-appr",
+			"type": "card",
+			"data": {"card_name": "Awaiting my Approval", "col": 4},
+		},
+		{"id": "ac-card-ops", "type": "card", "data": {"card_name": "Accounts Ops", "col": 4}},
+		{"id": "ac-card-bud", "type": "card", "data": {"card_name": "Budgets", "col": 4}},
+	]
+	idx = 0
+	for _section, specs in sections:
+		for spec in specs:
+			content.append(
+				{
+					"id": f"ac-sc-{idx}",
+					"type": "shortcut",
+					"data": {"shortcut_name": spec["label"], "col": 4},
+				}
+			)
+			idx += 1
+	content.append(
+		{
+			"id": "ac-sc-budget",
+			"type": "shortcut",
+			"data": {"shortcut_name": "Budget Health", "col": 4},
+		}
+	)
+	ws.content = json.dumps(content)
+
+	ws.flags.ignore_links = True
+	ws.flags.ignore_permissions = True
+	ws.flags.ignore_validate = True
+	ws.save(ignore_permissions=True)
 
 
-def _canonical_sidebar_items():
+def _rebuild_sidebar():
 	items = [
 		{
 			"type": "Link",
@@ -433,53 +359,58 @@ def _canonical_sidebar_items():
 			"indent": 0,
 			"keep_closed": 0,
 			"show_arrow": 0,
-		}
+		},
+		_section("My Spend", "expense"),
+		_doctype_item("Expense Claim", "expense", "My Expense Claims"),
+		_doctype_item("Employee Advance", "money-coins-1", "My Advances"),
+		_doctype_item("Purchase Order", "buying", "My Purchase Orders"),
+		_url_sidebar_item(SPA_ADVANCE_PORTAL),
+		_section("Awaiting my Approval", "inbox"),
+		_doctype_item("Expense Claim", "expense", "Expense Claims Pending Me"),
+		_doctype_item("Employee Advance", "money-coins-1", "Advances Pending Me"),
+		_doctype_item("Purchase Order", "buying", "Purchase Orders Pending Me"),
+		_section("Accounts Ops", "wallet"),
+		_doctype_item("Expense Claim", "expense", "Claims to Reimburse"),
+		_doctype_item("Purchase Invoice", "file", "Vendor Invoices to Pay"),
 	]
-	items.extend(_approvals_sidebar_block())
-	items.extend(_accounts_ops_sidebar_block())
 	items.extend(_budget_sidebar_block())
-	items.extend(
-		[
-			{
-				"type": "Section Break",
-				"label": "Documents",
-				"icon": "file",
-				"collapsible": 1,
-				"indent": 0,
-				"keep_closed": 0,
-				"show_arrow": 1,
-				"child": 0,
-			},
-			_doctype_item("Expense Claim", "expense"),
-			_doctype_item("Employee Advance", "money-coins-1"),
-			_doctype_item("Purchase Order", "buying"),
-			_doctype_item("Purchase Invoice", "file"),
-			_doctype_item("Project", "project"),
-		]
-	)
-	return items
 
-
-def _ensure_sidebar():
 	if frappe.db.exists("Workspace Sidebar", SIDEBAR_NAME):
-		_refresh_sidebar_items()
+		sidebar = frappe.get_doc("Workspace Sidebar", SIDEBAR_NAME)
+		sidebar.items = []
+		for row in items:
+			sidebar.append("items", row)
+		sidebar.flags.ignore_links = True
+		sidebar.save(ignore_permissions=True)
 		return
 
-	sidebar = frappe.get_doc(
+	frappe.get_doc(
 		{
 			"doctype": "Workspace Sidebar",
 			"title": SIDEBAR_NAME,
 			"header_icon": "expense",
-			"items": _canonical_sidebar_items(),
+			"items": items,
 		}
-	)
-	sidebar.insert(ignore_permissions=True)
+	).insert(ignore_permissions=True)
 
 
-def _doctype_item(doctype, icon):
+def _section(label, icon):
+	return {
+		"type": "Section Break",
+		"label": label,
+		"icon": icon,
+		"collapsible": 1,
+		"indent": 0,
+		"keep_closed": 0,
+		"show_arrow": 1,
+		"child": 0,
+	}
+
+
+def _doctype_item(doctype, icon, label=None):
 	return {
 		"type": "Link",
-		"label": doctype,
+		"label": label or doctype,
 		"link_to": doctype,
 		"link_type": "DocType",
 		"icon": icon,
@@ -491,43 +422,34 @@ def _doctype_item(doctype, icon):
 	}
 
 
-def _refresh_sidebar_items():
-	"""Rebuild My Expenses sidebar to canonical order (approvals / ops / budget / docs)."""
-	sidebar = frappe.get_doc("Workspace Sidebar", SIDEBAR_NAME)
-	canonical = _canonical_sidebar_items()
-	current = [
-		(row.type, row.label, row.link_type, row.link_to)
-		for row in sidebar.items or []
-	]
-	desired = [
-		(row.get("type"), row.get("label"), row.get("link_type"), row.get("link_to"))
-		for row in canonical
-	]
-	if current == desired:
-		return
-
-	sidebar.items = []
-	for row in canonical:
-		sidebar.append("items", row)
-	sidebar.flags.ignore_links = True
-	sidebar.save(ignore_permissions=True)
-
-
 def _strip_accounting_from_volunteering_sidebar():
 	if not frappe.db.exists("Workspace Sidebar", "Volunteering"):
 		return
 
-	budget_pages = {spec["name"] for spec in BUDGET_PAGE_SPECS}
-	all_pages = set(RETIRED_PENDING_PAGES) | budget_pages
+	retired_pages = set(RETIRED_PENDING_PAGES)
+	spa_urls = {SPA_ADVANCE_PORTAL["url"], SPA_BUDGET_HEALTH["url"]}
 
 	sidebar = frappe.get_doc("Workspace Sidebar", "Volunteering")
 	filtered = [
 		item
 		for item in sidebar.items
 		if _is_valid_sidebar_link(item)
-		and not (item.link_type == "Page" and item.link_to in all_pages)
+		and not (item.link_type == "Page" and item.link_to in retired_pages)
+		and not (
+			item.link_type == "URL"
+			and (item.get("url") or item.get("link_to")) in spa_urls
+		)
 		and item.label
-		not in (PENDING_SIDEBAR_SECTION, ACCOUNTS_OPS_SIDEBAR_SECTION, BUDGET_SIDEBAR_SECTION, "Pending Approvals")
+		not in (
+			"Pending Approvals",
+			"Approvals",
+			"Accounts Ops",
+			"Budgets",
+			"Awaiting my Approval",
+			"My Spend",
+			"Advance Portal",
+			"Budget Health",
+		)
 	]
 	if len(filtered) == len(sidebar.items):
 		return
@@ -537,3 +459,11 @@ def _strip_accounting_from_volunteering_sidebar():
 		sidebar.append("items", item.as_dict())
 	sidebar.flags.ignore_links = True
 	sidebar.save(ignore_permissions=True)
+
+
+def _get_workspace_payload() -> dict:
+	path = frappe.get_app_path(
+		"volunteering", "volunteering", "workspace", "my_expenses", "my_expenses.json"
+	)
+	with open(path, encoding="utf-8") as handle:
+		return json.load(handle)

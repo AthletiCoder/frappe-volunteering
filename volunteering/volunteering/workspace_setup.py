@@ -47,6 +47,13 @@ def get_latest_ngo_event():
 
 def boot_session(bootinfo):
 	bootinfo.volunteering_latest_event = get_latest_ngo_event()
+	# Used by My Work shortcut filters (self vs approver queues).
+	if frappe.session.user and frappe.session.user not in ("Guest", "Administrator"):
+		bootinfo.employee = frappe.db.get_value(
+			"Employee", {"user_id": frappe.session.user}, "name"
+		)
+	else:
+		bootinfo.employee = None
 
 
 def ensure_volunteering_workspace():
