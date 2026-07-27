@@ -17,27 +17,23 @@ from volunteering.volunteering.approval_routing import (
 	get_pending_state_for_level,
 	get_requester_minimum_level,
 )
-from volunteering.volunteering.doctype.volunteering_accounting_settings.volunteering_accounting_settings import (
-	get_accounting_settings,
-)
-
-
 class TestApprovalRoutingHelpers(UnitTestCase):
 	def setUp(self):
-		settings = get_accounting_settings()
-		settings.use_designation_approval = 0
-		settings.tier_1_limit = 2000
-		settings.tier_2_limit = 10000
-		settings.save(ignore_permissions=True)
-		frappe.clear_cache(doctype="Volunteering Accounting Settings")
+		# Patch settings in memory — never write the live singles doc, otherwise
+		# running this module flips use_designation_approval off on the site.
+		self._settings = frappe._dict(
+			use_designation_approval=0,
+			tier_1_limit=2000,
+			tier_2_limit=10000,
+		)
+		patcher = patch(
+			"volunteering.volunteering.approval_routing.get_accounting_settings",
+			return_value=self._settings,
+		)
+		patcher.start()
+		self.addCleanup(patcher.stop)
 
 	def test_amount_tiers_use_settings(self):
-		settings = get_accounting_settings()
-		settings.tier_1_limit = 2000
-		settings.tier_2_limit = 10000
-		settings.save(ignore_permissions=True)
-		frappe.clear_cache(doctype="Volunteering Accounting Settings")
-
 		low = frappe._dict(doctype="Expense Claim", total_claimed_amount=1500)
 		mid = frappe._dict(doctype="Expense Claim", total_claimed_amount=5000)
 		high = frappe._dict(doctype="Expense Claim", total_claimed_amount=15000)

@@ -1,7 +1,7 @@
 {
  "app": "volunteering",
  "charts": [],
- "content": "[{\"id\": \"ac-header\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">My Expenses</span>\", \"col\": 12}}, {\"id\": \"ac-intro\", \"type\": \"paragraph\", \"data\": {\"text\": \"Your spend requests, approvals awaiting you, and accounts ops queues. Orange cards show live pending counts \\u2014 click to open the filtered list.\", \"col\": 12}}, {\"id\": \"ac-spacer\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"ac-card-spend\", \"type\": \"card\", \"data\": {\"card_name\": \"My Spend\", \"col\": 4}}, {\"id\": \"ac-card-appr\", \"type\": \"card\", \"data\": {\"card_name\": \"Awaiting my Approval\", \"col\": 4}}, {\"id\": \"ac-card-ops\", \"type\": \"card\", \"data\": {\"card_name\": \"Accounts Ops\", \"col\": 4}}, {\"id\": \"ac-card-bud\", \"type\": \"card\", \"data\": {\"card_name\": \"Budgets\", \"col\": 4}}, {\"id\": \"ac-sc-0\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"My Expense Claims\", \"col\": 4}}, {\"id\": \"ac-sc-1\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"My Advances\", \"col\": 4}}, {\"id\": \"ac-sc-2\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"My Purchase Orders\", \"col\": 4}}, {\"id\": \"ac-sc-3\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Advance Portal\", \"col\": 4}}, {\"id\": \"ac-sc-4\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Expense Claims Pending Me\", \"col\": 4}}, {\"id\": \"ac-sc-5\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Advances Pending Me\", \"col\": 4}}, {\"id\": \"ac-sc-6\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Purchase Orders Pending Me\", \"col\": 4}}, {\"id\": \"ac-sc-7\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Claims to Reimburse\", \"col\": 4}}, {\"id\": \"ac-sc-8\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Vendor Invoices to Pay\", \"col\": 4}}, {\"id\": \"ac-sc-budget\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Budget Health\", \"col\": 4}}]",
+ "content": "[{\"id\": \"ac-header\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">My Expenses</span>\", \"col\": 12}}, {\"id\": \"ac-intro\", \"type\": \"paragraph\", \"data\": {\"text\": \"Your spend requests, approvals awaiting you, and accounts ops queues. Orange cards show live pending counts \\u2014 click to open the filtered list.\", \"col\": 12}}, {\"id\": \"ac-spacer\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"ac-card-spend\", \"type\": \"card\", \"data\": {\"card_name\": \"My Spend\", \"col\": 4}}, {\"id\": \"ac-card-appr\", \"type\": \"card\", \"data\": {\"card_name\": \"Awaiting my Approval\", \"col\": 4}}, {\"id\": \"ac-card-ops\", \"type\": \"card\", \"data\": {\"card_name\": \"Accounts Ops\", \"col\": 4}}, {\"id\": \"ac-card-bud\", \"type\": \"card\", \"data\": {\"card_name\": \"Budgets\", \"col\": 4}}, {\"id\": \"ac-sc-0\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"My Expense Claims\", \"col\": 4}}, {\"id\": \"ac-sc-1\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"My Advances\", \"col\": 4}}, {\"id\": \"ac-sc-2\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"My Purchase Orders\", \"col\": 4}}, {\"id\": \"ac-sc-3\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Advance Portal\", \"col\": 4}}, {\"id\": \"ac-sc-4\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Expense Claims Pending Me\", \"col\": 4}}, {\"id\": \"ac-sc-5\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Advances Pending Me\", \"col\": 4}}, {\"id\": \"ac-sc-6\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Purchase Orders Pending Me\", \"col\": 4}}, {\"id\": \"ac-sc-7\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Claims to Reimburse\", \"col\": 4}}, {\"id\": \"ac-sc-8\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Vendor Invoices to Pay\", \"col\": 4}}, {\"id\": \"ac-sc-9\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Approval & Advance Limits\", \"col\": 4}}, {\"id\": \"ac-sc-budget\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Budget Health\", \"col\": 4}}, {\"id\": \"ac-sc-residual\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Advances with Residual\", \"col\": 4}}]",
  "creation": "2026-07-22 08:00:00",
  "custom_blocks": [],
  "docstatus": 0,
@@ -124,6 +124,16 @@
   {
    "hidden": 0,
    "is_query_report": 0,
+   "label": "Approval & Advance Limits",
+   "link_count": 0,
+   "link_to": "Approval and Advance Limits",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
    "label": "Budgets",
    "link_count": 0,
    "link_type": "DocType",
@@ -142,7 +152,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-07-25 17:44:10.333568",
+ "modified": "2026-07-26 14:18:21.624089",
  "modified_by": "Administrator",
  "module": "Volunteering",
  "name": "My Expenses",
@@ -178,7 +188,7 @@
    "role": "System Manager"
   },
   {
-   "role": "People Manager"
+   "role": "Leave Approver"
   }
  ],
  "sequence_id": 0.0,
@@ -255,11 +265,26 @@
    "type": "DocType"
   },
   {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Approval & Advance Limits",
+   "link_to": "Approval and Advance Limits",
+   "type": "DocType"
+  },
+  {
    "color": "Green",
    "doc_view": "",
    "label": "Budget Health",
    "type": "URL",
    "url": "/volunteering/budget-health"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "",
+   "label": "Advances with Residual",
+   "link_to": "Employee Advances with Residual",
+   "report_ref_doctype": "Employee Advance",
+   "type": "Report"
   }
  ],
  "title": "My Expenses",

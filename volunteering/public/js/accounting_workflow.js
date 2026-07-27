@@ -71,10 +71,8 @@ volunteering.accounting_workflow.hide_advance_account_fields = function (frm) {
 };
 
 volunteering.accounting_workflow.clear_advance_link_hints = function (frm) {
-	if (frm._advance_hint_comment) {
-		$(frm._advance_hint_comment).remove();
-		frm._advance_hint_comment = null;
-	}
+	volunteering.form_hints.clear(frm);
+	frm._advance_hint_comment = null;
 };
 
 volunteering.accounting_workflow.show_advance_link_hints = function (frm) {
@@ -85,31 +83,34 @@ volunteering.accounting_workflow.show_advance_link_hints = function (frm) {
 
 	// refresh + employee both fire on new forms; keep only the latest response
 	const employee = frm.doc.employee;
-	const token = (frm._advance_hint_token = (frm._advance_hint_token || 0) + 1);
-
-	frappe
-		.xcall("volunteering.volunteering.employee_advance_controls.get_linkable_advances_hint", {
-			employee,
-		})
-		.then((msg) => {
-			if (token !== frm._advance_hint_token || frm.doc.employee !== employee) {
-				return;
-			}
-			volunteering.accounting_workflow.clear_advance_link_hints(frm);
-			if (!msg) {
-				return;
-			}
-			frm._advance_hint_comment = frm.dashboard.add_comment(msg, "blue", true);
-		})
-		.catch(() => {});
+	volunteering.form_hints.run_once(frm, "advance_link", (token) =>
+		frappe
+			.xcall("volunteering.volunteering.employee_advance_controls.get_linkable_advances_hint", {
+				employee,
+			})
+			.then((msg) => {
+				if (
+					!volunteering.form_hints.is_current(frm, "advance_link", token) ||
+					frm.doc.employee !== employee
+				) {
+					return;
+				}
+				volunteering.form_hints.clear(frm);
+				if (!msg) {
+					return;
+				}
+				volunteering.form_hints.set_headline(frm, msg, "blue");
+			})
+			.catch(() => {})
+	);
 };
 
 volunteering.accounting_workflow.show_spend_hints = function (frm) {
 	if (frm.doc.docstatus !== 0 || frm.doc.workflow_state !== "Draft") {
 		return;
 	}
-	frm.dashboard.clear_headline();
-	frm.dashboard.set_headline(
+	volunteering.form_hints.set_headline(
+		frm,
 		__(
 			'Prefer vendor payments for larger spends. See <a href="/help/accounts/how-to-spend" target="_blank">How to spend</a>.'
 		)

@@ -176,12 +176,6 @@
    "write": 1
   },
   {
-   "permlevel": 1,
-   "read": 1,
-   "role": "People Manager",
-   "write": 1
-  },
-  {
    "create": 1,
    "if_owner": 1,
    "read": 1,

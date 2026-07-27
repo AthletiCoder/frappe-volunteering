@@ -57,11 +57,12 @@ async function lock_status_for_self(frm) {
 
 function show_leave_flow_hint(frm) {
 	if (frm.doc.docstatus !== 0) {
-		frm.set_intro("");
+		volunteering.form_hints.clear(frm);
 		return;
 	}
 	if (frm.doc.leave_approver === frappe.session.user || is_hr_user()) {
-		frm.set_intro(
+		volunteering.form_hints.set_intro(
+			frm,
 			__(
 				"Use <b>Approve & Submit</b> or <b>Reject & Submit</b> to decide in one step. You cannot approve your own leave."
 			),
@@ -69,7 +70,8 @@ function show_leave_flow_hint(frm) {
 		);
 		return;
 	}
-	frm.set_intro(
+	volunteering.form_hints.set_intro(
+		frm,
 		__(
 			"Save with status <b>Open</b>. Your Leave Approver sets Approved/Rejected and submits. You cannot approve your own leave."
 		),

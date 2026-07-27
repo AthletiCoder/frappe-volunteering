@@ -160,4 +160,6 @@ def get_daily_work_log_settings():
 		"present_hours_threshold": 6,
 		"enable_attendance_job": 1,
 		"enable_board_digest": 1,
+		"digest_frequency": "Daily",
+		"digest_recipient_roles": "Executive Board Member\nExecutive Board Chairperson",
 	}

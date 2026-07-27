@@ -69,7 +69,9 @@ def after_migrate():
 	ensure_departments()
 	ensure_designations()
 	ensure_accounting_settings()
+	ensure_designation_limits()
 	ensure_employee_advance_accounts()
+	ensure_expense_claim_payable_account()
 	ensure_employee_advance_field_visibility()
 	ensure_budget_health_permissions()
 	reload_accounting_workflows()
@@ -411,12 +413,95 @@ def ensure_accounting_settings():
 	if not settings.get("preferred_payout_mode"):
 		settings.preferred_payout_mode = "Manual"
 
+	settings.save(ignore_permissions=True)
+	frappe.clear_cache(doctype="Volunteering Accounting Settings")
+
+
+def ensure_expense_claim_payable_account():
+	"""Expense Claim GL posting needs a Payable account with party support.
+
+	Repairs companies where Default Expense Claim Payable Account points at a
+	non-Payable account (e.g. Cash), which crashes approval with
+	'Party Type and Party can only be set for Receivable / Payable account'.
+	"""
+	for company in frappe.get_all(
+		"Company",
+		fields=["name", "default_expense_claim_payable_account", "default_payable_account"],
+	):
+		current = company.default_expense_claim_payable_account
+		if current and frappe.db.get_value("Account", current, "account_type") == "Payable":
+			continue
+
+		replacement = company.default_payable_account
+		if not (
+			replacement
+			and frappe.db.get_value("Account", replacement, "account_type") == "Payable"
+		):
+			replacement = frappe.db.get_value(
+				"Account",
+				{
+					"company": company.name,
+					"account_type": "Payable",
+					"is_group": 0,
+					"disabled": 0,
+				},
+				"name",
+			)
+		if not replacement:
+			continue
+
+		frappe.db.set_value(
+			"Company",
+			company.name,
+			"default_expense_claim_payable_account",
+			replacement,
+		)
+		frappe.clear_cache(doctype="Company")
+
+
+def ensure_designation_limits():
+	"""Seed / migrate designation limits on the Approval and Advance Limits page.
+
+	Rows used to live on Volunteering Accounting Settings; copy any orphaned
+	rows over once, then upsert missing defaults.
+	"""
+	if not frappe.db.exists("DocType", "Approval and Advance Limits"):
+		return
+
+	doc = frappe.get_single("Approval and Advance Limits")
+
+	# One-time copy of rows left behind on Volunteering Accounting Settings
+	legacy_rows = frappe.get_all(
+		"Designation Approval Limit",
+		filters={
+			"parenttype": "Volunteering Accounting Settings",
+			"parentfield": "designation_limits",
+		},
+		fields=["name", "designation", "max_approve_amount", "max_advance_amount"],
+		order_by="idx asc",
+	)
+	if legacy_rows and not doc.get("designation_limits"):
+		for row in legacy_rows:
+			doc.append(
+				"designation_limits",
+				{
+					"designation": row.designation,
+					"max_approve_amount": row.max_approve_amount,
+					"max_advance_amount": row.max_advance_amount,
+				},
+			)
+	if legacy_rows:
+		frappe.db.delete(
+			"Designation Approval Limit",
+			{"parenttype": "Volunteering Accounting Settings"},
+		)
+
 	# Upsert missing designation limit rows from defaults (partial tables used to skip this)
-	existing = {row.designation for row in (settings.get("designation_limits") or []) if row.designation}
+	existing = {row.designation for row in (doc.get("designation_limits") or []) if row.designation}
 	for designation, max_approve, max_advance in DEFAULT_DESIGNATION_LIMITS:
 		if designation in existing:
 			continue
-		settings.append(
+		doc.append(
 			"designation_limits",
 			{
 				"designation": designation,
@@ -426,11 +511,11 @@ def ensure_accounting_settings():
 		)
 
 	# Keep Director advance headroom if an older seed left it at 25k / missing
-	for row in settings.get("designation_limits") or []:
+	for row in doc.get("designation_limits") or []:
 		if row.designation == "Director" and flt(row.max_advance_amount) < 50000:
 			row.max_advance_amount = 50000
 		if row.designation == "Director" and flt(row.max_approve_amount) < 25000:
 			row.max_approve_amount = 25000
 
-	settings.save(ignore_permissions=True)
-	frappe.clear_cache(doctype="Volunteering Accounting Settings")
+	doc.save(ignore_permissions=True)
+	frappe.clear_cache(doctype="Approval and Advance Limits")

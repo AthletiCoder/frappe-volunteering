@@ -1,129 +1,115 @@
-### Volunteering
+# Volunteering
 
-Track volunteers, events, participation, and reciprocation in one focused workflow for NGO operations.
+An ERPNext app for NGO day-to-day work: volunteer events, staff attendance and leave, and controlled spending (advances, claims, and budgets).
 
-### Features
+---
 
-#### Core DocTypes
+## What it covers
 
-- **Volunteer**: Stores personal and employment details for each volunteer, with automatic phone normalization for clean matching and deduping.
-- **NGO Event**: Manages event planning and execution stages (`Planned`, `Registrations`, `Shipping`, `Followup`, `Closed`).
-- **Participation**: Captures event registrations, attendance, logistics details (kits, shipping, logging), and volunteer linkage.
-- **Participation Extra Detail**: Adds dynamic question-and-answer rows per participation for campaign-specific data.
-- **Gift Hamper**: Defines hamper templates by tier (`Standard`, `Reminder`, `Deluxe`) with cost rollups.
-- **Gift Hamper Item**: Child table for hamper item breakdown (item, qty, unit cost, amount).
-- **Reciprocation**: Tracks hamper allocation and delivery status per volunteer per event.
+### Volunteers and events
 
-#### Workflow Highlights
+- Keep a clean volunteer directory (phone matching avoids duplicates).
+- Run campaigns through clear stages: plan → register → ship → follow up → close.
+- Public signup form for events (WhatsApp confirmation, kit count, delivery options, referrals).
+- Coordinators can update attendance and logistics in a spreadsheet-style table for an event — no need to open every record.
+- Relationship Managers rate volunteers after logging (1–5 for communication ease); each volunteer gets a rolling score from their last three rated events.
 
-- **Smart volunteer linking**: Participation uses phone matching to link to an existing volunteer, or auto-creates one when needed.
-- **Event-triggered automation**: Moving an event to `Shipping` can trigger reciprocation creation for eligible volunteers.
-- **Volunteer tiering logic**: Volunteer status is updated based on recent participation patterns (for example, Active/Star/Inactive behavior).
-- **Operational tracking**: Participation records support end-to-end follow-up from registration to shipping and logging.
+### My Work (for staff)
 
-#### Web Form Template (Event Registration)
+One home for self-service and approvals:
 
-- **Published registration form**: A ready-to-use public form for event signups.
-- **Custom interactive inputs**: Includes campaign-focused fields such as WhatsApp confirmation, kit count, collection method, and optional organizing interest.
-- **Referral support**: Reads referral from URL params and stores it in `referred_by`.
-- **Validation-first UX**: Enforces required fields (for example, WhatsApp confirmation and delivery address when residential delivery is selected).
-- **Structured payload mapping**: Writes answers into `Participation` and `Participation Extra Detail` so data remains reportable and clean.
+- **Self service** — daily work logs, attendance, leave, and regularization requests (with live counts of what’s still open).
+- **Awaiting my approval** — leaves and attendance requests from people who report to you (hidden if you have no reportees).
 
-#### Reporting and Access
+Managers can leave private remarks when reviewing a work log. Approvers can approve or reject leave in one click from the leave form.
 
-- **Dynamic event report**: `Generic Event Participation Report` builds columns dynamically from extra-detail questions for the selected event.
-- **Role-aware access model**: Supports `NGO Admin`, `NGO Coordinator`, and `NGO Member` with DocType-level permissions and row-level visibility controls on key records.
+### My Expenses (for spend)
 
-#### Coordinator spreadsheet editing (Desk)
+One home for personal spend and money waiting on you:
 
-Coordinators can update participations without opening each record individually:
+- Your expense claims, advances, and purchase orders — with pending counts.
+- Approvals waiting on you (claims, advances, orders).
+- Accounts queues: claims ready to reimburse, vendor invoices to pay.
+- **Advance Portal** — see each advance’s status, how much is claimed vs still unused, linked bills, and shortcuts to claim or request a new advance.
+- **Budget Health** — a clear view of project budget status with health colours and links into the detail.
+- **Advances with leftover** — report for chasing unsettled advance balances.
 
-1. Open an **NGO Event** and click **Manage Participations**.
-2. This opens the Participation **Report** view (spreadsheet table) filtered to that event.
-3. Click any editable cell (Attendance, Kits Delivered, Logging Status, etc.) and change the value — it auto-saves on commit (Tab, Enter, or click away).
-4. The **Relationship Manager** column shows who owns follow-up for each volunteer (copied from the Volunteer record). Use the filter bar to narrow by RM when several coordinators share one event.
-5. If another coordinator updates a row, your table refreshes that row automatically.
-6. For screenshots or RM ratings, open the full Participation form via the row ID link.
+Staff can only raise advances for themselves. Project and bank account details are filled in behind the scenes. Prefer vendor payment for larger spends; reimbursement is for when you already paid out of pocket.
 
-### Volunteer ratings (for Relationship Managers)
+### Approval and advance limits
 
-This section explains how to record and use volunteer ratings after an event.
+Accounts (and System Managers) configure how much each **designation** may:
 
-#### Who can rate
+1. **Approve for others** — the largest amount they can clear on someone else’s request.
+2. **Hold as a personal advance** — the largest float they can request for themselves.
 
-- Each **Volunteer** has an assigned **Relationship Manager** (`Volunteer.relationship_manager`).
-- Only that Relationship Manager can enter or change the rating and comment on a **Participation** record.
-- **NGO Admin** and **System Manager** can also edit ratings when needed.
+Board-level roles have unlimited approval authority. Open the page from **My Expenses → Approval & Advance Limits**. HR and Board members can view the limits; only Accounts Managers and System Managers can change them.
 
-#### When to rate
+Approvals follow the **Reports To** chain on the employee record until someone with enough authority is reached. Managers below the limit can reject or escalate (with a reason), not approve above their level.
 
-Rate at the **end of the event**, after follow-up work is done:
+### Daily work log summary email
 
-1. Complete distribution and logging details on the Participation (kits delivered, hours logged, etc.).
-2. Set **Logging Status** to **Logged**.
-3. The form will prompt you to add a **Rating** and **Relationship Manager Comment**.
-4. Save the Participation.
+On **Daily Work Log Settings** you can turn on an email summary of everyone’s work logs:
 
-A rating is **required** once Logging Status is **Logged**.
+- **Who** — by role (e.g. board), plus optional extra addresses
+- **From** — optional sender address (otherwise the system default)
+- **How often** — daily, weekly, or monthly
 
-#### What you are rating
+Daily emails show yesterday in detail; weekly/monthly show hours and days logged. Use **Preview Summary** and **Send Summary Now** on the settings page to check the look before going live.
 
-- Use the **Rating** field (1–5 stars) for **overall communication ease** with the volunteer during that event.
-- Add context in **Relationship Manager Comment** (follow-up quality, responsiveness, issues, positives).
+### Help in the system
 
-This is separate from **Volunteer Status** (Active / Star / Inactive), which is based on how often someone participates, not how easy they are to work with.
+In-app help pages cover “how to spend” and day-to-day accounts ops (vendor vs advance vs reimbursement, and when Get Advances will list an advance — it must be approved **and paid**).
 
-#### Before you save
+---
 
-- **Kits Delivered** must be greater than **zero** before a rating can be saved.
-- **Hours Logged** should reflect actual volunteer effort for that event.
+## Release notes (recent)
 
-#### How expected hours and effective rating work
+### Spend and approvals
 
-The system compares logged hours to expected hours for the kits delivered:
+- Dedicated **Approval & Advance Limits** page (by designation), moved out of the general accounting settings dump.
+- **My Work** and **My Expenses** cleaned up: shortcut cards with live counts; sidebars slimmed so everything important lives on the workspace.
+- Advance Portal and Budget Health as polished web pages (build the frontend once after install — see below).
+- Employees restricted to their own advances; leftover-advance report fixed.
+- Approve / Reject (+ submit) on leave applications for approvers.
+- Optional “already paid outside the system” action on vendor invoices for Accounts.
+- Optional monthly reimbursement cap in accounting settings.
+- Safer advance payments (blocks using a customer Debtors account for employee advances).
+- Company expense-claim payable account auto-repaired if it was pointed at cash instead of a proper payable account.
 
-- **Expected hours** = `Kits Delivered` × **Hours Per Kit**
-- **Hours Per Kit** comes from the **Project** linked to the event (`NGO Event` → `Project`). If not set on the project, the default is **0.5** hours per kit.
+### Attendance and work logs
 
-Example: 10 kits delivered, Hours Per Kit = 0.5 → expected hours = 5. If the volunteer logged 5 hours, there is no adjustment. If they logged less or more, the **Effective Rating** on that Participation may move slightly down or up (within 1–5), based on your star rating.
+- Manager-only remarks on daily work logs.
+- Configurable work-log summary email (recipients, sender, daily / weekly / monthly).
+- People who manage others use the existing Leave Approver path from **Reports To** — no extra custom manager role to maintain.
 
-On each Participation you will see (read-only after save):
+### Fixes and housekeeping
 
-| Field | Meaning |
-|-------|---------|
-| **Expected Hours** | Target hours for kits delivered |
-| **Hours Delta** | Hours Logged minus Expected Hours |
-| **Effective Rating** | Final score for this event (1–5) after the hours adjustment |
+- Clearer messages when an advance can’t be linked to a claim yet (not paid / not submitted).
+- Budget Health no longer fails for Accounts users missing project read access.
+- Duplicate “available advances” hints on expense claims removed.
 
-#### Volunteer profile score
+---
 
-Open the **Volunteer** record to see the rolled-up score:
+## Getting started (operators)
 
-| Field | Meaning |
-|-------|---------|
-| **Effective Rating** | Weighted average from the volunteer’s **last 3 rated events** (most recent event counts the most) |
-| **Rated Events Count** | How many rated events were used (1–3) |
-| **Rating Last Updated** | When the profile score was last recalculated |
+1. Set each employee’s **Reports To** and **Designation** — that drives leave approval and spend approval limits.
+2. Open **Approval & Advance Limits** and confirm the amounts match your policy (or Reset to Defaults).
+3. Set **Daily Work Log Settings** if you want the summary email.
+4. Point staff to **My Work** and **My Expenses** from the desk home.
 
-Weights for the last three rated events (newest first): **50%**, **30%**, **20%**. Only participations with a rating are included.
+After install or upgrade, run a migrate so workspaces and settings seed correctly. For Advance Portal and Budget Health, build the frontend once:
 
-#### Quick checklist per participation
+```bash
+cd apps/volunteering/frontend
+yarn install && yarn build
+```
 
-- [ ] Kits Delivered is correct and greater than zero
-- [ ] Hours Logged is entered
-- [ ] Logging Status = **Logged**
-- [ ] Rating (1–5) and comment added
-- [ ] Save — confirm **Effective Rating** on Participation and **Effective Rating** on Volunteer
+Then clear cache / reload the site.
 
-#### Tips
+---
 
-- Set **Hours Per Kit** on the event’s **Project** if a campaign needs a different effort expectation than the default (0.5).
-- Use comments for anything the number alone cannot capture; they help future Relationship Managers and coordinators.
-- Re-save a Participation after changing kits, hours, or rating to refresh the volunteer’s profile score.
-
-### Installation
-
-You can install this app using the [bench](https://github.com/frappe/bench) CLI:
+## Installation
 
 ```bash
 cd $PATH_TO_YOUR_BENCH
@@ -131,22 +117,21 @@ bench get-app $URL_OF_THIS_REPO --branch version-16
 bench install-app volunteering
 ```
 
-### Contributing
+---
 
-This app uses `pre-commit` for code formatting and linting. Please [install pre-commit](https://pre-commit.com/#installation) and enable it for this repository:
+## Contributing
+
+This app uses [pre-commit](https://pre-commit.com/#installation) for formatting and linting:
 
 ```bash
 cd apps/volunteering
 pre-commit install
 ```
 
-Pre-commit is configured to use the following tools for checking and formatting your code:
+Tools: ruff, eslint, prettier, pyupgrade.
 
-- ruff
-- eslint
-- prettier
-- pyupgrade
+---
 
-### License
+## License
 
-mit
+MIT

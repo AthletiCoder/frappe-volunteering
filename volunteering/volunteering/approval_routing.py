@@ -548,9 +548,34 @@ def escalate_document(doctype, name, escalation_reason):
 
 	doc.escalation_reason = escalation_reason
 	escalate_to_next_approver(doc)
+	_remove_stale_approver_share(doc)
 	doc.save(ignore_permissions=True)
 	notify_pending_approvers(doc)
 	return doc
+
+
+def _remove_stale_approver_share(doc):
+	"""HRMS share_doc_with_approver deletes the outgoing approver's DocShare as
+	the session user, who typically lacks DocShare delete permission. Remove it
+	up front with elevated permissions so escalation doesn't crash."""
+	if doc.doctype != "Expense Claim":
+		return
+	old_approver = frappe.db.get_value(doc.doctype, doc.name, "expense_approver")
+	if not old_approver:
+		return
+	share = frappe.db.get_value(
+		"DocShare",
+		{"user": old_approver, "share_name": doc.name, "share_doctype": doc.doctype},
+	)
+	if share:
+		frappe.delete_doc(
+			"DocShare",
+			share,
+			ignore_permissions=True,
+			force=True,
+			delete_permanently=True,
+			flags={"ignore_share_permission": True},
+		)
 
 
 @frappe.whitelist()

@@ -137,7 +137,8 @@ def get_or_create_payable_account(company=None):
 	company = company or frappe.db.get_value("Company", {}, "name")
 	for fieldname in ("default_expense_claim_payable_account", "default_payable_account"):
 		account = frappe.db.get_value("Company", company, fieldname)
-		if account:
+		# Guard against misconfigured defaults (e.g. Cash): GL posting requires Payable
+		if account and frappe.db.get_value("Account", account, "account_type") == "Payable":
 			return account
 
 	account = frappe.db.get_value(

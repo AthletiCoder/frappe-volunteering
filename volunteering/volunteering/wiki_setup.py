@@ -10,8 +10,14 @@ Requires the `wiki` app installed on the site.
 import frappe
 from frappe.utils import cint
 
+from volunteering.volunteering.accounts_wiki_content import (
+	ACCOUNTS_CONFIG,
+	HOW_TO_SPEND,
+	TALLY_GUIDE,
+)
 from volunteering.volunteering.hr_wiki_content import (
 	HR_ATTENDANCE,
+	HR_CONFIG,
 	HR_DAILY_WORK_LOG,
 	HR_HOME,
 	HR_LEAVE,
@@ -22,155 +28,6 @@ from volunteering.volunteering.hr_wiki_content import (
 
 SPACE_ROUTE = "help"
 SPACE_NAME = "Sevamrita Wiki"
-
-HOW_TO_SPEND = """# How to spend
-
-Every expenditure should follow **one** path. Start from [My Expenses](/app/my-expenses) (advances & claims) or [My Work](/app/my-work) for attendance.
-
-1. **Vendor payment (preferred)** — Purchase Order → Purchase Invoice → Payment Entry
-2. **Employee Advance** — float before buying (local purchase, travel, events); settle with Expense Claim
-3. **Reimbursement (exception)** — Expense Claim only when advance/vendor was not feasible
-
-## Prefer vendor payment
-
-Above the configured **Vendor Payment Threshold** (default ₹5,000), create a [Purchase Order](/app/purchase-order/new) instead of reimbursing yourself.
-
-**Who creates what**
-
-| Step | Who |
-|------|-----|
-| Purchase Order | Accounts / procurement (after need is clear) |
-| Purchase Invoice | **Either** staff or Accounts — create from the approved PO and attach the supplier bill |
-| Payment Entry | **Accounts only** |
-
-### Goods needed now, tax invoice later
-
-If the supplier must be paid before the tax invoice arrives:
-
-1. Get an **approved, submitted** Purchase Order
-2. Accounts creates **Payment Entry against that PO** (supplier advance — like Tally advance to creditor)
-3. When the invoice arrives, staff or Accounts creates **Purchase Invoice from the PO** and allocates the advance
-
-Credit purchases (pay after invoice) stay: PO → PI → Payment Entry vs PI.
-
-If you must reimburse above the threshold, set **Vendor Payment Override Reason**.
-
-## Employee Advance
-
-- You can only raise advances **for yourself** (Accounts/HR may help others)
-- Project and advance account are set automatically (hidden from staff)
-- A new advance is blocked while another has residual **above** the replenish threshold (default **10%** of paid amount)
-- If residual is **at or below 10%**, you may request a replenishment advance — but you must still claim or return the leftover (not auto-written-off)
-- Track status on [Advance Portal](/volunteering/advances)
-- Settle via [Expense Claim](/app/expense-claim/new) linked to the Advance (**Get Advances** only lists advances that are Submitted **and Paid**)
-- Accounts can chase leftovers on [Advances with Residual](/app/query-report/Employee%20Advances%20with%20Residual)
-
-Open: [New Employee Advance](/app/employee-advance/new)
-
-## Reimbursement
-
-**Expense Claim = “I already paid from my pocket — please pay me back.”**
-
-1. You pay the vendor / expense yourself  
-2. File an [Expense Claim](/app/expense-claim/new) with receipts  
-3. Manager / Accounts approve  
-4. Accounts creates a Payment Entry paying **you** → claim becomes Paid  
-
-There is no separate “I already paid” checkbox on Expense Claim — filing the claim *is* that declaration.
-
-Optional: Volunteering Accounting Settings → **Monthly Reimbursement Cap** (0 = off).
-
-## Vendor invoice paid outside ERPNext
-
-If a [Purchase Invoice](/app/purchase-invoice) was settled in cash/elsewhere, Accounts can use **Mark Paid (outside system)** on the invoice (creates a Payment Entry).
-
-## Approvals
-
-Approvals follow your **Reports To** chain and **Designation** limits.
-
-- If your designation covers the amount: **Approve** (primary) or **Reject**
-- If the amount is above your limit: **Reject** or **Escalate** (not Approve)
-- Self-approval is not allowed
-
-## Accounts
-
-Accounts **does not** approve day-to-day spends. After approval they create [Payment Entry](/app/payment-entry) (like a Tally Payment voucher).
-
-See also: [Accounts: Tally → ERPNext](/help/accounts/tally-to-erpnext) · [HR Home](/help/hr/home)
-"""
-
-TALLY_GUIDE = """# Accounts: Tally → ERPNext
-
-This guide is for Accounts users comfortable with **Tally**. ERPNext keeps standard voucher names (Payment Entry, Journal Entry) so auditors and CAs recognise them. Use this map instead of renaming screens.
-
-> If you still post in Tally in parallel, **do not double-post** the same payment. Treat ERPNext as the books of record unless leadership says otherwise.
-
-## Mindset
-
-| Tally | ERPNext |
-|-------|---------|
-| Enter voucher → books update | Staff **request** → manager **approves** → Accounts **pays** (Payment Entry) |
-| Alter / Delete | **Cancel** / **Amend** (audit trail preserved) |
-| Day Book | [General Ledger](/app/query-report/General%20Ledger) + list of vouchers |
-
-Accounts role here: **weekly/monthly audit + Payment Entry**. Not live spend approval.
-
-Staff hubs: [My Expenses](/app/my-expenses) for claims/advances/PI; Payment Entry stays with Accounts.
-
-## Three spend paths
-
-| Path | Flow | Tally analogue |
-|------|------|----------------|
-| Credit vendor | PO → PI → PE vs PI | Purchase + Payment |
-| Pay before invoice | Approved PO → **PE vs PO** (supplier advance) → later PI clears advance | Advance to creditor vs order |
-| Staff float / pocket | Advance or Expense Claim → PE vs employee | Payment to staff / imprest |
-
-Every Purchase Invoice line must still link an **approved, submitted** PO. Staff or Accounts may create the PI; only Accounts pays.
-
-## Voucher map
-
-| Tally | ERPNext | When |
-|-------|---------|------|
-| Payment voucher | [Payment Entry](/app/payment-entry) (Pay) | Pay supplier (vs PI or approved PO) / employee after approval |
-| Receipt voucher | Payment Entry (Receive) | Donations (Cashfree) / receipts |
-| Journal | [Journal Entry](/app/journal-entry) | Settlements, clearing, adjustments |
-| Purchase | [Purchase Invoice](/app/purchase-invoice) | Vendor bill (must link approved PO) |
-| — (indent) | [Purchase Order](/app/purchase-order) | Commitment before invoice |
-| — | [Expense Claim](/app/expense-claim) | Staff reimbursement (exception) |
-| — | [Employee Advance](/app/employee-advance) | Staff float; settle later; replenish allowed if residual ≤10% |
-
-## Master map
-
-| Tally | ERPNext |
-|-------|---------|
-| Ledger / Group | [Chart of Accounts](/app/chart-of-accounts) |
-| Sundry Creditor | [Supplier](/app/supplier) |
-| Sundry Debtor | [Customer](/app/customer) |
-| Cost Centre | [Cost Center](/app/cost-center) |
-| Job / cost category | [Project](/app/project) (Campaign / Event / Admin) |
-| Cash / Bank ledger | Account + [Mode of Payment](/app/mode-of-payment) |
-
-## Day-to-day ops
-
-1. [My Expenses](/app/my-expenses) — Vendor Invoices to Pay, Claims to Reimburse, Advance Portal
-2. [Employee Advances with Residual](/app/query-report/Employee%20Advances%20with%20Residual)
-3. [Bank Reconciliation](/app/bank-reconciliation-tool)
-4. [Budget Health](/volunteering/budget-health)
-5. [General Ledger](/app/query-report/General%20Ledger)
-
-## Cashfree Clearing
-
-Inbound donations land in **Cashfree Clearing**. When settlement hits your real bank, post a Journal Entry: Debit Bank / Credit Clearing (fees per CA advice).
-
-## What Accounts does not do
-
-No live spend approval — operations approve; Accounts pays and audits.
-
-## Related
-
-- [How to spend](/help/accounts/how-to-spend)
-- [HR Home](/help/hr/home)
-"""
 
 # (group_title, slug, [(page_title, page_slug, content_getter)])
 HELP_TREE = (
@@ -184,6 +41,7 @@ HELP_TREE = (
 			("Work From Home", "work-from-home", lambda: HR_WFH),
 			("Leave Application", "leave", lambda: HR_LEAVE),
 			("Manager Guide", "manager-guide", lambda: HR_MANAGER),
+			("HR Configuration", "configuration", lambda: HR_CONFIG),
 			("HR Settings & Ops", "settings", lambda: HR_SETTINGS),
 		),
 	),
@@ -192,6 +50,7 @@ HELP_TREE = (
 		"accounts",
 		(
 			("How to Spend", "how-to-spend", lambda: HOW_TO_SPEND),
+			("Accounts Configuration", "configuration", lambda: ACCOUNTS_CONFIG),
 			("Tally → ERPNext", "tally-to-erpnext", lambda: TALLY_GUIDE),
 		),
 	),

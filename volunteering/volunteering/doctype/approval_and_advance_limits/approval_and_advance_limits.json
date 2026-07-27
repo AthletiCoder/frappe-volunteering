@@ -1,0 +1,62 @@
+{
+ "actions": [],
+ "creation": "2026-07-26 12:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "intro_html",
+  "designation_limits"
+ ],
+ "fields": [
+  {
+   "fieldname": "intro_html",
+   "fieldtype": "HTML",
+   "options": "<div class=\"alert alert-info\" style=\"font-size:13px;\">\n<b>Two independent limits per designation:</b>\n<ul style=\"margin:6px 0 0 18px;padding:0;\">\n<li><b>Max Approval Authority</b> \u2014 the largest amount a person of this designation can <b>approve for others</b> (approvals route up <i>Reports To</i> until someone has enough authority).</li>\n<li><b>Max Self Advance</b> \u2014 the largest <b>Employee Advance</b> a person of this designation may hold for themselves.</li>\n</ul>\n<div style=\"margin-top:6px;\">Board of Directors has unlimited approval authority regardless of the amount entered. Designations not listed here fall back to built-in defaults.</div>\n</div>"
+  },
+  {
+   "fieldname": "designation_limits",
+   "fieldtype": "Table",
+   "label": "Designation Limits",
+   "options": "Designation Approval Limit"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-07-26 12:00:00",
+ "modified_by": "Administrator",
+ "module": "Volunteering",
+ "name": "Approval and Advance Limits",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "Accounts Manager",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "HR Manager"
+  },
+  {
+   "read": 1,
+   "role": "NGO Board Member"
+  },
+  {
+   "read": 1,
+   "role": "NGO Board Chairperson"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

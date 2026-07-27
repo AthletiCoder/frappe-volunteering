@@ -178,44 +178,42 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 			or frappe.db.get_value("Workspace", {"label": "My Expenses"}, "name")
 		)
 		self.assertTrue(frappe.db.exists("Workspace Sidebar", "My Expenses"))
-
-		expenses_sidebar = frappe.get_doc("Workspace Sidebar", "My Expenses")
-		url_links = {
-			(item.get("url") or item.link_to)
-			for item in expenses_sidebar.items
-			if item.link_type == "URL" and (item.get("url") or item.link_to)
-		}
-		self.assertIn("/volunteering/budget-health", url_links)
-		self.assertIn("/volunteering/advances", url_links)
-		page_links = {
-			item.link_to
-			for item in expenses_sidebar.items
-			if item.link_type == "Page" and item.link_to
-		}
+		sidebar = frappe.get_doc("Workspace Sidebar", "My Expenses")
+		# Shell only — workspace home link, no duplicated DocType nav
+		labels = [item.label for item in sidebar.items if item.type == "Link"]
+		self.assertEqual(labels, ["My Expenses"])
 		self.assertFalse(
 			{
-				"pending-my-approval",
-				"pending-reimburse",
-				"pending-vendor-pay",
-				"project-budget-health",
-				"advance-portal",
+				"My Expense Claims",
+				"Claims to Reimburse",
+				"Advance Portal",
+				"Budget Health",
 			}
-			& page_links
+			& set(labels)
 		)
 
-		doctype_labels = {
-			item.label
-			for item in expenses_sidebar.items
-			if item.link_type == "DocType" and item.label
-		}
+		ws = frappe.get_doc(
+			"Workspace",
+			frappe.db.exists("Workspace", "My Expenses")
+			or frappe.db.get_value("Workspace", {"label": "My Expenses"}, "name"),
+		)
+		shortcut_labels = {s.label for s in ws.shortcuts}
+		self.assertIn("Advance Portal", shortcut_labels)
+		self.assertIn("Budget Health", shortcut_labels)
 		self.assertTrue(
 			{
 				"Expense Claims Pending Me",
 				"Claims to Reimburse",
 				"Vendor Invoices to Pay",
 			}
-			<= doctype_labels
+			<= shortcut_labels
 		)
+		advance = next(s for s in ws.shortcuts if s.label == "Advance Portal")
+		self.assertEqual(advance.type, "URL")
+		self.assertEqual(advance.url, "/volunteering/advances")
+		budget = next(s for s in ws.shortcuts if s.label == "Budget Health")
+		self.assertEqual(budget.type, "URL")
+		self.assertEqual(budget.url, "/volunteering/budget-health")
 
 		if frappe.db.exists("Workspace Sidebar", "Volunteering"):
 			vol_sidebar = frappe.get_doc("Workspace Sidebar", "Volunteering")

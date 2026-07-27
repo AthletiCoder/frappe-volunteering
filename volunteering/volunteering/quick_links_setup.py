@@ -6,8 +6,6 @@ import json
 
 import frappe
 
-from volunteering.volunteering.people_manager_setup import PEOPLE_MANAGER_ROLE
-
 WORKSPACE_NAME = "My Work"
 SIDEBAR_NAME = "My Work"
 LEGACY_WORKSPACE_NAMES = ("Quick Links", "Staff Hub", "Employee Hub")
@@ -112,21 +110,13 @@ LEGACY_PENDING_LABELS = (
 
 
 def ensure_my_work():
-	"""Rename legacy hubs, rebuild My Work workspace + sidebar."""
+	"""Rename legacy hubs, rebuild My Work workspace; drop redundant sidebar."""
 	try:
-		from volunteering.volunteering.people_manager_setup import (
-			backfill_people_manager_roles,
-			ensure_people_manager_role,
-		)
-
-		ensure_people_manager_role()
-		backfill_people_manager_roles()
 		_delete_legacy_quick_links_workspace()
 		_rename_legacy_workspace()
-		_rename_legacy_sidebar()
 		_ensure_workspace_once()
 		_rebuild_workspace()
-		_rebuild_sidebar()
+		_ensure_minimal_sidebar()
 	except Exception:
 		frappe.log_error(title="My Work setup failed", message=frappe.get_traceback())
 
@@ -283,7 +273,7 @@ def _rebuild_workspace():
 			},
 		)
 
-	for role in ("Employee", "HR User", "HR Manager", "System Manager", "Leave Approver", PEOPLE_MANAGER_ROLE):
+	for role in ("Employee", "HR User", "HR Manager", "System Manager", "Leave Approver"):
 		if frappe.db.exists("Role", role):
 			ws.append("roles", {"role": role})
 
@@ -336,60 +326,30 @@ def _rebuild_workspace():
 	ws.save(ignore_permissions=True)
 
 
-def _rebuild_sidebar():
-	"""Slim sidebar: Self Service + Awaiting my Approval (DocType links for nav)."""
-	items = [
-		{
-			"type": "Link",
-			"label": WORKSPACE_NAME,
-			"link_to": WORKSPACE_NAME,
-			"link_type": "Workspace",
-			"icon": "briefcase",
-			"child": 0,
-			"collapsible": 0,
-			"indent": 0,
-			"keep_closed": 0,
-			"show_arrow": 0,
-		},
-		{
-			"type": "Section Break",
-			"label": "Self Service",
-			"icon": "users",
-			"collapsible": 1,
-			"indent": 0,
-			"keep_closed": 0,
-			"show_arrow": 1,
-			"child": 0,
-		},
-	]
-	for spec, icon in zip(
-		SELF_SERVICE_SHORTCUTS,
-		("file-text", "calendar", "calendar", "check-circle", "edit"),
-	):
-		if frappe.db.exists("DocType", spec["link_to"]):
-			items.append(_doctype_item(spec["link_to"], icon, label=spec["label"]))
-
-	items.append(
-		{
-			"type": "Section Break",
-			"label": "Awaiting my Approval",
-			"icon": "check-circle",
-			"collapsible": 1,
-			"indent": 0,
-			"keep_closed": 0,
-			"show_arrow": 1,
-			"child": 0,
-		}
-	)
-	for spec, icon in zip(APPROVER_SHORTCUTS, ("calendar", "calendar")):
-		if frappe.db.exists("DocType", spec["link_to"]):
-			items.append(_doctype_item(spec["link_to"], icon, label=spec["label"]))
+def _ensure_minimal_sidebar():
+	"""Keep a sidebar shell so Desktop Icons (link_type=Workspace Sidebar) still open
+	the workspace page — but do not duplicate workspace shortcut destinations."""
+	_home = {
+		"type": "Link",
+		"label": WORKSPACE_NAME,
+		"link_to": WORKSPACE_NAME,
+		"link_type": "Workspace",
+		"icon": "briefcase",
+		"child": 0,
+		"collapsible": 0,
+		"indent": 0,
+		"keep_closed": 0,
+		"show_arrow": 0,
+	}
+	for legacy in LEGACY_SIDEBAR_NAMES:
+		if legacy != SIDEBAR_NAME and frappe.db.exists("Workspace Sidebar", legacy):
+			frappe.delete_doc("Workspace Sidebar", legacy, force=True, ignore_permissions=True)
 
 	if frappe.db.exists("Workspace Sidebar", SIDEBAR_NAME):
 		sidebar = frappe.get_doc("Workspace Sidebar", SIDEBAR_NAME)
 		sidebar.items = []
-		for row in items:
-			sidebar.append("items", row)
+		sidebar.append("items", _home)
+		sidebar.header_icon = "briefcase"
 		sidebar.flags.ignore_links = True
 		sidebar.save(ignore_permissions=True)
 		return
@@ -399,7 +359,7 @@ def _rebuild_sidebar():
 			"doctype": "Workspace Sidebar",
 			"title": SIDEBAR_NAME,
 			"header_icon": "briefcase",
-			"items": items,
+			"items": [_home],
 		}
 	).insert(ignore_permissions=True)
 

@@ -1,62 +1,62 @@
 frappe.ui.form.on("Daily Work Log Settings", {
 	refresh(frm) {
-		if (
-			!frappe.user.has_role("HR Manager") &&
-			!frappe.user.has_role("System Manager")
-		) {
-			return;
-		}
-
-		frm.add_custom_button(__("Process Attendance"), () => {
-			const yesterday = frappe.datetime.add_days(frappe.datetime.get_today(), -1);
-
-			frappe.prompt(
-				[
-					{
-						label: __("Attendance Date"),
-						fieldname: "attendance_date",
-						fieldtype: "Date",
-						reqd: 1,
-						default: yesterday,
-					},
-				],
-				(values) => {
-					frappe.call({
-						method:
-							"volunteering.volunteering.doctype.daily_work_log_settings.daily_work_log_settings.trigger_attendance_job",
-						args: {
-							attendance_date: values.attendance_date,
-						},
-						freeze: true,
-						freeze_message: __("Processing attendance..."),
-						callback(r) {
-							const summary = r.message;
-							if (!summary || summary.skipped) {
-								return;
-							}
-
-							frappe.msgprint({
-								title: __("Attendance Processed"),
-								message: __(
-									"Date: {0}<br>Employees processed: {1}<br>Created: {2}<br>Updated: {3}<br>Unchanged: {4}<br>Skipped: {5}<br>Errors: {6}",
-									[
-										summary.attendance_date,
-										summary.processed,
-										summary.created,
-										summary.updated,
-										summary.unchanged,
-										summary.skipped,
-										summary.errors,
-									]
-								),
-								indicator: summary.errors ? "orange" : "green",
-							});
-						},
-					});
-				},
-				__("Process Attendance"),
-				__("Run")
-			);
-		});
+		frm.add_custom_button(__("Preview Summary"), () => preview_digest(frm), __("Work Log Summary"));
+		frm.add_custom_button(__("Send Summary Now"), () => send_digest_now(frm), __("Work Log Summary"));
 	},
 });
+
+function preview_digest(frm) {
+	frappe.call({
+		method: "volunteering.volunteering.api.attendance_digest.preview_work_log_digest",
+		freeze: true,
+		freeze_message: __("Building preview…"),
+		callback(r) {
+			const data = r.message || {};
+			const recipients = (data.recipients || []).join(", ") || __("(no recipients configured)");
+			const dialog = new frappe.ui.Dialog({
+				title: __("{0} Summary Preview", [data.label || ""]),
+				size: "large",
+				fields: [
+					{
+						fieldtype: "HTML",
+						fieldname: "preview",
+					},
+				],
+			});
+			dialog.fields_dict.preview.$wrapper.html(
+				`<p style="font-size:12px;color:#64748b;margin-bottom:12px;">
+					<b>${__("Recipients")}:</b> ${frappe.utils.escape_html(recipients)}
+				</p>` + (data.html || "")
+			);
+			dialog.show();
+		},
+	});
+}
+
+function send_digest_now(frm) {
+	frappe.confirm(
+		__("Send the work log summary email now to all configured recipients?"),
+		() => {
+			frappe.call({
+				method: "volunteering.volunteering.api.attendance_digest.send_work_log_digest_now",
+				freeze: true,
+				freeze_message: __("Sending…"),
+				callback(r) {
+					const data = r.message || {};
+					if (data.skipped) {
+						frappe.msgprint({
+							title: __("Not Sent"),
+							message: __("Skipped: {0}", [data.reason || "unknown"]),
+							indicator: "orange",
+						});
+						return;
+					}
+					frappe.show_alert({
+						message: __("Summary sent to {0} recipient(s).", [(data.recipients || []).length]),
+						indicator: "green",
+					});
+				},
+			});
+		}
+	);
+}

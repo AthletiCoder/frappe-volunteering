@@ -47,12 +47,27 @@ def get_accounting_settings():
 	)
 
 
+def get_limit_rows(settings=None):
+	"""Saved designation-limit rows.
+
+	If a settings object with `designation_limits` is passed (tests inject
+	these), use it; otherwise read the Approval and Advance Limits single.
+	"""
+	if settings is not None and settings.get("designation_limits"):
+		return settings.get("designation_limits")
+
+	if frappe.db.exists("DocType", "Approval and Advance Limits"):
+		return frappe.get_cached_doc("Approval and Advance Limits").get("designation_limits") or []
+
+	return []
+
+
 def get_designation_limit_map(settings=None):
 	"""Return {designation_name: {max_approve_amount, max_advance_amount, unlimited}}.
 
-	Starts from DEFAULT_DESIGNATION_LIMITS, then overlays saved settings rows.
+	Starts from DEFAULT_DESIGNATION_LIMITS, then overlays saved rows from the
+	Approval and Advance Limits page.
 	"""
-	settings = settings or get_accounting_settings()
 	limits = {}
 	for designation, max_approve, max_advance in DEFAULT_DESIGNATION_LIMITS:
 		limits[designation] = {
@@ -60,7 +75,7 @@ def get_designation_limit_map(settings=None):
 			"max_advance_amount": flt(max_advance),
 			"unlimited": designation in UNLIMITED_DESIGNATIONS,
 		}
-	for row in settings.get("designation_limits") or []:
+	for row in get_limit_rows(settings):
 		if not row.designation:
 			continue
 		unlimited = row.designation in UNLIMITED_DESIGNATIONS

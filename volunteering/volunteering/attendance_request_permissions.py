@@ -54,9 +54,6 @@ def has_permission(doc, ptype, user):
 
 	employee = frappe.db.get_value("Employee", {"user_id": user}, "name")
 	if not employee:
-		# #region agent log
-		_agent_dbg("A", "attendance_request_permissions.py:has_permission", "no employee for user", {"user": user, "ptype": ptype})
-		# #endregion
 		return False
 
 	is_own = doc.employee == employee
@@ -64,22 +61,6 @@ def has_permission(doc, ptype, user):
 
 	# Approval actions: only the reporting manager
 	if ptype in {"submit", "cancel", "amend"}:
-		# #region agent log
-		_agent_dbg(
-			"A",
-			"attendance_request_permissions.py:has_permission",
-			"submit/cancel check",
-			{
-				"user": user,
-				"ptype": ptype,
-				"doc_employee": doc.employee,
-				"session_employee": employee,
-				"is_own": is_own,
-				"is_manager": is_manager,
-				"allowed": is_manager,
-			},
-		)
-		# #endregion
 		return is_manager
 
 	if ptype in {"read", "print", "email", "export", "report"}:
@@ -96,6 +77,7 @@ def validate_attendance_request(doc, method=None):
 	"""Non-HR users may only create Attendance Requests for themselves."""
 	if frappe.session.user == "Administrator":
 		return
+
 	roles = set(frappe.get_roles(frappe.session.user))
 	if roles.intersection(HR_ROLES):
 		return
@@ -108,32 +90,3 @@ def validate_attendance_request(doc, method=None):
 		doc.employee = session_employee
 	elif doc.employee != session_employee:
 		frappe.throw(_("You can only create Attendance Requests for yourself."))
-
-
-def _agent_dbg(hypothesis_id, location, message, data):
-	try:
-		import json
-		import time
-
-		with open(
-			"/Users/varunkumar/Documents/coding/erp/erpnext/frappe-bench/.cursor/debug-4c4245.log",
-			"a",
-			encoding="utf-8",
-		) as f:
-			f.write(
-				json.dumps(
-					{
-						"sessionId": "4c4245",
-						"hypothesisId": hypothesis_id,
-						"location": location,
-						"message": message,
-						"data": data,
-						"timestamp": int(time.time() * 1000),
-						"runId": "pre-fix",
-					}
-				)
-				+ "\n"
-			)
-	except Exception:
-		pass
-

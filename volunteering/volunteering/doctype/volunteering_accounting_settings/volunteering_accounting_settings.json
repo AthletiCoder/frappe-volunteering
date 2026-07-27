@@ -6,7 +6,6 @@
  "field_order": [
   "approval_section",
   "use_designation_approval",
-  "designation_limits",
   "legacy_thresholds_section",
   "tier_1_limit",
   "tier_2_limit",
@@ -40,17 +39,10 @@
   },
   {
    "default": "1",
-   "description": "Route approvals via Employee Designation limits and Reports To. Managers below the amount limit may only Reject or Escalate.",
+   "description": "Route approvals via Employee Designation limits and Reports To. Managers below the amount limit may only Reject or Escalate. Configure per-designation amounts on the Approval and Advance Limits page.",
    "fieldname": "use_designation_approval",
    "fieldtype": "Check",
    "label": "Use Designation + Reports To Approval"
-  },
-  {
-   "description": "Two independent limits per designation: how much they can APPROVE for others, and how large a SELF advance they can hold.",
-   "fieldname": "designation_limits",
-   "fieldtype": "Table",
-   "label": "Designation Approval & Advance Limits",
-   "options": "Designation Approval Limit"
   },
   {
    "collapsible": 1,

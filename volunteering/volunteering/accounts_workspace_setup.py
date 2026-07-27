@@ -10,12 +10,8 @@ from volunteering.volunteering.accounting_dashboard.setup import (
 	RETIRED_PENDING_PAGES,
 	SPA_ADVANCE_PORTAL,
 	SPA_BUDGET_HEALTH,
-	_budget_sidebar_block,
 	_is_valid_sidebar_link,
-	_url_sidebar_item,
 )
-from volunteering.volunteering.people_manager_setup import PEOPLE_MANAGER_ROLE
-
 WORKSPACE_NAME = "My Expenses"
 SIDEBAR_NAME = "My Expenses"
 LEGACY_WORKSPACE_NAMES = ("Accounts",)
@@ -106,6 +102,12 @@ OPS_SHORTCUTS = (
 		"color": "Orange",
 		"stats_filter": VENDOR_PAY_FILTER,
 	},
+	{
+		"label": "Approval & Advance Limits",
+		"link_to": "Approval and Advance Limits",
+		"color": "Grey",
+		"stats_filter": "",
+	},
 )
 
 
@@ -116,10 +118,9 @@ def ensure_accounts_workspace():
 def ensure_my_expenses():
 	try:
 		_rename_legacy_workspace()
-		_rename_legacy_sidebar()
 		_ensure_workspace_once()
 		_rebuild_workspace()
-		_rebuild_sidebar()
+		_ensure_minimal_sidebar()
 		_strip_accounting_from_volunteering_sidebar()
 	except Exception:
 		frappe.log_error(title="My Expenses setup failed", message=frappe.get_traceback())
@@ -278,6 +279,17 @@ def _rebuild_workspace():
 			"color": "Green",
 		},
 	)
+	if frappe.db.exists("Report", "Employee Advances with Residual"):
+		ws.append(
+			"shortcuts",
+			{
+				"type": "Report",
+				"label": "Advances with Residual",
+				"link_to": "Employee Advances with Residual",
+				"color": "Orange",
+				"report_ref_doctype": "Employee Advance",
+			},
+		)
 
 	for role in (
 		"Employee",
@@ -288,7 +300,7 @@ def _rebuild_workspace():
 		"NGO Board Member",
 		"NGO Board Chairperson",
 		"System Manager",
-		PEOPLE_MANAGER_ROLE,
+		"Leave Approver",
 	):
 		if frappe.db.exists("Role", role):
 			ws.append("roles", {"role": role})
@@ -338,6 +350,14 @@ def _rebuild_workspace():
 			"data": {"shortcut_name": "Budget Health", "col": 4},
 		}
 	)
+	if frappe.db.exists("Report", "Employee Advances with Residual"):
+		content.append(
+			{
+				"id": "ac-sc-residual",
+				"type": "shortcut",
+				"data": {"shortcut_name": "Advances with Residual", "col": 4},
+			}
+		)
 	ws.content = json.dumps(content)
 
 	ws.flags.ignore_links = True
@@ -346,40 +366,30 @@ def _rebuild_workspace():
 	ws.save(ignore_permissions=True)
 
 
-def _rebuild_sidebar():
-	items = [
-		{
-			"type": "Link",
-			"label": WORKSPACE_NAME,
-			"link_to": WORKSPACE_NAME,
-			"link_type": "Workspace",
-			"icon": "layout-dashboard",
-			"child": 0,
-			"collapsible": 0,
-			"indent": 0,
-			"keep_closed": 0,
-			"show_arrow": 0,
-		},
-		_section("My Spend", "expense"),
-		_doctype_item("Expense Claim", "expense", "My Expense Claims"),
-		_doctype_item("Employee Advance", "money-coins-1", "My Advances"),
-		_doctype_item("Purchase Order", "buying", "My Purchase Orders"),
-		_url_sidebar_item(SPA_ADVANCE_PORTAL),
-		_section("Awaiting my Approval", "inbox"),
-		_doctype_item("Expense Claim", "expense", "Expense Claims Pending Me"),
-		_doctype_item("Employee Advance", "money-coins-1", "Advances Pending Me"),
-		_doctype_item("Purchase Order", "buying", "Purchase Orders Pending Me"),
-		_section("Accounts Ops", "wallet"),
-		_doctype_item("Expense Claim", "expense", "Claims to Reimburse"),
-		_doctype_item("Purchase Invoice", "file", "Vendor Invoices to Pay"),
-	]
-	items.extend(_budget_sidebar_block())
+def _ensure_minimal_sidebar():
+	"""Keep a sidebar shell so Desktop Icons still open the workspace page.
+	Do not list spend/approval DocTypes here — those live on workspace shortcuts."""
+	_home = {
+		"type": "Link",
+		"label": WORKSPACE_NAME,
+		"link_to": WORKSPACE_NAME,
+		"link_type": "Workspace",
+		"icon": "expense",
+		"child": 0,
+		"collapsible": 0,
+		"indent": 0,
+		"keep_closed": 0,
+		"show_arrow": 0,
+	}
+	for legacy in LEGACY_SIDEBAR_NAMES:
+		if legacy != SIDEBAR_NAME and frappe.db.exists("Workspace Sidebar", legacy):
+			frappe.delete_doc("Workspace Sidebar", legacy, force=True, ignore_permissions=True)
 
 	if frappe.db.exists("Workspace Sidebar", SIDEBAR_NAME):
 		sidebar = frappe.get_doc("Workspace Sidebar", SIDEBAR_NAME)
 		sidebar.items = []
-		for row in items:
-			sidebar.append("items", row)
+		sidebar.append("items", _home)
+		sidebar.header_icon = "expense"
 		sidebar.flags.ignore_links = True
 		sidebar.save(ignore_permissions=True)
 		return
@@ -389,7 +399,7 @@ def _rebuild_sidebar():
 			"doctype": "Workspace Sidebar",
 			"title": SIDEBAR_NAME,
 			"header_icon": "expense",
-			"items": items,
+			"items": [_home],
 		}
 	).insert(ignore_permissions=True)
 
