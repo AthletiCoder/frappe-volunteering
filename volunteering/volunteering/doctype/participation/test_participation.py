@@ -308,7 +308,7 @@ class IntegrationTestParticipation(IntegrationTestCase):
         with self.assertRaises(frappe.ValidationError):
             update_participation_field(participation.name, "event", other_event.name)
 
-    def test_update_participation_field_requires_rating_when_logged(self):
+    def test_update_participation_field_allows_completed_without_rating(self):
         event = self.create_event()
         volunteer = frappe.get_doc(
             {
@@ -330,8 +330,10 @@ class IntegrationTestParticipation(IntegrationTestCase):
             update_participation_field,
         )
 
-        with self.assertRaises(frappe.ValidationError):
-            update_participation_field(participation.name, "logging_status", "Completed")
+        update_participation_field(participation.name, "logging_status", "Completed")
+        participation.reload()
+        self.assertEqual(participation.logging_status, "Completed")
+        self.assertFalse(participation.rm_rating)
 
     def test_participation_copies_relationship_manager_on_insert(self):
         event = self.create_event()

@@ -1,0 +1,234 @@
+{
+ "actions": [],
+ "creation": "2026-06-12 12:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "approval_section",
+  "use_designation_approval",
+  "legacy_thresholds_section",
+  "tier_1_limit",
+  "tier_2_limit",
+  "spend_rules_section",
+  "vendor_payment_threshold",
+  "cash_payment_limit",
+  "invoice_split_window_days",
+  "max_unsettled_advances",
+  "advance_replenish_residual_pct",
+  "default_advance_project",
+  "monthly_reimbursement_cap",
+  "budget_section",
+  "enable_budget_warnings",
+  "budget_hard_block_pct",
+  "budget_override_role",
+  "emergency_section",
+  "emergency_submit_working_days",
+  "emergency_approve_working_days",
+  "post_facto_section",
+  "post_facto_max_days",
+  "post_facto_max_per_month",
+  "payout_prep_section",
+  "preferred_payout_mode",
+  "payout_provider"
+ ],
+ "fields": [
+  {
+   "fieldname": "approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval Authority"
+  },
+  {
+   "default": "1",
+   "description": "Route approvals via Employee Designation limits and Reports To. Managers below the amount limit may only Reject or Escalate. Configure per-designation amounts on the Approval and Advance Limits page.",
+   "fieldname": "use_designation_approval",
+   "fieldtype": "Check",
+   "label": "Use Designation + Reports To Approval"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "legacy_thresholds_section",
+   "fieldtype": "Section Break",
+   "label": "Legacy Amount Tiers (fallback when designation approval is off)"
+  },
+  {
+   "default": "2000",
+   "fieldname": "tier_1_limit",
+   "fieldtype": "Currency",
+   "label": "Tier 1 Limit",
+   "reqd": 1
+  },
+  {
+   "default": "10000",
+   "fieldname": "tier_2_limit",
+   "fieldtype": "Currency",
+   "label": "Tier 2 Limit",
+   "reqd": 1
+  },
+  {
+   "fieldname": "spend_rules_section",
+   "fieldtype": "Section Break",
+   "label": "Spend Rules"
+  },
+  {
+   "default": "5000",
+   "description": "Above this amount, prefer Purchase Order / vendor payment. Reimbursement may continue with a reason.",
+   "fieldname": "vendor_payment_threshold",
+   "fieldtype": "Currency",
+   "label": "Vendor Payment Threshold",
+   "reqd": 1
+  },
+  {
+   "default": "2000",
+   "fieldname": "cash_payment_limit",
+   "fieldtype": "Currency",
+   "label": "Cash Payment Limit",
+   "reqd": 1
+  },
+  {
+   "default": "7",
+   "fieldname": "invoice_split_window_days",
+   "fieldtype": "Int",
+   "label": "Invoice Split Detection Window (Days)",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "description": "Maximum advances whose residual exceeds the replenish threshold. Small leftovers at or below the threshold do not block a new (replenish) advance.",
+   "fieldname": "max_unsettled_advances",
+   "fieldtype": "Int",
+   "label": "Max Blocking Unsettled Advances Per Employee",
+   "reqd": 1
+  },
+  {
+   "default": "10",
+   "description": "If residual on a paid advance is at or below this percent of paid amount, staff may request a replenishment advance. Residuals are not auto-written-off.",
+   "fieldname": "advance_replenish_residual_pct",
+   "fieldtype": "Percent",
+   "label": "Advance Replenish Residual %",
+   "reqd": 1
+  },
+  {
+   "description": "Hidden on Employee Advance forms; auto-set when staff raise advances so budgets still track spend.",
+   "fieldname": "default_advance_project",
+   "fieldtype": "Link",
+   "label": "Default Advance Project",
+   "options": "Project"
+  },
+  {
+   "default": "0",
+   "description": "Optional. When > 0, Expense Claims for an employee in a calendar month cannot exceed this total (0 = disabled). Expense Claim = reimbursement for money you already paid.",
+   "fieldname": "monthly_reimbursement_cap",
+   "fieldtype": "Currency",
+   "label": "Monthly Reimbursement Cap (per employee)"
+  },
+  {
+   "fieldname": "budget_section",
+   "fieldtype": "Section Break",
+   "label": "Budget Controls"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_budget_warnings",
+   "fieldtype": "Check",
+   "label": "Enable Soft Budget Warnings"
+  },
+  {
+   "default": "25",
+   "description": "Block approval when proposed spend exceeds allocated budget by more than this percent, unless override role applies.",
+   "fieldname": "budget_hard_block_pct",
+   "fieldtype": "Percent",
+   "label": "Budget Hard-Block Overspend %",
+   "reqd": 1
+  },
+  {
+   "default": "NGO Board Chairperson",
+   "fieldname": "budget_override_role",
+   "fieldtype": "Link",
+   "label": "Budget Override Role",
+   "options": "Role"
+  },
+  {
+   "fieldname": "emergency_section",
+   "fieldtype": "Section Break",
+   "label": "Emergency Purchases"
+  },
+  {
+   "default": "1",
+   "fieldname": "emergency_submit_working_days",
+   "fieldtype": "Int",
+   "label": "Emergency Submit Within Working Days",
+   "reqd": 1
+  },
+  {
+   "default": "2",
+   "fieldname": "emergency_approve_working_days",
+   "fieldtype": "Int",
+   "label": "Emergency Approve Within Working Days",
+   "reqd": 1
+  },
+  {
+   "fieldname": "post_facto_section",
+   "fieldtype": "Section Break",
+   "label": "Post-Facto Purchase (legacy settings)"
+  },
+  {
+   "default": "7",
+   "fieldname": "post_facto_max_days",
+   "fieldtype": "Int",
+   "label": "Post-Facto Max Days After Invoice"
+  },
+  {
+   "default": "2",
+   "fieldname": "post_facto_max_per_month",
+   "fieldtype": "Int",
+   "label": "Post-Facto Max Per Employee Per Month"
+  },
+  {
+   "fieldname": "payout_prep_section",
+   "fieldtype": "Section Break",
+   "label": "Payout Provider (future Cashfree)"
+  },
+  {
+   "default": "Manual",
+   "fieldname": "preferred_payout_mode",
+   "fieldtype": "Select",
+   "label": "Preferred Payout Mode",
+   "options": "Manual\nCashfree Payout"
+  },
+  {
+   "default": "manual",
+   "description": "Stub for Phase 2 Cashfree Payouts. Payment Entry remains the accounting voucher.",
+   "fieldname": "payout_provider",
+   "fieldtype": "Select",
+   "label": "Payout Provider",
+   "options": "manual\ncashfree"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-07-21 12:00:00",
+ "modified_by": "Administrator",
+ "module": "Volunteering",
+ "name": "Volunteering Accounting Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Accounts Manager",
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

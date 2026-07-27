@@ -25,8 +25,13 @@ required_apps = ["hrms"]
 # ------------------
 
 # include js, css files in header of desk.html
-# app_include_css = "/assets/volunteering/css/volunteering.css"
-# app_include_js = "/assets/volunteering/js/volunteering.js"
+app_include_js = ["/assets/volunteering/js/form_hints.js"]
+
+# Website route for Frappe UI SPA (falls back to Desk pages if not built)
+website_route_rules = [
+	{"from_route": "/volunteering/<path:app_path>", "to_route": "volunteering"},
+	{"from_route": "/volunteering", "to_route": "volunteering"},
+]
 
 # include js, css files in header of web template
 # web_include_css = "/assets/volunteering/css/volunteering.css"
@@ -52,6 +57,11 @@ doctype_list_js = {
 doctype_js = {
     "Employee": "volunteering/doctype/daily_work_log/employee_daily_work_log.js",
     "Leave Application": "public/js/leave_application.js",
+    "Attendance Request": "public/js/attendance_request.js",
+    "Expense Claim": "public/js/accounting_workflow.js",
+    "Purchase Order": "public/js/accounting_workflow.js",
+    "Employee Advance": "public/js/accounting_workflow.js",
+    "Purchase Invoice": "public/js/purchase_invoice.js",
 }
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -135,16 +145,22 @@ permission_query_conditions = {
     "Participation": "volunteering.volunteering.participation_permissions.get_permission_query_conditions",
     "Reciprocation": "volunteering.volunteering.reciprocation_permissions.get_permission_query_conditions",
     "Daily Work Log": "volunteering.volunteering.daily_work_log_permissions.get_permission_query_conditions",
+    "Expense Claim": "volunteering.volunteering.expense_claim_permissions.get_permission_query_conditions",
+    "Employee Advance": "volunteering.volunteering.employee_advance_permissions.get_permission_query_conditions",
     "Manager Note": "volunteering.volunteering.manager_note_permissions.get_permission_query_conditions",
     "Attendance Request": "volunteering.volunteering.attendance_request_permissions.get_permission_query_conditions",
+    "Attendance": "volunteering.volunteering.attendance_permissions.get_permission_query_conditions",
 }
 
 # Override "Has Permission" logic for specific row-level updates
 has_permission = {
     "Volunteer": "volunteering.volunteering.volunteer_permissions.has_permission",
     "Daily Work Log": "volunteering.volunteering.daily_work_log_permissions.has_permission",
+    "Expense Claim": "volunteering.volunteering.expense_claim_permissions.has_permission",
+    "Employee Advance": "volunteering.volunteering.employee_advance_permissions.has_permission",
     "Manager Note": "volunteering.volunteering.manager_note_permissions.has_permission",
     "Attendance Request": "volunteering.volunteering.attendance_request_permissions.has_permission",
+    "Attendance": "volunteering.volunteering.attendance_permissions.has_permission",
 }
 
 # permission_query_conditions = {
@@ -160,11 +176,79 @@ has_permission = {
 # Hook on document methods and events
 
 doc_events = {
+	"Purchase Invoice": {
+		"before_save": [
+			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
+			"volunteering.volunteering.accounting_controls.validate_project_has_cost_center",
+			"volunteering.volunteering.accounting_controls.assign_department_from_owner",
+			"volunteering.volunteering.budget_service.validate_budget_on_save",
+		],
+		"before_submit": "volunteering.volunteering.accounting_controls.validate_purchase_invoice_po_chain",
+	},
+	"Expense Claim": {
+		"before_save": [
+			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
+			"volunteering.volunteering.accounting_controls.validate_project_has_cost_center",
+			"volunteering.volunteering.accounting_controls.assign_department_from_employee",
+			"volunteering.volunteering.approval_routing.before_accounting_document_save",
+			"volunteering.volunteering.budget_service.validate_budget_on_save",
+			"volunteering.volunteering.spend_controls.validate_spend_controls",
+			"volunteering.volunteering.reimbursement_controls.validate_reimbursement_cap",
+		],
+		# Approve sets docstatus=1 and calls submit() (skips before_save) — re-check budget here.
+		"before_submit": [
+			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
+			"volunteering.volunteering.approval_routing.sync_expense_claim_approval_status_before_submit",
+			"volunteering.volunteering.budget_service.validate_budget_on_save",
+		],
+		"on_update": "volunteering.volunteering.approval_routing.on_accounting_workflow_state_change",
+	},
+	"Purchase Order": {
+		"before_save": [
+			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
+			"volunteering.volunteering.accounting_controls.validate_project_has_cost_center",
+			"volunteering.volunteering.accounting_controls.assign_department_from_owner",
+			"volunteering.volunteering.approval_routing.before_accounting_document_save",
+			"volunteering.volunteering.budget_service.validate_budget_on_save",
+			"volunteering.volunteering.spend_controls.validate_spend_controls",
+		],
+		"before_submit": [
+			"volunteering.volunteering.budget_service.validate_budget_on_save",
+		],
+		"on_update": "volunteering.volunteering.approval_routing.on_accounting_workflow_state_change",
+	},
+	"Employee Advance": {
+		"before_save": [
+			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
+			"volunteering.volunteering.accounting_controls.validate_project_has_cost_center",
+			"volunteering.volunteering.employee_advance_controls.before_employee_advance_save",
+			"volunteering.volunteering.approval_routing.before_accounting_document_save",
+			"volunteering.volunteering.budget_service.validate_budget_on_save",
+		],
+		"before_submit": [
+			"volunteering.volunteering.budget_service.validate_budget_on_save",
+		],
+		"on_update": "volunteering.volunteering.approval_routing.on_accounting_workflow_state_change",
+	},
+	"Payment Entry": {
+		"before_submit": [
+			"volunteering.volunteering.accounting_controls.validate_payment_entry",
+			"volunteering.volunteering.spend_controls.validate_spend_controls",
+		],
+		"on_submit": "volunteering.volunteering.disbursement_notifications.on_payment_entry_submit",
+	},
 	"Leave Application": {
 		"validate": "volunteering.volunteering.leave_policy.validate_leave_application",
 	},
+	"Attendance Request": {
+		"validate": "volunteering.volunteering.attendance_request_permissions.validate_attendance_request",
+	},
 	"Employee": {
 		"after_insert": "volunteering.volunteering.leave_setup.assign_default_leave_policy",
+		"validate": "volunteering.volunteering.leave_pending.sync_leave_approver_from_reports_to",
+	},
+	"Project": {
+		"validate": "volunteering.volunteering.budget_service.validate_project_department_budgets",
 	},
 }
 
@@ -174,6 +258,8 @@ after_migrate = [
 	"volunteering.volunteering.workspace_setup.backfill_participation_relationship_managers",
 	"volunteering.volunteering.hr_dashboard_setup.ensure_hr_dashboards",
 	"volunteering.volunteering.quick_links_setup.ensure_quick_links",
+	"volunteering.volunteering.desk_icons_setup.ensure_desk_icons",
+	"volunteering.volunteering.accounting_setup.after_migrate",
 ]
 
 boot_session = "volunteering.volunteering.workspace_setup.boot_session"
@@ -184,6 +270,9 @@ boot_session = "volunteering.volunteering.workspace_setup.boot_session"
 scheduler_events = {
 	"daily": [
 		"volunteering.volunteering.api.digest.send_daily_donation_digest",
+	],
+	"weekly": [
+		"volunteering.volunteering.accounting_dashboard.setup.send_weekly_pending_approval_reminder",
 	],
 	"cron": {
 		"0 12 * * *": [
@@ -309,5 +398,10 @@ fixtures = [
         ],
     },
     {"dt": "Web Form", "filters": [["module", "=", "Volunteering"]]},
+    {"doctype": "Custom Field", "filters": [["dt", "in", ["Purchase Order", "Purchase Invoice", "Expense Claim", "Payment Entry"]]]},
+    {"doctype": "Property Setter", "filters": [["doc_type", "in", ["Purchase Order", "Purchase Invoice", "Expense Claim", "Payment Entry"]]]},
+    {"doctype": "Workflow", "filters": [["document_type", "in", ["Purchase Order", "Purchase Invoice", "Expense Claim", "Payment Entry", "Employee Advance"]]]},
+    "Workflow State",
+    "Workflow Action",
     {"doctype": "Custom Field", "filters": [["dt", "=", "Project"], ["fieldname", "=", "hours_per_kit"]]},
 ]

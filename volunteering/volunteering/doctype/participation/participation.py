@@ -162,9 +162,6 @@ class Participation(Document):
     def _validate_rating_inputs(self):
         rating_stars = _get_rm_rating_stars(self.rm_rating)
 
-        if self.logging_status == "Completed" and not rating_stars:
-            frappe.throw(_("Rating is required once Logging Status is Completed."))
-
         if rating_stars and (self.kits_delivered or 0) <= 0:
             frappe.throw(_("Kits Delivered must be greater than zero before rating."))
 

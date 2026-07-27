@@ -9,7 +9,12 @@
   "present_hours_threshold",
   "attendance_section",
   "enable_attendance_job",
+  "digest_section",
   "enable_board_digest",
+  "digest_frequency",
+  "digest_column_break",
+  "digest_sender",
+  "digest_recipient_roles",
   "board_digest_extra_recipients"
  ],
  "fields": [
@@ -44,21 +49,53 @@
    "label": "Enable Attendance Job"
   },
   {
-   "default": "1",
-   "fieldname": "enable_board_digest",
-   "fieldtype": "Check",
-   "label": "Enable Executive Board Digest"
+   "fieldname": "digest_section",
+   "fieldtype": "Section Break",
+   "label": "Work Log Summary Email"
   },
   {
-   "description": "Optional comma-separated emails in addition to Executive Board Member / Chairperson users",
+   "default": "1",
+   "description": "Send a summary of everyone's work logs (hours, projects, tasks, missing logs) by email.",
+   "fieldname": "enable_board_digest",
+   "fieldtype": "Check",
+   "label": "Enable Work Log Summary Email"
+  },
+  {
+   "default": "Daily",
+   "description": "Daily = yesterday. Weekly = previous Mon\u2013Sun (sent Monday). Monthly = previous month (sent on the 1st).",
+   "fieldname": "digest_frequency",
+   "fieldtype": "Select",
+   "label": "Frequency",
+   "options": "Daily\nWeekly\nMonthly"
+  },
+  {
+   "fieldname": "digest_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Optional. Sender address (must be a configured outgoing account). Blank = system default outgoing email.",
+   "fieldname": "digest_sender",
+   "fieldtype": "Data",
+   "label": "Send From (email)",
+   "options": "Email"
+  },
+  {
+   "default": "Executive Board Member\nExecutive Board Chairperson",
+   "description": "One role per line. Every enabled user holding any of these roles receives the summary.",
+   "fieldname": "digest_recipient_roles",
+   "fieldtype": "Small Text",
+   "label": "Recipient Roles"
+  },
+  {
+   "description": "Optional extra addresses (comma or newline separated), in addition to the roles above.",
    "fieldname": "board_digest_extra_recipients",
    "fieldtype": "Small Text",
-   "label": "Extra Digest Recipients"
+   "label": "Extra Recipient Emails"
   }
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-07-14 12:00:00",
+ "modified": "2026-07-26 12:00:00",
  "modified_by": "Administrator",
  "module": "Volunteering",
  "name": "Daily Work Log Settings",

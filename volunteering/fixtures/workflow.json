@@ -1,0 +1,458 @@
+[
+ {
+  "docstatus": 0,
+  "doctype": "Workflow",
+  "document_type": "Expense Claim",
+  "enable_action_confirmation": 1,
+  "is_active": 1,
+  "modified": "2026-07-21 12:00:00",
+  "name": "Expense Claim Approval",
+  "override_status": 0,
+  "send_email_alert": 1,
+  "states": [
+   {
+    "allow_edit": "Employee",
+    "avoid_status_override": 0,
+    "doc_status": "0",
+    "evaluate_as_expression": 0,
+    "is_optional_state": 0,
+    "send_email": 1,
+    "state": "Draft",
+    "workflow_builder_id": null
+   },
+   {
+    "allow_edit": "Employee",
+    "avoid_status_override": 0,
+    "doc_status": "0",
+    "evaluate_as_expression": 0,
+    "is_optional_state": 0,
+    "send_email": 1,
+    "state": "Pending Approval",
+    "workflow_builder_id": null
+   },
+   {
+    "allow_edit": "Accounts Manager",
+    "avoid_status_override": 0,
+    "doc_status": "1",
+    "evaluate_as_expression": 0,
+    "is_optional_state": 0,
+    "send_email": 1,
+    "state": "Approved",
+    "update_field": "approval_status",
+    "update_value": "Approved",
+    "workflow_builder_id": null
+   },
+   {
+    "allow_edit": "Employee",
+    "avoid_status_override": 0,
+    "doc_status": "0",
+    "evaluate_as_expression": 0,
+    "is_optional_state": 0,
+    "send_email": 1,
+    "state": "Rejected",
+    "update_field": "approval_status",
+    "update_value": "Rejected",
+    "workflow_builder_id": null
+   }
+  ],
+  "transitions": [
+   {
+    "action": "Submit",
+    "allow_self_approval": 1,
+    "allowed": "Employee",
+    "condition": null,
+    "next_state": "Pending Approval",
+    "send_email_to_creator": 0,
+    "state": "Draft",
+    "workflow_builder_id": null
+   },
+   {
+    "action": "Re-submit",
+    "allow_self_approval": 1,
+    "allowed": "Employee",
+    "condition": null,
+    "next_state": "Pending Approval",
+    "send_email_to_creator": 0,
+    "state": "Rejected",
+    "workflow_builder_id": null
+   },
+   {
+    "action": "Approve",
+    "allow_self_approval": 0,
+    "allowed": "Employee",
+    "condition": "frappe.session.user == doc.pending_approver",
+    "next_state": "Approved",
+    "send_email_to_creator": 1,
+    "state": "Pending Approval",
+    "workflow_builder_id": null
+   },
+   {
+    "action": "Reject",
+    "allow_self_approval": 0,
+    "allowed": "Employee",
+    "condition": "frappe.session.user == doc.pending_approver",
+    "next_state": "Rejected",
+    "send_email_to_creator": 1,
+    "state": "Pending Approval",
+    "workflow_builder_id": null
+   },
+   {
+    "action": "Approve",
+    "allow_self_approval": 0,
+    "allowed": "NGO Board Chairperson",
+    "condition": null,
+    "next_state": "Approved",
+    "send_email_to_creator": 1,
+    "state": "Pending Approval",
+    "workflow_builder_id": null
+   },
+   {
+    "action": "Reject",
+    "allow_self_approval": 0,
+    "allowed": "NGO Board Chairperson",
+    "condition": null,
+    "next_state": "Rejected",
+    "send_email_to_creator": 1,
+    "state": "Pending Approval",
+    "workflow_builder_id": null
+   },
+   {
+    "action": "Approve",
+    "allow_self_approval": 0,
+    "allowed": "Executive Board Chairperson",
+    "condition": null,
+    "next_state": "Approved",
+    "send_email_to_creator": 1,
+    "state": "Pending Approval",
+    "workflow_builder_id": null
+   }
+  ],
+  "workflow_data": null,
+  "workflow_name": "Expense Claim Approval",
+  "workflow_state_field": "workflow_state"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow",
+  "document_type": "Purchase Order",
+  "enable_action_confirmation": 1,
+  "is_active": 1,
+  "modified": "2026-07-21 12:00:00",
+  "name": "Purchase Order Approval",
+  "override_status": 0,
+  "send_email_alert": 1,
+  "states": [
+   {
+    "allow_edit": "Employee",
+    "avoid_status_override": 0,
+    "doc_status": "0",
+    "evaluate_as_expression": 0,
+    "is_optional_state": 0,
+    "send_email": 1,
+    "state": "Draft",
+    "workflow_builder_id": null
+   },
+   {
+    "allow_edit": "Employee",
+    "avoid_status_override": 0,
+    "doc_status": "0",
+    "evaluate_as_expression": 0,
+    "is_optional_state": 0,
+    "send_email": 1,
+    "state": "Pending Approval",
+    "workflow_builder_id": null
+   },
+   {
+    "allow_edit": "Accounts Manager",
+    "avoid_status_override": 0,
+    "doc_status": "1",
+    "evaluate_as_expression": 0,
+    "is_optional_state": 0,
+    "send_email": 1,
+    "state": "Approved",
+    "workflow_builder_id": null
+   },
+   {
+    "allow_edit": "Employee",
+    "avoid_status_override": 0,
+    "doc_status": "0",
+    "evaluate_as_expression": 0,
+    "is_optional_state": 0,
+    "send_email": 1,
+    "state": "Rejected",
+    "workflow_builder_id": null
+   }
+  ],
+  "transitions": [
+   {
+    "action": "Submit",
+    "allow_self_approval": 1,
+    "allowed": "Employee",
+    "condition": null,
+    "next_state": "Pending Approval",
+    "send_email_to_creator": 0,
+    "state": "Draft",
+    "workflow_builder_id": null
+   },
+   {
+    "action": "Re-submit",
+    "allow_self_approval": 1,
+    "allowed": "Employee",
+    "condition": null,
+    "next_state": "Pending Approval",
+    "send_email_to_creator": 0,
+    "state": "Rejected",
+    "workflow_builder_id": null
+   },
+   {
+    "action": "Approve",
+    "allow_self_approval": 0,
+    "allowed": "Employee",
+    "condition": "frappe.session.user == doc.pending_approver",
+    "next_state": "Approved",
+    "send_email_to_creator": 1,
+    "state": "Pending Approval",
+    "workflow_builder_id": null
+   },
+   {
+    "action": "Reject",
+    "allow_self_approval": 0,
+    "allowed": "Employee",
+    "condition": "frappe.session.user == doc.pending_approver",
+    "next_state": "Rejected",
+    "send_email_to_creator": 1,
+    "state": "Pending Approval",
+    "workflow_builder_id": null
+   },
+   {
+    "action": "Approve",
+    "allow_self_approval": 0,
+    "allowed": "NGO Board Chairperson",
+    "condition": null,
+    "next_state": "Approved",
+    "send_email_to_creator": 1,
+    "state": "Pending Approval",
+    "workflow_builder_id": null
+   },
+   {
+    "action": "Reject",
+    "allow_self_approval": 0,
+    "allowed": "NGO Board Chairperson",
+    "condition": null,
+    "next_state": "Rejected",
+    "send_email_to_creator": 1,
+    "state": "Pending Approval",
+    "workflow_builder_id": null
+   },
+   {
+    "action": "Approve",
+    "allow_self_approval": 0,
+    "allowed": "Executive Board Chairperson",
+    "condition": null,
+    "next_state": "Approved",
+    "send_email_to_creator": 1,
+    "state": "Pending Approval",
+    "workflow_builder_id": null
+   }
+  ],
+  "workflow_data": null,
+  "workflow_name": "Purchase Order Approval",
+  "workflow_state_field": "workflow_state"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow",
+  "document_type": "Employee Advance",
+  "enable_action_confirmation": 1,
+  "is_active": 1,
+  "modified": "2026-07-21 12:00:00",
+  "name": "Employee Advance Approval",
+  "override_status": 0,
+  "send_email_alert": 1,
+  "states": [
+   {
+    "allow_edit": "Employee",
+    "avoid_status_override": 0,
+    "doc_status": "0",
+    "evaluate_as_expression": 0,
+    "is_optional_state": 0,
+    "send_email": 1,
+    "state": "Draft",
+    "workflow_builder_id": null
+   },
+   {
+    "allow_edit": "Employee",
+    "avoid_status_override": 0,
+    "doc_status": "0",
+    "evaluate_as_expression": 0,
+    "is_optional_state": 0,
+    "send_email": 1,
+    "state": "Pending Approval",
+    "workflow_builder_id": null
+   },
+   {
+    "allow_edit": "Accounts Manager",
+    "avoid_status_override": 0,
+    "doc_status": "1",
+    "evaluate_as_expression": 0,
+    "is_optional_state": 0,
+    "send_email": 1,
+    "state": "Approved",
+    "workflow_builder_id": null
+   },
+   {
+    "allow_edit": "Employee",
+    "avoid_status_override": 0,
+    "doc_status": "0",
+    "evaluate_as_expression": 0,
+    "is_optional_state": 0,
+    "send_email": 1,
+    "state": "Rejected",
+    "workflow_builder_id": null
+   }
+  ],
+  "transitions": [
+   {
+    "action": "Submit",
+    "allow_self_approval": 1,
+    "allowed": "Employee",
+    "condition": null,
+    "next_state": "Pending Approval",
+    "send_email_to_creator": 0,
+    "state": "Draft",
+    "workflow_builder_id": null
+   },
+   {
+    "action": "Re-submit",
+    "allow_self_approval": 1,
+    "allowed": "Employee",
+    "condition": null,
+    "next_state": "Pending Approval",
+    "send_email_to_creator": 0,
+    "state": "Rejected",
+    "workflow_builder_id": null
+   },
+   {
+    "action": "Approve",
+    "allow_self_approval": 0,
+    "allowed": "Employee",
+    "condition": "frappe.session.user == doc.pending_approver",
+    "next_state": "Approved",
+    "send_email_to_creator": 1,
+    "state": "Pending Approval",
+    "workflow_builder_id": null
+   },
+   {
+    "action": "Reject",
+    "allow_self_approval": 0,
+    "allowed": "Employee",
+    "condition": "frappe.session.user == doc.pending_approver",
+    "next_state": "Rejected",
+    "send_email_to_creator": 1,
+    "state": "Pending Approval",
+    "workflow_builder_id": null
+   },
+   {
+    "action": "Approve",
+    "allow_self_approval": 0,
+    "allowed": "NGO Board Chairperson",
+    "condition": null,
+    "next_state": "Approved",
+    "send_email_to_creator": 1,
+    "state": "Pending Approval",
+    "workflow_builder_id": null
+   },
+   {
+    "action": "Reject",
+    "allow_self_approval": 0,
+    "allowed": "NGO Board Chairperson",
+    "condition": null,
+    "next_state": "Rejected",
+    "send_email_to_creator": 1,
+    "state": "Pending Approval",
+    "workflow_builder_id": null
+   },
+   {
+    "action": "Approve",
+    "allow_self_approval": 0,
+    "allowed": "Executive Board Chairperson",
+    "condition": null,
+    "next_state": "Approved",
+    "send_email_to_creator": 1,
+    "state": "Pending Approval",
+    "workflow_builder_id": null
+   }
+  ],
+  "workflow_data": null,
+  "workflow_name": "Employee Advance Approval",
+  "workflow_state_field": "workflow_state"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow",
+  "document_type": "Purchase Invoice",
+  "enable_action_confirmation": 1,
+  "is_active": 1,
+  "modified": "2026-07-21 12:00:00",
+  "name": "Purchase Invoice Workflow",
+  "override_status": 0,
+  "send_email_alert": 1,
+  "states": [
+   {
+    "allow_edit": "Employee",
+    "avoid_status_override": 0,
+    "doc_status": "0",
+    "evaluate_as_expression": 0,
+    "is_optional_state": 0,
+    "send_email": 1,
+    "state": "Draft",
+    "workflow_builder_id": null
+   },
+   {
+    "allow_edit": "Accounts Manager",
+    "avoid_status_override": 0,
+    "doc_status": "1",
+    "evaluate_as_expression": 0,
+    "is_optional_state": 0,
+    "send_email": 1,
+    "state": "Approved",
+    "workflow_builder_id": null
+   },
+   {
+    "allow_edit": "Employee",
+    "avoid_status_override": 0,
+    "doc_status": "0",
+    "evaluate_as_expression": 0,
+    "is_optional_state": 0,
+    "send_email": 1,
+    "state": "Rejected",
+    "workflow_builder_id": null
+   }
+  ],
+  "transitions": [
+   {
+    "action": "Submit",
+    "allow_self_approval": 1,
+    "allowed": "Employee",
+    "condition": null,
+    "next_state": "Approved",
+    "send_email_to_creator": 0,
+    "state": "Draft",
+    "workflow_builder_id": null
+   },
+   {
+    "action": "Re-submit",
+    "allow_self_approval": 1,
+    "allowed": "Employee",
+    "condition": null,
+    "next_state": "Approved",
+    "send_email_to_creator": 0,
+    "state": "Rejected",
+    "workflow_builder_id": null
+   }
+  ],
+  "workflow_data": null,
+  "workflow_name": "Purchase Invoice Workflow",
+  "workflow_state_field": "workflow_state"
+ }
+]

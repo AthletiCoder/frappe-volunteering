@@ -1,0 +1,50 @@
+{
+ "actions": [],
+ "creation": "2026-07-21 12:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "designation",
+  "max_approve_amount",
+  "max_advance_amount"
+ ],
+ "fields": [
+  {
+   "fieldname": "designation",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Designation",
+   "options": "Designation",
+   "reqd": 1
+  },
+  {
+   "description": "Largest amount this designation can approve for OTHERS (approval routing up reports_to).",
+   "fieldname": "max_approve_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Max Approval Authority (for others)",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "Largest advance a person of this designation may hold for THEMSELVES.",
+   "fieldname": "max_advance_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Max Self Advance (own float)"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-07-21 12:00:00",
+ "modified_by": "Administrator",
+ "module": "Volunteering",
+ "name": "Designation Approval Limit",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

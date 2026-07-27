@@ -3,8 +3,10 @@
 # Read docs to understand patches: https://frappeframework.com/docs/v14/user/en/database-migrations
 
 [post_model_sync]
+volunteering.patches.v1_0.disable_accounting_server_scripts
 volunteering.patches.normalize_volunteer_mobile_numbers
 volunteering.patches.update_volunteering_dashboard_filters
 volunteering.patches.rename_board_roles
 volunteering.patches.setup_attendance_holiday_status
 volunteering.patches.fix_duplicate_privilege_leave_allocations
+volunteering.patches.migrate_fund_project_type_to_project_type

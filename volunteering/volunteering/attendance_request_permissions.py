@@ -6,6 +6,7 @@ HR Manager / HR User / System Manager retain full access.
 """
 
 import frappe
+from frappe import _
 
 HR_ROLES = {"HR Manager", "HR User", "System Manager"}
 
@@ -70,3 +71,22 @@ def has_permission(doc, ptype, user):
 		return is_own
 
 	return False
+
+
+def validate_attendance_request(doc, method=None):
+	"""Non-HR users may only create Attendance Requests for themselves."""
+	if frappe.session.user == "Administrator":
+		return
+
+	roles = set(frappe.get_roles(frappe.session.user))
+	if roles.intersection(HR_ROLES):
+		return
+
+	session_employee = frappe.db.get_value("Employee", {"user_id": frappe.session.user}, "name")
+	if not session_employee:
+		frappe.throw(_("Your user is not linked to an Employee record."))
+
+	if not doc.employee:
+		doc.employee = session_employee
+	elif doc.employee != session_employee:
+		frappe.throw(_("You can only create Attendance Requests for yourself."))

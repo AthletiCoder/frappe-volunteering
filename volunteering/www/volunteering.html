@@ -1,0 +1,30 @@
+{% extends "templates/web.html" %}
+
+{% block title %}Volunteering{% endblock %}
+
+{% block head_include %}
+{% if has_spa_build %}
+<link rel="stylesheet" href="/assets/volunteering/frontend/assets/{{ spa_entry_css }}">
+{% endif %}
+{% endblock %}
+
+{% block page_content %}
+<div id="app"></div>
+<script>
+	window.csrf_token = "{{ csrf_token }}";
+	if (!window.frappe) window.frappe = {};
+</script>
+{% if has_spa_build %}
+<script type="module" crossorigin src="/assets/volunteering/frontend/assets/{{ spa_entry_js }}"></script>
+{% else %}
+<div class="page-card" style="max-width: 32rem; margin: 4rem auto; text-align: center;">
+	<h2>Frontend not built</h2>
+	<p class="text-muted">
+		Budget Health and Advance Portal need the Vue SPA build.
+		From the app folder run <code>yarn install && yarn build</code> in <code>frontend/</code>,
+		then clear cache.
+	</p>
+	<p><a href="/app/my-expenses">Back to My Expenses</a></p>
+</div>
+{% endif %}
+{% endblock %}

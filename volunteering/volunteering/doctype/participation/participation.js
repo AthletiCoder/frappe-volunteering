@@ -30,7 +30,6 @@
 		refresh(frm) {
 			const whatsapp_link = get_whatsapp_link(frm.doc.temp_phone);
 			const call_link = get_call_link(frm.doc.temp_phone);
-			const should_prompt_rating = frm.doc.logging_status === "Completed" && !frm.doc.rm_rating;
 
 			if (whatsapp_link) {
 				frm.add_custom_button(
@@ -48,28 +47,6 @@
 						window.location.href = call_link;
 					}
 				);
-			}
-
-			if (should_prompt_rating) {
-				frm.set_intro(
-					__(
-						"Logging is marked as Logged. Please submit Relationship Manager rating and comments."
-					),
-					"orange"
-				);
-			} else {
-				frm.set_intro("");
-			}
-		},
-
-		logging_status(frm) {
-			if (frm.doc.logging_status === "Completed" && !frm.doc.rm_rating) {
-				frappe.show_alert({
-					message: __(
-						"Please enter Relationship Manager rating now that logging is complete."
-					),
-					indicator: "orange",
-				});
 			}
 		},
 	});

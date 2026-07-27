@@ -142,20 +142,22 @@ class IntegrationTestParticipationRating(IntegrationTestCase):
         self.assertEqual(volunteer.rating_sample_size, 2)
         self.assertEqual(volunteer.effective_rating, 3.88)
 
-    def test_logged_status_requires_rating(self):
+    def test_completed_status_allows_save_without_rating(self):
         event = self.create_event()
         volunteer = self.create_volunteer()
 
-        with self.assertRaises(frappe.ValidationError):
-            frappe.get_doc(
-                {
-                    "doctype": "Participation",
-                    "event": event.name,
-                    "volunteer": volunteer.name,
-                    "logging_status": "Completed",
-                    "kits_delivered": 5,
-                }
-            ).insert(ignore_permissions=True)
+        participation = frappe.get_doc(
+            {
+                "doctype": "Participation",
+                "event": event.name,
+                "volunteer": volunteer.name,
+                "logging_status": "Completed",
+                "kits_delivered": 5,
+            }
+        ).insert(ignore_permissions=True)
+
+        self.assertEqual(participation.logging_status, "Completed")
+        self.assertFalse(participation.rm_rating)
 
     def test_non_rm_cannot_rate_on_insert(self):
         event = self.create_event()
