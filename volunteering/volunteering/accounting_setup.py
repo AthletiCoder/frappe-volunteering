@@ -53,7 +53,10 @@ def reload_accounting_workflows():
 		name = wf_data["name"]
 		if frappe.db.exists("Workflow", name):
 			frappe.delete_doc("Workflow", name, ignore_permissions=True, force=True)
-		frappe.get_doc(wf_data).insert(ignore_permissions=True)
+		doc = frappe.get_doc(wf_data)
+		# Masters are seeded above; ignore_links covers racey/partial Cloud sites.
+		doc.flags.ignore_links = True
+		doc.insert(ignore_permissions=True)
 
 	frappe.clear_cache(doctype="Workflow")
 	sync_workflow_submit_permissions()
@@ -288,7 +291,12 @@ def remove_obsolete_accounting_custom_fields():
 
 
 def ensure_workflow_actions():
-	for action_name in ("Escalate",):
+	"""Create Workflow Action Master rows used by accounting workflow fixtures.
+
+	Fresh sites (e.g. Frappe Cloud) may not have Submit / Re-submit yet; only
+	seeding Escalate left migrate failing on LinkValidationError.
+	"""
+	for action_name in ("Submit", "Re-submit", "Approve", "Reject", "Escalate"):
 		if frappe.db.exists("Workflow Action Master", action_name):
 			continue
 		frappe.get_doc(
@@ -297,16 +305,24 @@ def ensure_workflow_actions():
 
 
 def ensure_workflow_states():
-	if frappe.db.exists("Workflow State", "Pending Approval"):
-		return
-	frappe.get_doc(
-		{
-			"doctype": "Workflow State",
-			"workflow_state_name": "Pending Approval",
-			"style": "Warning",
-			"icon": "question-sign",
-		}
-	).insert(ignore_permissions=True)
+	"""Create Workflow State rows used by accounting workflow fixtures."""
+	defaults = (
+		("Draft", "Primary", "file"),
+		("Pending Approval", "Warning", "question-sign"),
+		("Approved", "Success", "ok-sign"),
+		("Rejected", "Danger", "remove"),
+	)
+	for state_name, style, icon in defaults:
+		if frappe.db.exists("Workflow State", state_name):
+			continue
+		frappe.get_doc(
+			{
+				"doctype": "Workflow State",
+				"workflow_state_name": state_name,
+				"style": style,
+				"icon": icon,
+			}
+		).insert(ignore_permissions=True)
 
 
 def sync_workflow_submit_permissions():
