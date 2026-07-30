@@ -1,13 +1,14 @@
 # Copyright (c) 2026, Vadiraj Tirtha Das and contributors
 # For license information, please see license.txt
 
-"""Desk home-wall icons: My Work, My Expenses, Wiki."""
+"""Desk home-wall icons provided by the Volunteering app."""
 
 from __future__ import annotations
 
 import frappe
 
 EMPLOYEE_ROLES = ("Employee", "System Manager")
+HR_ACCOUNTABILITY_ROLES = ("HR Manager", "System Manager")
 EXPENSE_ROLES = (
 	"Employee",
 	"Accounts User",
@@ -30,6 +31,14 @@ HIDE_LABELS = (
 
 SIDEBAR_ICONS = (
 	{
+		"label": "Volunteering",
+		"icon_type": "Link",
+		"link_type": "Workspace Sidebar",
+		"link_to": "Volunteering",
+		"icon": "hand-heart",
+		"role_prefix": "NGO ",
+	},
+	{
 		"label": "My Work",
 		"icon_type": "Link",
 		"link_type": "Workspace Sidebar",
@@ -44,6 +53,14 @@ SIDEBAR_ICONS = (
 		"link_to": "My Expenses",
 		"icon": "expense",
 		"roles": EXPENSE_ROLES,
+	},
+	{
+		"label": "HR Accountability",
+		"icon_type": "Link",
+		"link_type": "Workspace Sidebar",
+		"link_to": "HR Accountability",
+		"icon": "hr",
+		"roles": HR_ACCOUNTABILITY_ROLES,
 	},
 )
 
@@ -109,7 +126,7 @@ def _upsert_icon(spec: dict):
 		doc.icon = spec.get("icon")
 		doc.hidden = 0
 		doc.app = "volunteering"
-		_sync_roles(doc, spec.get("roles") or ())
+		_sync_roles(doc, spec.get("roles") or (), spec.get("role_prefix"))
 		doc.flags.ignore_permissions = True
 		doc.save(ignore_permissions=True)
 		return
@@ -128,12 +145,16 @@ def _upsert_icon(spec: dict):
 			"app": "volunteering",
 		}
 	)
-	_sync_roles(doc, spec.get("roles") or ())
+	_sync_roles(doc, spec.get("roles") or (), spec.get("role_prefix"))
 	doc.insert(ignore_permissions=True)
 
 
-def _sync_roles(doc, roles):
+def _sync_roles(doc, roles, role_prefix=None):
 	wanted = {r for r in roles if frappe.db.exists("Role", r)}
+	if role_prefix:
+		wanted.update(
+			frappe.get_all("Role", filters={"name": ["like", f"{role_prefix}%"]}, pluck="name")
+		)
 	existing = {row.role for row in doc.roles or []}
 	if existing == wanted:
 		return

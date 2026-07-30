@@ -25,6 +25,32 @@ def get_or_create_user(email, roles, first_name="Test"):
 	return email
 
 
+def ensure_designations(*designations):
+	for designation in designations:
+		if not frappe.db.exists("Designation", designation):
+			frappe.get_doc(
+				{"doctype": "Designation", "designation_name": designation}
+			).insert(ignore_permissions=True)
+
+
+def delete_documents_with_workflow_actions(doctype, filters):
+	"""Hard-delete documents together with their Workflow Action rows.
+
+	frappe.db.delete does not cascade to Workflow Action, so orphaned rows would
+	otherwise leak into the approvals dashboard queries of later tests.
+	"""
+	names = frappe.get_all(doctype, filters=filters, pluck="name")
+	if not names:
+		return names
+
+	frappe.db.delete(doctype, {"name": ["in", names]})
+	frappe.db.delete(
+		"Workflow Action",
+		{"reference_doctype": doctype, "reference_name": ["in", names]},
+	)
+	return names
+
+
 def get_or_create_department(name, department_head=None):
 	company = frappe.db.get_value("Company", {}, "name")
 	filters = {"department_name": name}

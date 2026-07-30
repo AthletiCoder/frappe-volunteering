@@ -11,6 +11,7 @@ from volunteering.volunteering.accounting_setup import (
 	setup_accounting_custom_fields,
 )
 from volunteering.volunteering.accounting_test_utils import (
+	ensure_designations,
 	get_or_create_department,
 	get_or_create_employee,
 	get_or_create_project_with_cost_center,
@@ -46,7 +47,18 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 		cls.department = get_or_create_department("Operations")
 		cls.manager = get_or_create_employee(cls.manager_email, cls.department, "Budget Manager")
 		cls.employee = get_or_create_employee(cls.employee_email, cls.department)
-		frappe.db.set_value("Employee", cls.employee, "reports_to", cls.manager)
+
+		# Director (25000 limit) keeps the approval-authority guard out of the way
+		# so these tests exercise the budget rules on a 12000 claim.
+		ensure_designations("Associate", "Director")
+		frappe.db.set_value(
+			"Employee", cls.manager, {"designation": "Director", "reports_to": None}
+		)
+		frappe.db.set_value(
+			"Employee",
+			cls.employee,
+			{"designation": "Associate", "reports_to": cls.manager},
+		)
 		set_project_department_budget(cls.project, cls.department, 10000)
 
 	@classmethod

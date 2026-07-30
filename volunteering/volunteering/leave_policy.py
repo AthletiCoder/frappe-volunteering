@@ -15,46 +15,6 @@ def validate_leave_application(doc, method=None):
 	if not doc.from_date:
 		return
 
-	# #region agent log
-	try:
-		import json
-		import time
-
-		emp_user = frappe.db.get_value("Employee", doc.employee, "user_id") if doc.employee else None
-		prevent = frappe.db.get_single_value("HR Settings", "prevent_self_leave_approval")
-		with open(
-			"/Users/varunkumar/Documents/coding/erp/erpnext/frappe-bench/.cursor/debug-4c4245.log",
-			"a",
-			encoding="utf-8",
-		) as f:
-			f.write(
-				json.dumps(
-					{
-						"sessionId": "4c4245",
-						"hypothesisId": "B",
-						"location": "leave_policy.py:validate_leave_application",
-						"message": "leave validate",
-						"data": {
-							"session_user": frappe.session.user,
-							"employee": doc.employee,
-							"employee_user": emp_user,
-							"status": doc.status,
-							"docstatus": doc.docstatus,
-							"prevent_self_leave_approval": prevent,
-							"roles": frappe.get_roles(frappe.session.user),
-							"is_self": emp_user == frappe.session.user,
-							"leave_approver": doc.get("leave_approver"),
-						},
-						"timestamp": int(time.time() * 1000),
-						"runId": "post-fix",
-					}
-				)
-				+ "\n"
-			)
-	except Exception:
-		pass
-	# #endregion
-
 	_ensure_leave_approver_from_reports_to(doc)
 	_validate_employee_field_locked(doc)
 	_validate_no_self_leave_approval(doc)
@@ -84,6 +44,8 @@ HR_OVERRIDE_ROLES = {"HR Manager", "HR User", "System Manager"}
 
 def _is_hr_user(user=None):
 	user = user or frappe.session.user
+	if user == "Administrator":
+		return True
 	return bool(set(frappe.get_roles(user)).intersection(HR_OVERRIDE_ROLES))
 
 
@@ -127,33 +89,6 @@ def _validate_no_self_leave_approval(doc):
 		return
 
 	if doc.status in ("Approved", "Rejected"):
-		# #region agent log
-		try:
-			import json
-			import time
-
-			with open(
-				"/Users/varunkumar/Documents/coding/erp/erpnext/frappe-bench/.cursor/debug-4c4245.log",
-				"a",
-				encoding="utf-8",
-			) as f:
-				f.write(
-					json.dumps(
-						{
-							"sessionId": "4c4245",
-							"hypothesisId": "B",
-							"location": "leave_policy.py:_validate_no_self_leave_approval",
-							"message": "blocked self approval",
-							"data": {"status": doc.status, "user": frappe.session.user},
-							"timestamp": int(time.time() * 1000),
-							"runId": "post-fix",
-						}
-					)
-					+ "\n"
-				)
-		except Exception:
-			pass
-		# #endregion
 		frappe.throw(
 			_(
 				"You cannot approve or reject your own Leave Application. "
@@ -226,12 +161,6 @@ def validate_emergency_leave(doc, from_date, today, leave_days, settings):
 		)
 
 
-def _is_hr_user():
-	if frappe.session.user == "Administrator":
-		return True
-	return bool(set(frappe.get_roles()) & {"HR Manager", "HR User", "System Manager"})
-
-
 def validate_director_approval(doc, leave_days):
 	if leave_days <= DIRECTOR_APPROVAL_THRESHOLD:
 		return
@@ -295,40 +224,6 @@ def get_leave_policy_settings():
 def get_leave_form_defaults():
 	"""Safe defaults for Leave Application form (Employee need not read Leave Policy Settings)."""
 	settings = get_leave_policy_settings()
-	result = {
+	return {
 		"default_leave_type": settings.get("default_leave_type") or "Privilege Leave",
 	}
-	# #region agent log
-	try:
-		import json
-		import time
-
-		with open(
-			"/Users/varunkumar/Documents/coding/erp/erpnext/frappe-bench/.cursor/debug-4c4245.log",
-			"a",
-			encoding="utf-8",
-		) as f:
-			f.write(
-				json.dumps(
-					{
-						"sessionId": "4c4245",
-						"hypothesisId": "H1",
-						"location": "leave_policy.py:get_leave_form_defaults",
-						"message": "defaults for leave form",
-						"data": {
-							"user": frappe.session.user,
-							"default_leave_type": result["default_leave_type"],
-							"has_lps_read": frappe.has_permission(
-								"Leave Policy Settings", "read"
-							),
-						},
-						"timestamp": int(time.time() * 1000),
-						"runId": "leave-ux",
-					}
-				)
-				+ "\n"
-			)
-	except Exception:
-		pass
-	# #endregion
-	return result

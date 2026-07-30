@@ -31,7 +31,17 @@ def _fetch_pending_rows():
 		key = (row.reference_doctype, row.reference_name)
 		if key not in by_key:
 			by_key[key] = row
-	return list(by_key.values())
+	# Workflow Actions outlive hard-deleted documents; skip those orphans so one
+	# missing reference cannot break the whole dashboard.
+	return [row for row in by_key.values() if _reference_exists(row)]
+
+
+def _reference_exists(row):
+	return bool(
+		row.reference_doctype
+		and row.reference_name
+		and frappe.db.exists(row.reference_doctype, row.reference_name)
+	)
 
 
 def _fetch_open_workflow_actions():
@@ -106,7 +116,7 @@ def _can_user_act(row, user, roles):
 				continue
 			return True
 		return False
-	except frappe.PermissionError:
+	except (frappe.PermissionError, frappe.DoesNotExistError):
 		return False
 	finally:
 		frappe.set_user(previous_user)
@@ -130,7 +140,7 @@ def _available_actions(doctype, name, user, roles):
 				continue
 			actions.append(transition.action)
 		return sorted(set(actions))
-	except frappe.PermissionError:
+	except (frappe.PermissionError, frappe.DoesNotExistError):
 		return []
 	finally:
 		frappe.set_user(previous_user)

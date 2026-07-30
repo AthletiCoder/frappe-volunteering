@@ -8,7 +8,6 @@ from __future__ import annotations
 import frappe
 
 from volunteering.volunteering.volunteering_access import (
-	agent_dbg,
 	user_has_volunteering_ops_access,
 	volunteer_email_for_user,
 )
@@ -18,30 +17,16 @@ def get_permission_query_conditions(user):
 	if not user:
 		user = frappe.session.user
 
-	ops = user_has_volunteering_ops_access(user)
-	# #region agent log
-	agent_dbg(
-		"H2",
-		"participation_permissions.py:get_permission_query_conditions",
-		"participation query entry",
-		{"user": user, "ops": ops, "roles_has_member": "NGO Member" in frappe.get_roles(user)},
-	)
-	# #endregion
-
-	if ops:
+	if user_has_volunteering_ops_access(user):
 		return ""
 
 	if "NGO Member" in frappe.get_roles(user):
 		email = volunteer_email_for_user(user)
-		cond = (
+		return (
 			"`tabParticipation`.volunteer in ("
 			f"select name from `tabVolunteer` where email = {frappe.db.escape(email)}"
 			")"
 		)
-		# #region agent log
-		agent_dbg("H2", "participation_permissions.py:member_filter", "self filter", {"email": email})
-		# #endregion
-		return cond
 
 	return "1=0"
 

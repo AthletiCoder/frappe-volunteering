@@ -69,6 +69,28 @@ class IntegrationTestLeavePolicy(IntegrationTestCase):
 		allocation.insert(ignore_permissions=True)
 		allocation.submit()
 
+	def _holiday_free_span(self, days):
+		"""Find an upcoming span of `days` calendar days that are all working days.
+
+		The test holiday list marks Sundays off, so a fixed offset from today
+		would count fewer leave days than calendar days depending on the weekday
+		the suite happens to run on.
+		"""
+		from hrms.hr.doctype.leave_application.leave_application import (
+			get_number_of_leave_days,
+		)
+
+		for offset in range(14):
+			from_date = add_days(nowdate(), offset)
+			to_date = add_days(from_date, days - 1)
+			leave_days = get_number_of_leave_days(
+				self.employee, self.leave_type, from_date, to_date, 0, None
+			)
+			if leave_days == days:
+				return from_date, to_date
+
+		self.fail(f"No holiday-free {days}-day span found in the next two weeks")
+
 	def _make_leave_application(self, **kwargs):
 		return frappe.get_doc(
 			{
@@ -98,19 +120,21 @@ class IntegrationTestLeavePolicy(IntegrationTestCase):
 				validate_leave_application(doc)
 
 	def test_emergency_leave_cannot_exceed_three_days(self):
+		from_date, to_date = self._holiday_free_span(4)
 		doc = self._make_leave_application(
 			leave_category="Emergency",
-			from_date=nowdate(),
-			to_date=add_days(nowdate(), 3),
+			from_date=from_date,
+			to_date=to_date,
 		)
 		with self.assertRaises(frappe.ValidationError):
 			validate_leave_application(doc)
 
 	def test_emergency_leave_three_days_allowed(self):
+		from_date, to_date = self._holiday_free_span(3)
 		doc = self._make_leave_application(
 			leave_category="Emergency",
-			from_date=nowdate(),
-			to_date=add_days(nowdate(), 2),
+			from_date=from_date,
+			to_date=to_date,
 		)
 		validate_leave_application(doc)
 

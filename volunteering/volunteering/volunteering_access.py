@@ -30,6 +30,11 @@ VOLUNTEERING_OPS_ROLES = frozenset(
 FULL_ACCESS_ROLES = VOLUNTEERING_OPS_ROLES
 
 
+def has_app_permission() -> bool:
+	"""Show the Volunteering app to users assigned any NGO-prefixed role."""
+	return any(role.startswith("NGO ") for role in frappe.get_roles())
+
+
 def user_has_volunteering_ops_access(user=None) -> bool:
 	user = user or frappe.session.user
 	if user == "Administrator":
@@ -41,31 +46,3 @@ def volunteer_email_for_user(user) -> str:
 	"""Volunteer is matched to User by email (Volunteer has no user_id field)."""
 	email = frappe.db.get_value("User", user, "email")
 	return email or user
-
-
-def agent_dbg(hypothesis_id, location, message, data):
-	try:
-		import json
-		import time
-
-		with open(
-			"/Users/varunkumar/Documents/coding/erp/erpnext/frappe-bench/.cursor/debug-4c4245.log",
-			"a",
-			encoding="utf-8",
-		) as f:
-			f.write(
-				json.dumps(
-					{
-						"sessionId": "4c4245",
-						"hypothesisId": hypothesis_id,
-						"location": location,
-						"message": message,
-						"data": data,
-						"timestamp": int(time.time() * 1000),
-						"runId": "post-fix",
-					}
-				)
-				+ "\n"
-			)
-	except Exception:
-		pass

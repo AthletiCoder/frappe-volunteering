@@ -21,6 +21,8 @@ from volunteering.volunteering.accounting_setup import (
 	setup_accounting_custom_fields,
 )
 from volunteering.volunteering.accounting_test_utils import (
+	delete_documents_with_workflow_actions,
+	ensure_designations,
 	get_or_create_department,
 	get_or_create_employee,
 	get_or_create_project_with_cost_center,
@@ -44,11 +46,22 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 		cls._gs_patcher.start()
 		cls._gs_queue_patcher = patch("frappe.utils.global_search.sync_value_in_queue")
 		cls._gs_queue_patcher.start()
+		# Approval routing follows the reports_to chain; pin the flag so results
+		# don't depend on the live site's setting.
+		cls._prev_designation_flag = frappe.db.get_single_value(
+			"Volunteering Accounting Settings", "use_designation_approval"
+		)
+		frappe.db.set_single_value(
+			"Volunteering Accounting Settings", "use_designation_approval", 1
+		)
+		frappe.clear_cache(doctype="Volunteering Accounting Settings")
 		setup_accounting_custom_fields()
 		frappe.clear_cache(doctype="Expense Claim")
 		reload_accounting_workflows()
 		ensure_workflow_actions()
 		ensure_accounting_pages()
+
+		ensure_designations("Associate", "Manager")
 
 		cls.project = get_or_create_project_with_cost_center()
 		cls.dept_head_email = get_or_create_user(
@@ -72,6 +85,22 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 		cls.other_employee = get_or_create_employee(
 			cls.other_employee_email, cls.other_department, "Other Employee"
 		)
+		cls.dept_head_employee = get_or_create_employee(
+			cls.dept_head_email, cls.department, "Dept Head Employee"
+		)
+
+		# The department head only becomes the approver by sitting on the
+		# employee's reports_to chain with a designation limit covering the claim.
+		frappe.db.set_value(
+			"Employee",
+			cls.dept_head_employee,
+			{"designation": "Manager", "reports_to": None},
+		)
+		frappe.db.set_value(
+			"Employee",
+			cls.employee,
+			{"designation": "Associate", "reports_to": cls.dept_head_employee},
+		)
 
 	@classmethod
 	def tearDownClass(cls):
@@ -79,10 +108,17 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 		cls._gs_patcher.stop()
 		cls._email_patcher.stop()
 		frappe.flags.mute_emails = False
+		frappe.db.set_single_value(
+			"Volunteering Accounting Settings",
+			"use_designation_approval",
+			1 if cls._prev_designation_flag is None else cls._prev_designation_flag,
+		)
+		frappe.clear_cache(doctype="Volunteering Accounting Settings")
 		super().tearDownClass()
 
 	def tearDown(self):
-		frappe.db.delete(
+		frappe.set_user("Administrator")
+		delete_documents_with_workflow_actions(
 			"Expense Claim",
 			{"employee": ["in", [self.employee, self.other_employee]]},
 		)

@@ -12,6 +12,8 @@ from volunteering.volunteering.accounting_setup import (
 	setup_accounting_custom_fields,
 )
 from volunteering.volunteering.accounting_test_utils import (
+	delete_documents_with_workflow_actions,
+	ensure_designations,
 	get_or_create_department,
 	get_or_create_employee,
 	get_or_create_project_with_cost_center,
@@ -49,11 +51,7 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 		reload_accounting_workflows()
 		ensure_workflow_actions()
 
-		for designation in ("Associate", "Manager", "Director"):
-			if not frappe.db.exists("Designation", designation):
-				frappe.get_doc(
-					{"doctype": "Designation", "designation_name": designation}
-				).insert(ignore_permissions=True)
+		ensure_designations("Associate", "Manager", "Director")
 
 		cls.project = get_or_create_project_with_cost_center()
 		cls.employee_email = get_or_create_user(
@@ -112,7 +110,7 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 
 	def tearDown(self):
 		frappe.set_user("Administrator")
-		frappe.db.delete(
+		delete_documents_with_workflow_actions(
 			"Expense Claim",
 			{
 				"employee": [

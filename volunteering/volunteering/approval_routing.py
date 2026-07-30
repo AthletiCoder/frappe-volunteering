@@ -433,6 +433,20 @@ def before_accounting_document_save(doc, method=None):
 		sync_approval_status_from_workflow(doc)
 
 
+def before_accounting_document_submit(doc, method=None):
+	"""Re-check the approval guards on submit.
+
+	Approve sets docstatus=1 and calls submit(), which skips before_save — so
+	without this the assigned approver could clear an amount above their
+	designation limit instead of escalating.
+	"""
+	if doc.doctype not in ACCOUNTING_WORKFLOW_DOCTYPES:
+		return
+
+	validate_no_self_approval(doc)
+	validate_approver_authority(doc)
+
+
 def on_accounting_workflow_state_change(doc, method=None):
 	"""Send email alert when routed to a pending approval state."""
 	if doc.doctype not in ACCOUNTING_WORKFLOW_DOCTYPES:

@@ -8,7 +8,6 @@ from __future__ import annotations
 import frappe
 
 from volunteering.volunteering.volunteering_access import (
-	agent_dbg,
 	user_has_volunteering_ops_access,
 	volunteer_email_for_user,
 )
@@ -17,15 +16,6 @@ from volunteering.volunteering.volunteering_access import (
 def get_permission_query_conditions(user):
 	if not user:
 		user = frappe.session.user
-
-	# #region agent log
-	agent_dbg(
-		"H1",
-		"volunteer_permissions.py:get_permission_query_conditions",
-		"volunteer query entry",
-		{"user": user, "ops": user_has_volunteering_ops_access(user)},
-	)
-	# #endregion
 
 	if user_has_volunteering_ops_access(user):
 		return ""

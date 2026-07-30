@@ -11,15 +11,15 @@ app_license = "mit"
 required_apps = ["hrms"]
 
 # Each item in the list will be shown as an app in the apps page
-# add_to_apps_screen = [
-# 	{
-# 		"name": "volunteering",
-# 		"logo": "/assets/volunteering/logo.png",
-# 		"title": "Volunteering",
-# 		"route": "/volunteering",
-# 		"has_permission": "volunteering.api.permission.has_app_permission"
-# 	}
-# ]
+add_to_apps_screen = [
+	{
+		"name": "volunteering",
+		"logo": "/assets/volunteering/logo.svg",
+		"title": "Volunteering",
+		"route": "/app/volunteering",
+		"has_permission": "volunteering.volunteering.volunteering_access.has_app_permission",
+	}
+]
 
 # Includes in <head>
 # ------------------
@@ -199,6 +199,7 @@ doc_events = {
 		"before_submit": [
 			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
 			"volunteering.volunteering.approval_routing.sync_expense_claim_approval_status_before_submit",
+			"volunteering.volunteering.approval_routing.before_accounting_document_submit",
 			"volunteering.volunteering.budget_service.validate_budget_on_save",
 		],
 		"on_update": "volunteering.volunteering.approval_routing.on_accounting_workflow_state_change",
@@ -213,6 +214,7 @@ doc_events = {
 			"volunteering.volunteering.spend_controls.validate_spend_controls",
 		],
 		"before_submit": [
+			"volunteering.volunteering.approval_routing.before_accounting_document_submit",
 			"volunteering.volunteering.budget_service.validate_budget_on_save",
 		],
 		"on_update": "volunteering.volunteering.approval_routing.on_accounting_workflow_state_change",
@@ -226,6 +228,7 @@ doc_events = {
 			"volunteering.volunteering.budget_service.validate_budget_on_save",
 		],
 		"before_submit": [
+			"volunteering.volunteering.approval_routing.before_accounting_document_submit",
 			"volunteering.volunteering.budget_service.validate_budget_on_save",
 		],
 		"on_update": "volunteering.volunteering.approval_routing.on_accounting_workflow_state_change",
