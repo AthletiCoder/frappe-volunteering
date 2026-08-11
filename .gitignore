@@ -53,3 +53,11 @@ jspm_packages/
 
 # Aider AI Chat
 .aider*
+
+# Playwright E2E
+e2e/.auth/
+e2e/.env
+test-results/
+playwright-report/
+playwright/.cache/
+blob-report/
