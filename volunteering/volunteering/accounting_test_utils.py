@@ -47,14 +47,6 @@ def get_or_create_user(email, roles, first_name="Test"):
 	return email
 
 
-def ensure_designations(*designations):
-	for designation in designations:
-		if not frappe.db.exists("Designation", designation):
-			frappe.get_doc(
-				{"doctype": "Designation", "designation_name": designation}
-			).insert(ignore_permissions=True)
-
-
 def delete_documents_with_workflow_actions(doctype, filters):
 	"""Hard-delete documents together with their Workflow Action rows.
 

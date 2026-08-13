@@ -442,7 +442,7 @@ def before_accounting_document_submit(doc, method=None):
 
 	Approve sets docstatus=1 and calls submit(), which skips before_save — so
 	without this the assigned approver could clear an amount above their
-	designation limit instead of escalating.
+	grade limit instead of escalating.
 	"""
 	if doc.doctype not in ACCOUNTING_WORKFLOW_DOCTYPES:
 		return

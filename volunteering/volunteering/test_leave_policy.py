@@ -78,26 +78,27 @@ class IntegrationTestLeavePolicy(IntegrationTestCase):
 		allocation.submit()
 
 	def _holiday_free_span(self, days):
-		"""Find an upcoming span of `days` calendar days that are all working days.
+		"""Find an upcoming from/to where counted leave days equal `days`.
 
-		The test holiday list marks Sundays off, so a fixed offset from today
-		would count fewer leave days than calendar days depending on the weekday
-		the suite happens to run on.
+		Org weekly offs (Wednesday) and the test holiday list (Sundays) mean a
+		fixed calendar length can under-count leave days. Allow the calendar
+		window to stretch past weekly offs until the leave-day total matches.
 		"""
 		from hrms.hr.doctype.leave_application.leave_application import (
 			get_number_of_leave_days,
 		)
 
-		for offset in range(14):
+		for offset in range(21):
 			from_date = add_days(nowdate(), offset)
-			to_date = add_days(from_date, days - 1)
-			leave_days = get_number_of_leave_days(
-				self.employee, self.leave_type, from_date, to_date, 0, None
-			)
-			if leave_days == days:
-				return from_date, to_date
+			for length in range(days, days + 7):
+				to_date = add_days(from_date, length - 1)
+				leave_days = get_number_of_leave_days(
+					self.employee, self.leave_type, from_date, to_date, 0, None
+				)
+				if leave_days == days:
+					return from_date, to_date
 
-		self.fail(f"No holiday-free {days}-day span found in the next two weeks")
+		self.fail(f"No span with {days} leave days found in the next three weeks")
 
 	def _make_leave_application(self, **kwargs):
 		return frappe.get_doc(
