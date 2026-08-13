@@ -5,7 +5,7 @@
   "document_type": "Expense Claim",
   "enable_action_confirmation": 1,
   "is_active": 1,
-  "modified": "2026-07-21 12:00:00",
+  "modified": "2026-08-13 12:00:00",
   "name": "Expense Claim Approval",
   "override_status": 0,
   "send_email_alert": 1,
@@ -16,7 +16,7 @@
     "doc_status": "0",
     "evaluate_as_expression": 0,
     "is_optional_state": 0,
-    "send_email": 1,
+    "send_email": 0,
     "state": "Draft",
     "workflow_builder_id": null
    },
@@ -26,7 +26,7 @@
     "doc_status": "0",
     "evaluate_as_expression": 0,
     "is_optional_state": 0,
-    "send_email": 1,
+    "send_email": 0,
     "state": "Pending Approval",
     "workflow_builder_id": null
    },
@@ -36,7 +36,7 @@
     "doc_status": "1",
     "evaluate_as_expression": 0,
     "is_optional_state": 0,
-    "send_email": 1,
+    "send_email": 0,
     "state": "Approved",
     "update_field": "approval_status",
     "update_value": "Approved",
@@ -48,7 +48,7 @@
     "doc_status": "0",
     "evaluate_as_expression": 0,
     "is_optional_state": 0,
-    "send_email": 1,
+    "send_email": 0,
     "state": "Rejected",
     "update_field": "approval_status",
     "update_value": "Rejected",
@@ -99,8 +99,8 @@
    {
     "action": "Approve",
     "allow_self_approval": 0,
-    "allowed": "NGO Board Chairperson",
-    "condition": null,
+    "allowed": "Employee",
+    "condition": "frappe.session.user != 'Guest' and (frappe.db.get_value('Employee', {'user_id': frappe.session.user}, 'grade') == 'Board of Directors' or frappe.db.get_value('Has Role', {'parenttype': 'User', 'parent': frappe.session.user, 'role': 'Executive Board Chairperson'}, 'name'))",
     "next_state": "Approved",
     "send_email_to_creator": 1,
     "state": "Pending Approval",
@@ -109,19 +109,9 @@
    {
     "action": "Reject",
     "allow_self_approval": 0,
-    "allowed": "NGO Board Chairperson",
-    "condition": null,
+    "allowed": "Employee",
+    "condition": "frappe.session.user != 'Guest' and (frappe.db.get_value('Employee', {'user_id': frappe.session.user}, 'grade') == 'Board of Directors' or frappe.db.get_value('Has Role', {'parenttype': 'User', 'parent': frappe.session.user, 'role': 'Executive Board Chairperson'}, 'name'))",
     "next_state": "Rejected",
-    "send_email_to_creator": 1,
-    "state": "Pending Approval",
-    "workflow_builder_id": null
-   },
-   {
-    "action": "Approve",
-    "allow_self_approval": 0,
-    "allowed": "Executive Board Chairperson",
-    "condition": null,
-    "next_state": "Approved",
     "send_email_to_creator": 1,
     "state": "Pending Approval",
     "workflow_builder_id": null
@@ -137,7 +127,7 @@
   "document_type": "Purchase Order",
   "enable_action_confirmation": 1,
   "is_active": 1,
-  "modified": "2026-07-21 12:00:00",
+  "modified": "2026-08-13 12:00:00",
   "name": "Purchase Order Approval",
   "override_status": 0,
   "send_email_alert": 1,
@@ -148,7 +138,7 @@
     "doc_status": "0",
     "evaluate_as_expression": 0,
     "is_optional_state": 0,
-    "send_email": 1,
+    "send_email": 0,
     "state": "Draft",
     "workflow_builder_id": null
    },
@@ -158,7 +148,7 @@
     "doc_status": "0",
     "evaluate_as_expression": 0,
     "is_optional_state": 0,
-    "send_email": 1,
+    "send_email": 0,
     "state": "Pending Approval",
     "workflow_builder_id": null
    },
@@ -168,7 +158,7 @@
     "doc_status": "1",
     "evaluate_as_expression": 0,
     "is_optional_state": 0,
-    "send_email": 1,
+    "send_email": 0,
     "state": "Approved",
     "workflow_builder_id": null
    },
@@ -178,7 +168,7 @@
     "doc_status": "0",
     "evaluate_as_expression": 0,
     "is_optional_state": 0,
-    "send_email": 1,
+    "send_email": 0,
     "state": "Rejected",
     "workflow_builder_id": null
    }
@@ -227,8 +217,8 @@
    {
     "action": "Approve",
     "allow_self_approval": 0,
-    "allowed": "NGO Board Chairperson",
-    "condition": null,
+    "allowed": "Employee",
+    "condition": "frappe.session.user != 'Guest' and (frappe.db.get_value('Employee', {'user_id': frappe.session.user}, 'grade') == 'Board of Directors' or frappe.db.get_value('Has Role', {'parenttype': 'User', 'parent': frappe.session.user, 'role': 'Executive Board Chairperson'}, 'name'))",
     "next_state": "Approved",
     "send_email_to_creator": 1,
     "state": "Pending Approval",
@@ -237,19 +227,9 @@
    {
     "action": "Reject",
     "allow_self_approval": 0,
-    "allowed": "NGO Board Chairperson",
-    "condition": null,
+    "allowed": "Employee",
+    "condition": "frappe.session.user != 'Guest' and (frappe.db.get_value('Employee', {'user_id': frappe.session.user}, 'grade') == 'Board of Directors' or frappe.db.get_value('Has Role', {'parenttype': 'User', 'parent': frappe.session.user, 'role': 'Executive Board Chairperson'}, 'name'))",
     "next_state": "Rejected",
-    "send_email_to_creator": 1,
-    "state": "Pending Approval",
-    "workflow_builder_id": null
-   },
-   {
-    "action": "Approve",
-    "allow_self_approval": 0,
-    "allowed": "Executive Board Chairperson",
-    "condition": null,
-    "next_state": "Approved",
     "send_email_to_creator": 1,
     "state": "Pending Approval",
     "workflow_builder_id": null
@@ -265,7 +245,7 @@
   "document_type": "Employee Advance",
   "enable_action_confirmation": 1,
   "is_active": 1,
-  "modified": "2026-07-21 12:00:00",
+  "modified": "2026-08-13 12:00:00",
   "name": "Employee Advance Approval",
   "override_status": 0,
   "send_email_alert": 1,
@@ -276,7 +256,7 @@
     "doc_status": "0",
     "evaluate_as_expression": 0,
     "is_optional_state": 0,
-    "send_email": 1,
+    "send_email": 0,
     "state": "Draft",
     "workflow_builder_id": null
    },
@@ -286,7 +266,7 @@
     "doc_status": "0",
     "evaluate_as_expression": 0,
     "is_optional_state": 0,
-    "send_email": 1,
+    "send_email": 0,
     "state": "Pending Approval",
     "workflow_builder_id": null
    },
@@ -296,7 +276,7 @@
     "doc_status": "1",
     "evaluate_as_expression": 0,
     "is_optional_state": 0,
-    "send_email": 1,
+    "send_email": 0,
     "state": "Approved",
     "workflow_builder_id": null
    },
@@ -306,7 +286,7 @@
     "doc_status": "0",
     "evaluate_as_expression": 0,
     "is_optional_state": 0,
-    "send_email": 1,
+    "send_email": 0,
     "state": "Rejected",
     "workflow_builder_id": null
    }
@@ -355,8 +335,8 @@
    {
     "action": "Approve",
     "allow_self_approval": 0,
-    "allowed": "NGO Board Chairperson",
-    "condition": null,
+    "allowed": "Employee",
+    "condition": "frappe.session.user != 'Guest' and (frappe.db.get_value('Employee', {'user_id': frappe.session.user}, 'grade') == 'Board of Directors' or frappe.db.get_value('Has Role', {'parenttype': 'User', 'parent': frappe.session.user, 'role': 'Executive Board Chairperson'}, 'name'))",
     "next_state": "Approved",
     "send_email_to_creator": 1,
     "state": "Pending Approval",
@@ -365,19 +345,9 @@
    {
     "action": "Reject",
     "allow_self_approval": 0,
-    "allowed": "NGO Board Chairperson",
-    "condition": null,
+    "allowed": "Employee",
+    "condition": "frappe.session.user != 'Guest' and (frappe.db.get_value('Employee', {'user_id': frappe.session.user}, 'grade') == 'Board of Directors' or frappe.db.get_value('Has Role', {'parenttype': 'User', 'parent': frappe.session.user, 'role': 'Executive Board Chairperson'}, 'name'))",
     "next_state": "Rejected",
-    "send_email_to_creator": 1,
-    "state": "Pending Approval",
-    "workflow_builder_id": null
-   },
-   {
-    "action": "Approve",
-    "allow_self_approval": 0,
-    "allowed": "Executive Board Chairperson",
-    "condition": null,
-    "next_state": "Approved",
     "send_email_to_creator": 1,
     "state": "Pending Approval",
     "workflow_builder_id": null
@@ -404,7 +374,7 @@
     "doc_status": "0",
     "evaluate_as_expression": 0,
     "is_optional_state": 0,
-    "send_email": 1,
+    "send_email": 0,
     "state": "Draft",
     "workflow_builder_id": null
    },
@@ -414,7 +384,7 @@
     "doc_status": "1",
     "evaluate_as_expression": 0,
     "is_optional_state": 0,
-    "send_email": 1,
+    "send_email": 0,
     "state": "Approved",
     "workflow_builder_id": null
    },
@@ -424,7 +394,7 @@
     "doc_status": "0",
     "evaluate_as_expression": 0,
     "is_optional_state": 0,
-    "send_email": 1,
+    "send_email": 0,
     "state": "Rejected",
     "workflow_builder_id": null
    }

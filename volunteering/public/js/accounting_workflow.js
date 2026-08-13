@@ -37,19 +37,29 @@ volunteering.accounting_workflow.setup_form = function (doctype) {
 	});
 };
 
+volunteering.accounting_workflow.is_board_level = function () {
+	// Board authority lives on Employee Grade, so it can only be resolved server side.
+	if (!volunteering.accounting_workflow._board_level_promise) {
+		volunteering.accounting_workflow._board_level_promise = frappe
+			.xcall("volunteering.volunteering.authority.user_is_board_level_for_session")
+			.catch(() => false);
+	}
+	return volunteering.accounting_workflow._board_level_promise;
+};
+
 volunteering.accounting_workflow.lock_advance_employee = function (frm) {
-	const full_access = frappe.user.has_role([
+	const staff_access = frappe.user.has_role([
 		"Accounts Manager",
 		"Accounts User",
 		"HR Manager",
 		"HR User",
 		"System Manager",
-		"NGO Board Member",
-		"NGO Board Chairperson",
 	]);
-	if (full_access) {
+	if (staff_access) {
 		return;
 	}
+
+	// Lock first, then unlock for board-level users once the check returns.
 	frm.set_df_property("employee", "read_only", 1);
 	if (frm.is_new() && !frm.doc.employee) {
 		frappe.db.get_value("Employee", { user_id: frappe.session.user }, "name").then((r) => {
@@ -58,6 +68,12 @@ volunteering.accounting_workflow.lock_advance_employee = function (frm) {
 			}
 		});
 	}
+
+	volunteering.accounting_workflow.is_board_level().then((is_board) => {
+		if (is_board) {
+			frm.set_df_property("employee", "read_only", 0);
+		}
+	});
 };
 
 volunteering.accounting_workflow.hide_advance_account_fields = function (frm) {
