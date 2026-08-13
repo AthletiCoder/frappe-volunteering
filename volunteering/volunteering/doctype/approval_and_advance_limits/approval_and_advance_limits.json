@@ -11,18 +11,18 @@
   {
    "fieldname": "intro_html",
    "fieldtype": "HTML",
-   "options": "<div class=\"alert alert-info\" style=\"font-size:13px;\">\n<b>Two independent limits per designation:</b>\n<ul style=\"margin:6px 0 0 18px;padding:0;\">\n<li><b>Max Approval Authority</b> \u2014 the largest amount a person of this designation can <b>approve for others</b> (approvals route up <i>Reports To</i> until someone has enough authority).</li>\n<li><b>Max Self Advance</b> \u2014 the largest <b>Employee Advance</b> a person of this designation may hold for themselves.</li>\n</ul>\n<div style=\"margin-top:6px;\">Board of Directors has unlimited approval authority regardless of the amount entered. Designations not listed here fall back to built-in defaults.</div>\n</div>"
+   "options": "<div class=\"alert alert-info\" style=\"font-size:13px;\">\n<b>Two independent limits per grade:</b>\n<ul style=\"margin:6px 0 0 18px;padding:0;\">\n<li><b>Max Approval Authority</b> \u2014 the largest amount a person of this grade can <b>approve for others</b> (approvals route up <i>Reports To</i> until someone has enough authority).</li>\n<li><b>Max Self Advance</b> \u2014 the largest <b>Employee Advance</b> a person of this grade may hold for themselves.</li>\n</ul>\n<div style=\"margin-top:6px;\">Set the band on <b>Employee \u2192 Grade</b>. Designation stays the job title. Board of Directors has unlimited approval authority regardless of the amount entered. Grades not listed here fall back to built-in defaults.</div>\n</div>"
   },
   {
    "fieldname": "designation_limits",
    "fieldtype": "Table",
-   "label": "Designation Limits",
+   "label": "Grade Limits",
    "options": "Designation Approval Limit"
   }
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-07-26 12:00:00",
+ "modified": "2026-08-13 12:00:00",
  "modified_by": "Administrator",
  "module": "Volunteering",
  "name": "Approval and Advance Limits",
@@ -49,11 +49,7 @@
   },
   {
    "read": 1,
-   "role": "NGO Board Member"
-  },
-  {
-   "read": 1,
-   "role": "NGO Board Chairperson"
+   "role": "Employee"
   }
  ],
  "sort_field": "modified",

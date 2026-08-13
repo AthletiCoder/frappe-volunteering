@@ -2,7 +2,7 @@
 
 Employees create/see only their own advances.
 Managers see reportees (reports_to).
-Accounts / Board / HR / System Manager see all.
+Accounts / HR / System Manager and board-level grades see all.
 """
 
 from __future__ import annotations
@@ -14,9 +14,15 @@ from volunteering.volunteering.accounting_dashboard.constants import (
 	ACCOUNTS_ROLES,
 	BOARD_ROLES,
 )
+from volunteering.volunteering.authority import user_is_board_level
 
 HR_ROLES = frozenset({"HR Manager", "HR User", "System Manager", "Administrator"})
 FULL_ACCESS_ROLES = ACCOUNTS_ROLES | BOARD_ROLES | HR_ROLES
+
+
+def _has_full_access(user, roles=None):
+	roles = roles if roles is not None else set(frappe.get_roles(user))
+	return bool(roles.intersection(FULL_ACCESS_ROLES)) or user_is_board_level(user)
 
 
 def get_permission_query_conditions(user):
@@ -27,7 +33,7 @@ def get_permission_query_conditions(user):
 		return ""
 
 	roles = set(frappe.get_roles(user))
-	if roles.intersection(FULL_ACCESS_ROLES):
+	if _has_full_access(user, roles):
 		return ""
 
 	employee = frappe.db.get_value("Employee", {"user_id": user}, "name")
@@ -49,7 +55,7 @@ def has_permission(doc, ptype, user):
 		return True
 
 	roles = set(frappe.get_roles(user))
-	if roles.intersection(FULL_ACCESS_ROLES):
+	if _has_full_access(user, roles):
 		return True
 
 	employee = frappe.db.get_value("Employee", {"user_id": user}, "name")
@@ -78,8 +84,7 @@ def validate_employee_self_only(doc, method=None):
 	if frappe.session.user == "Administrator":
 		return
 
-	roles = set(frappe.get_roles(frappe.session.user))
-	if roles.intersection(FULL_ACCESS_ROLES):
+	if _has_full_access(frappe.session.user):
 		return
 
 	session_employee = frappe.db.get_value(

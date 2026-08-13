@@ -20,7 +20,6 @@ VOLUNTEERING_OPS_ROLES = frozenset(
 	{
 		"NGO Admin",
 		"NGO Coordinator",
-		"NGO Department Head",
 		"System Manager",
 		"Administrator",
 	}

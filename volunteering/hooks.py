@@ -394,8 +394,6 @@ fixtures = [
                     "NGO Admin",
                     "NGO Coordinator",
                     "NGO Member",
-                    "Executive Board Member",
-                    "Executive Board Chairperson",
                 ],
             ]
         ],

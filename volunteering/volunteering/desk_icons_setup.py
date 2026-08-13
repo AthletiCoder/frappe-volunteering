@@ -14,9 +14,6 @@ EXPENSE_ROLES = (
 	"Accounts User",
 	"Accounts Manager",
 	"NGO Coordinator",
-	"NGO Department Head",
-	"NGO Board Member",
-	"NGO Board Chairperson",
 	"System Manager",
 )
 WIKI_ROLES = ("Employee", "Accounts User", "Accounts Manager", "System Manager")

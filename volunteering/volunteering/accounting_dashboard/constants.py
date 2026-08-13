@@ -1,3 +1,5 @@
+from volunteering.volunteering.authority import LEGACY_BOARD_ROLES, LEGACY_ROLE_DEPT_HEAD
+
 ACCOUNTING_APPROVAL_DOCTYPES = (
 	"Expense Claim",
 	"Purchase Order",
@@ -14,13 +16,9 @@ ACCOUNTS_ROLES = frozenset(
 	}
 )
 
-BOARD_ROLES = frozenset(
-	{
-		"NGO Board Member",
-		"NGO Board Chairperson",
-		"Executive Board Member",
-		"Executive Board Chairperson",
-	}
-)
+# Board access now comes from Employee Grade (see authority.user_is_board_level).
+# These names only remain so dual-path checks keep working until the obsolete
+# roles are deleted.
+BOARD_ROLES = LEGACY_BOARD_ROLES
 
-DEPT_HEAD_ROLE = "NGO Department Head"
+DEPT_HEAD_ROLE = LEGACY_ROLE_DEPT_HEAD

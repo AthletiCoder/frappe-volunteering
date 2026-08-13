@@ -13,7 +13,7 @@ class ApprovalandAdvanceLimits(Document):
 		for row in self.designation_limits or []:
 			if row.designation in seen:
 				frappe.throw(
-					_("Row {0}: Designation {1} is listed more than once.").format(
+					_("Row {0}: Grade {1} is listed more than once.").format(
 						row.idx, frappe.bold(row.designation)
 					)
 				)
@@ -28,22 +28,25 @@ class ApprovalandAdvanceLimits(Document):
 
 @frappe.whitelist()
 def reset_to_defaults():
-	"""Replace the limits table with the built-in defaults."""
+	"""Replace the limits table with the built-in grade defaults."""
 	frappe.only_for(("System Manager", "Accounts Manager"))
 
+	from volunteering.volunteering.accounting_setup import ensure_employee_grades
 	from volunteering.volunteering.doctype.volunteering_accounting_settings.volunteering_accounting_settings import (
-		DEFAULT_DESIGNATION_LIMITS,
+		DEFAULT_GRADE_LIMITS,
 	)
+
+	ensure_employee_grades()
 
 	doc = frappe.get_doc("Approval and Advance Limits")
 	doc.set("designation_limits", [])
-	for designation, max_approve, max_advance in DEFAULT_DESIGNATION_LIMITS:
-		if not frappe.db.exists("Designation", designation):
+	for grade, max_approve, max_advance in DEFAULT_GRADE_LIMITS:
+		if not frappe.db.exists("Employee Grade", grade):
 			continue
 		doc.append(
 			"designation_limits",
 			{
-				"designation": designation,
+				"designation": grade,
 				"max_approve_amount": max_approve,
 				"max_advance_amount": max_advance,
 			},

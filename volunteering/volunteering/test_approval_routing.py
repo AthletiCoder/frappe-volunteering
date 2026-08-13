@@ -20,8 +20,9 @@ from volunteering.volunteering.approval_routing import (
 class TestApprovalRoutingHelpers(UnitTestCase):
 	def setUp(self):
 		# Patch settings in memory — never write the live singles doc, otherwise
-		# running this module flips use_designation_approval off on the site.
+		# running this module flips use_grade_approval off on the site.
 		self._settings = frappe._dict(
+			use_grade_approval=0,
 			use_designation_approval=0,
 			tier_1_limit=2000,
 			tier_2_limit=10000,
@@ -55,11 +56,17 @@ class TestApprovalRoutingHelpers(UnitTestCase):
 		self.assertEqual(get_pending_state_for_level("Expense Claim", 2), PENDING_TIER_2)
 		self.assertEqual(get_pending_state_for_level("Expense Claim", 3), PENDING_TIER_3)
 
+	@patch("volunteering.volunteering.approval_routing.is_department_head_user")
+	@patch("volunteering.volunteering.approval_routing.user_has_executive_board")
+	@patch("volunteering.volunteering.approval_routing.user_has_board_of_directors")
 	@patch("volunteering.volunteering.approval_routing.get_requester_user")
-	@patch("volunteering.volunteering.approval_routing.get_user_roles")
-	def test_effective_approval_level_for_small_claim(self, mock_roles, mock_requester):
+	def test_effective_approval_level_for_small_claim(
+		self, mock_requester, mock_board, mock_exec_board, mock_is_head
+	):
 		mock_requester.return_value = "employee@example.com"
-		mock_roles.return_value = {"Employee"}
+		mock_board.return_value = False
+		mock_exec_board.return_value = False
+		mock_is_head.return_value = False
 		doc = frappe._dict(
 			doctype="Expense Claim",
 			total_claimed_amount=1500,
@@ -67,11 +74,17 @@ class TestApprovalRoutingHelpers(UnitTestCase):
 		)
 		self.assertEqual(get_effective_approval_level(doc), 1)
 
+	@patch("volunteering.volunteering.approval_routing.user_has_executive_board")
+	@patch("volunteering.volunteering.approval_routing.user_has_board_of_directors")
 	@patch("volunteering.volunteering.approval_routing.get_requester_user")
 	@patch("volunteering.volunteering.approval_routing.is_department_head_user")
-	def test_department_head_requester_routes_to_board_tier(self, mock_is_head, mock_requester):
+	def test_department_head_requester_routes_to_board_tier(
+		self, mock_is_head, mock_requester, mock_board, mock_exec_board
+	):
 		mock_requester.return_value = "head@example.com"
 		mock_is_head.return_value = True
+		mock_board.return_value = False
+		mock_exec_board.return_value = False
 		doc = frappe._dict(
 			doctype="Expense Claim",
 			total_claimed_amount=500,
@@ -82,10 +95,10 @@ class TestApprovalRoutingHelpers(UnitTestCase):
 		self.assertEqual(get_effective_approval_level(doc), 2)
 
 	@patch("volunteering.volunteering.approval_routing.get_requester_user")
-	@patch("volunteering.volunteering.approval_routing.get_user_roles")
-	def test_board_chair_cannot_create_requests(self, mock_roles, mock_requester):
+	@patch("volunteering.volunteering.approval_routing.user_has_board_of_directors")
+	def test_board_of_directors_grade_cannot_create_requests(self, mock_board, mock_requester):
 		mock_requester.return_value = "chair@example.com"
-		mock_roles.return_value = {"NGO Board Chairperson"}
+		mock_board.return_value = True
 		doc = frappe._dict(doctype="Expense Claim", employee="EMP-1", owner="chair@example.com")
 		with self.assertRaises(frappe.ValidationError):
 			get_requester_minimum_level(doc)

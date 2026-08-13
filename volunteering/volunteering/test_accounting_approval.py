@@ -4,7 +4,6 @@
 import frappe
 from frappe.model.workflow import apply_workflow
 from frappe.tests import IntegrationTestCase
-from unittest.mock import patch
 
 from volunteering.volunteering.accounting_setup import (
 	ensure_workflow_actions,
@@ -12,46 +11,41 @@ from volunteering.volunteering.accounting_setup import (
 	setup_accounting_custom_fields,
 )
 from volunteering.volunteering.accounting_test_utils import (
-	delete_documents_with_workflow_actions,
-	ensure_designations,
 	get_or_create_department,
 	get_or_create_employee,
 	get_or_create_project_with_cost_center,
 	get_or_create_user,
 	make_expense_claim,
+	mute_accounting_test_emails,
+	set_employee_grade,
 )
 from volunteering.volunteering.approval_routing import PENDING_APPROVAL, escalate_document
 
 
 class IntegrationTestAccountingApproval(IntegrationTestCase):
-	"""End-to-end designation + reports_to approval flow for Expense Claims.
+	"""End-to-end grade + reports_to approval flow for Expense Claims.
 
 	Chain: employee (Associate, approve 0) -> manager (Manager, approve 2000)
-	-> director (Director, approve 25000). The workflow fixture routes
-	Draft -> Pending Approval, gated by `pending_approver`.
+	-> director (Director, approve 25000), where the band is Employee.grade.
+	The workflow fixture routes Draft -> Pending Approval, gated by
+	`pending_approver`.
 	"""
 
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
-		frappe.flags.mute_emails = True
-		cls._email_patcher = patch("frappe.sendmail")
-		cls._email_patcher.start()
-		# The workflow fixture only supports designation approval; pin the flag
-		# so results don't depend on the live site's setting.
-		cls._prev_designation_flag = frappe.db.get_single_value(
-			"Volunteering Accounting Settings", "use_designation_approval"
+		cls._email_patcher = mute_accounting_test_emails()
+		# The workflow fixture only supports grade approval; pin the flag so
+		# results don't depend on the live site's setting.
+		cls._prev_grade_flag = frappe.db.get_single_value(
+			"Volunteering Accounting Settings", "use_grade_approval"
 		)
-		frappe.db.set_single_value(
-			"Volunteering Accounting Settings", "use_designation_approval", 1
-		)
+		frappe.db.set_single_value("Volunteering Accounting Settings", "use_grade_approval", 1)
 		frappe.clear_cache(doctype="Volunteering Accounting Settings")
 		setup_accounting_custom_fields()
 		frappe.clear_cache(doctype="Expense Claim")
 		reload_accounting_workflows()
 		ensure_workflow_actions()
-
-		ensure_designations("Associate", "Manager", "Director")
 
 		cls.project = get_or_create_project_with_cost_center()
 		cls.employee_email = get_or_create_user(
@@ -63,9 +57,10 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 		cls.director_email = get_or_create_user(
 			"director-acct@example.com", ["Employee"], "Director User"
 		)
+		# Authority comes from the grade below, not from a board role.
 		cls.board_chair_email = get_or_create_user(
 			"board-chair-acct@example.com",
-			["Employee", "NGO Board Chairperson"],
+			["Employee"],
 			"Board Chair",
 		)
 		cls.department = get_or_create_department("Operations", cls.manager_email)
@@ -80,37 +75,26 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 			cls.board_chair_email, cls.department, "Board Chair Employee"
 		)
 
-		frappe.db.set_value(
-			"Employee",
-			cls.employee,
-			{"designation": "Associate", "reports_to": cls.manager_employee},
-		)
-		frappe.db.set_value(
-			"Employee",
-			cls.manager_employee,
-			{"designation": "Manager", "reports_to": cls.director_employee},
-		)
-		frappe.db.set_value(
-			"Employee",
-			cls.director_employee,
-			{"designation": "Director", "reports_to": None},
-		)
+		set_employee_grade(cls.employee, "Associate", reports_to=cls.manager_employee)
+		set_employee_grade(cls.manager_employee, "Manager", reports_to=cls.director_employee)
+		set_employee_grade(cls.director_employee, "Director", reports_to=None)
+		set_employee_grade(cls.board_chair_employee, "Board of Directors")
 
 	@classmethod
 	def tearDownClass(cls):
-		cls._email_patcher.stop()
+		cls._email_patcher.close()
 		frappe.flags.mute_emails = False
 		frappe.db.set_single_value(
 			"Volunteering Accounting Settings",
-			"use_designation_approval",
-			1 if cls._prev_designation_flag is None else cls._prev_designation_flag,
+			"use_grade_approval",
+			1 if cls._prev_grade_flag is None else cls._prev_grade_flag,
 		)
 		frappe.clear_cache(doctype="Volunteering Accounting Settings")
 		super().tearDownClass()
 
 	def tearDown(self):
 		frappe.set_user("Administrator")
-		delete_documents_with_workflow_actions(
+		frappe.db.delete(
 			"Expense Claim",
 			{
 				"employee": [
@@ -193,9 +177,7 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 		self.assertEqual(claim.pending_approver, self.manager_email)
 
 		frappe.set_user(self.manager_email)
-		escalate_document(
-			"Expense Claim", claim.name, "Amount above my designation limit"
-		)
+		escalate_document("Expense Claim", claim.name, "Amount above my grade limit")
 		claim.reload()
 		self.assertEqual(claim.workflow_state, PENDING_APPROVAL)
 		self.assertEqual(claim.pending_approver, self.director_email)
@@ -222,7 +204,7 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			apply_workflow(claim, "Submit")
 
-	def test_board_chair_cannot_create_expense_claim(self):
+	def test_board_of_directors_grade_cannot_create_expense_claim(self):
 		frappe.set_user(self.board_chair_email)
 		with self.assertRaises(frappe.ValidationError):
 			make_expense_claim(

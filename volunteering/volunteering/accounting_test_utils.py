@@ -1,5 +1,27 @@
+from contextlib import ExitStack
+from unittest.mock import patch
+
 import frappe
 from frappe.utils import add_days, nowdate
+
+
+def mute_accounting_test_emails():
+	"""Block workflow-action PDF emails (wkhtmltopdf) and frappe.sendmail in tests.
+
+	`frappe.flags.mute_emails` / patching sendmail is not enough: Workflow Action
+	builds the mail with attach_print() before send, and that blows up under
+	frappe.in_test (enqueue runs inline).
+	"""
+	frappe.flags.mute_emails = True
+	stack = ExitStack()
+	stack.enter_context(patch("frappe.sendmail"))
+	stack.enter_context(
+		patch(
+			"frappe.workflow.doctype.workflow_action.workflow_action.send_workflow_action_email",
+			lambda *args, **kwargs: None,
+		)
+	)
+	return stack
 
 
 def get_or_create_user(email, roles, first_name="Test"):
@@ -92,6 +114,24 @@ def get_or_create_employee(user_email, department, first_name="Test Employee"):
 			"gender": "Male",
 		}
 	).insert(ignore_permissions=True).name
+
+
+def ensure_employee_grade(grade):
+	if not frappe.db.exists("Employee Grade", grade):
+		frappe.get_doc({"doctype": "Employee Grade", "__newname": grade}).insert(
+			ignore_permissions=True
+		)
+	return grade
+
+
+def set_employee_grade(employee, grade, reports_to=None):
+	"""Grade carries approval / advance limits; designation stays the job title."""
+	ensure_employee_grade(grade)
+	values = {"grade": grade}
+	if reports_to is not None:
+		values["reports_to"] = reports_to
+	frappe.db.set_value("Employee", employee, values)
+	return grade
 
 
 def get_or_create_project_with_cost_center():

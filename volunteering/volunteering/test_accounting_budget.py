@@ -11,12 +11,13 @@ from volunteering.volunteering.accounting_setup import (
 	setup_accounting_custom_fields,
 )
 from volunteering.volunteering.accounting_test_utils import (
-	ensure_designations,
 	get_or_create_department,
 	get_or_create_employee,
 	get_or_create_project_with_cost_center,
 	get_or_create_user,
 	make_expense_claim,
+	mute_accounting_test_emails,
+	set_employee_grade,
 	set_project_department_budget,
 )
 from volunteering.volunteering.budget_service import get_budget_health, get_consumed_amount
@@ -26,9 +27,7 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
-		frappe.flags.mute_emails = True
-		cls._email_patcher = patch("frappe.sendmail")
-		cls._email_patcher.start()
+		cls._email_patcher = mute_accounting_test_emails()
 		cls._gs_patcher = patch("frappe.model.document.update_global_search")
 		cls._gs_patcher.start()
 		cls._gs_queue_patcher = patch("frappe.utils.global_search.sync_value_in_queue")
@@ -42,30 +41,21 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 			"employee-acct@example.com", ["Employee"], "Employee User"
 		)
 		cls.manager_email = get_or_create_user(
-			"budget-mgr-acct@example.com", ["Employee", "NGO Department Head"], "Budget Mgr"
+			"budget-mgr-acct@example.com", ["Employee"], "Budget Mgr"
 		)
 		cls.department = get_or_create_department("Operations")
 		cls.manager = get_or_create_employee(cls.manager_email, cls.department, "Budget Manager")
 		cls.employee = get_or_create_employee(cls.employee_email, cls.department)
-
-		# Director (25000 limit) keeps the approval-authority guard out of the way
-		# so these tests exercise the budget rules on a 12000 claim.
-		ensure_designations("Associate", "Director")
-		frappe.db.set_value(
-			"Employee", cls.manager, {"designation": "Director", "reports_to": None}
-		)
-		frappe.db.set_value(
-			"Employee",
-			cls.employee,
-			{"designation": "Associate", "reports_to": cls.manager},
-		)
+		# Director grade approves up to 25000, enough for the 12000 over-budget claims.
+		set_employee_grade(cls.manager, "Director")
+		set_employee_grade(cls.employee, "Associate", reports_to=cls.manager)
 		set_project_department_budget(cls.project, cls.department, 10000)
 
 	@classmethod
 	def tearDownClass(cls):
 		cls._gs_queue_patcher.stop()
 		cls._gs_patcher.stop()
-		cls._email_patcher.stop()
+		cls._email_patcher.close()
 		frappe.flags.mute_emails = False
 		super().tearDownClass()
 

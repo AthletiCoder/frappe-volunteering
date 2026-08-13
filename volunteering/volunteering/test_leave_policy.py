@@ -5,7 +5,15 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import add_days, nowdate
 
-from volunteering.volunteering.leave_policy import validate_leave_application
+from volunteering.volunteering.accounting_test_utils import (
+	get_or_create_employee,
+	get_or_create_user,
+	set_employee_grade,
+)
+from volunteering.volunteering.leave_policy import (
+	validate_director_approval,
+	validate_leave_application,
+)
 from volunteering.volunteering.test_utils import (
 	ensure_employee_holiday_list,
 	get_or_create_test_employee,
@@ -166,6 +174,23 @@ class IntegrationTestLeavePolicy(IntegrationTestCase):
 		)
 		with self.assertRaises(frappe.ValidationError):
 			validate_leave_application(doc)
+
+	def test_long_leave_rejects_approver_without_board_grade(self):
+		approver = get_or_create_user("leave-manager@example.com", ["Employee"], "Leave Manager")
+		employee = get_or_create_employee(approver, None, "Leave Manager Employee")
+		set_employee_grade(employee, "Manager")
+
+		doc = self._make_leave_application(leave_approver=approver)
+		with self.assertRaises(frappe.ValidationError):
+			validate_director_approval(doc, 10)
+
+	def test_long_leave_allows_board_of_directors_grade(self):
+		approver = get_or_create_user("leave-board@example.com", ["Employee"], "Leave Board")
+		employee = get_or_create_employee(approver, None, "Leave Board Employee")
+		set_employee_grade(employee, "Board of Directors")
+
+		doc = self._make_leave_application(leave_approver=approver)
+		validate_director_approval(doc, 10)
 
 	def test_sets_default_leave_type(self):
 		doc = self._make_leave_application(leave_type="")

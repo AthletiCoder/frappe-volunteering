@@ -5,17 +5,37 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 
+from volunteering.volunteering.authority import (
+	BOARD_OF_DIRECTORS,
+	LEGACY_ROLE_BOARD_CHAIR,
+	LEGACY_ROLE_BOARD_MEMBER,
+	LEGACY_ROLE_DEPT_HEAD,
+	LEGACY_ROLE_EXEC_BOARD,
+	LEGACY_ROLE_EXEC_CHAIR,
+	get_employee_for_user,
+	get_grade_for_employee,
+)
+from volunteering.volunteering.authority import (
+	get_fallback_board_approver as _authority_fallback_board_approver,
+)
+from volunteering.volunteering.authority import (
+	is_department_head_user as _authority_is_department_head_user,
+)
+from volunteering.volunteering.authority import (
+	user_has_board_of_directors,
+	user_has_executive_board,
+)
 from volunteering.volunteering.doctype.volunteering_accounting_settings.volunteering_accounting_settings import (
-	designation_can_approve,
 	get_accounting_settings,
+	grade_can_approve,
 )
 
-ROLE_BOARD_CHAIR = "NGO Board Chairperson"
-ROLE_BOARD_MEMBER = "NGO Board Member"
-ROLE_DEPT_HEAD = "NGO Department Head"
+ROLE_BOARD_CHAIR = LEGACY_ROLE_BOARD_CHAIR
+ROLE_BOARD_MEMBER = LEGACY_ROLE_BOARD_MEMBER
+ROLE_DEPT_HEAD = LEGACY_ROLE_DEPT_HEAD
 ROLE_ACCOUNTS_MANAGER = "Accounts Manager"
-ROLE_EXEC_BOARD = "Executive Board Member"
-ROLE_EXEC_CHAIR = "Executive Board Chairperson"
+ROLE_EXEC_BOARD = LEGACY_ROLE_EXEC_BOARD
+ROLE_EXEC_CHAIR = LEGACY_ROLE_EXEC_CHAIR
 
 PENDING_ROUTER_STATE = "Pending"
 PENDING_APPROVAL = "Pending Approval"
@@ -51,9 +71,14 @@ AMOUNT_FIELDS = {
 }
 
 
-def use_designation_approval(settings=None):
+def use_grade_approval(settings=None):
+	"""Grade + Reports To routing. Honours the legacy flag while sites migrate."""
 	settings = settings or get_accounting_settings()
-	return bool(settings.get("use_designation_approval"))
+	return bool(settings.get("use_grade_approval") or settings.get("use_designation_approval"))
+
+
+# Legacy alias kept for call sites / tests still on the old name.
+use_designation_approval = use_grade_approval
 
 
 def get_amount_field(doctype):
@@ -78,20 +103,8 @@ def get_requester_employee(doc):
 	return frappe.db.get_value("Employee", {"user_id": doc.owner}, "name")
 
 
-def get_user_roles(user):
-	if not user:
-		return set()
-	return set(frappe.get_roles(user))
-
-
 def is_department_head_user(user):
-	if not user:
-		return False
-	if ROLE_DEPT_HEAD in get_user_roles(user):
-		return True
-	return bool(
-		frappe.db.exists("Department", {"department_head": user, "name": ["!=", "All Departments"]})
-	)
+	return _authority_is_department_head_user(user)
 
 
 def get_department_head_user(department):
@@ -100,17 +113,21 @@ def get_department_head_user(department):
 	return frappe.db.get_value("Department", department, "department_head")
 
 
-def get_employee_for_user(user):
-	if not user:
-		return None
-	return frappe.db.get_value("Employee", {"user_id": user}, "name")
-
-
-def get_designation_for_user(user):
-	employee = get_employee_for_user(user)
+def get_approval_band_for_employee(employee):
+	"""Employee Grade carries the limits; fall back to Designation pre-migration."""
 	if not employee:
 		return None
-	return frappe.db.get_value("Employee", employee, "designation")
+	return get_grade_for_employee(employee) or frappe.db.get_value(
+		"Employee", employee, "designation"
+	)
+
+
+def get_approval_band_for_user(user):
+	return get_approval_band_for_employee(get_employee_for_user(user))
+
+
+# Legacy alias — limits moved from Designation to Employee Grade.
+get_designation_for_user = get_approval_band_for_user
 
 
 def get_reports_to_user(employee):
@@ -125,7 +142,7 @@ def get_reports_to_user(employee):
 
 def walk_approval_chain(employee, amount, start_after_employee=None):
 	"""
-	Walk reports_to upward from employee. Yield (user, manager_employee, designation, can_approve).
+	Walk reports_to upward from employee. Yield (user, manager_employee, grade, can_approve).
 	If start_after_employee is set, skip that manager and yield subsequent ones (escalation).
 	"""
 	settings = get_accounting_settings()
@@ -146,20 +163,20 @@ def walk_approval_chain(employee, amount, start_after_employee=None):
 			continue
 
 		user = frappe.db.get_value("Employee", manager, "user_id")
-		designation = frappe.db.get_value("Employee", manager, "designation")
+		grade = get_approval_band_for_employee(manager)
 		can_approve = False
-		if designation == "Board of Directors":
+		if grade == BOARD_OF_DIRECTORS:
 			can_approve = True
-		elif designation:
-			can_approve = designation_can_approve(designation, amount, settings)
-		yield user, manager, designation, can_approve
+		elif grade:
+			can_approve = grade_can_approve(grade, amount, settings)
+		yield user, manager, grade, can_approve
 		current = manager
 
 
 def find_first_approver(employee, amount, start_after_employee=None):
 	"""Return first manager user in chain (prefer one who can approve; else next manager)."""
 	first = None
-	for user, emp, designation, can_approve in walk_approval_chain(
+	for user, emp, grade, can_approve in walk_approval_chain(
 		employee, amount, start_after_employee=start_after_employee
 	):
 		if not user:
@@ -174,27 +191,15 @@ def find_first_approver(employee, amount, start_after_employee=None):
 
 
 def get_fallback_board_approver():
-	for role in (ROLE_BOARD_CHAIR, ROLE_EXEC_CHAIR, ROLE_BOARD_MEMBER, ROLE_EXEC_BOARD):
-		users = frappe.get_all(
-			"Has Role",
-			filters={"role": role, "parenttype": "User", "parent": ["!=", "Guest"]},
-			pluck="parent",
-		)
-		for user in users:
-			if frappe.db.get_value("User", user, "enabled"):
-				return user
-	return None
+	return _authority_fallback_board_approver()
 
 
 def user_can_approve_amount(user, amount):
 	if not user:
 		return False
-	designation = get_designation_for_user(user)
-	if designation == "Board of Directors":
+	if user_has_board_of_directors(user):
 		return True
-	if ROLE_BOARD_CHAIR in get_user_roles(user) or ROLE_EXEC_CHAIR in get_user_roles(user):
-		return True
-	return designation_can_approve(designation, amount)
+	return grade_can_approve(get_approval_band_for_user(user), amount)
 
 
 def assign_pending_approver(doc):
@@ -235,7 +240,7 @@ def escalate_to_next_approver(doc):
 	doc.pending_approver = next_approver
 
 
-# --- Legacy tier helpers (fallback when use_designation_approval is off) ---
+# --- Legacy tier helpers (fallback when grade approval is off) ---
 
 
 def get_amount_approval_level(doc):
@@ -253,15 +258,14 @@ def get_amount_approval_level(doc):
 
 def get_requester_minimum_level(doc):
 	requester = get_requester_user(doc)
-	roles = get_user_roles(requester)
 
-	if ROLE_BOARD_CHAIR in roles or ROLE_EXEC_CHAIR in roles:
+	if user_has_board_of_directors(requester):
 		frappe.throw(
-			_("Board Chairperson cannot create {0} requests.").format(doc.doctype),
+			_("Board of Directors cannot create {0} requests.").format(doc.doctype),
 			title=_("Not Allowed"),
 		)
 
-	if ROLE_BOARD_MEMBER in roles or ROLE_EXEC_BOARD in roles:
+	if user_has_executive_board(requester):
 		return 2
 
 	if is_department_head_user(requester):
@@ -275,7 +279,7 @@ def get_effective_approval_level(doc):
 
 
 def get_pending_state_for_level(doctype, level):
-	if use_designation_approval():
+	if use_grade_approval():
 		return PENDING_APPROVAL
 	if level == 1:
 		return PENDING_EXPENSE_TIER_1 if doctype == "Expense Claim" else PENDING_PO_TIER_1
@@ -287,7 +291,7 @@ def get_pending_state_for_level(doctype, level):
 def route_pending_workflow_state(doc):
 	if doc.workflow_state != PENDING_ROUTER_STATE:
 		return
-	if use_designation_approval():
+	if use_grade_approval():
 		doc.workflow_state = PENDING_APPROVAL
 		return
 	level = get_effective_approval_level(doc)
@@ -298,7 +302,7 @@ def assign_expense_approver(doc):
 	if doc.doctype != "Expense Claim" or not doc.get("employee"):
 		return
 
-	if use_designation_approval() and doc.get("pending_approver"):
+	if use_grade_approval() and doc.get("pending_approver"):
 		doc.expense_approver = doc.pending_approver
 		return
 
@@ -320,13 +324,13 @@ def validate_no_self_approval(doc):
 
 
 def validate_approver_authority(doc):
-	"""Block Approve when pending approver's designation limit is below amount."""
+	"""Block Approve when pending approver's grade limit is below amount."""
 	previous = doc.get_doc_before_save()
 	if not previous:
 		return
 	if doc.workflow_state != "Approved" or previous.workflow_state == "Approved":
 		return
-	if not use_designation_approval():
+	if not use_grade_approval():
 		return
 
 	amount = get_document_amount(doc)
@@ -344,7 +348,7 @@ def validate_approver_authority(doc):
 	if not user_can_approve_amount(user, amount):
 		frappe.throw(
 			_(
-				"Your designation approval limit is below {0}. "
+				"Your grade approval limit is below {0}. "
 				"Reject or Escalate to a higher authority."
 			).format(frappe.format_value(amount, "Currency"))
 		)
@@ -355,8 +359,8 @@ def validate_escalation_reason(doc):
 	if not previous:
 		return
 
-	# Designation mode: escalate keeps Pending Approval but pending_approver changes
-	if use_designation_approval():
+	# Grade mode: escalate keeps Pending Approval but pending_approver changes
+	if use_grade_approval():
 		if (
 			previous.workflow_state == PENDING_APPROVAL
 			and doc.workflow_state == PENDING_APPROVAL
@@ -410,10 +414,10 @@ def before_accounting_document_save(doc, method=None):
 	if doc.doctype not in ACCOUNTING_WORKFLOW_DOCTYPES:
 		return
 
-	# Always block Board Chair create (designation and legacy modes)
+	# Always block Board of Directors create (grade and legacy tier modes)
 	get_requester_minimum_level(doc)
 
-	if use_designation_approval():
+	if use_grade_approval():
 		doc.approval_level = 1
 		if doc.workflow_state in (PENDING_APPROVAL, PENDING_ROUTER_STATE):
 			if not doc.get("pending_approver"):
@@ -459,12 +463,12 @@ def on_accounting_workflow_state_change(doc, method=None):
 	if previous and previous.workflow_state == doc.workflow_state:
 		# Still notify if pending_approver changed (escalation)
 		if not (
-			use_designation_approval()
+			use_grade_approval()
 			and previous.get("pending_approver") != doc.get("pending_approver")
 		):
 			return
 
-	if use_designation_approval() and doc.workflow_state == PENDING_APPROVAL and not doc.get(
+	if use_grade_approval() and doc.workflow_state == PENDING_APPROVAL and not doc.get(
 		"pending_approver"
 	):
 		assign_pending_approver(doc)
@@ -478,11 +482,10 @@ def notify_pending_approvers(doc):
 		return
 
 	subject = _("Approval required: {0} {1}").format(doc.doctype, doc.name)
-	message = _("{0} {1} is awaiting your approval at stage: {2}.").format(
-		doc.doctype,
-		doc.name,
-		doc.workflow_state,
-	)
+	link = frappe.utils.get_url_to_form(doc.doctype, doc.name)
+	message = _(
+		'{0} <a href="{1}">{2}</a> is awaiting your approval at stage: {3}.'
+	).format(doc.doctype, link, doc.name, doc.workflow_state)
 
 	frappe.sendmail(
 		recipients=recipients,
@@ -495,7 +498,7 @@ def notify_pending_approvers(doc):
 
 
 def get_pending_approver_emails(doc):
-	if use_designation_approval() and doc.get("pending_approver"):
+	if use_grade_approval() and doc.get("pending_approver"):
 		return _user_emails([doc.pending_approver])
 
 	if doc.workflow_state == PENDING_EXPENSE_TIER_1 and doc.get("expense_approver"):
@@ -552,10 +555,10 @@ def escalate_document(doctype, name, escalation_reason):
 		frappe.throw(_("A reason is required when escalating approval."))
 
 	amount = get_document_amount(doc)
-	if use_designation_approval() and user_can_approve_amount(frappe.session.user, amount):
+	if use_grade_approval() and user_can_approve_amount(frappe.session.user, amount):
 		frappe.throw(
 			_(
-				"Your designation limit covers this amount. Approve or Reject — "
+				"Your grade limit covers this amount. Approve or Reject — "
 				"Escalate is only when the amount exceeds your limit."
 			)
 		)
@@ -612,7 +615,7 @@ def get_approver_action_flags(doctype, name):
 
 	amount = get_document_amount(doc)
 	can_approve = True
-	if use_designation_approval():
+	if use_grade_approval():
 		can_approve = user_can_approve_amount(frappe.session.user, amount)
 
 	return {

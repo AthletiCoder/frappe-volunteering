@@ -4,8 +4,9 @@ from frappe.utils import date_diff, flt, getdate, nowdate
 
 from hrms.hr.doctype.leave_application.leave_application import get_number_of_leave_days
 
+from volunteering.volunteering.authority import BOARD_OF_DIRECTORS, user_has_board_of_directors
+
 LEAVE_CATEGORIES = ("Normal", "Emergency")
-DIRECTOR_ROLE = "Executive Board Chairperson"
 EMERGENCY_MAX_DAYS = 3
 DIRECTOR_APPROVAL_THRESHOLD = 7
 EMERGENCY_REGULARIZE_HOURS = 48
@@ -43,6 +44,7 @@ HR_OVERRIDE_ROLES = {"HR Manager", "HR User", "System Manager"}
 
 
 def _is_hr_user(user=None):
+	"""HR / System Manager / Administrator may override employee self-service limits."""
 	user = user or frappe.session.user
 	if user == "Administrator":
 		return True
@@ -140,8 +142,15 @@ def validate_normal_leave(doc, from_date, today, leave_days):
 
 
 def validate_emergency_leave(doc, from_date, today, leave_days, settings):
+	"""Emergency leave is capped by calendar consecutive days (inclusive).
+
+	Working-day leave counts from HRMS can be shorter than the calendar span
+	(weekends/holidays), but the policy is about consecutive calendar absence.
+	"""
 	max_days = int(settings.get("emergency_max_consecutive_days") or EMERGENCY_MAX_DAYS)
-	if leave_days > max_days:
+	to_date = getdate(doc.to_date or doc.from_date)
+	calendar_days = date_diff(to_date, from_date) + 1
+	if calendar_days > max_days:
 		frappe.throw(
 			_(
 				"Emergency leave cannot exceed {0} consecutive day(s). "
@@ -151,7 +160,6 @@ def validate_emergency_leave(doc, from_date, today, leave_days, settings):
 
 	# Retroactive: must regularize within 48 hours of return (to_date + 48h).
 	# HR / System Manager may backfill beyond the window on behalf of employees.
-	to_date = getdate(doc.to_date or doc.from_date)
 	if from_date < today and date_diff(today, to_date) > 2 and not _is_hr_user():
 		frappe.throw(
 			_(
@@ -169,24 +177,25 @@ def validate_director_approval(doc, leave_days):
 	if not approver:
 		frappe.throw(
 			_(
-				"Leave of more than {0} consecutive days requires an Executive Board Chairperson "
+				"Leave of more than {0} consecutive days requires a {1} grade employee "
 				"as Leave Approver."
-			).format(DIRECTOR_APPROVAL_THRESHOLD)
+			).format(DIRECTOR_APPROVAL_THRESHOLD, BOARD_OF_DIRECTORS)
 		)
 
 	if not user_has_director_role(approver):
 		frappe.throw(
 			_(
-				"Leave of more than {0} consecutive days must be approved by a user with the "
-				"Executive Board Chairperson role."
-			).format(DIRECTOR_APPROVAL_THRESHOLD)
+				"Leave of more than {0} consecutive days must be approved by an employee "
+				"with the {1} grade."
+			).format(DIRECTOR_APPROVAL_THRESHOLD, BOARD_OF_DIRECTORS)
 		)
 
 
 def user_has_director_role(user):
+	"""Board of Directors grade (legacy chair role still honoured while migrating)."""
 	if not user:
 		return False
-	return DIRECTOR_ROLE in frappe.get_roles(user)
+	return user_has_board_of_directors(user)
 
 
 def get_application_leave_days(doc):

@@ -24,9 +24,17 @@ class IntegrationTestAttendanceService(IntegrationTestCase):
 	def setUp(self):
 		super().setUp()
 		self.employee = get_or_create_test_employee()
+		# Daily attendance job skips Unpaid; attendance tests need a payroll employee.
+		ensure_employment_type("Full-time")
+		if frappe.db.exists("DocType", "Employment Type"):
+			frappe.db.set_value("Employee", self.employee, "employment_type", "Full-time")
 		self.project = get_or_create_test_project(self.employee)
 		# Allow enough backdate room for picking a non-holiday day past grace.
+		self._prev_backdate_limit = None
 		if frappe.db.exists("DocType", "Daily Work Log Settings"):
+			self._prev_backdate_limit = frappe.db.get_single_value(
+				"Daily Work Log Settings", "backdate_limit_days"
+			)
 			frappe.db.set_single_value("Daily Work Log Settings", "backdate_limit_days", 14)
 		self.attendance_date = self._pick_working_day()
 		self._cleanup()
@@ -48,6 +56,14 @@ class IntegrationTestAttendanceService(IntegrationTestCase):
 
 	def tearDown(self):
 		self._cleanup()
+		if self._prev_backdate_limit is not None and frappe.db.exists(
+			"DocType", "Daily Work Log Settings"
+		):
+			frappe.db.set_single_value(
+				"Daily Work Log Settings",
+				"backdate_limit_days",
+				self._prev_backdate_limit,
+			)
 		super().tearDown()
 
 	def _cleanup(self):
@@ -275,6 +291,33 @@ class IntegrationTestAttendanceService(IntegrationTestCase):
 			if get_holiday_info(self.employee, candidate):
 				return candidate
 		return None
+
+	def test_org_weekly_off_marks_holiday_without_holiday_list(self):
+		"""Wednesday stays Holiday even if get_holiday_info finds nothing."""
+		from volunteering.volunteering.leave_setup import WEEKLY_OFF_DAY
+		from unittest.mock import patch
+
+		day = getdate(nowdate())
+		wednesday = add_days(day, (WEEKLY_OFF_DAY - day.weekday()) % 7)
+		if wednesday > day:
+			wednesday = add_days(wednesday, -7)
+
+		frappe.db.delete("Attendance", {"employee": self.employee, "attendance_date": wednesday})
+		frappe.db.delete("Daily Work Log", {"employee": self.employee, "date": wednesday})
+
+		with patch(
+			"volunteering.volunteering.attendance_service.get_holiday_info",
+			return_value=None,
+		):
+			process_employee_attendance(self.employee, wednesday)
+
+		status = frappe.db.get_value(
+			"Attendance",
+			{"employee": self.employee, "attendance_date": wednesday, "docstatus": 1},
+			"status",
+		)
+		self.assertEqual(status, "Holiday")
+		frappe.db.delete("Attendance", {"employee": self.employee, "attendance_date": wednesday})
 
 	def test_work_on_holiday_stays_holiday_with_hours(self):
 		holiday_date = self._find_recent_holiday()
