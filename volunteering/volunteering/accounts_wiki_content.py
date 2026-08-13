@@ -77,9 +77,9 @@ If a [Purchase Invoice](/app/purchase-invoice) was paid in cash or by another wa
 
 ## How approvals work
 
-Approvals follow two things: your **manager chain** (Reports To) and your **designation** (job level).
+Approvals follow two things: your **manager chain** (Reports To) and your **grade** (seniority band on your Employee record). Designation is only your job title — it does not decide amounts.
 
-- If your designation limit covers the amount: you can **Approve** or **Reject**.
+- If your grade limit covers the amount: you can **Approve** or **Reject**.
 - If the amount is above your limit: you can **Reject** or **Escalate** (send it to a higher person). You cannot approve it.
 - You can never approve your own request.
 
@@ -170,34 +170,34 @@ This page shows **where** to set spending limits and rules, and **who** can chan
 
 | Setting | Who can change it | Who can only view |
 |---------|-------------------|-------------------|
-| Approval & Advance Limits | Accounts Manager, System Manager | HR Manager, Board members |
+| Approval & Advance Limits | Accounts Manager, System Manager | HR Manager, Employees |
 | Accounting Settings | Accounts Manager, System Manager | — |
 
-## 1. Set approval and advance limits (by designation)
+## 1. Set approval and advance limits (by grade)
 
-Limits are set for each **designation** (job level), not for each person. You give each person the right designation on their Employee record, and they get that designation's limits. See [HR Configuration](/help/hr/configuration) for how to set a designation.
+Limits are set for each **grade** (seniority band), not for each person. You give each person the right grade on their Employee record, and they get that grade's limits. See [HR Configuration](/help/hr/configuration) for how to set a grade.
 
 **Open the page:** [My Expenses](/app/my-expenses) → **Approval & Advance Limits**, or go to [Approval and Advance Limits](/app/approval-and-advance-limits).
 
-Each designation has two separate limits:
+Each grade has two separate limits:
 
 | Column | Meaning |
 |--------|---------|
 | **Max Approval Authority** | The biggest amount this person can **approve for other people**. |
 | **Max Self Advance** | The biggest advance this person can take **for themselves**. |
 
-Board-level roles can approve **any** amount.
+Anyone on the **Board of Directors** grade can approve **any** amount.
 
 ### How to edit
 
 1. Open the page.
-2. Change the amounts in the table, or add a row for a designation that is missing.
+2. Change the amounts in the table, or add a row for a grade that is missing.
 3. Click **Save**.
 4. To go back to the standard values, click **Reset to Defaults**.
 
 ### Standard values
 
-| Designation | Can approve for others | Own advance limit |
+| Grade | Can approve for others | Own advance limit |
 |-------------|------------------------|-------------------|
 | Associate | 0 | 2,000 |
 | Manager | 2,000 | 5,000 |
@@ -208,11 +208,11 @@ Board-level roles can approve **any** amount.
 | Executive Board | 100,000 | 100,000 |
 | Board of Directors | Unlimited | — |
 
-## 2. Turn designation approval on or off
+## 2. Turn grade approval on or off
 
 Open [Accounting Settings](/app/volunteering-accounting-settings) → **Approval Authority**.
 
-- **On** (normal): approvals use the designation limits above and the manager chain (Reports To).
+- **On** (normal): approvals use the grade limits above and the manager chain (Reports To).
 - **Off**: the system uses simple amount tiers instead. Keep this **on** unless leadership asks otherwise.
 
 ## 3. Other spending rules
@@ -236,7 +236,7 @@ Also on [Accounting Settings](/app/volunteering-accounting-settings) → **Budge
 |---------|--------------|---------|
 | Enable Soft Budget Warnings | Show a warning when spending is near the budget. | On |
 | Budget Hard-Block % | Block approval when spending goes over the budget by more than this. | 25% |
-| Budget Override Role | The role that is allowed to go over the budget. | Board Chairperson |
+| Budget Hard-Block override | Who may approve past the hard limit. | Board of Directors grade |
 
 See project budget status any time on [Budget Health](/volunteering/budget-health).
 

@@ -19,11 +19,20 @@ from frappe.utils import (
 	nowdate,
 )
 
+from volunteering.volunteering.authority import (
+	BOARD_OF_DIRECTORS,
+	EXECUTIVE_BOARD,
+	LEGACY_BOARD_ROLES,
+	employees_with_grades,
+)
 from volunteering.volunteering.doctype.daily_work_log.daily_work_log import (
 	get_daily_work_log_settings,
 )
+from volunteering.volunteering.leave_setup import WEEKLY_OFF_DAY
 
-BOARD_ROLES = ("Executive Board Member", "Executive Board Chairperson")
+# Leadership is an Employee Grade; the roles are only a dual-path fallback.
+DIGEST_GRADES = (EXECUTIVE_BOARD, BOARD_OF_DIRECTORS)
+BOARD_ROLES = tuple(sorted(LEGACY_BOARD_ROLES))
 PRESENT_THRESHOLD = 6.0
 
 
@@ -53,7 +62,8 @@ def send_work_log_digest(reference_date=None, force=False):
 	frequency = (settings.get("digest_frequency") or "Daily").strip() or "Daily"
 
 	if not force and not _is_due(frequency, reference_date):
-		return {"skipped": True, "reason": "not due", "frequency": frequency}
+		reason = "weekly off" if _is_weekly_off_day(reference_date) else "not due"
+		return {"skipped": True, "reason": reason, "frequency": frequency}
 
 	recipients = _digest_recipients(settings)
 	if not recipients:
@@ -131,12 +141,21 @@ def preview_work_log_digest():
 # ---------------------------------------------------------------------------
 # Frequency helpers
 # ---------------------------------------------------------------------------
+def _is_weekly_off_day(reference_date) -> bool:
+	"""Org weekly off is Wednesday (see leave_setup.WEEKLY_OFF_DAY)."""
+	return getdate(reference_date).weekday() == WEEKLY_OFF_DAY
+
+
 def _is_due(frequency, reference_date):
+	reference_date = getdate(reference_date)
+	if frequency == "Daily":
+		# No automatic daily summary on the weekly off.
+		return not _is_weekly_off_day(reference_date)
 	if frequency == "Weekly":
-		return getdate(reference_date).weekday() == 0  # Monday
+		return reference_date.weekday() == 0  # Monday
 	if frequency == "Monthly":
-		return getdate(reference_date).day == 1
-	return True  # Daily
+		return reference_date.day == 1
+	return True
 
 
 def _resolve_period(frequency, reference_date):
@@ -168,21 +187,26 @@ def _digest_recipients(settings) -> list[str]:
 		if email and "@" in email:
 			emails.add(email)
 
+	users = set(employees_with_grades(DIGEST_GRADES))
+
 	roles = _recipient_roles(settings)
 	if roles:
-		users = frappe.get_all(
-			"Has Role",
-			filters={"role": ["in", roles], "parenttype": "User"},
-			fields=["parent"],
-			distinct=True,
+		users.update(
+			row.parent
+			for row in frappe.get_all(
+				"Has Role",
+				filters={"role": ["in", roles], "parenttype": "User"},
+				fields=["parent"],
+				distinct=True,
+			)
 		)
-		for row in users:
-			user = row.parent
-			if user in ("Administrator", "Guest"):
-				continue
-			info = frappe.db.get_value("User", user, ["enabled", "email"], as_dict=True)
-			if info and info.enabled and info.email:
-				emails.add(info.email)
+
+	for user in users:
+		if user in ("Administrator", "Guest"):
+			continue
+		info = frappe.db.get_value("User", user, ["enabled", "email"], as_dict=True)
+		if info and info.enabled and info.email:
+			emails.add(info.email)
 
 	return sorted(emails)
 
@@ -190,9 +214,9 @@ def _digest_recipients(settings) -> list[str]:
 def _recipient_roles(settings) -> list[str]:
 	raw = settings.get("digest_recipient_roles")
 	if raw is None:
+		# Field absent (older settings docs): keep the legacy board roles.
 		return list(BOARD_ROLES)
-	roles = [r.strip() for r in raw.replace(",", "\n").split("\n") if r.strip()]
-	return roles or list(BOARD_ROLES)
+	return [r.strip() for r in raw.replace(",", "\n").split("\n") if r.strip()]
 
 
 # ---------------------------------------------------------------------------

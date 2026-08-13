@@ -10,14 +10,15 @@ from volunteering.volunteering.approval_routing import (
 	find_first_approver,
 )
 from volunteering.volunteering.doctype.volunteering_accounting_settings.volunteering_accounting_settings import (
-	designation_can_approve,
+	grade_can_approve,
 )
 from volunteering.volunteering.payout_provider import ManualPayoutProvider, get_payout_provider
 
 
 def _settings_with_limits():
+	# The child fieldname is still `designation`; its values are Employee Grades.
 	return frappe._dict(
-		use_designation_approval=1,
+		use_grade_approval=1,
 		tier_1_limit=2000,
 		tier_2_limit=10000,
 		designation_limits=[
@@ -34,15 +35,15 @@ def _settings_with_limits():
 	)
 
 
-class TestDesignationApproval(UnitTestCase):
+class TestGradeApproval(UnitTestCase):
 	@patch(
 		"volunteering.volunteering.doctype.volunteering_accounting_settings.volunteering_accounting_settings.get_accounting_settings"
 	)
-	def test_designation_can_approve_respects_limit(self, mock_settings):
+	def test_grade_can_approve_respects_limit(self, mock_settings):
 		mock_settings.return_value = _settings_with_limits()
-		self.assertTrue(designation_can_approve("Manager", 1500))
-		self.assertFalse(designation_can_approve("Manager", 5000))
-		self.assertTrue(designation_can_approve("Board of Directors", 999999))
+		self.assertTrue(grade_can_approve("Manager", 1500))
+		self.assertFalse(grade_can_approve("Manager", 5000))
+		self.assertTrue(grade_can_approve("Board of Directors", 999999))
 
 	@patch("volunteering.volunteering.approval_routing.get_accounting_settings")
 	@patch("volunteering.volunteering.approval_routing.frappe.db.get_value")
@@ -56,11 +57,11 @@ class TestDesignationApproval(UnitTestCase):
 				return "CEO_EMP"
 			if doctype == "Employee" and name == "MGR" and fieldname == "user_id":
 				return "mgr@example.com"
-			if doctype == "Employee" and name == "MGR" and fieldname == "designation":
+			if doctype == "Employee" and name == "MGR" and fieldname == "grade":
 				return "Manager"
 			if doctype == "Employee" and name == "CEO_EMP" and fieldname == "user_id":
 				return "ceo@example.com"
-			if doctype == "Employee" and name == "CEO_EMP" and fieldname == "designation":
+			if doctype == "Employee" and name == "CEO_EMP" and fieldname == "grade":
 				return "CEO"
 			if doctype == "Employee" and name == "CEO_EMP" and fieldname == "reports_to":
 				return None
@@ -83,6 +84,7 @@ class TestLegacyTierStillWork(UnitTestCase):
 		from volunteering.volunteering.approval_routing import get_amount_approval_level
 
 		mock_settings.return_value = frappe._dict(
+			use_grade_approval=0,
 			use_designation_approval=0,
 			tier_1_limit=2000,
 			tier_2_limit=10000,
@@ -103,33 +105,33 @@ class TestApproverActionFlags(UnitTestCase):
 		return doc
 
 	@patch("volunteering.volunteering.approval_routing.user_can_approve_amount")
-	@patch("volunteering.volunteering.approval_routing.use_designation_approval")
+	@patch("volunteering.volunteering.approval_routing.use_grade_approval")
 	@patch("volunteering.volunteering.approval_routing.get_document_amount")
 	@patch("volunteering.volunteering.approval_routing.frappe.get_doc")
 	def test_escalate_blocked_when_under_limit(
-		self, mock_get_doc, mock_amount, mock_use_desig, mock_can_approve
+		self, mock_get_doc, mock_amount, mock_use_grade, mock_can_approve
 	):
 		from volunteering.volunteering.approval_routing import escalate_document
 
 		self._mock_doc(mock_get_doc)
 		mock_amount.return_value = 1000
-		mock_use_desig.return_value = True
+		mock_use_grade.return_value = True
 		mock_can_approve.return_value = True
 		with self.assertRaises(frappe.ValidationError):
 			escalate_document("Expense Claim", "EC-1", "need higher")
 
 	@patch("volunteering.volunteering.approval_routing.user_can_approve_amount")
-	@patch("volunteering.volunteering.approval_routing.use_designation_approval")
+	@patch("volunteering.volunteering.approval_routing.use_grade_approval")
 	@patch("volunteering.volunteering.approval_routing.get_document_amount")
 	@patch("volunteering.volunteering.approval_routing.frappe.get_doc")
 	def test_approver_flags_escalate_only_when_over_limit(
-		self, mock_get_doc, mock_amount, mock_use_desig, mock_can_approve
+		self, mock_get_doc, mock_amount, mock_use_grade, mock_can_approve
 	):
 		from volunteering.volunteering.approval_routing import get_approver_action_flags
 
 		self._mock_doc(mock_get_doc)
 		mock_amount.return_value = 5000
-		mock_use_desig.return_value = True
+		mock_use_grade.return_value = True
 		mock_can_approve.return_value = False
 		flags = get_approver_action_flags("Expense Claim", "EC-1")
 		self.assertTrue(flags["can_escalate"])

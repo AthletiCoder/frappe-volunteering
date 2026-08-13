@@ -5,13 +5,21 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import add_days, getdate, nowdate
 
+from volunteering.volunteering.accounting_test_utils import (
+	get_or_create_employee,
+	get_or_create_user,
+	set_employee_grade,
+)
 from volunteering.volunteering.api.attendance_digest import (
 	_build_rows,
 	_digest_recipients,
+	_is_due,
 	_render_html,
 	_row_for_employee,
+	send_work_log_digest,
 )
 from volunteering.volunteering.attendance_service import get_holiday_info
+from volunteering.volunteering.leave_setup import WEEKLY_OFF_DAY
 from volunteering.volunteering.test_utils import (
 	get_or_create_test_employee,
 	get_or_create_test_project,
@@ -124,7 +132,28 @@ class IntegrationTestAttendanceDigest(IntegrationTestCase):
 		for row in rows:
 			self.assertIn(frappe.utils.escape_html(row["employee_name"]), html)
 
-	def test_recipients_from_board_roles(self):
+	def test_recipients_include_extra_addresses(self):
 		settings = frappe._dict({"board_digest_extra_recipients": "extra@example.org"})
 		recipients = _digest_recipients(settings)
 		self.assertIn("extra@example.org", recipients)
+
+	def test_recipients_from_board_grades(self):
+		board_email = get_or_create_user("digest-board@example.com", ["Employee"], "Digest Board")
+		board_employee = get_or_create_employee(board_email, None, "Digest Board Employee")
+		set_employee_grade(board_employee, "Executive Board")
+
+		settings = frappe._dict({"digest_recipient_roles": ""})
+		self.assertIn(board_email, _digest_recipients(settings))
+
+	def test_daily_digest_skips_wednesday_weekly_off(self):
+		# Find a Wednesday and a non-Wednesday relative to today.
+		day = getdate(nowdate())
+		wednesday = add_days(day, (WEEKLY_OFF_DAY - day.weekday()) % 7)
+		thursday = add_days(wednesday, 1)
+		self.assertEqual(wednesday.weekday(), WEEKLY_OFF_DAY)
+		self.assertFalse(_is_due("Daily", wednesday))
+		self.assertTrue(_is_due("Daily", thursday))
+
+		result = send_work_log_digest(reference_date=wednesday, force=False)
+		self.assertTrue(result.get("skipped"))
+		self.assertEqual(result.get("reason"), "weekly off")

@@ -1,0 +1,329 @@
+Starting test run with parameters: site=sevamrita.local, app=volunteering, verbose=False, tests=(), force=False, profile=False, failfast=False, skip_before_tests=False, debug=False, selected_categories=[]
+View detailed logs (using --verbose): /Users/vadirajtirthadas/Documents/coding/frappe-bench/logs/frappe.testing.log
+
+Running 44 unit tests for volunteering
+
+volunteering.volunteering.test_approval_routing.TestApprovalRoutingHelpers
+   [32m ✔ [0m test_amount_tiers_use_settings
+   [32m ✔ [0m test_assign_expense_approver_from_department
+   [32m ✔ [0m test_board_of_directors_grade_cannot_create_requests
+   [32m ✔ [0m test_department_head_requester_routes_to_board_tier
+   [32m ✔ [0m test_effective_approval_level_for_small_claim
+   [32m ✔ [0m test_pending_state_mapping
+   [32m ✔ [0m test_po_amount_tiers_use_grand_total
+
+volunteering.volunteering.test_employee_advance_controls.TestEmployeeAdvanceResidual
+   [32m ✔ [0m test_exactly_ten_percent_is_not_blocking
+   [32m ✔ [0m test_fifteen_percent_residual_blocks
+   [32m ✔ [0m test_five_percent_residual_allows_replenish
+   [32m ✔ [0m test_fully_claimed_allows_without_warning
+   [32m ✔ [0m test_fully_claimed_has_zero_residual
+   [32m ✔ [0m test_returned_has_zero_residual
+   [32m ✔ [0m test_unpaid_is_fully_residual_and_blocking
+   [32m ✔ [0m test_validate_allows_replenish_with_warning
+   [32m ✔ [0m test_validate_blocks_when_blocking_open
+
+volunteering.volunteering.test_designation_approval.TestApproverActionFlags
+   [32m ✔ [0m test_approver_flags_escalate_only_when_over_limit
+   [32m ✔ [0m test_escalate_blocked_when_under_limit
+
+volunteering.volunteering.test_designation_approval.TestGradeApproval
+   [32m ✔ [0m test_find_first_approver_skips_low_limit_manager
+   [32m ✔ [0m test_grade_can_approve_respects_limit
+   [32m ✔ [0m test_manual_payout_provider_default
+
+volunteering.volunteering.test_designation_approval.TestLegacyTierStillWork
+   [32m ✔ [0m test_legacy_amount_tiers
+
+volunteering.volunteering.test_budget_service.UnitTestBudgetService
+   [32m ✔ [0m test_get_allocated_budget_returns_zero_when_missing
+   [32m ✔ [0m test_get_document_amount_uses_claimed_amount_for_ec
+   [32m ✔ [0m test_get_document_amount_uses_grand_total_for_po
+
+volunteering.volunteering.test_accounting_controls.TestPaymentEntryControls
+   [32m ✔ [0m test_supplier_pe_against_approved_pi_allowed
+   [32m ✔ [0m test_supplier_pe_against_approved_po_allowed
+   [32m ✔ [0m test_supplier_pe_against_draft_po_blocked
+   [32m ✔ [0m test_supplier_pe_against_unapproved_pi_blocked
+   [32m ✔ [0m test_supplier_pe_against_unapproved_po_blocked
+   [32m ✔ [0m test_supplier_pe_without_refs_blocked
+   [32m ✔ [0m test_supplier_pe_wrong_ref_type_blocked
+
+volunteering.volunteering.api.test_donations.TestDonationHelpersUnit
+   [32m ✔ [0m test_idempotency_key_is_uuid_and_stable
+   [32m ✔ [0m test_split_full_name
+   [32m ✔ [0m test_status_token_roundtrip
+   [32m ✔ [0m test_unique_cashfree_order_id
+   [32m ✔ [0m test_webhook_signature_rejects_tamper
+   [32m ✔ [0m test_webhook_signature_valid
+
+volunteering.volunteering.doctype.donation.test_donation.TestDonationPanUnit
+   [32m ✔ [0m test_invalid_pan
+   [32m ✔ [0m test_valid_pan
+
+volunteering.volunteering.doctype.volunteer.test_volunteer.TestVolunteerMobileHelpers
+   [32m ✔ [0m test_format_mobile_number_normalizes_indian_numbers
+   [32m ✔ [0m test_mobile_lookup_key_uses_last_ten_digits
+
+volunteering.volunteering.doctype.participation.test_participation_rating.TestParticipationRatingHelpers
+   [32m ✔ [0m test_rm_rating_fraction_to_stars
+   [32m ✔ [0m test_rm_rating_legacy_star_values
+
+
+----------------------------------------------------------------------
+Ran 44 tests in 0.111s
+
+OK
+
+Running 157 integration tests for volunteering
+
+volunteering.volunteering.test_employment_type.IntegrationTestEmploymentType
+   [32m ✔ [0m test_ensure_unpaid_employment_type
+   [32m ✔ [0m test_is_unpaid_employee_helper
+
+volunteering.volunteering.test_manager_note_permissions.IntegrationTestManagerNotePermissions
+   [32m ✔ [0m test_admin_sees_all
+   [32m ✔ [0m test_direct_manager_can_read
+   [32m ✔ [0m test_employee_cannot_read_own_note
+   [32m ✔ [0m test_employee_query_conditions_hide_all
+   [32m ✔ [0m test_hierarchy_detection
+   [32m ✔ [0m test_manager_cannot_edit_or_delete
+   [32m ✔ [0m test_note_is_append_only_with_audit_fields
+   [32m ✔ [0m test_skip_level_manager_can_read
+
+volunteering.volunteering.test_accounting_dashboard.IntegrationTestAccountingDashboard
+   [32m ✔ [0m test_dept_head_can_read_own_department_claim
+       ▸  /Users/vadirajtirthadas/Documents/coding/frappe-bench/apps/frappe/frappe/model/qb_query.py:153: V17FrappeDeprecationWarning: This codepath was marked (DATE: 2024-01-01) deprecated for removal (from v17 onwards); note:
+       ▸   The 'limit_page_length' parameter is deprecated. Use 'limit' instead.
+       ▸  
+       ▸    deprecation_warning(
+   [32m ✔ [0m test_dept_head_cannot_read_other_department_claim
+   [32m ✔ [0m test_dept_head_permission_query_scopes_to_department
+   [32m ✔ [0m test_ensure_accounting_pages_is_idempotent
+   [32m ✔ [0m test_get_pending_approvals_for_department_head
+   [32m ✔ [0m test_get_pending_reimbursements_lists_approved_unpaid_claims
+   [32m ✔ [0m test_get_pending_reimbursements_requires_accounts_role
+   [32m ✔ [0m test_get_pending_vendor_payments_requires_accounts_role
+   [32m ✔ [0m test_permission_hooks_are_importable
+   [32m ✔ [0m test_weekly_reminder_targets_users_with_pending_approvals
+
+volunteering.volunteering.test_attendance_service.IntegrationTestAttendanceService
+   [32m ✔ [0m test_approved_leave_marks_on_leave
+   [32m ✔ [0m test_count_special_day_work
+   [32m ✔ [0m test_grace_period_skips_absent_for_today
+   [32m ✔ [0m test_hours_below_threshold_marks_half_day
+   [32m ✔ [0m test_late_log_flips_absent_to_present
+   [32m ✔ [0m test_leave_takes_priority_over_hours
+   [31m ✖ [0m test_manual_process_daily_attendance_marks_absent
+   [32m ✔ [0m test_missing_log_marks_absent
+   [32m ✔ [0m test_rerun_does_not_create_duplicate_attendance
+   [32m ✔ [0m test_submitted_work_log_marks_present
+   [32m ✔ [0m test_unpaid_employees_excluded_from_active_list
+   [32m ✔ [0m test_wfh_request_with_work_log_marks_work_from_home
+   [32m ✔ [0m test_wfh_request_without_work_log_marks_absent
+   [32m ✔ [0m test_work_on_holiday_stays_holiday_with_hours
+   [32m ✔ [0m test_working_hours_synced_to_attendance
+
+volunteering.volunteering.test_accounting_budget.IntegrationTestAccountingBudget
+   [32m ✔ [0m test_approve_over_budget_requires_exceedance_reason
+       ▸  /Users/vadirajtirthadas/Documents/coding/frappe-bench/apps/frappe/frappe/model/qb_query.py:153: V17FrappeDeprecationWarning: This codepath was marked (DATE: 2024-01-01) deprecated for removal (from v17 onwards); note:
+       ▸   The 'limit_page_length' parameter is deprecated. Use 'limit' instead.
+       ▸  
+       ▸    deprecation_warning(
+   [32m ✔ [0m test_approve_over_budget_with_reason_under_hard_limit
+   [32m ✔ [0m test_budget_health_returns_project_department_row
+   [32m ✔ [0m test_expense_claim_gets_department_from_employee
+   [32m ✔ [0m test_form_has_approval_tab_and_budget_exceedance_label
+   [32m ✔ [0m test_over_budget_claim_still_saves_with_soft_warning
+   [32m ✔ [0m test_submitted_claim_counts_toward_consumed_budget
+
+volunteering.volunteering.test_accounting_approval.IntegrationTestAccountingApproval
+   [32m ✔ [0m test_board_of_directors_grade_cannot_create_expense_claim
+   [32m ✔ [0m test_claim_without_receipt_cannot_submit
+       ▸  /Users/vadirajtirthadas/Documents/coding/frappe-bench/apps/frappe/frappe/model/qb_query.py:153: V17FrappeDeprecationWarning: This codepath was marked (DATE: 2024-01-01) deprecated for removal (from v17 onwards); note:
+       ▸   The 'limit_page_length' parameter is deprecated. Use 'limit' instead.
+       ▸  
+       ▸    deprecation_warning(
+   [32m ✔ [0m test_escalation_blocked_when_limit_covers_amount
+   [32m ✔ [0m test_escalation_moves_up_the_chain
+   [32m ✔ [0m test_escalation_requires_reason
+   [32m ✔ [0m test_high_value_claim_lands_with_first_manager
+   [32m ✔ [0m test_low_value_claim_routes_to_manager
+   [32m ✔ [0m test_manager_can_approve_low_value_claim
+   [32m ✔ [0m test_mid_value_claim_routes_past_manager_to_director
+   [32m ✔ [0m test_own_claim_skips_self_approval
+   [32m ✔ [0m test_rejected_claim_stays_rejected_until_resubmit
+
+volunteering.volunteering.test_quick_links_setup.IntegrationTestMyWork
+   [32m ✔ [0m test_ensure_my_work_is_idempotent
+   [32m ✔ [0m test_rebuild_restores_standard_layout
+
+volunteering.volunteering.test_attendance_digest.IntegrationTestAttendanceDigest
+   [32m ✔ [0m test_full_day_is_not_flagged
+   [32m ✔ [0m test_html_renders_all_rows
+   [32m ✔ [0m test_low_hours_is_flagged
+   [32m ✔ [0m test_missing_log_is_flagged
+   [32m ✔ [0m test_recipients_from_board_grades
+   [32m ✔ [0m test_recipients_include_extra_addresses
+
+volunteering.volunteering.test_dashboard_utils.IntegrationTestDashboardUtils
+   [32m ✔ [0m test_dashboard_chart_get_accepts_dict_filters
+   [32m ✔ [0m test_kits_distribution_chart_sorts_by_kit_value
+   [32m ✔ [0m test_normalize_dashboard_filters_converts_dict_to_list
+   [32m ✔ [0m test_normalize_dashboard_filters_handles_json_string
+   [32m ✔ [0m test_normalize_dashboard_filters_returns_empty_for_blank_values
+   [32m ✔ [0m test_normalize_dashboard_filters_returns_list_filters_unchanged
+
+volunteering.volunteering.test_accounting_po_approval.IntegrationTestAccountingPOApproval
+   [32m ✔ [0m test_board_of_directors_grade_cannot_create_purchase_order
+       ▸  /Users/vadirajtirthadas/Documents/coding/frappe-bench/apps/frappe/frappe/model/qb_query.py:153: V17FrappeDeprecationWarning: This codepath was marked (DATE: 2024-01-01) deprecated for removal (from v17 onwards); note:
+       ▸   The 'limit_page_length' parameter is deprecated. Use 'limit' instead.
+       ▸  
+       ▸    deprecation_warning(
+   [32m ✔ [0m test_escalation_moves_up_the_chain
+   [32m ✔ [0m test_high_value_po_lands_with_first_manager
+   [32m ✔ [0m test_low_value_po_routes_to_manager
+   [32m ✔ [0m test_manager_can_approve_low_value_po
+   [32m ✔ [0m test_mid_value_po_routes_past_manager_to_director
+
+volunteering.volunteering.test_attendance_request_permissions.IntegrationTestAttendanceRequestPermissions
+   [32m ✔ [0m test_custom_docperm_grants_employee_submit
+   [32m ✔ [0m test_employee_cannot_submit_own_request
+   [32m ✔ [0m test_manager_can_submit_reports_request
+   [32m ✔ [0m test_unrelated_employee_has_no_access
+
+volunteering.volunteering.test_leave_policy.IntegrationTestLeavePolicy
+   [31m ✖ [0m test_emergency_leave_cannot_exceed_three_days
+   [32m ✔ [0m test_emergency_leave_three_days_allowed
+   [32m ✔ [0m test_emergency_leave_too_far_backdated
+   [32m ✔ [0m test_long_leave_allows_board_of_directors_grade
+   [32m ✔ [0m test_long_leave_rejects_approver_without_board_grade
+   [32m ✔ [0m test_long_leave_requires_director_approver
+   [32m ✔ [0m test_normal_leave_requires_n_day_notice
+   [32m ✔ [0m test_normal_leave_with_sufficient_notice
+   [32m ✔ [0m test_sets_default_leave_type
+
+volunteering.volunteering.test_workspace_setup.IntegrationTestWorkspaceSetup
+   [32m ✔ [0m test_boot_session_sets_latest_event
+   [32m ✔ [0m test_get_latest_ngo_event_returns_most_recently_created
+   [32m ✔ [0m test_sync_volunteering_dashboard_filters_replaces_removed_settings_reference
+   [32m ✔ [0m test_sync_volunteering_workspace_dashboard_is_idempotent
+   [32m ✔ [0m test_sync_volunteering_workspace_dashboard_upgrades_bare_workspace
+
+volunteering.volunteering.api.test_donations.IntegrationTestDonationApis
+   [32m ✔ [0m test_cashfree_webhook_rejects_bad_signature
+   [32m ✔ [0m test_create_80g_requires_pan
+   [32m ✔ [0m test_create_donation_and_order_happy_path
+   [32m ✔ [0m test_create_rejects_below_minimum
+   [32m ✔ [0m test_fraud_rate_limit_per_phone
+   [32m ✔ [0m test_get_donation_status_requires_token
+   [32m ✔ [0m test_reconcile_marks_paid_from_get_order
+   [32m ✔ [0m test_upsert_volunteer_by_phone_is_idempotent
+   [32m ✔ [0m test_webhook_failed_marks_failed
+   [32m ✔ [0m test_webhook_success_is_idempotent
+   [32m ✔ [0m test_webhook_success_marks_donation
+
+volunteering.volunteering.api.test_payment_entry.IntegrationTestDonationPaymentEntry
+   [37m = [0m test_creates_receive_pe_when_enabled
+   [32m ✔ [0m test_skips_when_already_has_payment_entry
+   [32m ✔ [0m test_skips_when_auto_create_disabled
+   [32m ✔ [0m test_skips_when_not_success
+
+volunteering.volunteering.doctype.donation.test_donation.IntegrationTestDonation
+[90m  Test Records created: Donation (0)[0m
+   [32m ✔ [0m test_80g_requires_valid_pan_and_address
+   [32m ✔ [0m test_amount_must_be_positive
+   [32m ✔ [0m test_insert_normalizes_mobile
+   [32m ✔ [0m test_without_80g_pan_optional
+
+volunteering.volunteering.doctype.ngo_event.test_ngo_event.IntegrationTestNGOEvent
+[90m  Test Records created: NGO Event (0)[0m
+   [32m ✔ [0m test_report_maps_dynamic_question_answers
+
+volunteering.volunteering.doctype.daily_work_log.test_daily_work_log.IntegrationTestDailyWorkLog
+[90m  Test Records created: Daily Work Log (0)[0m
+   [32m ✔ [0m test_backdated_log_beyond_limit_is_rejected
+   [32m ✔ [0m test_cancel_permission_only_on_system_manager
+   [32m ✔ [0m test_duplicate_employee_date_is_rejected
+   [32m ✔ [0m test_item_validation
+   [32m ✔ [0m test_mark_as_reviewed_after_submit
+   [32m ✔ [0m test_permission_hooks_are_importable
+   [32m ✔ [0m test_submit_sets_status
+   [32m ✔ [0m test_system_manager_can_cancel_work_log
+   [32m ✔ [0m test_total_hours_cannot_exceed_24
+   [32m ✔ [0m test_total_hours_is_calculated
+
+volunteering.volunteering.doctype.volunteer.test_volunteer.IntegrationTestVolunteer
+[90m  Test Records created: Volunteer (0)[0m
+   [32m ✔ [0m test_find_volunteer_by_mobile_matches_legacy_bare_digits
+   [32m ✔ [0m test_mobile_number_is_normalized_on_save
+   [32m ✔ [0m test_permission_query_condition_hooks_are_importable
+   [32m ✔ [0m test_sync_participation_relationship_managers_helper
+   [32m ✔ [0m test_volunteer_rm_change_does_not_affect_other_volunteers
+   [32m ✔ [0m test_volunteer_rm_change_propagates_to_participations
+   [32m ✔ [0m test_volunteer_save_without_rm_change_skips_participation_update
+
+volunteering.volunteering.doctype.attendance_regularization_request.test_attendance_regularization_request.IntegrationTestAttendanceRegularizationRequest
+[90m  Test Records created: Attendance Regularization Request (0)[0m
+   [32m ✔ [0m test_approval_updates_attendance
+   [32m ✔ [0m test_duplicate_open_request_is_blocked
+   [32m ✔ [0m test_noon_job_does_not_overwrite_regularized_attendance
+   [32m ✔ [0m test_rejection_leaves_attendance_unchanged
+
+volunteering.volunteering.doctype.participation.test_participation_rating.IntegrationTestParticipationRating
+[90m  Test Records created: Participation (0)[0m
+   [32m ✔ [0m test_completed_status_allows_save_without_rating
+   [32m ✔ [0m test_delete_participation_recalculates_volunteer_rollup
+   [32m ✔ [0m test_effective_rating_adjusts_for_hours_delta
+   [32m ✔ [0m test_effective_rating_matches_expected_hours
+   [32m ✔ [0m test_insert_updates_volunteer_rollup
+   [32m ✔ [0m test_non_rm_cannot_rate_on_insert
+   [32m ✔ [0m test_volunteer_change_updates_both_rollups
+   [32m ✔ [0m test_volunteer_rollup_uses_recent_event_weights
+
+volunteering.volunteering.doctype.participation.test_participation.IntegrationTestParticipation
+   [32m ✔ [0m test_backfill_participation_relationship_managers
+   [32m ✔ [0m test_before_insert_links_existing_volunteer_with_leading_zero_phone
+   [32m ✔ [0m test_before_insert_links_legacy_bare_digit_volunteer
+   [32m ✔ [0m test_before_insert_links_volunteer_from_temp_phone
+   [32m ✔ [0m test_before_insert_rejects_all_zero_phone
+   [32m ✔ [0m test_before_insert_requires_volunteer_without_phone
+   [32m ✔ [0m test_check_event_registration_returns_false_for_unknown_phone
+   [32m ✔ [0m test_duplicate_registration_is_blocked
+   [32m ✔ [0m test_kits_delivered_update_without_rating_clears_volunteer_rollup
+   [32m ✔ [0m test_participation_copies_relationship_manager_on_insert
+   [32m ✔ [0m test_participation_copies_relationship_manager_when_volunteer_changes
+   [32m ✔ [0m test_participation_relationship_manager_empty_when_volunteer_has_none
+   [32m ✔ [0m test_update_participation_field_allows_completed_without_rating
+   [32m ✔ [0m test_update_participation_field_rejects_event_change
+   [32m ✔ [0m test_update_participation_field_rejects_invalid_field
+   [32m ✔ [0m test_update_participation_field_rejects_relationship_manager
+   [32m ✔ [0m test_update_participation_field_updates_status
+
+
+======================================================================
+ FAIL  test_manual_process_daily_attendance_marks_absent (volunteering.volunteering.test_attendance_service.IntegrationTestAttendanceService.test_manual_process_daily_attendance_marks_absent)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/vadirajtirthadas/Documents/coding/frappe-bench/apps/volunteering/volunteering/volunteering/test_attendance_service.py", line 170, in test_manual_process_daily_attendance_marks_absent
+    self.assertEqual(self._get_attendance_status(), "Absent")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    self = <volunteering.volunteering.test_attendance_service.IntegrationTestAttendanceService testMethod=test_manual_process_daily_attendance_marks_absent>
+    summary = {'attendance_date': '2026-08-10', 'processed': 10, 'created': 10, 'updated': 0, 'unchanged': 0, 'skipped': 0, 'errors': 0}
+AssertionError: None != 'Absent'
+
+======================================================================
+ FAIL  test_emergency_leave_cannot_exceed_three_days (volunteering.volunteering.test_leave_policy.IntegrationTestLeavePolicy.test_emergency_leave_cannot_exceed_three_days)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/vadirajtirthadas/Documents/coding/frappe-bench/apps/volunteering/volunteering/volunteering/test_leave_policy.py", line 114, in test_emergency_leave_cannot_exceed_three_days
+    with self.assertRaises(frappe.ValidationError):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+    doc = <LeaveApplication: doctype=Leave Application unsaved>
+    self = <volunteering.volunteering.test_leave_policy.IntegrationTestLeavePolicy testMethod=test_emergency_leave_cannot_exceed_three_days>
+AssertionError: ValidationError not raised
+
+----------------------------------------------------------------------
+Ran 157 tests in 17.835s
+
+FAILED (failures=2, skipped=1)

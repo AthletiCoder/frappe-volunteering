@@ -5,6 +5,7 @@ from hrms.hr.doctype.attendance.attendance import mark_attendance
 from hrms.hr.utils import get_holidays_for_employee
 
 from volunteering.volunteering.doctype.daily_work_log.daily_work_log import get_daily_work_log_settings
+from volunteering.volunteering.leave_setup import WEEKLY_OFF_DAY
 
 PRESENT_HOURS_THRESHOLD = 6.0
 
@@ -107,8 +108,8 @@ def process_employee_attendance(employee, attendance_date, force_regularized=Fal
 		)
 		return action
 
-	holiday_info = get_holiday_info(employee, attendance_date)
-	if holiday_info:
+	# Holiday list weekly offs, plus org Wednesday off even if the list is missing.
+	if get_holiday_info(employee, attendance_date) or is_org_weekly_off(attendance_date):
 		hours = get_submitted_work_log_hours(employee, attendance_date)
 		_, action = ensure_attendance(
 			employee=employee,
@@ -399,6 +400,11 @@ def get_approved_leave(employee, attendance_date):
 		["name", "leave_type"],
 		as_dict=True,
 	)
+
+
+def is_org_weekly_off(attendance_date) -> bool:
+	"""Org weekly off is Wednesday (see leave_setup.WEEKLY_OFF_DAY)."""
+	return getdate(attendance_date).weekday() == WEEKLY_OFF_DAY
 
 
 def get_holiday_info(employee, attendance_date):

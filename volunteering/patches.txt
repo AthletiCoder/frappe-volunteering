@@ -7,6 +7,11 @@ volunteering.patches.v1_0.disable_accounting_server_scripts
 volunteering.patches.normalize_volunteer_mobile_numbers
 volunteering.patches.update_volunteering_dashboard_filters
 volunteering.patches.rename_board_roles
+volunteering.patches.migrate_authority_to_grade
+# Enable once grades/department heads are verified on the site — it deletes the
+# Board / Department Head roles the dual-path checks still fall back to:
+# volunteering.patches.remove_obsolete_board_roles
 volunteering.patches.setup_attendance_holiday_status
+volunteering.patches.fix_wednesday_absent_attendance
 volunteering.patches.fix_duplicate_privilege_leave_allocations
 volunteering.patches.migrate_fund_project_type_to_project_type

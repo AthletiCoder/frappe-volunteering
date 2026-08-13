@@ -8,8 +8,8 @@ from frappe import _
 from frappe.utils import flt
 
 from volunteering.volunteering.doctype.volunteering_accounting_settings.volunteering_accounting_settings import (
-	designation_advance_limit,
 	get_accounting_settings,
+	grade_advance_limit,
 )
 
 # Fully settled statuses never block replenishment
@@ -31,7 +31,7 @@ def before_employee_advance_save(doc, method=None):
 		)
 
 	_validate_max_unsettled(doc)
-	_validate_designation_advance_limit(doc)
+	_validate_grade_advance_limit(doc)
 
 
 def _autoset_project(doc):
@@ -228,14 +228,16 @@ def get_linkable_advances_hint(employee):
 	).format("; ".join(parts))
 
 
-def _validate_designation_advance_limit(doc):
-	designation = frappe.db.get_value("Employee", doc.employee, "designation")
-	if not designation:
+def _validate_grade_advance_limit(doc):
+	from volunteering.volunteering.approval_routing import get_approval_band_for_employee
+
+	grade = get_approval_band_for_employee(doc.employee)
+	if not grade:
 		return
 
-	limit = designation_advance_limit(designation)
+	limit = grade_advance_limit(grade)
 	amount = flt(doc.advance_amount)
-	# None = designation not configured — skip hard block
+	# None = grade not configured — skip hard block
 	if limit is None:
 		return
 	# Board unlimited uses large sentinel
@@ -243,12 +245,10 @@ def _validate_designation_advance_limit(doc):
 		return
 	if amount > limit:
 		frappe.throw(
-			_(
-				"Advance amount {0} exceeds the designation limit ({1}) for {2}."
-			).format(
+			_("Advance amount {0} exceeds the grade limit ({1}) for {2}.").format(
 				frappe.format_value(amount, "Currency"),
 				frappe.format_value(limit, "Currency"),
-				designation,
+				grade,
 			),
 			title=_("Advance Limit Exceeded"),
 		)

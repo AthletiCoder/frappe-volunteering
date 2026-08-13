@@ -5,6 +5,7 @@
  "engine": "InnoDB",
  "field_order": [
   "approval_section",
+  "use_grade_approval",
   "use_designation_approval",
   "legacy_thresholds_section",
   "tier_1_limit",
@@ -39,16 +40,24 @@
   },
   {
    "default": "1",
-   "description": "Route approvals via Employee Designation limits and Reports To. Managers below the amount limit may only Reject or Escalate. Configure per-designation amounts on the Approval and Advance Limits page.",
+   "description": "Route approvals via Employee Grade limits and Reports To. Managers below the amount limit may only Reject or Escalate. Configure per-grade amounts on the Approval and Advance Limits page.",
+   "fieldname": "use_grade_approval",
+   "fieldtype": "Check",
+   "label": "Use Grade + Reports To Approval"
+  },
+  {
+   "default": "1",
+   "description": "Superseded by Use Grade + Reports To Approval. Kept so sites mid-migration keep routing by chain instead of falling back to amount tiers.",
    "fieldname": "use_designation_approval",
    "fieldtype": "Check",
-   "label": "Use Designation + Reports To Approval"
+   "hidden": 1,
+   "label": "Use Grade Approval (legacy field)"
   },
   {
    "collapsible": 1,
    "fieldname": "legacy_thresholds_section",
    "fieldtype": "Section Break",
-   "label": "Legacy Amount Tiers (fallback when designation approval is off)"
+   "label": "Legacy Amount Tiers (fallback when grade approval is off)"
   },
   {
    "default": "2000",
@@ -134,17 +143,17 @@
   },
   {
    "default": "25",
-   "description": "Block approval when proposed spend exceeds allocated budget by more than this percent, unless override role applies.",
+   "description": "Block approval when proposed spend exceeds allocated budget by more than this percent. Board of Directors grade always overrides.",
    "fieldname": "budget_hard_block_pct",
    "fieldtype": "Percent",
    "label": "Budget Hard-Block Overspend %",
    "reqd": 1
   },
   {
-   "default": "NGO Board Chairperson",
+   "description": "Optional extra override on top of the Board of Directors grade. Leave blank — grade decides.",
    "fieldname": "budget_override_role",
    "fieldtype": "Link",
-   "label": "Budget Override Role",
+   "label": "Budget Override Role (optional)",
    "options": "Role"
   },
   {
@@ -206,7 +215,7 @@
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-07-21 12:00:00",
+ "modified": "2026-08-13 12:00:00",
  "modified_by": "Administrator",
  "module": "Volunteering",
  "name": "Volunteering Accounting Settings",

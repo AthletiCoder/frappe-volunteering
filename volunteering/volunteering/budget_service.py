@@ -6,6 +6,7 @@ from frappe import _
 from frappe.utils import flt
 
 from volunteering.volunteering.approval_routing import get_amount_field, get_document_amount
+from volunteering.volunteering.authority import BOARD_OF_DIRECTORS, user_has_board_of_directors
 from volunteering.volunteering.doctype.volunteering_accounting_settings.volunteering_accounting_settings import (
 	get_accounting_settings,
 )
@@ -95,10 +96,17 @@ def _is_approving(doc):
 	return previous.workflow_state != "Approved"
 
 
-def _has_budget_override_role(settings=None):
+def _can_override_budget(settings=None):
+	"""Board of Directors grade overrides; an optional configured role still works."""
+	if user_has_board_of_directors(frappe.session.user):
+		return True
 	settings = settings or get_accounting_settings()
-	override_role = settings.get("budget_override_role") or "NGO Board Chairperson"
-	return override_role in frappe.get_roles(frappe.session.user)
+	override_role = settings.get("budget_override_role")
+	return bool(override_role) and override_role in frappe.get_roles(frappe.session.user)
+
+
+# Legacy alias for callers/tests still on the role-only name.
+_has_budget_override_role = _can_override_budget
 
 
 def validate_budget_on_save(doc, method=None):
@@ -147,7 +155,7 @@ def validate_budget_on_save(doc, method=None):
 
 	hard_pct = flt(settings.get("budget_hard_block_pct") or 25)
 	reason = (doc.get("budget_override_reason") or "").strip()
-	override_role = settings.get("budget_override_role") or "NGO Board Chairperson"
+	override_authority = settings.get("budget_override_role") or BOARD_OF_DIRECTORS
 
 	if _is_approving(doc):
 		if not reason:
@@ -159,7 +167,7 @@ def validate_budget_on_save(doc, method=None):
 				title=_("Budget Exceedance Reason Required"),
 			)
 
-		if over_pct > hard_pct and not _has_budget_override_role(settings):
+		if over_pct > hard_pct and not _can_override_budget(settings):
 			frappe.throw(
 				_(
 					"{0} Overspend is {1}% (hard limit {2}%). "
@@ -168,7 +176,7 @@ def validate_budget_on_save(doc, method=None):
 					warning,
 					frappe.utils.rounded(over_pct, 1),
 					hard_pct,
-					override_role,
+					override_authority,
 				),
 				title=_("Budget Hard Block"),
 			)

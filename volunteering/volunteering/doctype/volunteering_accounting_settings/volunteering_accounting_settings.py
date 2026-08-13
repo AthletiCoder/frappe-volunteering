@@ -5,8 +5,10 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import flt
 
+from volunteering.volunteering.authority import BOARD_OF_DIRECTORS
 
-DEFAULT_DESIGNATION_LIMITS = (
+# (Employee Grade, max approve for others, max self advance)
+DEFAULT_GRADE_LIMITS = (
 	("Associate", 0, 2000),
 	("Manager", 2000, 5000),
 	("Vice President", 5000, 10000),
@@ -17,7 +19,11 @@ DEFAULT_DESIGNATION_LIMITS = (
 	("Board of Directors", 0, 0),  # 0 approve = unlimited when flagged below
 )
 
-UNLIMITED_DESIGNATIONS = {"Board of Directors"}
+UNLIMITED_GRADES = frozenset({BOARD_OF_DIRECTORS})
+
+# Legacy aliases — limits moved from Designation to Employee Grade.
+DEFAULT_DESIGNATION_LIMITS = DEFAULT_GRADE_LIMITS
+UNLIMITED_DESIGNATIONS = UNLIMITED_GRADES
 
 
 class VolunteeringAccountingSettings(Document):
@@ -31,6 +37,7 @@ def get_accounting_settings():
 	return frappe._dict(
 		tier_1_limit=2000,
 		tier_2_limit=10000,
+		use_grade_approval=1,
 		use_designation_approval=1,
 		vendor_payment_threshold=5000,
 		cash_payment_limit=2000,
@@ -39,7 +46,7 @@ def get_accounting_settings():
 		advance_replenish_residual_pct=10,
 		enable_budget_warnings=1,
 		budget_hard_block_pct=25,
-		budget_override_role="NGO Board Chairperson",
+		budget_override_role="",
 		emergency_submit_working_days=1,
 		emergency_approve_working_days=2,
 		preferred_payout_mode="Manual",
@@ -48,10 +55,11 @@ def get_accounting_settings():
 
 
 def get_limit_rows(settings=None):
-	"""Saved designation-limit rows.
+	"""Saved grade-limit rows.
 
 	If a settings object with `designation_limits` is passed (tests inject
 	these), use it; otherwise read the Approval and Advance Limits single.
+	The child fieldname stays `designation`; its values are Employee Grades.
 	"""
 	if settings is not None and settings.get("designation_limits"):
 		return settings.get("designation_limits")
@@ -62,49 +70,63 @@ def get_limit_rows(settings=None):
 	return []
 
 
-def get_designation_limit_map(settings=None):
-	"""Return {designation_name: {max_approve_amount, max_advance_amount, unlimited}}.
+def get_grade_limit_map(settings=None):
+	"""Return {grade_name: {max_approve_amount, max_advance_amount, unlimited}}.
 
-	Starts from DEFAULT_DESIGNATION_LIMITS, then overlays saved rows from the
+	Starts from DEFAULT_GRADE_LIMITS, then overlays saved rows from the
 	Approval and Advance Limits page.
 	"""
 	limits = {}
-	for designation, max_approve, max_advance in DEFAULT_DESIGNATION_LIMITS:
-		limits[designation] = {
+	for grade, max_approve, max_advance in DEFAULT_GRADE_LIMITS:
+		limits[grade] = {
 			"max_approve_amount": flt(max_approve),
 			"max_advance_amount": flt(max_advance),
-			"unlimited": designation in UNLIMITED_DESIGNATIONS,
+			"unlimited": grade in UNLIMITED_GRADES,
 		}
 	for row in get_limit_rows(settings):
 		if not row.designation:
 			continue
-		unlimited = row.designation in UNLIMITED_DESIGNATIONS
 		limits[row.designation] = {
 			"max_approve_amount": flt(row.max_approve_amount),
 			"max_advance_amount": flt(row.max_advance_amount),
-			"unlimited": unlimited,
+			"unlimited": row.designation in UNLIMITED_GRADES,
 		}
 	return limits
 
 
-def designation_can_approve(designation, amount, settings=None):
-	limits = get_designation_limit_map(settings)
-	if not designation or designation not in limits:
+def grade_can_approve(grade, amount, settings=None):
+	limits = get_grade_limit_map(settings)
+	if not grade or grade not in limits:
 		return False
-	row = limits[designation]
+	row = limits[grade]
 	if row.get("unlimited"):
 		return True
 	return flt(amount) <= flt(row.get("max_approve_amount"))
 
 
-def designation_advance_limit(designation, settings=None):
-	limits = get_designation_limit_map(settings)
-	if not designation:
+def grade_advance_limit(grade, settings=None):
+	limits = get_grade_limit_map(settings)
+	if not grade:
 		return 0
-	if designation not in limits:
-		# Unknown designation: do not hard-block at 0 — treat as unset
+	if grade not in limits:
+		# Unknown grade: do not hard-block at 0 — treat as unset
 		return None
-	row = limits[designation]
+	row = limits[grade]
 	if row.get("unlimited"):
 		return 10**12
 	return flt(row.get("max_advance_amount"))
+
+
+# --- Legacy wrappers (call sites migrating from Designation to Grade) -------
+
+
+def get_designation_limit_map(settings=None):
+	return get_grade_limit_map(settings)
+
+
+def designation_can_approve(designation, amount, settings=None):
+	return grade_can_approve(designation, amount, settings)
+
+
+def designation_advance_limit(designation, settings=None):
+	return grade_advance_limit(designation, settings)

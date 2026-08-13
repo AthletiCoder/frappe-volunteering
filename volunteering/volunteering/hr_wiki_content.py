@@ -23,7 +23,7 @@ Guides for daily work, attendance, leave, and work from home.
 
 ## For HR and admins
 
-- [HR Configuration](/help/hr/configuration) — assign managers, designations, and set up policies
+- [HR Configuration](/help/hr/configuration) — assign managers, grades, and set up policies
 - [HR Settings & Ops](/help/hr/settings) — day-to-day HR tasks and policy details
 
 ## Quick links
@@ -186,7 +186,7 @@ Every application needs a **Leave Approver**. This is usually your manager, and 
 
 ## Long leave (more than 7 days)
 
-For leave longer than 7 days, the approver must be the **Board Chairperson**.
+For leave longer than 7 days, the approver must be an employee on the **Board of Directors** grade.
 
 ## After approval
 
@@ -264,15 +264,16 @@ When you do this, the system automatically:
 
 The **Leave Approver** field on the Employee page is filled in from Reports To automatically. You usually do not need to change it. Only change it by hand if someone needs a different approver.
 
-## 3. Give a person a designation (job level)
+## 3. Give a person a grade (approval band)
 
-The **Designation** field on the Employee page decides how much a person can approve and how large an advance they can take.
+**Designation** is the job title. **Grade** decides how much a person can approve and how large an advance they can take.
 
 1. Open the person's [Employee](/app/employee) page.
-2. Choose the **Designation** (for example, Manager, Director).
-3. Save.
+2. Set the **Designation** (job title, for example Programme Officer).
+3. Choose the **Grade** (for example, Manager, Director, Board of Directors).
+4. Save.
 
-The amounts for each designation are set by Accounts. See [Accounts Configuration](/help/accounts/configuration).
+The amounts for each grade are set by Accounts. See [Accounts Configuration](/help/accounts/configuration).
 
 ## 4. Set the department and department head
 
@@ -311,7 +312,7 @@ Use **Preview Summary** to see how it looks, and **Send Summary Now** to send it
 
 ## New employees
 
-When you add a new employee, the standard leave policy is given to them automatically (unless they are Unpaid). Remember to set their **Reports To** and **Designation**.
+When you add a new employee, the standard leave policy is given to them automatically (unless they are Unpaid). Remember to set their **Reports To**, **Designation** (job title) and **Grade** (approval band).
 
 ## Related
 
@@ -322,7 +323,7 @@ When you add a new employee, the standard leave policy is given to them automati
 
 HR_SETTINGS = """# HR settings & ops
 
-For HR Managers and System Managers. For how to assign managers and designations, see [HR Configuration](/help/hr/configuration).
+For HR Managers and System Managers. For how to assign managers and grades, see [HR Configuration](/help/hr/configuration).
 
 ## Settings pages
 

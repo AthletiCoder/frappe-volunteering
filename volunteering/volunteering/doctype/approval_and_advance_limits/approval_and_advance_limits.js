@@ -11,7 +11,7 @@ frappe.ui.form.on("Approval and Advance Limits", {
 						freeze_message: __("Resetting…"),
 						callback(r) {
 							frappe.show_alert({
-								message: __("Restored {0} default designation limits.", [r.message]),
+								message: __("Restored {0} default grade limits.", [r.message]),
 								indicator: "green",
 							});
 							frm.reload_doc();
