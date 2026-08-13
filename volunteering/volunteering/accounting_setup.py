@@ -4,7 +4,7 @@ from frappe.utils import flt
 
 from volunteering.volunteering.custom_fields import ACCOUNTING_CUSTOM_FIELDS
 from volunteering.volunteering.doctype.volunteering_accounting_settings.volunteering_accounting_settings import (
-	DEFAULT_DESIGNATION_LIMITS,
+	DEFAULT_GRADE_LIMITS,
 )
 
 DEPARTMENT_NAMES = [
@@ -17,11 +17,8 @@ DEPARTMENT_NAMES = [
 	"Donor Relations",
 ]
 
-ACCOUNTING_ROLES = [
-	"NGO Department Head",
-	"NGO Board Member",
-	"NGO Board Chairperson",
-]
+# Authority is Employee Grade + Department.department_head; no board roles to seed.
+ACCOUNTING_ROLES: list[str] = []
 
 BUDGET_HEALTH_ROLES = (
 	"Accounts User",
@@ -29,7 +26,9 @@ BUDGET_HEALTH_ROLES = (
 	"NGO Coordinator",
 )
 
-DEFAULT_DESIGNATIONS = [row[0] for row in DEFAULT_DESIGNATION_LIMITS]
+DEFAULT_GRADES = [row[0] for row in DEFAULT_GRADE_LIMITS]
+# Job titles seeded historically; kept so existing Employee.designation links resolve.
+DEFAULT_DESIGNATIONS = DEFAULT_GRADES
 
 
 def reload_accounting_workflows():
@@ -71,6 +70,7 @@ def after_migrate():
 	ensure_workflow_states()
 	ensure_departments()
 	ensure_designations()
+	ensure_employee_grades()
 	ensure_accounting_settings()
 	ensure_designation_limits()
 	ensure_employee_advance_accounts()
@@ -351,6 +351,7 @@ def setup_accounting_custom_fields():
 
 
 def ensure_accounting_roles():
+	"""No accounting-specific roles remain; authority is Grade + department_head."""
 	for role_name in ACCOUNTING_ROLES:
 		if frappe.db.exists("Role", role_name):
 			continue
@@ -366,6 +367,21 @@ def ensure_designations():
 		frappe.get_doc({"doctype": "Designation", "designation_name": name}).insert(
 			ignore_permissions=True
 		)
+
+
+def ensure_employee_grades():
+	"""Seed the Employee Grades that carry approval / advance limits."""
+	if not frappe.db.exists("DocType", "Employee Grade"):
+		return
+	for name in DEFAULT_GRADES:
+		if frappe.db.exists("Employee Grade", name):
+			continue
+		try:
+			frappe.get_doc({"doctype": "Employee Grade", "__newname": name}).insert(
+				ignore_permissions=True
+			)
+		except frappe.DuplicateEntryError:
+			continue
 
 
 def _department_exists(department_name, company=None):
@@ -416,12 +432,12 @@ def ensure_accounting_settings():
 		settings.advance_replenish_residual_pct = 10
 	if settings.get("budget_hard_block_pct") is None:
 		settings.budget_hard_block_pct = 25
-	if not settings.get("budget_override_role"):
-		settings.budget_override_role = "NGO Board Chairperson"
 	if settings.get("emergency_submit_working_days") is None:
 		settings.emergency_submit_working_days = 1
 	if settings.get("emergency_approve_working_days") is None:
 		settings.emergency_approve_working_days = 2
+	if settings.get("use_grade_approval") is None:
+		settings.use_grade_approval = 1
 	if settings.get("use_designation_approval") is None:
 		settings.use_designation_approval = 1
 	if not settings.get("payout_provider"):
@@ -476,14 +492,16 @@ def ensure_expense_claim_payable_account():
 
 
 def ensure_designation_limits():
-	"""Seed / migrate designation limits on the Approval and Advance Limits page.
+	"""Seed / migrate grade limits on the Approval and Advance Limits page.
 
 	Rows used to live on Volunteering Accounting Settings; copy any orphaned
-	rows over once, then upsert missing defaults.
+	rows over once, then upsert missing defaults. The child fieldname is still
+	`designation`, but its values are Employee Grades.
 	"""
 	if not frappe.db.exists("DocType", "Approval and Advance Limits"):
 		return
 
+	ensure_employee_grades()
 	doc = frappe.get_single("Approval and Advance Limits")
 
 	# One-time copy of rows left behind on Volunteering Accounting Settings
@@ -512,15 +530,15 @@ def ensure_designation_limits():
 			{"parenttype": "Volunteering Accounting Settings"},
 		)
 
-	# Upsert missing designation limit rows from defaults (partial tables used to skip this)
+	# Upsert missing grade limit rows from defaults (partial tables used to skip this)
 	existing = {row.designation for row in (doc.get("designation_limits") or []) if row.designation}
-	for designation, max_approve, max_advance in DEFAULT_DESIGNATION_LIMITS:
-		if designation in existing:
+	for grade, max_approve, max_advance in DEFAULT_GRADE_LIMITS:
+		if grade in existing:
 			continue
 		doc.append(
 			"designation_limits",
 			{
-				"designation": designation,
+				"designation": grade,
 				"max_approve_amount": max_approve,
 				"max_advance_amount": max_advance,
 			},

@@ -80,8 +80,7 @@
    "options": "Email"
   },
   {
-   "default": "Executive Board Member\nExecutive Board Chairperson",
-   "description": "One role per line. Every enabled user holding any of these roles receives the summary.",
+   "description": "Optional. One role per line, in addition to employees on the Executive Board / Board of Directors grades, who always receive the summary.",
    "fieldname": "digest_recipient_roles",
    "fieldtype": "Small Text",
    "label": "Recipient Roles"

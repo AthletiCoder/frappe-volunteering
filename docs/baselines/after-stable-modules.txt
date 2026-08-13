@@ -1,0 +1,30 @@
+===== STABLE MODULES AFTER =====
+===== MODULE volunteering.volunteering.doctype.volunteer.test_volunteer =====
+Ran 2 tests in 0.001s
+OK
+Ran 7 tests in 0.173s
+OK
+===== MODULE volunteering.volunteering.doctype.participation.test_participation =====
+Ran 17 tests in 0.250s
+OK
+===== MODULE volunteering.volunteering.doctype.donation.test_donation =====
+Ran 2 tests in 0.001s
+OK
+Ran 4 tests in 0.039s
+OK
+===== MODULE volunteering.volunteering.test_attendance_service =====
+ FAIL  test_manual_process_daily_attendance_marks_absent (volunteering.volunteering.test_attendance_service.IntegrationTestAttendanceService.test_manual_process_daily_attendance_marks_absent)
+Ran 15 tests in 8.521s
+FAILED (failures=1)
+===== MODULE volunteering.volunteering.test_employee_advance_controls =====
+Ran 9 tests in 0.079s
+OK
+===== MODULE volunteering.volunteering.test_budget_service =====
+Ran 3 tests in 0.032s
+OK
+===== MODULE volunteering.volunteering.test_accounting_controls =====
+Ran 7 tests in 0.057s
+OK
+===== MODULE volunteering.volunteering.test_manager_note_permissions =====
+Ran 8 tests in 1.992s
+OK

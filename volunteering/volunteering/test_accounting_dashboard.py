@@ -26,6 +26,8 @@ from volunteering.volunteering.accounting_test_utils import (
 	get_or_create_project_with_cost_center,
 	get_or_create_user,
 	make_expense_claim,
+	mute_accounting_test_emails,
+	set_employee_grade,
 )
 from volunteering.volunteering.expense_claim_permissions import (
 	get_permission_query_conditions,
@@ -37,13 +39,13 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
-		frappe.flags.mute_emails = True
-		cls._email_patcher = patch("frappe.sendmail")
-		cls._email_patcher.start()
+		cls._email_patcher = mute_accounting_test_emails()
 		cls._gs_patcher = patch("frappe.model.document.update_global_search")
 		cls._gs_patcher.start()
 		cls._gs_queue_patcher = patch("frappe.utils.global_search.sync_value_in_queue")
 		cls._gs_queue_patcher.start()
+		frappe.db.set_single_value("Volunteering Accounting Settings", "use_grade_approval", 1)
+		frappe.clear_cache(doctype="Volunteering Accounting Settings")
 		setup_accounting_custom_fields()
 		frappe.clear_cache(doctype="Expense Claim")
 		reload_accounting_workflows()
@@ -52,10 +54,10 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 
 		cls.project = get_or_create_project_with_cost_center()
 		cls.dept_head_email = get_or_create_user(
-			"dept-head-acct@example.com", ["Employee", "NGO Department Head"], "Dept Head"
+			"dept-head-acct@example.com", ["Employee"], "Dept Head"
 		)
 		cls.other_dept_head_email = get_or_create_user(
-			"other-dept-head-acct@example.com", ["Employee", "NGO Department Head"], "Other Head"
+			"other-dept-head-acct@example.com", ["Employee"], "Other Head"
 		)
 		cls.employee_email = get_or_create_user(
 			"employee-acct@example.com", ["Employee"], "Employee User"
@@ -72,12 +74,19 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 		cls.other_employee = get_or_create_employee(
 			cls.other_employee_email, cls.other_department, "Other Employee"
 		)
+		cls.dept_head_employee = get_or_create_employee(
+			cls.dept_head_email, cls.department, "Dept Head Employee"
+		)
+		# Grade chain: Associate -> Manager (also the department head).
+		set_employee_grade(cls.dept_head_employee, "Manager", reports_to=None)
+		set_employee_grade(cls.employee, "Associate", reports_to=cls.dept_head_employee)
+		set_employee_grade(cls.other_employee, "Associate", reports_to=None)
 
 	@classmethod
 	def tearDownClass(cls):
 		cls._gs_queue_patcher.stop()
 		cls._gs_patcher.stop()
-		cls._email_patcher.stop()
+		cls._email_patcher.close()
 		frappe.flags.mute_emails = False
 		super().tearDownClass()
 
@@ -230,4 +239,6 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 		self._submit_claim_as(self.employee_email, amount=1500)
 		send_weekly_pending_approval_reminder()
 		called_users = {call.args[0] for call in mock_send.call_args_list}
+		# Pending approver is the manager in the reports_to chain (dept head here).
+		# Board-of-Directors override users may also be notified — that is fine.
 		self.assertIn(self.dept_head_email, called_users)

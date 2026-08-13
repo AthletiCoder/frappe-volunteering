@@ -1,0 +1,49 @@
+===== AUTHORITY MODULES AFTER =====
+===== MODULE volunteering.volunteering.test_designation_approval =====
+Ran 6 tests in 0.093s
+OK
+===== MODULE volunteering.volunteering.test_approval_routing =====
+Ran 7 tests in 0.084s
+OK
+===== MODULE volunteering.volunteering.test_attendance_digest =====
+Ran 6 tests in 1.112s
+OK
+===== MODULE volunteering.volunteering.test_leave_policy =====
+ FAIL  test_emergency_leave_cannot_exceed_three_days (volunteering.volunteering.test_leave_policy.IntegrationTestLeavePolicy.test_emergency_leave_cannot_exceed_three_days)
+Ran 9 tests in 1.393s
+FAILED (failures=1)
+===== MODULE volunteering.volunteering.test_accounting_approval =====
+ ERROR  test_claim_without_receipt_cannot_submit (volunteering.volunteering.test_accounting_approval.IntegrationTestAccountingApproval.test_claim_without_receipt_cannot_submit)
+ ERROR  test_escalation_blocked_when_limit_covers_amount (volunteering.volunteering.test_accounting_approval.IntegrationTestAccountingApproval.test_escalation_blocked_when_limit_covers_amount)
+ ERROR  test_escalation_moves_up_the_chain (volunteering.volunteering.test_accounting_approval.IntegrationTestAccountingApproval.test_escalation_moves_up_the_chain)
+ ERROR  test_escalation_requires_reason (volunteering.volunteering.test_accounting_approval.IntegrationTestAccountingApproval.test_escalation_requires_reason)
+ ERROR  test_high_value_claim_lands_with_first_manager (volunteering.volunteering.test_accounting_approval.IntegrationTestAccountingApproval.test_high_value_claim_lands_with_first_manager)
+ ERROR  test_low_value_claim_routes_to_manager (volunteering.volunteering.test_accounting_approval.IntegrationTestAccountingApproval.test_low_value_claim_routes_to_manager)
+ ERROR  test_manager_can_approve_low_value_claim (volunteering.volunteering.test_accounting_approval.IntegrationTestAccountingApproval.test_manager_can_approve_low_value_claim)
+ ERROR  test_mid_value_claim_routes_past_manager_to_director (volunteering.volunteering.test_accounting_approval.IntegrationTestAccountingApproval.test_mid_value_claim_routes_past_manager_to_director)
+ ERROR  test_own_claim_skips_self_approval (volunteering.volunteering.test_accounting_approval.IntegrationTestAccountingApproval.test_own_claim_skips_self_approval)
+ ERROR  test_rejected_claim_stays_rejected_until_resubmit (volunteering.volunteering.test_accounting_approval.IntegrationTestAccountingApproval.test_rejected_claim_stays_rejected_until_resubmit)
+Ran 11 tests in 11.060s
+FAILED (errors=10)
+===== MODULE volunteering.volunteering.test_accounting_po_approval =====
+ ERROR  test_escalation_moves_up_the_chain (volunteering.volunteering.test_accounting_po_approval.IntegrationTestAccountingPOApproval.test_escalation_moves_up_the_chain)
+ ERROR  test_high_value_po_lands_with_first_manager (volunteering.volunteering.test_accounting_po_approval.IntegrationTestAccountingPOApproval.test_high_value_po_lands_with_first_manager)
+ ERROR  test_low_value_po_routes_to_manager (volunteering.volunteering.test_accounting_po_approval.IntegrationTestAccountingPOApproval.test_low_value_po_routes_to_manager)
+ ERROR  test_manager_can_approve_low_value_po (volunteering.volunteering.test_accounting_po_approval.IntegrationTestAccountingPOApproval.test_manager_can_approve_low_value_po)
+ ERROR  test_mid_value_po_routes_past_manager_to_director (volunteering.volunteering.test_accounting_po_approval.IntegrationTestAccountingPOApproval.test_mid_value_po_routes_past_manager_to_director)
+Ran 6 tests in 6.871s
+FAILED (errors=5)
+===== MODULE volunteering.volunteering.test_accounting_dashboard =====
+ ERROR  test_dept_head_cannot_read_other_department_claim (volunteering.volunteering.test_accounting_dashboard.IntegrationTestAccountingDashboard.test_dept_head_cannot_read_other_department_claim)
+ ERROR  test_get_pending_approvals_for_department_head (volunteering.volunteering.test_accounting_dashboard.IntegrationTestAccountingDashboard.test_get_pending_approvals_for_department_head)
+ ERROR  test_get_pending_reimbursements_lists_approved_unpaid_claims (volunteering.volunteering.test_accounting_dashboard.IntegrationTestAccountingDashboard.test_get_pending_reimbursements_lists_approved_unpaid_claims)
+ ERROR  test_weekly_reminder_targets_users_with_pending_approvals (volunteering.volunteering.test_accounting_dashboard.IntegrationTestAccountingDashboard.test_weekly_reminder_targets_users_with_pending_approvals)
+Ran 10 tests in 5.612s
+FAILED (errors=4)
+===== MODULE volunteering.volunteering.test_accounting_budget =====
+ ERROR  test_approve_over_budget_with_reason_under_hard_limit (volunteering.volunteering.test_accounting_budget.IntegrationTestAccountingBudget.test_approve_over_budget_with_reason_under_hard_limit)
+ ERROR  test_expense_claim_gets_department_from_employee (volunteering.volunteering.test_accounting_budget.IntegrationTestAccountingBudget.test_expense_claim_gets_department_from_employee)
+ ERROR  test_over_budget_claim_still_saves_with_soft_warning (volunteering.volunteering.test_accounting_budget.IntegrationTestAccountingBudget.test_over_budget_claim_still_saves_with_soft_warning)
+ ERROR  test_submitted_claim_counts_toward_consumed_budget (volunteering.volunteering.test_accounting_budget.IntegrationTestAccountingBudget.test_submitted_claim_counts_toward_consumed_budget)
+Ran 7 tests in 5.222s
+FAILED (errors=4)
