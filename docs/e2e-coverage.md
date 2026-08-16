@@ -113,13 +113,13 @@ Source: `sevamrit-erp-testing.xlsx` (108 spreadsheet cases). All 108 IDs are aut
 | AC-SET-002 | HR Manager view-only on limits | critical | `e2e/tests/accounts/settings.spec.ts` | automated |
 | AC-SET-003 | Edit Vendor Payment Threshold and Cash Payment Limit | regression | `e2e/tests/accounts/settings.spec.ts` | automated |
 | AC-SET-004 | Cash payment within limit setting saved | regression | `e2e/tests/accounts/settings.spec.ts` | automated |
-| AC-SET-005 | Default Advance Project auto-fills on new advance | regression | `e2e/tests/accounts/settings.spec.ts` | automated |
+| AC-SET-005 | Advances are not tagged to a project | regression | `e2e/tests/accounts/settings.spec.ts` | automated |
 | AC-VEN-001 | Happy path PO approve | critical | `e2e/tests/accounts/vendor.spec.ts` | automated |
 | AC-VEN-002 | Purchase Invoice without approved PO blocked | critical | `e2e/tests/accounts/vendor.spec.ts` | automated |
 | AC-VEN-003 | Staff cannot create Payment Entry | critical | `e2e/tests/accounts/vendor.spec.ts` | automated |
 | AC-VEN-004 | Accounts can open Payment Entry form | critical | `e2e/tests/accounts/vendor.spec.ts` | automated |
 | AC-VEN-005 | Pay vendor before bill (advance against PO) | critical | `e2e/tests/accounts/vendor.spec.ts` | automated |
-| AC-VEN-006 | Mark Paid outside system API exists | critical | `e2e/tests/accounts/vendor.spec.ts` | automated |
+| AC-VEN-006 | Mark Paid outside system creates Payment Entry | critical | `e2e/tests/accounts/vendor.spec.ts` | automated |
 | AC-VEN-007 | Above vendor threshold without override blocked | critical | `e2e/tests/accounts/vendor.spec.ts` | automated |
 | AC-VEN-008 | Above threshold allowed with Vendor Payment Override Reason | critical | `e2e/tests/accounts/vendor.spec.ts` | automated |
 

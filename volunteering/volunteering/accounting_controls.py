@@ -5,8 +5,9 @@ PROJECT_CONTROLLED_DOCTYPES = (
 	"Purchase Order",
 	"Purchase Invoice",
 	"Expense Claim",
-	"Employee Advance",
 )
+# Program cost objects — advances are not tagged to a project.
+PROJECT_REQUIRED_DOCTYPES = ("Purchase Order", "Expense Claim")
 
 
 def set_cost_center_from_project(doc, method=None):
@@ -48,6 +49,19 @@ def assign_department_from_owner(doc, method=None):
 	department = frappe.db.get_value("Employee", employee, "department")
 	if department:
 		doc.department = department
+
+
+def validate_project_required(doc, method=None):
+	if doc.doctype not in PROJECT_REQUIRED_DOCTYPES:
+		return
+	if doc.get("project"):
+		return
+	frappe.throw(
+		_(
+			"Set a Project on this {0} so spend is checked against the live department budget. "
+			"Employee Advances are not tagged to a project; tag the Expense Claim when you settle."
+		).format(doc.doctype)
+	)
 
 
 def validate_project_has_cost_center(doc, method=None):

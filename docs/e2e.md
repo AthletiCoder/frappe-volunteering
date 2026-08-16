@@ -37,15 +37,7 @@ E2E_PASSWORD='E2eTestPass!26' bench --site sevamrita.local execute volunteering.
 
 ## Layout
 
-```
-e2e/tests/
-  auth.setup.ts
-  accounts|hr|volunteering|ops/
-    smoke.spec.ts
-    regression/   # L2
-    critical/     # L3
-  shared/persona-smoke.spec.ts
-```
+Specs live in `e2e/tests/{accounts,hr,volunteering,ops,cross-module,shared}/*.spec.ts`. Tags: `@smoke`, `@regression`, `@critical`.
 
 Personas: [e2e-personas.md](./e2e-personas.md). Coverage: [e2e-coverage.md](./e2e-coverage.md).
-Git rules: [e2e-git.md](./e2e-git.md).
+Git rules: [e2e-git.md](./e2e-git.md). Docs map: [README.md](./README.md).

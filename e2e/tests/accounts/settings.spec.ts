@@ -70,7 +70,7 @@ test.describe('Accounting settings @accounts', () => {
 			expect(Number(limit)).toBe(2000);
 		});
 
-		test('AC-SET-005 @regression: Default Advance Project auto-fills on new advance', async ({
+		test('AC-SET-005 @regression: Advances are not tagged to a project', async ({
 			request,
 		}) => {
 			const cast = await getCast(request, 'accounts');
@@ -82,13 +82,13 @@ test.describe('Accounting settings @accounts', () => {
 				{ employee: accountsEmp, amount: 1000, submit: 0 },
 				'accounts',
 			);
-			const project = await e2eCall<string>(
+			const project = await e2eCall<string | null>(
 				request,
 				'get_doc_field',
 				{ doctype: 'Employee Advance', name: advance.name, field: 'project' },
 				'accounts',
 			);
-			expect(project).toBeTruthy();
+			expect(project).toBeFalsy();
 		});
 	});
 

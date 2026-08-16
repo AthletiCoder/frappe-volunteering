@@ -261,7 +261,7 @@ def make_expense_claim(
 	expense_type = get_or_create_expense_claim_type()
 	company = frappe.db.get_value("Employee", employee, "company")
 	payable_account = get_or_create_payable_account(company)
-	cost_center = frappe.db.get_value("Project", project, "cost_center")
+	cost_center = frappe.db.get_value("Project", project, "cost_center") if project else None
 	department = frappe.db.get_value("Employee", employee, "department")
 	claim = frappe.get_doc(
 		{
@@ -363,6 +363,96 @@ def make_purchase_order(project, amount=1500, owner=None):
 		po.owner = owner
 	po.insert(ignore_permissions=True)
 	return po
+
+
+def get_or_create_bank_account(company=None):
+	company = company or frappe.db.get_value("Company", {}, "name")
+	for fieldname in ("default_bank_account", "default_cash_account"):
+		account = frappe.db.get_value("Company", company, fieldname)
+		if account and not frappe.db.get_value("Account", account, "is_group"):
+			return account
+	account = frappe.db.get_value(
+		"Account",
+		{"company": company, "account_type": "Bank", "is_group": 0, "disabled": 0},
+		"name",
+	)
+	if account:
+		return account
+	account = frappe.db.get_value(
+		"Account",
+		{"company": company, "account_type": "Cash", "is_group": 0, "disabled": 0},
+		"name",
+	)
+	if account:
+		return account
+	frappe.throw(f"No bank/cash account found for company {company}")
+
+
+def make_purchase_invoice(project, amount=1500, purchase_order=None):
+	"""Insert a draft Purchase Invoice. Link `purchase_order` on the item when given."""
+	company = frappe.db.get_value("Company", {}, "name")
+	supplier = get_or_create_supplier()
+	item_code = get_or_create_purchase_item()
+	cost_center = frappe.db.get_value("Project", project, "cost_center") if project else None
+	expense_account = get_or_create_expense_account(company)
+	credit_to = get_or_create_payable_account(company)
+	item_row = {
+		"item_code": item_code,
+		"qty": 1,
+		"rate": amount,
+		"expense_account": expense_account,
+		"cost_center": cost_center,
+		"project": project,
+	}
+	if purchase_order:
+		item_row["purchase_order"] = purchase_order
+		po_item = frappe.db.get_value(
+			"Purchase Order Item", {"parent": purchase_order}, "name"
+		)
+		if po_item:
+			item_row["po_detail"] = po_item
+	pi = frappe.get_doc(
+		{
+			"doctype": "Purchase Invoice",
+			"company": company,
+			"supplier": supplier,
+			"project": project,
+			"cost_center": cost_center,
+			"posting_date": nowdate(),
+			"due_date": nowdate(),
+			"credit_to": credit_to,
+			"update_stock": 0,
+			"items": [item_row],
+		}
+	)
+	pi.insert(ignore_permissions=True)
+	return pi
+
+
+def make_purchase_invoice_from_po(po_name):
+	from erpnext.buying.doctype.purchase_order.purchase_order import make_purchase_invoice as map_pi
+
+	po = frappe.get_doc("Purchase Order", po_name)
+	if po.docstatus != 1:
+		frappe.throw("Purchase Invoice requires a submitted Purchase Order.")
+
+	pi = map_pi(po_name)
+	pi.flags.ignore_permissions = True
+	if not pi.get("credit_to"):
+		pi.credit_to = get_or_create_payable_account(pi.company)
+	pi.insert(ignore_permissions=True)
+	return pi
+
+
+def make_supplier_payment_entry(reference_doctype, reference_name):
+	from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
+
+	pe = get_payment_entry(reference_doctype, reference_name)
+	pe.flags.ignore_permissions = True
+	if not pe.get("paid_from"):
+		pe.paid_from = get_or_create_bank_account(pe.company)
+	pe.insert(ignore_permissions=True)
+	return pe
 
 
 def set_project_department_budget(project, department, allocated_amount):

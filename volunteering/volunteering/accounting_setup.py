@@ -221,7 +221,7 @@ def _backfill_employee_advance_accounts(company: str, account: str):
 
 
 def ensure_employee_advance_field_visibility():
-	"""Hide advance_account from non-Accounts; keep project hidden (auto-set)."""
+	"""Hide advance_account from non-Accounts; keep project hidden (advances are not tagged)."""
 	_ensure_property_setter(
 		"Employee Advance",
 		"advance_account",
@@ -236,7 +236,7 @@ def ensure_employee_advance_field_visibility():
 		"1",
 		"Check",
 	)
-	# Project remains required in DB; employees never see it (auto-set on save)
+	# Project is unused on advances; budget is tagged on the settling Expense Claim.
 	_ensure_property_setter(
 		"Employee Advance",
 		"project",

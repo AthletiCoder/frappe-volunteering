@@ -61,6 +61,7 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 
 	def tearDown(self):
 		frappe.db.delete("Expense Claim", {"employee": self.employee})
+		frappe.db.delete("Employee Advance", {"employee": self.employee})
 		super().tearDown()
 
 	def test_expense_claim_gets_department_from_employee(self):
@@ -138,3 +139,27 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 		project_meta = frappe.get_meta("Project")
 		self.assertFalse(bool(project_meta.get_field("fund_project_type")))
 		self.assertTrue(project_meta.has_field("parent_campaign"))
+
+	def test_employee_advance_does_not_consume_project_budget(self):
+		before = get_consumed_amount(self.project, self.department)
+		frappe.set_user(self.employee_email)
+		company = frappe.db.get_value("Employee", self.employee, "company")
+		advance = frappe.get_doc(
+			{
+				"doctype": "Employee Advance",
+				"employee": self.employee,
+				"company": company,
+				"purpose": "Budget isolation",
+				"advance_amount": 1500,
+				"posting_date": frappe.utils.nowdate(),
+			}
+		)
+		advance.insert(ignore_permissions=True)
+		apply_workflow(advance, "Submit")
+		self.assertFalse(advance.project)
+		self.assertEqual(get_consumed_amount(self.project, self.department), before)
+
+	def test_expense_claim_requires_project(self):
+		frappe.set_user(self.employee_email)
+		with self.assertRaises(frappe.ValidationError):
+			make_expense_claim(self.employee, None, amount=500)

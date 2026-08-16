@@ -20,46 +20,13 @@ def before_employee_advance_save(doc, method=None):
 	from volunteering.volunteering.employee_advance_permissions import validate_employee_self_only
 
 	validate_employee_self_only(doc, method)
-	_autoset_project(doc)
-	if not doc.get("project"):
-		frappe.throw(
-			_(
-				"Project could not be determined for this advance. "
-				"Set a default Admin project on Volunteering Accounting Settings, "
-				"or ask Accounts to assign a project."
-			)
-		)
+	# Advances are staff float, not program spend. Do not tag to a Project.
+	# Budget is checked on the Expense Claim (or PO) that settles the spend.
+	if doc.get("project"):
+		doc.project = None
 
 	_validate_max_unsettled(doc)
 	_validate_grade_advance_limit(doc)
-
-
-def _autoset_project(doc):
-	"""Keep project for budget tracking but hide it from employees."""
-	if doc.get("project"):
-		return
-
-	settings = get_accounting_settings()
-	default_project = settings.get("default_advance_project") if settings else None
-	if default_project and frappe.db.exists("Project", default_project):
-		doc.project = default_project
-		return
-
-	# Prefer an Active Admin project for the company
-	company = doc.get("company") or frappe.db.get_value("Employee", doc.employee, "company")
-	filters = {"status": "Open", "project_type": "Admin"}
-	if company and frappe.db.has_column("Project", "company"):
-		filters["company"] = company
-	admin_project = frappe.db.get_value("Project", filters, "name", order_by="modified desc")
-	if admin_project:
-		doc.project = admin_project
-		return
-
-	# Last resort: any Open project for the company
-	fallback_filters = {"status": "Open"}
-	if company and frappe.db.has_column("Project", "company"):
-		fallback_filters["company"] = company
-	doc.project = frappe.db.get_value("Project", fallback_filters, "name", order_by="modified desc")
 
 
 def advance_residual_amount(row) -> float:

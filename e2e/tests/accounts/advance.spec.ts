@@ -24,13 +24,13 @@ test.describe('Employee Advance @accounts', () => {
 			}>(request, 'create_employee_advance', { employee: emp, amount: 2000, submit: 1 }, 'employee');
 			expect(advance.workflow_state).toBe('Pending Approval');
 
-			const project = await e2eCall<string>(
+			const project = await e2eCall<string | null>(
 				request,
 				'get_doc_field',
 				{ doctype: 'Employee Advance', name: advance.name, field: 'project' },
 				'admin',
 			);
-			expect(project).toBeTruthy();
+			expect(project).toBeFalsy();
 
 			const approved = await e2eCall<{ workflow_state: string }>(
 				request,
@@ -124,13 +124,13 @@ test.describe('Employee Advance @accounts', () => {
 				'admin',
 			);
 
-			const replenish = await e2eCall<{ ok: boolean }>(
+			const replenish = await e2eCall<{ ok: boolean; error?: string }>(
 				request,
 				'try_create_advance',
 				{ employee: emp, amount: 1500 },
 				'employee',
 			);
-			expect(replenish.ok).toBe(true);
+			expect(replenish.ok, replenish.error).toBe(true);
 		});
 
 		test('AC-ADV-007 @regression @critical: Settle advance via Expense Claim link', async ({

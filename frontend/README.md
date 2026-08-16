@@ -1,6 +1,6 @@
 # Volunteering frontend (Frappe UI SPA)
 
-Vue SPA for Budget Health + Advance Portal.
+Vue SPA for Budget Health + Advance Portal. App overview: [../README.md](../README.md).
 
 ```bash
 cd apps/volunteering/frontend

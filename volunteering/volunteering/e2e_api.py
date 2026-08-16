@@ -21,7 +21,10 @@ from volunteering.volunteering.accounting_test_utils import (
 	get_or_create_project_with_cost_center,
 	get_or_create_supplier,
 	make_expense_claim,
+	make_purchase_invoice,
+	make_purchase_invoice_from_po,
 	make_purchase_order,
+	make_supplier_payment_entry,
 	mute_accounting_test_emails,
 	set_project_department_budget,
 )
@@ -109,6 +112,32 @@ def _allow_account_read():
 		perms.has_permission = orig_perms
 
 
+@contextmanager
+def _allow_buying_read():
+	"""Map PO → PI / PE checks source-doc read; E2E Accounts may lack Purchase User."""
+	import frappe.permissions as perms
+
+	orig_perms = perms.has_permission
+	allowed = {"Account", "Purchase Order", "Purchase Invoice", "Payment Entry"}
+
+	def _has_permission(*args, **kwargs):
+		doctype = kwargs.get("doctype")
+		doc = kwargs.get("doc")
+		if args:
+			doctype = doctype or args[0]
+		if len(args) > 2:
+			doc = doc or args[2]
+		if doctype in allowed or getattr(doc, "doctype", None) in allowed:
+			return True
+		return orig_perms(*args, **kwargs)
+
+	perms.has_permission = _has_permission
+	try:
+		yield
+	finally:
+		perms.has_permission = orig_perms
+
+
 def _apply_workflow(doc, action):
 	"""Apply a workflow action as the session user.
 
@@ -179,10 +208,6 @@ def ensure_fixtures():
 	ensure_leave_allocation(_cast_employee("employee"), get_or_create_allocatable_leave_type(LWP_LEAVE))
 	frappe.db.set_single_value("Daily Work Log Settings", "backdate_limit_days", 14)
 	frappe.db.set_single_value("Daily Work Log Settings", "present_hours_threshold", 6)
-	if project:
-		frappe.db.set_single_value(
-			"Volunteering Accounting Settings", "default_advance_project", project
-		)
 	try:
 		from volunteering.volunteering.doctype.approval_and_advance_limits.approval_and_advance_limits import (
 			reset_to_defaults,
@@ -546,10 +571,11 @@ def create_expense_claim(
 	submit=0,
 	vendor_override_reason=None,
 	budget_override_reason=None,
+	include_project=1,
 ):
 	_guard_e2e()
 	employee = employee or _cast_employee("employee")
-	project = get_or_create_project_with_cost_center()
+	project = get_or_create_project_with_cost_center() if cint(include_project) else None
 	claim = make_expense_claim(
 		employee,
 		project,
@@ -655,6 +681,103 @@ def create_purchase_order(amount=1500, submit=0):
 		po.reload()
 	frappe.db.commit()
 	return {"name": po.name, "workflow_state": po.get("workflow_state")}
+
+
+@frappe.whitelist()
+def create_purchase_invoice(po_name=None, amount=1500, submit=0):
+	"""Create a PI. Omit po_name to hit the 'must link PO' rule on submit."""
+	_guard_e2e()
+	project = get_or_create_project_with_cost_center()
+	with _skip_doc_perm_checks(), _allow_buying_read():
+		if po_name:
+			pi = make_purchase_invoice_from_po(po_name)
+		else:
+			pi = make_purchase_invoice(project, amount=flt(amount), purchase_order=None)
+	if cint(submit):
+		_apply_workflow(pi, "Submit")
+		pi.reload()
+	frappe.db.commit()
+	return {
+		"name": pi.name,
+		"workflow_state": pi.get("workflow_state"),
+		"docstatus": pi.docstatus,
+		"outstanding_amount": flt(pi.get("outstanding_amount")),
+	}
+
+
+@frappe.whitelist()
+def try_create_purchase_invoice(**kwargs):
+	_guard_e2e()
+	try:
+		return {"ok": True, "data": create_purchase_invoice(**_strip_rpc_kwargs(kwargs))}
+	except Exception as exc:
+		frappe.db.rollback()
+		return {"ok": False, "error": _exc_message(exc)}
+
+
+@frappe.whitelist()
+def create_supplier_payment_entry(reference_doctype, reference_name, submit=0):
+	_guard_e2e()
+	roles = set(frappe.get_roles())
+	if not roles.intersection({"Accounts Manager", "Accounts User", "System Manager"}):
+		frappe.throw(
+			_("Only Accounts can create vendor Payment Entries."),
+			frappe.PermissionError,
+		)
+	with _skip_doc_perm_checks(), _allow_buying_read():
+		pe = make_supplier_payment_entry(reference_doctype, reference_name)
+	if cint(submit):
+		pe.flags.ignore_permissions = True
+		with _skip_doc_perm_checks(), _allow_buying_read():
+			pe.submit()
+		pe.reload()
+	frappe.db.commit()
+	return {
+		"name": pe.name,
+		"docstatus": pe.docstatus,
+		"party_type": pe.party_type,
+		"paid_amount": flt(pe.paid_amount),
+	}
+
+
+@frappe.whitelist()
+def try_create_supplier_payment_entry(**kwargs):
+	_guard_e2e()
+	try:
+		return {
+			"ok": True,
+			"data": create_supplier_payment_entry(**_strip_rpc_kwargs(kwargs)),
+		}
+	except Exception as exc:
+		frappe.db.rollback()
+		return {"ok": False, "error": _exc_message(exc)}
+
+
+@frappe.whitelist()
+def mark_invoice_paid_outside(name, remarks="E2E paid outside"):
+	_guard_e2e()
+	from volunteering.volunteering.reimbursement_controls import (
+		mark_purchase_invoice_paid_outside,
+	)
+
+	roles = set(frappe.get_roles())
+	if not roles.intersection({"Accounts Manager", "Accounts User", "System Manager"}):
+		frappe.throw(_("Only Accounts can mark invoices paid outside the system."), frappe.PermissionError)
+
+	with _skip_doc_perm_checks(), _allow_buying_read():
+		pe_name = mark_purchase_invoice_paid_outside(name, remarks=remarks)
+	frappe.db.commit()
+	return {"payment_entry": pe_name}
+
+
+@frappe.whitelist()
+def try_mark_invoice_paid_outside(**kwargs):
+	_guard_e2e()
+	try:
+		return {"ok": True, "data": mark_invoice_paid_outside(**_strip_rpc_kwargs(kwargs))}
+	except Exception as exc:
+		frappe.db.rollback()
+		return {"ok": False, "error": _exc_message(exc)}
 
 
 @frappe.whitelist()
@@ -787,6 +910,16 @@ def try_create_advance(**kwargs):
 	_guard_e2e()
 	try:
 		return {"ok": True, "data": create_employee_advance(**_strip_rpc_kwargs(kwargs))}
+	except Exception as exc:
+		frappe.db.rollback()
+		return {"ok": False, "error": _exc_message(exc)}
+
+
+@frappe.whitelist()
+def try_create_expense_claim(**kwargs):
+	_guard_e2e()
+	try:
+		return {"ok": True, "data": create_expense_claim(**_strip_rpc_kwargs(kwargs))}
 	except Exception as exc:
 		frappe.db.rollback()
 		return {"ok": False, "error": _exc_message(exc)}

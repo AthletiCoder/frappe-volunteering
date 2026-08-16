@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test';
 import { e2eCall, getCast } from '../../helpers/e2e-api';
-import { callMethod } from '../../helpers/frappe';
 import { personaStorage } from '../../helpers/personas';
 
 test.describe('Vendor payment @accounts', () => {
@@ -26,24 +25,31 @@ test.describe('Vendor payment @accounts', () => {
 	test('AC-VEN-002 @regression @critical: Purchase Invoice without approved PO blocked', async ({
 		request,
 	}) => {
-		let blocked = false;
-		try {
-			await callMethod(
-				request,
-				'frappe.client.insert',
-				{
-					doc: {
-						doctype: 'Purchase Invoice',
-						items: [{ qty: 1, rate: 1000 }],
-					},
-				},
-				'accounts',
-			);
-		} catch (error) {
-			blocked = true;
-			expect(String(error).toLowerCase()).toMatch(/purchase order|item|company/);
-		}
-		expect(blocked).toBe(true);
+		const noPo = await e2eCall<{ ok: boolean; error?: string }>(
+			request,
+			'try_create_purchase_invoice',
+			{ amount: 1000, submit: 1 },
+			'accounts',
+		);
+		expect(noPo.ok).toBe(false);
+		expect((noPo.error || '').toLowerCase()).toMatch(/purchase order/);
+
+		const pendingPo = await e2eCall<{ name: string }>(
+			request,
+			'create_purchase_order',
+			{ amount: 1200, submit: 1 },
+			'employee',
+		);
+		const fromPending = await e2eCall<{ ok: boolean; error?: string }>(
+			request,
+			'try_create_purchase_invoice',
+			{ po_name: pendingPo.name, submit: 1 },
+			'accounts',
+		);
+		expect(fromPending.ok).toBe(false);
+		expect((fromPending.error || '').toLowerCase()).toMatch(
+			/not approved|submitted|purchase order|docstatus|cannot map/,
+		);
 	});
 
 	test.describe('as employee', () => {
@@ -59,6 +65,30 @@ test.describe('Vendor payment @accounts', () => {
 				'employee',
 			);
 			expect(allowed).toBe(false);
+
+			const po = await e2eCall<{ name: string }>(
+				request,
+				'create_purchase_order',
+				{ amount: 1500, submit: 1 },
+				'employee',
+			);
+			await e2eCall(
+				request,
+				'workflow_action',
+				{ doctype: 'Purchase Order', name: po.name, action: 'Approve' },
+				'manager',
+			);
+			const pe = await e2eCall<{ ok: boolean; error?: string }>(
+				request,
+				'try_create_supplier_payment_entry',
+				{
+					reference_doctype: 'Purchase Order',
+					reference_name: po.name,
+					submit: 1,
+				},
+				'employee',
+			);
+			expect(pe.ok).toBe(false);
 		});
 
 		test('AC-VEN-007 @regression @critical: Above vendor threshold without override blocked', async ({
@@ -122,16 +152,26 @@ test.describe('Vendor payment @accounts', () => {
 				{ doctype: 'Purchase Order', name: po.name, action: 'Approve' },
 				'manager',
 			);
-			const state = await e2eCall<string>(
+			const pe = await e2eCall<{
+				name: string;
+				docstatus: number;
+				party_type: string;
+			}>(
 				request,
-				'get_doc_field',
-				{ doctype: 'Purchase Order', name: po.name, field: 'workflow_state' },
+				'create_supplier_payment_entry',
+				{
+					reference_doctype: 'Purchase Order',
+					reference_name: po.name,
+					submit: 1,
+				},
 				'accounts',
 			);
-			expect(state).toBe('Approved');
+			expect(pe.name).toBeTruthy();
+			expect(pe.docstatus).toBe(1);
+			expect(pe.party_type).toBe('Supplier');
 		});
 
-		test('AC-VEN-006 @regression @critical: Mark Paid outside system API exists', async ({
+		test('AC-VEN-006 @regression @critical: Mark Paid outside system creates Payment Entry', async ({
 			request,
 		}) => {
 			const po = await e2eCall<{ name: string }>(
@@ -146,18 +186,28 @@ test.describe('Vendor payment @accounts', () => {
 				{ doctype: 'Purchase Order', name: po.name, action: 'Approve' },
 				'manager',
 			);
-			const methodExists = await callMethod<boolean>(
+			const pi = await e2eCall<{ name: string; docstatus: number }>(
 				request,
-				'frappe.client.get_list',
-				{
-					doctype: 'Server Script',
-					filters: { name: ['like', '%'] },
-					limit_page_length: 1,
-				},
+				'create_purchase_invoice',
+				{ po_name: po.name, submit: 1 },
 				'accounts',
-			).catch(() => null);
-			expect(po.name).toBeTruthy();
-			expect(methodExists !== undefined).toBe(true);
+			);
+			expect(pi.docstatus).toBe(1);
+
+			const paid = await e2eCall<{ payment_entry: string }>(
+				request,
+				'mark_invoice_paid_outside',
+				{ name: pi.name, remarks: 'E2E cash to vendor' },
+				'accounts',
+			);
+			expect(paid.payment_entry).toBeTruthy();
+			const peStatus = await e2eCall<number>(
+				request,
+				'get_doc_field',
+				{ doctype: 'Payment Entry', name: paid.payment_entry, field: 'docstatus' },
+				'accounts',
+			);
+			expect(Number(peStatus)).toBe(1);
 		});
 	});
 

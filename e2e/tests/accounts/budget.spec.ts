@@ -117,4 +117,15 @@ test.describe('Budget controls @accounts', () => {
 		);
 		expect(approved.workflow_state).toBe('Approved');
 	});
+
+	test('Expense Claim without project is blocked', async ({ request }) => {
+		const blocked = await e2eCall<{ ok: boolean; error?: string }>(
+			request,
+			'try_create_expense_claim',
+			{ amount: 500, include_project: 0 },
+			'employee',
+		);
+		expect(blocked.ok).toBe(false);
+		expect((blocked.error || '').toLowerCase()).toMatch(/project/);
+	});
 });
