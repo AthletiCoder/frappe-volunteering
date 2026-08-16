@@ -437,6 +437,16 @@ def before_accounting_document_save(doc, method=None):
 		sync_approval_status_from_workflow(doc)
 
 
+def before_accounting_document_submit(doc, method=None):
+	"""Approve → submit skips before_save; re-run authority checks."""
+	if doc.doctype not in ACCOUNTING_WORKFLOW_DOCTYPES:
+		return
+	validate_no_self_approval(doc)
+	validate_approver_authority(doc)
+	if doc.doctype == "Expense Claim":
+		sync_approval_status_from_workflow(doc)
+
+
 def on_accounting_workflow_state_change(doc, method=None):
 	"""Send email alert when routed to a pending approval state."""
 	if doc.doctype not in ACCOUNTING_WORKFLOW_DOCTYPES:

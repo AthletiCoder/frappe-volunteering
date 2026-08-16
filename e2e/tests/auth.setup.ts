@@ -7,16 +7,31 @@ import {
 	PERSONAS,
 } from '../helpers/personas';
 
-// Authenticating ~10 personas needs more than the default 60s.
-setup.setTimeout(300_000);
+// Authenticating all personas needs more than the default 60s.
+setup.setTimeout(400_000);
 
 /**
  * Authenticate every persona once; write storageState + CSRF per alias.
  */
-setup('authenticate personas', async ({ browser }) => {
+setup('authenticate personas', async () => {
 	ensureAuthDir();
 
 	const keys = Object.keys(PERSONAS) as PersonaKey[];
+	const reuseAuth =
+		!process.env.E2E_FORCE_AUTH &&
+		keys.every((key) => fs.existsSync(PERSONAS[key].storageState));
+	if (reuseAuth) {
+		console.log(
+			'Reusing e2e/.auth sessions (set E2E_FORCE_AUTH=1 to log in again)',
+		);
+		return;
+	}
+
+	const { chromium } = await import('@playwright/test');
+	const browser = await chromium.launch({
+		channel: process.env.E2E_BROWSER_CHANNEL || 'chrome',
+	});
+	try {
 	for (const key of keys) {
 		const persona = PERSONAS[key];
 		const context = await browser.newContext();
@@ -41,8 +56,9 @@ setup('authenticate personas', async ({ browser }) => {
 		expect(userData.message).not.toBe('Guest');
 		console.log(`Authenticated ${key} as: ${userData.message}`);
 
-		// Desk can keep sockets open — avoid networkidle; wait for csrf instead.
-		await page.goto('/desk', { waitUntil: 'domcontentloaded' });
+		// NGO Member has no Desk — land on site root. Staff use Desk for CSRF.
+		const landing = key === 'volunteer' ? '/' : '/desk';
+		await page.goto(landing, { waitUntil: 'domcontentloaded' });
 		let csrfToken: string | undefined;
 		try {
 			csrfToken = await page.waitForFunction(
@@ -67,7 +83,6 @@ setup('authenticate personas', async ({ browser }) => {
 		await context.close();
 	}
 
-	// Keep legacy path for older specs expecting e2e/.auth/user.json
 	const adminState = PERSONAS[DEFAULT_PERSONA].storageState;
 	if (fs.existsSync(adminState)) {
 		fs.copyFileSync(adminState, 'e2e/.auth/user.json');
@@ -75,5 +90,8 @@ setup('authenticate personas', async ({ browser }) => {
 	const adminCsrf = PERSONAS[DEFAULT_PERSONA].csrfFile;
 	if (fs.existsSync(adminCsrf)) {
 		fs.copyFileSync(adminCsrf, 'e2e/.auth/csrf.json');
+	}
+	} finally {
+		await browser.close();
 	}
 });

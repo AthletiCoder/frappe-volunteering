@@ -27,8 +27,8 @@ def ensure_employment_type(name: str = UNPAID_EMPLOYMENT_TYPE) -> str:
 def is_unpaid_employee(employee: str | None) -> bool:
 	if not employee:
 		return False
-	employment_type = frappe.db.get_value("Employee", employee, "employment_type")
-	return employment_type == UNPAID_EMPLOYMENT_TYPE
+	employment_type = frappe.db.get_value("Employee", employee, "employment_type") or ""
+	return employment_type == UNPAID_EMPLOYMENT_TYPE or employment_type.lower().startswith("unpaid")
 
 
 def is_payroll_employee(employee: str | None) -> bool:

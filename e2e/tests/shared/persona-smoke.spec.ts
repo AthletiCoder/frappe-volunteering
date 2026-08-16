@@ -1,14 +1,12 @@
 import { expect, test } from '@playwright/test';
-import { callMethod } from '../helpers/frappe';
-import { personaStorage, PERSONAS } from '../helpers/personas';
-import { AdvancesPage } from '../pages/advances.page';
-import { ROUTES } from '../helpers/routes';
+import { callMethod } from '../../helpers/frappe';
+import { personaStorage, PERSONAS } from '../../helpers/personas';
+import { AdvancesPage } from '../../pages/advances.page';
 
 /**
- * Smoke that multi-persona storageState works (employee → manager).
- * Full spreadsheet flows come later.
+ * Cross-module multi-persona check (employee + manager storageState).
  */
-test.describe('Multi-persona auth @persona', () => {
+test.describe('Shared persona smoke @smoke @persona', () => {
 	test.describe('as employee', () => {
 		test.use({ storageState: personaStorage('employee') });
 
@@ -41,11 +39,19 @@ test.describe('Multi-persona auth @persona', () => {
 			);
 			expect(user).toBe(PERSONAS.manager.email);
 		});
+	});
 
-		test('manager can open My Work', async ({ page }) => {
-			await page.goto(ROUTES.myWork);
-			await page.waitForLoadState('networkidle');
-			await expect(page).toHaveURL(/\/(app|desk)\/my-work/);
+	test.describe('as chair (Board of Directors grade)', () => {
+		test.use({ storageState: personaStorage('chair') });
+
+		test('chair session is e2e.chair', async ({ request }) => {
+			const user = await callMethod<string>(
+				request,
+				'frappe.auth.get_logged_user',
+				{},
+				'chair',
+			);
+			expect(user).toBe(PERSONAS.chair.email);
 		});
 	});
 });

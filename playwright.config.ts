@@ -1,3 +1,4 @@
+import './e2e/playwright-env';
 import { defineConfig, devices } from '@playwright/test';
 import { personaStorage } from './e2e/helpers/personas';
 
@@ -12,11 +13,14 @@ import { personaStorage } from './e2e/helpers/personas';
  */
 export default defineConfig({
 	testDir: './e2e/tests',
+	globalSetup: './e2e/global-setup.ts',
 	fullyParallel: false,
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 2 : 0,
 	workers: 1,
-	reporter: process.env.CI ? [['github'], ['html']] : 'html',
+	reporter: process.env.CI
+		? [['github'], ['html', { open: 'never' }]]
+		: [['line'], ['html', { open: 'never' }]],
 	timeout: 60000,
 
 	expect: {
@@ -41,6 +45,16 @@ export default defineConfig({
 			name: 'chromium',
 			use: {
 				...devices['Desktop Chrome'],
+				channel: 'chrome',
+				storageState: personaStorage('admin'),
+			},
+			dependencies: ['setup'],
+		},
+		{
+			name: 'chrome',
+			use: {
+				...devices['Desktop Chrome'],
+				channel: 'chrome',
 				storageState: personaStorage('admin'),
 			},
 			dependencies: ['setup'],

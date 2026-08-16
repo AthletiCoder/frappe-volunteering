@@ -12,6 +12,35 @@ export interface FrappeResponse<T = unknown> {
 
 const csrfCache = new Map<string, string>();
 
+function personaCookieHeader(persona: PersonaKey = DEFAULT_PERSONA): Record<string, string> {
+	try {
+		const statePath = PERSONAS[persona].storageState;
+		if (!fs.existsSync(statePath)) {
+			return {};
+		}
+		const state = JSON.parse(fs.readFileSync(statePath, 'utf-8')) as {
+			cookies?: Array<{ name: string; value: string }>;
+		};
+		const cookies = state.cookies || [];
+		if (!cookies.length) {
+			return {};
+		}
+		return {
+			Cookie: cookies.map((c) => `${c.name}=${c.value}`).join('; '),
+		};
+	} catch (error) {
+		console.warn(`Failed to read cookies for ${persona}:`, error);
+		return {};
+	}
+}
+
+function personaHeaders(persona: PersonaKey = DEFAULT_PERSONA): Record<string, string> {
+	return {
+		...personaCookieHeader(persona),
+		...csrfHeaders(persona),
+	};
+}
+
 function getCsrfToken(persona: PersonaKey = DEFAULT_PERSONA): string {
 	if (csrfCache.has(persona)) {
 		return csrfCache.get(persona) || '';
@@ -48,7 +77,7 @@ export async function createDoc<T = Record<string, unknown>>(
 		data: doc,
 		headers: {
 			'Content-Type': 'application/json',
-			...csrfHeaders(persona),
+			...personaHeaders(persona),
 		},
 	});
 
@@ -92,7 +121,7 @@ export async function updateDoc<T = Record<string, unknown>>(
 			data: updates,
 			headers: {
 				'Content-Type': 'application/json',
-				...csrfHeaders(persona),
+				...personaHeaders(persona),
 			},
 		},
 	);
@@ -117,7 +146,7 @@ export async function deleteDoc(
 		`/api/resource/${doctype}/${encodeURIComponent(name)}`,
 		{
 			headers: {
-				...csrfHeaders(persona),
+				...personaHeaders(persona),
 			},
 		},
 	);
@@ -139,7 +168,7 @@ export async function callMethod<T = unknown>(
 		data: args,
 		headers: {
 			'Content-Type': 'application/json',
-			...csrfHeaders(persona),
+			...personaHeaders(persona),
 		},
 	});
 

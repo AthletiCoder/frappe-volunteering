@@ -15,6 +15,8 @@ export const ROUTES = {
 	advanceDetail: (name: string) => appUrl('advances', encodeURIComponent(name)),
 	myWork: '/desk/my-work',
 	myExpenses: '/desk/my-expenses',
+	emailQueue: '/desk/email-queue',
+	eventRegistration: '/event-registration-form',
 	login: '/login',
 } as const;
 
@@ -22,4 +24,5 @@ export const ROUTES = {
 export const DESK_WORKSPACE_RE = {
 	myWork: /\/(app|desk)\/my-work/,
 	myExpenses: /\/(app|desk)\/my-expenses/,
+	emailQueue: /\/(app|desk)\/email-queue/,
 } as const;

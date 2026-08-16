@@ -72,7 +72,7 @@ def cint_docstatus(doc):
 
 
 def get_active_employees(attendance_date):
-	from volunteering.volunteering.employment_type import UNPAID_EMPLOYMENT_TYPE
+	from volunteering.volunteering.employment_type import is_unpaid_employee
 
 	employees = frappe.get_all(
 		"Employee",
@@ -86,7 +86,7 @@ def get_active_employees(attendance_date):
 	return [
 		employee.name
 		for employee in employees
-		if employee.employment_type != UNPAID_EMPLOYMENT_TYPE
+		if not is_unpaid_employee(employee.name)
 		and (not employee.relieving_date or getdate(employee.relieving_date) >= attendance_date)
 	]
 

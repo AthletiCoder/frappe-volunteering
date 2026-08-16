@@ -250,17 +250,26 @@ def attach_test_receipt(doc):
 	).insert(ignore_permissions=True)
 
 
-def make_expense_claim(employee, project, amount=1500, owner=None):
+def make_expense_claim(
+	employee,
+	project,
+	amount=1500,
+	owner=None,
+	vendor_override_reason=None,
+	budget_override_reason=None,
+):
 	expense_type = get_or_create_expense_claim_type()
 	company = frappe.db.get_value("Employee", employee, "company")
 	payable_account = get_or_create_payable_account(company)
 	cost_center = frappe.db.get_value("Project", project, "cost_center")
+	department = frappe.db.get_value("Employee", employee, "department")
 	claim = frappe.get_doc(
 		{
 			"doctype": "Expense Claim",
 			"employee": employee,
 			"company": company,
 			"project": project,
+			"department": department,
 			"payable_account": payable_account,
 			"cost_center": cost_center,
 			"exchange_rate": 1,
@@ -278,6 +287,10 @@ def make_expense_claim(employee, project, amount=1500, owner=None):
 	)
 	if owner:
 		claim.owner = owner
+	if vendor_override_reason:
+		claim.vendor_override_reason = vendor_override_reason
+	if budget_override_reason:
+		claim.budget_override_reason = budget_override_reason
 	claim.insert(ignore_permissions=True)
 	attach_test_receipt(claim)
 	return claim

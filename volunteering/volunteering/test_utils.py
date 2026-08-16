@@ -202,15 +202,16 @@ def ensure_leave_allocation(employee, leave_type, from_date=None, to_date=None, 
 	from_date = from_date or add_days(nowdate(), -60)
 	to_date = to_date or add_days(nowdate(), 365)
 
-	existing = frappe.db.exists(
+	existing = frappe.db.get_value(
 		"Leave Allocation",
 		{
 			"employee": employee,
 			"leave_type": leave_type,
 			"docstatus": 1,
-			"from_date": ["<=", from_date],
-			"to_date": [">=", to_date],
+			"from_date": ["<=", to_date],
+			"to_date": [">=", from_date],
 		},
+		"name",
 	)
 	if existing:
 		return existing

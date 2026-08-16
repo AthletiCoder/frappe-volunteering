@@ -61,6 +61,8 @@ def _ensure_leave_approver_from_reports_to(doc):
 	if not leave_approver and reports_to:
 		leave_approver = frappe.db.get_value("Employee", reports_to, "user_id")
 	if leave_approver and doc.leave_approver != leave_approver:
+		if doc.leave_approver and user_has_board_of_directors(doc.leave_approver):
+			return
 		doc.leave_approver = leave_approver
 		doc.leave_approver_name = frappe.db.get_value("User", leave_approver, "full_name")
 
@@ -75,6 +77,16 @@ def _validate_employee_field_locked(doc):
 		frappe.throw(_("Your user is not linked to an Employee record."))
 
 	if doc.employee and doc.employee != session_employee:
+		# Reporting manager / named leave approver may save existing applications.
+		if not doc.is_new():
+			manager_emp = frappe.db.get_value("Employee", {"user_id": frappe.session.user}, "name")
+			is_reports_to = (
+				manager_emp
+				and frappe.db.get_value("Employee", doc.employee, "reports_to") == manager_emp
+			)
+			is_named_approver = doc.leave_approver == frappe.session.user
+			if is_reports_to or is_named_approver:
+				return
 		frappe.throw(_("You can only create Leave Applications for yourself."))
 
 	if not doc.employee:
@@ -187,7 +199,12 @@ def validate_emergency_leave(doc, from_date, today, leave_days, settings):
 
 	# Retroactive: must regularize within 48 hours of return (to_date + 48h).
 	# HR / System Manager may backfill beyond the window on behalf of employees.
+	# Approving an already-filed application must not re-apply the window.
 	if from_date < today and date_diff(today, to_date) > 2 and not _is_hr_user():
+		if not (
+			doc.is_new() or doc.has_value_changed("from_date") or doc.has_value_changed("to_date")
+		):
+			return
 		frappe.throw(
 			_(
 				"Emergency leave must be regularized within {0} hours of return. "

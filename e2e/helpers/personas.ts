@@ -38,13 +38,14 @@ export type PersonaKey =
 	| 'chair'
 	| 'hr'
 	| 'accounts'
-	| 'unpaid';
+	| 'unpaid'
+	| 'coordinator'
+	| 'volunteer';
 
 export interface PersonaCreds {
 	key: PersonaKey;
 	email: string;
 	password: string;
-	/** storageState path relative to apps/volunteering */
 	storageState: string;
 	csrfFile: string;
 }
@@ -81,9 +82,14 @@ export const PERSONAS: Record<PersonaKey, PersonaCreds> = {
 	hr: cred('hr', 'E2E_HR_USER', 'e2e.hr@sevamrita.local'),
 	accounts: cred('accounts', 'E2E_ACCOUNTS_USER', 'e2e.accounts@sevamrita.local'),
 	unpaid: cred('unpaid', 'E2E_UNPAID_USER', 'e2e.unpaid@sevamrita.local'),
+	coordinator: cred(
+		'coordinator',
+		'E2E_COORDINATOR_USER',
+		'e2e.coordinator@sevamrita.local',
+	),
+	volunteer: cred('volunteer', 'E2E_VOLUNTEER_USER', 'e2e.volunteer@sevamrita.local'),
 };
 
-// Admin password often differs from the shared E2E password
 PERSONAS.admin.password =
 	process.env.E2E_ADMIN_PASSWORD ||
 	process.env.FRAPPE_PASSWORD ||
