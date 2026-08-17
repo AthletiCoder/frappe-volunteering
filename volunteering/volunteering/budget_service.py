@@ -12,7 +12,9 @@ from volunteering.volunteering.doctype.volunteering_accounting_settings.voluntee
 )
 
 # PO commits budget; PI settles PO — do not double-count Purchase Invoice.
-BUDGET_TRACKED_DOCTYPES = ("Expense Claim", "Purchase Order", "Employee Advance")
+# Employee Advance is staff float (receivable), not program spend — budget hits
+# when the Expense Claim (or PO) is tagged to a Project.
+BUDGET_TRACKED_DOCTYPES = ("Expense Claim", "Purchase Order")
 CLOSED_PROJECT_CHECK_DOCTYPES = BUDGET_TRACKED_DOCTYPES + ("Purchase Invoice",)
 EXCLUDED_WORKFLOW_STATES = ("Draft", "Rejected", "")
 

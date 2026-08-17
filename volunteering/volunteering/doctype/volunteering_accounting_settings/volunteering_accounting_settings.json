@@ -117,9 +117,10 @@
    "reqd": 1
   },
   {
-   "description": "Hidden on Employee Advance forms; auto-set when staff raise advances so budgets still track spend.",
+   "description": "Unused. Advances are not tagged to a project. Set Project on Expense Claims and Purchase Orders for budget tracking.",
    "fieldname": "default_advance_project",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Default Advance Project",
    "options": "Project"
   },

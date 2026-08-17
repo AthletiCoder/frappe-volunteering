@@ -48,7 +48,8 @@ If you really must use your own money above the threshold, you must write a shor
 An advance is money the organisation gives you **before** you buy something.
 
 - You can take an advance **only for yourself**. (Accounts or HR can do it for others.)
-- The project and account are filled in for you automatically.
+- Do **not** tag an advance to a project. It is cash in your hands, not program spend yet.
+- When you settle, make an [Expense Claim](/app/expense-claim/new), **choose the Project** the bills belong to, and link the advance. Budget Health checks that project.
 - You cannot take a new advance while an old one still has a large **leftover** (more than 10% of what you were paid).
 - If the leftover is small (10% or less), you may take another advance. But you must still return or claim the leftover — it is never ignored.
 - Check the status of your advances on the [Advance Portal](/volunteering/advances).
@@ -62,9 +63,9 @@ Open: [New Employee Advance](/app/employee-advance/new)
 
 A claim means: *"I already paid with my own money. Please pay me back."*
 
-1. You pay the vendor or expense yourself.
-2. Make an [Expense Claim](/app/expense-claim/new) and attach the receipts.
-3. Your manager or Accounts approves it.
+1. You pay the vendor or expense yourself (or settle an advance).
+2. Make an [Expense Claim](/app/expense-claim/new), **set the Project**, and attach the receipts.
+3. Your manager or Accounts approves it (live department budget on that project is checked on Approve).
 4. Accounts pays you. The claim is then marked **Paid**.
 
 There is no separate "already paid" checkbox. Making the claim *is* how you say you already paid.
@@ -226,11 +227,12 @@ All of these are on [Accounting Settings](/app/volunteering-accounting-settings)
 | Monthly Reimbursement Cap | Most a person can claim back in one month (0 = no limit). | 0 |
 | Advance Replenish Leftover % | If an advance's leftover is at or below this, the person may take a new advance. | 10% |
 | Max Blocking Advances | How many large-leftover advances block a new one. | 1 |
-| Default Advance Project | The project used for advances when staff do not pick one (hidden from staff). | — |
 
 ## 4. Budget controls
 
 Also on [Accounting Settings](/app/volunteering-accounting-settings) → **Budget Controls**.
+
+Project **department budgets** are checked on **Expense Claims** and **Purchase Orders** (not on Employee Advances). Purchase Invoices do not double-count a PO.
 
 | Setting | What it does | Default |
 |---------|--------------|---------|

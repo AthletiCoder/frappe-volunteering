@@ -88,5 +88,33 @@ def validate_attendance_request(doc, method=None):
 
 	if not doc.employee:
 		doc.employee = session_employee
-	elif doc.employee != session_employee:
+	if doc.employee != session_employee:
+		is_manager = frappe.db.get_value("Employee", doc.employee, "reports_to") == session_employee
+		if is_manager and not doc.is_new():
+			return
 		frappe.throw(_("You can only create Attendance Requests for yourself."))
+
+
+def before_cancel_attendance_request(doc, method=None):
+	"""HRMS cancel updates Attendance; reporting managers lack that DocPerm."""
+	user = frappe.session.user
+	session_employee = frappe.db.get_value("Employee", {"user_id": user}, "name") if user != "Administrator" else None
+	roles = set(frappe.get_roles(user))
+	is_hr = user == "Administrator" or bool(roles.intersection(HR_ROLES))
+	is_manager = bool(
+		session_employee
+		and frappe.db.get_value("Employee", doc.employee, "reports_to") == session_employee
+	)
+	if not (is_hr or is_manager):
+		return
+
+	frappe.flags.ignore_permissions = True
+	doc.flags.ignore_permissions = True
+	for att_name in frappe.get_all(
+		"Attendance",
+		{"employee": doc.employee, "attendance_request": doc.name, "docstatus": 1},
+		pluck="name",
+	):
+		att = frappe.get_doc("Attendance", att_name)
+		att.flags.ignore_permissions = True
+		att.cancel()

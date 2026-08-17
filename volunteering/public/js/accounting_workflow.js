@@ -81,6 +81,7 @@ volunteering.accounting_workflow.hide_advance_account_fields = function (frm) {
 	if (frm.fields_dict.advance_account) {
 		frm.set_df_property("advance_account", "hidden", accounts ? 0 : 1);
 	}
+	// Advances are not tagged to a project; budget is on the settling Expense Claim.
 	if (frm.fields_dict.project) {
 		frm.set_df_property("project", "hidden", 1);
 	}

@@ -4,10 +4,17 @@
 import frappe
 from frappe.tests import UnitTestCase
 
-from volunteering.volunteering.budget_service import get_allocated_budget, get_document_amount
+from volunteering.volunteering.budget_service import (
+	BUDGET_TRACKED_DOCTYPES,
+	get_allocated_budget,
+	get_document_amount,
+)
 
 
 class UnitTestBudgetService(UnitTestCase):
+	def test_budget_tracked_doctypes_are_claims_and_orders(self):
+		self.assertEqual(BUDGET_TRACKED_DOCTYPES, ("Expense Claim", "Purchase Order"))
+		self.assertNotIn("Employee Advance", BUDGET_TRACKED_DOCTYPES)
 	def test_get_document_amount_uses_grand_total_for_po(self):
 		doc = frappe._dict(doctype="Purchase Order", grand_total=2500)
 		self.assertEqual(get_document_amount(doc), 2500)

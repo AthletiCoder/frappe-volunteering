@@ -187,6 +187,7 @@ doc_events = {
 	},
 	"Expense Claim": {
 		"before_save": [
+			"volunteering.volunteering.accounting_controls.validate_project_required",
 			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
 			"volunteering.volunteering.accounting_controls.validate_project_has_cost_center",
 			"volunteering.volunteering.accounting_controls.assign_department_from_employee",
@@ -197,14 +198,17 @@ doc_events = {
 		],
 		# Approve sets docstatus=1 and calls submit() (skips before_save) — re-check budget here.
 		"before_submit": [
+			"volunteering.volunteering.accounting_controls.validate_project_required",
 			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
 			"volunteering.volunteering.approval_routing.sync_expense_claim_approval_status_before_submit",
+			"volunteering.volunteering.approval_routing.before_accounting_document_submit",
 			"volunteering.volunteering.budget_service.validate_budget_on_save",
 		],
 		"on_update": "volunteering.volunteering.approval_routing.on_accounting_workflow_state_change",
 	},
 	"Purchase Order": {
 		"before_save": [
+			"volunteering.volunteering.accounting_controls.validate_project_required",
 			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
 			"volunteering.volunteering.accounting_controls.validate_project_has_cost_center",
 			"volunteering.volunteering.accounting_controls.assign_department_from_owner",
@@ -213,20 +217,19 @@ doc_events = {
 			"volunteering.volunteering.spend_controls.validate_spend_controls",
 		],
 		"before_submit": [
+			"volunteering.volunteering.accounting_controls.validate_project_required",
+			"volunteering.volunteering.approval_routing.before_accounting_document_submit",
 			"volunteering.volunteering.budget_service.validate_budget_on_save",
 		],
 		"on_update": "volunteering.volunteering.approval_routing.on_accounting_workflow_state_change",
 	},
 	"Employee Advance": {
 		"before_save": [
-			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
-			"volunteering.volunteering.accounting_controls.validate_project_has_cost_center",
 			"volunteering.volunteering.employee_advance_controls.before_employee_advance_save",
 			"volunteering.volunteering.approval_routing.before_accounting_document_save",
-			"volunteering.volunteering.budget_service.validate_budget_on_save",
 		],
 		"before_submit": [
-			"volunteering.volunteering.budget_service.validate_budget_on_save",
+			"volunteering.volunteering.approval_routing.before_accounting_document_submit",
 		],
 		"on_update": "volunteering.volunteering.approval_routing.on_accounting_workflow_state_change",
 	},
@@ -242,6 +245,7 @@ doc_events = {
 	},
 	"Attendance Request": {
 		"validate": "volunteering.volunteering.attendance_request_permissions.validate_attendance_request",
+		"before_cancel": "volunteering.volunteering.attendance_request_permissions.before_cancel_attendance_request",
 	},
 	"Employee": {
 		"after_insert": "volunteering.volunteering.leave_setup.assign_default_leave_policy",

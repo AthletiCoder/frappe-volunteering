@@ -26,7 +26,11 @@ If you must reimburse above the threshold, fill **Vendor Payment Override Reason
 
 - New advance blocked while residual on another is **above** replenish threshold (default **10%**)
 - Residual ≤10% allows replenishment; leftovers must still be claimed or returned ([Advances with Residual](query report))
-- Settle via Expense Claim linked to the Advance
+- Do **not** tag the advance to a project. Settle via Expense Claim **on the Project** the spend belongs to — that is what budget checks.
+
+## Expense Claim
+
+Set **Project** (required). Live department budget on that project is checked when the claim is approved. Linking an advance does not move budget by itself.
 
 ## Approvals
 

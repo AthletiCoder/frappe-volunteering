@@ -68,13 +68,20 @@ def has_permission(doc, ptype, user):
 	if ptype in {"read", "print", "email", "export", "report", "select"}:
 		return is_own or is_manager
 
-	# Create / write / delete only for own advances (non-Accounts)
-	if ptype in {"write", "create", "delete"}:
+	# Create is allowed for any linked employee; validate_employee_self_only
+	# still blocks creating for someone else (clear "yourself" error).
+	if ptype == "create":
+		return True
+
+	# Managers must write/submit to Approve via workflow.
+	if ptype == "write":
+		return is_own or is_manager
+
+	if ptype == "delete":
 		return is_own
 
-	# Submit/cancel: Accounts already returned True; managers may read only
 	if ptype in {"submit", "cancel", "amend"}:
-		return False
+		return is_own or is_manager
 
 	return False
 
