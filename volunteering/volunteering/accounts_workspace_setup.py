@@ -204,93 +204,10 @@ def _rebuild_workspace():
 	if not name:
 		return
 
+	from volunteering.volunteering.home_service import apply_moved_to_home_workspace
+
 	ws = frappe.get_doc("Workspace", name)
-	ws.set("shortcuts", [])
-	ws.set("links", [])
 	ws.set("roles", [])
-
-	sections = (
-		("My Spend", MY_SPEND_SHORTCUTS),
-		("Awaiting my Approval", APPROVAL_SHORTCUTS),
-		("Accounts Ops", OPS_SHORTCUTS),
-	)
-
-	for section_label, specs in sections:
-		ws.append("links", {"type": "Card Break", "label": section_label, "hidden": 0})
-		for spec in specs:
-			stype = spec.get("type") or "DocType"
-			if stype == "DocType" and not frappe.db.exists("DocType", spec["link_to"]):
-				continue
-			if stype == "Page" and not frappe.db.exists("Page", spec["link_to"]):
-				continue
-			if stype == "DocType" and "pending_approver" in (spec.get("stats_filter") or ""):
-				if not frappe.db.has_column(spec["link_to"], "pending_approver"):
-					continue
-
-			# Workspace Link only supports DocType / Page / Report — SPA routes are shortcuts only
-			if stype != "URL":
-				link_type = "Page" if stype == "Page" else "DocType"
-				ws.append(
-					"links",
-					{
-						"type": "Link",
-						"label": spec["label"],
-						"link_type": link_type,
-						"link_to": spec["link_to"],
-						"hidden": 0,
-					},
-				)
-
-			sc = {
-				"type": stype if stype in ("DocType", "Page", "URL") else "DocType",
-				"label": spec["label"],
-				"doc_view": "List",
-				"color": spec.get("color") or "Blue",
-			}
-			if stype == "URL":
-				sc["url"] = spec["link_to"]
-			else:
-				sc["link_to"] = spec["link_to"]
-				if spec.get("stats_filter"):
-					sc["stats_filter"] = spec.get("stats_filter")
-			ws.append("shortcuts", sc)
-
-	ws.append("links", {"type": "Card Break", "label": "Budgets", "hidden": 0})
-	# Residual report stays as a Workspace Link; SPA Budget Health is shortcut-only
-	if frappe.db.exists("Report", "Employee Advances with Residual"):
-		ws.append(
-			"links",
-			{
-				"type": "Link",
-				"label": "Advances with Residual",
-				"link_type": "Report",
-				"link_to": "Employee Advances with Residual",
-				"is_query_report": 1,
-				"hidden": 0,
-				"report_ref_doctype": "Employee Advance",
-			},
-		)
-	ws.append(
-		"shortcuts",
-		{
-			"type": "URL",
-			"label": SPA_BUDGET_HEALTH["label"],
-			"url": SPA_BUDGET_HEALTH["url"],
-			"color": "Green",
-		},
-	)
-	if frappe.db.exists("Report", "Employee Advances with Residual"):
-		ws.append(
-			"shortcuts",
-			{
-				"type": "Report",
-				"label": "Advances with Residual",
-				"link_to": "Employee Advances with Residual",
-				"color": "Orange",
-				"report_ref_doctype": "Employee Advance",
-			},
-		)
-
 	for role in (
 		"Employee",
 		"Accounts User",
@@ -301,104 +218,13 @@ def _rebuild_workspace():
 	):
 		if frappe.db.exists("Role", role):
 			ws.append("roles", {"role": role})
-
-	content = [
-		{
-			"id": "ac-header",
-			"type": "header",
-			"data": {"text": '<span class="h4">My Expenses</span>', "col": 12},
-		},
-		{
-			"id": "ac-intro",
-			"type": "paragraph",
-			"data": {
-				"text": (
-					"Your spend requests, approvals awaiting you, and accounts ops queues. "
-					"Orange cards show live pending counts — click to open the filtered list."
-				),
-				"col": 12,
-			},
-		},
-		{"id": "ac-spacer", "type": "spacer", "data": {"col": 12}},
-		{"id": "ac-card-spend", "type": "card", "data": {"card_name": "My Spend", "col": 4}},
-		{
-			"id": "ac-card-appr",
-			"type": "card",
-			"data": {"card_name": "Awaiting my Approval", "col": 4},
-		},
-		{"id": "ac-card-ops", "type": "card", "data": {"card_name": "Accounts Ops", "col": 4}},
-		{"id": "ac-card-bud", "type": "card", "data": {"card_name": "Budgets", "col": 4}},
-	]
-	idx = 0
-	for _section, specs in sections:
-		for spec in specs:
-			content.append(
-				{
-					"id": f"ac-sc-{idx}",
-					"type": "shortcut",
-					"data": {"shortcut_name": spec["label"], "col": 4},
-				}
-			)
-			idx += 1
-	content.append(
-		{
-			"id": "ac-sc-budget",
-			"type": "shortcut",
-			"data": {"shortcut_name": "Budget Health", "col": 4},
-		}
-	)
-	if frappe.db.exists("Report", "Employee Advances with Residual"):
-		content.append(
-			{
-				"id": "ac-sc-residual",
-				"type": "shortcut",
-				"data": {"shortcut_name": "Advances with Residual", "col": 4},
-			}
-		)
-	ws.content = json.dumps(content)
-
-	ws.flags.ignore_links = True
-	ws.flags.ignore_permissions = True
-	ws.flags.ignore_validate = True
-	ws.save(ignore_permissions=True)
+	apply_moved_to_home_workspace(ws, WORKSPACE_NAME)
 
 
 def _ensure_minimal_sidebar():
-	"""Keep a sidebar shell so Desktop Icons still open the workspace page.
-	Do not list spend/approval DocTypes here — those live on workspace shortcuts."""
-	_home = {
-		"type": "Link",
-		"label": WORKSPACE_NAME,
-		"link_to": WORKSPACE_NAME,
-		"link_type": "Workspace",
-		"icon": "expense",
-		"child": 0,
-		"collapsible": 0,
-		"indent": 0,
-		"keep_closed": 0,
-		"show_arrow": 0,
-	}
-	for legacy in LEGACY_SIDEBAR_NAMES:
-		if legacy != SIDEBAR_NAME and frappe.db.exists("Workspace Sidebar", legacy):
-			frappe.delete_doc("Workspace Sidebar", legacy, force=True, ignore_permissions=True)
+	from volunteering.volunteering.home_service import ensure_home_sidebar
 
-	if frappe.db.exists("Workspace Sidebar", SIDEBAR_NAME):
-		sidebar = frappe.get_doc("Workspace Sidebar", SIDEBAR_NAME)
-		sidebar.items = []
-		sidebar.append("items", _home)
-		sidebar.header_icon = "expense"
-		sidebar.flags.ignore_links = True
-		sidebar.save(ignore_permissions=True)
-		return
-
-	frappe.get_doc(
-		{
-			"doctype": "Workspace Sidebar",
-			"title": SIDEBAR_NAME,
-			"header_icon": "expense",
-			"items": [_home],
-		}
-	).insert(ignore_permissions=True)
+	ensure_home_sidebar(SIDEBAR_NAME, "expense", LEGACY_SIDEBAR_NAMES)
 
 
 def _section(label, icon):

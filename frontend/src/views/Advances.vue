@@ -1,26 +1,29 @@
 <template>
 	<div>
-		<div class="flex items-center justify-between mb-6 gap-3 flex-wrap">
-			<div>
-				<h1 class="text-2xl font-bold text-gray-900">Advance Portal</h1>
-				<p class="text-sm text-gray-500">
-					Status, residual, and expense claims tagged to each advance. Reportees can spend against a manager’s
-					paid advance after claim approval.
-				</p>
-			</div>
-			<div class="flex gap-2">
-				<a class="px-3 py-1.5 rounded-lg border text-sm" href="/app/employee-advance/new">New Advance</a>
-				<button class="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-sm" @click="load">Refresh</button>
-			</div>
-		</div>
+		<PageHeader
+			eyebrow="Money"
+			title="Advance Portal"
+			subtitle="Status, leftover cash, and claims tagged to each advance."
+		>
+			<template #actions>
+				<a class="btn-secondary text-sm" href="/app/employee-advance/new">New Advance</a>
+				<button class="btn-primary text-sm" type="button" :disabled="loading" @click="load">
+					{{ loading ? "Loading…" : "Refresh" }}
+				</button>
+			</template>
+		</PageHeader>
 
-		<div v-if="error" class="text-red-600 mb-4">{{ error }}</div>
+		<div v-if="error" class="text-bad mb-4">{{ error }}</div>
 
-		<div v-for="adv in advances" :key="adv.name" class="rounded-xl border bg-white shadow-sm p-4 mb-4">
+		<div
+			v-for="adv in advances"
+			:key="adv.name"
+			class="rounded-2xl border border-line bg-surface shadow-soft p-4 mb-4 hover:shadow-lift transition-shadow duration-200"
+		>
 			<div class="flex justify-between gap-3 flex-wrap">
 				<div>
-					<a class="font-semibold text-blue-700 hover:underline" :href="adv.route">{{ adv.name }}</a>
-					<div class="text-sm text-gray-500">
+					<a class="font-semibold text-accent hover:underline" :href="adv.route">{{ adv.name }}</a>
+					<div class="text-sm text-muted">
 						{{ adv.purpose || "—" }} · {{ adv.status }} · {{ adv.workflow_state || "" }}
 					</div>
 				</div>
@@ -30,32 +33,30 @@
 			</div>
 
 			<div class="grid grid-cols-2 md:grid-cols-5 gap-2 mt-3">
-				<div v-for="s in stats(adv)" :key="s.label" class="rounded-lg bg-gray-50 p-2">
-					<div class="text-xs text-gray-500">{{ s.label }}</div>
-					<div class="font-semibold">{{ s.value }}</div>
+				<div v-for="s in stats(adv)" :key="s.label" class="rounded-xl bg-soft p-2">
+					<div class="text-xs text-muted">{{ s.label }}</div>
+					<div class="font-semibold text-ink">{{ s.value }}</div>
 				</div>
 			</div>
 
 			<div class="mt-3 text-sm">
-				<div class="font-medium mb-1">Linked Expense Claims</div>
-				<div v-if="!(adv.expense_claims || []).length" class="text-gray-500">No expense claims linked yet.</div>
+				<div class="font-medium mb-1 text-ink">Linked Expense Claims</div>
+				<div v-if="!(adv.expense_claims || []).length" class="text-muted">No expense claims linked yet.</div>
 				<div v-for="c in adv.expense_claims || []" :key="c.name" class="mb-1">
-					<a class="text-blue-700 hover:underline" :href="c.route">{{ c.name }}</a>
-					<span class="text-gray-500"> · {{ formatMoney(c.allocated_amount) }} · {{ c.status }}</span>
+					<a class="text-accent hover:underline" :href="c.route">{{ c.name }}</a>
+					<span class="text-muted"> · {{ formatMoney(c.allocated_amount) }} · {{ c.status }}</span>
 				</div>
 			</div>
 
-			<div class="mt-3 flex gap-2">
-				<a
-					class="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm"
-					:href="`/app/expense-claim/new?employee=${encodeURIComponent(adv.employee)}`"
+			<div class="mt-3 flex flex-wrap gap-2">
+				<a class="btn-primary text-sm" :href="`/app/expense-claim/new?employee=${encodeURIComponent(adv.employee)}`"
 					>New Expense Claim</a
 				>
-				<a class="px-3 py-1.5 rounded-lg border text-sm" :href="adv.route">Open Advance</a>
+				<a class="btn-secondary text-sm" :href="adv.route">Open Advance</a>
 			</div>
 		</div>
 
-		<div v-if="!advances.length && !loading" class="text-center text-gray-500 py-10">
+		<div v-if="!advances.length && !loading" class="text-center text-muted py-10">
 			No advances yet. Request one, get it paid by Accounts, then link claims via Get Advances.
 		</div>
 	</div>
@@ -64,21 +65,17 @@
 <script setup>
 import { onMounted, ref } from "vue";
 import { call } from "../lib/frappe";
+import { formatMoney } from "../lib/money";
+import PageHeader from "../components/PageHeader.vue";
 
 const advances = ref([]);
 const loading = ref(false);
 const error = ref("");
 
-function formatMoney(v) {
-	return new Intl.NumberFormat(undefined, { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(
-		v || 0
-	);
-}
-
 function residualClass(pct) {
-	if ((pct || 0) > 10) return "bg-red-100 text-red-700";
-	if ((pct || 0) > 0) return "bg-orange-100 text-orange-700";
-	return "bg-green-100 text-green-700";
+	if ((pct || 0) > 10) return "bg-bad-soft text-bad";
+	if ((pct || 0) > 0) return "bg-warn-soft text-warn";
+	return "bg-ok-soft text-ok";
 }
 
 function stats(adv) {

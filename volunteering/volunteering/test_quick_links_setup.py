@@ -20,8 +20,8 @@ class IntegrationTestMyWork(IntegrationTestCase):
 		# Running again must not raise and must keep exactly one workspace.
 		ensure_my_work()
 		ws = frappe.get_doc("Workspace", self._workspace_name())
-		self.assertIn("eh-header", ws.content or "")
-		self.assertIn("Self Service", ws.content or "")
+		self.assertIn("home-moved-header", ws.content or "")
+		self.assertIn("Home", ws.content or "")
 
 	def test_rebuild_restores_standard_layout(self):
 		"""ensure_my_work force-rebuilds content, discarding manual edits."""
@@ -34,4 +34,4 @@ class IntegrationTestMyWork(IntegrationTestCase):
 		ensure_my_work()
 		ws.reload()
 		self.assertNotIn("custom", ws.content or "")
-		self.assertIn("eh-header", ws.content or "")
+		self.assertIn("home-moved-header", ws.content or "")

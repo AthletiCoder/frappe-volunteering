@@ -45,7 +45,7 @@ Source: `sevamrit-erp-testing.xlsx` (108 spreadsheet cases). All 108 IDs are aut
 | HR-DWL-010 | Cancel submitted log recalculates attendance | critical | `e2e/tests/hr/daily-work-log.spec.ts` | automated |
 | HR-DWL-011 | Employee can only create own work log | regression | `e2e/tests/hr/daily-work-log.spec.ts` | automated |
 | HR-DWL-012 | Missing Daily Logs Report lists missing days | regression | `e2e/tests/hr/daily-work-log.spec.ts` | automated |
-| HR-DWL-013 | My Work hub loads for employee | smoke | `e2e/tests/hr/smoke.spec.ts` | automated |
+| HR-DWL-013 | Home loads for employee | smoke | `e2e/tests/hr/smoke.spec.ts` | automated |
 | HR-LV-001 | Normal Privilege Leave with sufficient notice | critical | `e2e/tests/hr/leave.spec.ts` | automated |
 | HR-LV-002 | Normal leave with past start date blocked | critical | `e2e/tests/hr/leave.spec.ts` | automated |
 | HR-LV-003 | Normal leave insufficient notice blocked | critical | `e2e/tests/hr/leave.spec.ts` | automated |
@@ -97,7 +97,7 @@ Source: `sevamrit-erp-testing.xlsx` (108 spreadsheet cases). All 108 IDs are aut
 | AC-APR-008 | Grade change updates effective limits | critical | `e2e/tests/accounts/approval.spec.ts` | automated |
 | AC-BKS-001 | Cashfree clearing Journal Entry form reachable | regression | `e2e/tests/accounts/books.spec.ts` | automated |
 | AC-BKS-002 | Cancel preserves history (submitted doc not deletable) | regression | `e2e/tests/accounts/books.spec.ts` | automated |
-| AC-BKS-003 | My Expenses hub loads | smoke | `e2e/tests/accounts/smoke.spec.ts` | automated |
+| AC-BKS-003 | Home loads for employee spend actions | smoke | `e2e/tests/accounts/smoke.spec.ts` | automated |
 | AC-BKS-004 | General Ledger report runs | regression | `e2e/tests/accounts/books.spec.ts` | automated |
 | AC-BKS-005 | Bank Reconciliation Tool opens | regression | `e2e/tests/accounts/books.spec.ts` | automated |
 | AC-BUD-001 | Soft budget warning near budget | regression | `e2e/tests/accounts/budget.spec.ts` | automated |
@@ -146,6 +146,7 @@ Infrastructure and persona checks without spreadsheet IDs (not counted in the 10
 | — | Event registration form reachable | smoke | `e2e/tests/volunteering/smoke.spec.ts` | automated |
 | — | Coordinator session is e2e.coordinator | smoke | `e2e/tests/volunteering/smoke.spec.ts` | automated |
 | — | Volunteer session is e2e.volunteer | smoke | `e2e/tests/volunteering/smoke.spec.ts` | automated |
+| — | get_home_payload API contract | smoke | `e2e/tests/volunteering/smoke.spec.ts` | automated |
 | — | get_budget_health API contract | smoke | `e2e/tests/volunteering/smoke.spec.ts` | automated |
 | — | Employee / manager / chair persona sessions | smoke | `e2e/tests/shared/persona-smoke.spec.ts` | automated |
 | — | Employee can open Advance Portal | smoke | `e2e/tests/shared/persona-smoke.spec.ts` | automated |

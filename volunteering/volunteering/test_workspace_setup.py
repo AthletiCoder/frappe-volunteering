@@ -7,9 +7,11 @@ from frappe.utils import nowdate
 
 from volunteering.volunteering.workspace_setup import (
 	DASHBOARD_MARKER,
+	SPA_LINKS_MARKER,
 	VOLUNTEERING_EVENT_DYNAMIC_FILTER,
 	WORKSPACE_NAME,
 	boot_session,
+	ensure_spa_workspace_shortcuts,
 	get_latest_ngo_event,
 	sync_volunteering_dashboard_filters,
 	sync_volunteering_workspace_dashboard,
@@ -96,3 +98,18 @@ class IntegrationTestWorkspaceSetup(IntegrationTestCase):
 
 		self.assertEqual(workspace.content, content)
 		self.assertEqual(len(workspace.charts), chart_count)
+
+	def test_spa_shortcuts_keep_volunteering_dashboard(self):
+		if not frappe.db.exists("Workspace", WORKSPACE_NAME):
+			self.skipTest("Volunteering workspace is not installed")
+
+		ensure_spa_workspace_shortcuts()
+		workspace = frappe.get_doc("Workspace", WORKSPACE_NAME)
+		self.assertIn(DASHBOARD_MARKER, workspace.content or "")
+		self.assertIn(SPA_LINKS_MARKER, workspace.content or "")
+		by_label = {row.label: row for row in workspace.shortcuts}
+		self.assertEqual(by_label["Home"].url, "/volunteering/home")
+		self.assertEqual(by_label["To-do"].url, "/volunteering/todos")
+		self.assertEqual(by_label["Advance Portal"].url, "/volunteering/advances")
+		self.assertEqual(by_label["Budget Health"].url, "/volunteering/budget-health")
+		self.assertIn("Event Report", by_label)

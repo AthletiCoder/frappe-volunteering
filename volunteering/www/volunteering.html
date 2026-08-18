@@ -3,6 +3,17 @@
 {% block title %}Volunteering{% endblock %}
 
 {% block head_include %}
+<script>
+	(function () {
+		try {
+			var stored = localStorage.getItem("volunteering.theme");
+			var dark =
+				stored === "dark" ||
+				(stored !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+			document.documentElement.classList.toggle("dark", dark);
+		} catch (e) {}
+	})();
+</script>
 {% if has_spa_build %}
 <link rel="stylesheet" href="/assets/volunteering/frontend/assets/{{ spa_entry_css }}">
 {% endif %}
@@ -24,7 +35,7 @@
 		From the app folder run <code>yarn install && yarn build</code> in <code>frontend/</code>,
 		then clear cache.
 	</p>
-	<p><a href="/app/my-expenses">Back to My Expenses</a></p>
+	<p><a href="/volunteering/home">Back to Home</a></p>
 </div>
 {% endif %}
 {% endblock %}

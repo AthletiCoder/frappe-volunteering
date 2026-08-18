@@ -188,9 +188,9 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 		)
 		self.assertTrue(frappe.db.exists("Workspace Sidebar", "My Expenses"))
 		sidebar = frappe.get_doc("Workspace Sidebar", "My Expenses")
-		# Shell only — workspace home link, no duplicated DocType nav
+		# Shell only — Home URL, no duplicated DocType nav
 		labels = [item.label for item in sidebar.items if item.type == "Link"]
-		self.assertEqual(labels, ["My Expenses"])
+		self.assertEqual(labels, ["Home"])
 		self.assertFalse(
 			{
 				"My Expense Claims",
@@ -207,22 +207,11 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 			or frappe.db.get_value("Workspace", {"label": "My Expenses"}, "name"),
 		)
 		shortcut_labels = {s.label for s in ws.shortcuts}
-		self.assertIn("Advance Portal", shortcut_labels)
-		self.assertIn("Budget Health", shortcut_labels)
-		self.assertTrue(
-			{
-				"Expense Claims Pending Me",
-				"Claims to Reimburse",
-				"Vendor Invoices to Pay",
-			}
-			<= shortcut_labels
-		)
-		advance = next(s for s in ws.shortcuts if s.label == "Advance Portal")
-		self.assertEqual(advance.type, "URL")
-		self.assertEqual(advance.url, "/volunteering/advances")
-		budget = next(s for s in ws.shortcuts if s.label == "Budget Health")
-		self.assertEqual(budget.type, "URL")
-		self.assertEqual(budget.url, "/volunteering/budget-health")
+		self.assertIn("Home", shortcut_labels)
+		home = next(s for s in ws.shortcuts if s.label == "Home")
+		self.assertEqual(home.type, "URL")
+		self.assertEqual(home.url, "/volunteering/home")
+		self.assertIn("home-moved-header", ws.content or "")
 
 		if frappe.db.exists("Workspace Sidebar", "Volunteering"):
 			vol_sidebar = frappe.get_doc("Workspace Sidebar", "Volunteering")

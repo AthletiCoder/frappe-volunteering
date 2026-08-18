@@ -226,7 +226,7 @@ def _send_reminder_email(user, rows):
 
 	message += (
 		"<br><br>"
-		+ _("Open My Expenses: {0}").format(frappe.utils.get_url("/app/my-expenses"))
+		+ _("Open Home: {0}").format(frappe.utils.get_url("/volunteering/home"))
 	)
 
 	frappe.sendmail(

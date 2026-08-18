@@ -12,8 +12,7 @@ This page shows the right way to spend money. Pick **one** path for each expense
 
 Start here:
 
-- [My Expenses](/app/my-expenses) — for advances and claims
-- [My Work](/app/my-work) — for attendance and leave
+- [Home](/volunteering/home) — leave, work, advances, and claims
 
 ## The three ways to spend
 
@@ -142,7 +141,7 @@ Every vendor bill must link to an **approved, submitted** order. Staff or Accoun
 
 ## Daily work
 
-1. [My Expenses](/app/my-expenses) — bills to pay, claims to pay back, advances
+1. [Home](/volunteering/home) — bills to pay, claims to pay back, advances
 2. [Advances with leftover](/app/query-report/Employee%20Advances%20with%20Residual)
 3. [Bank Reconciliation](/app/bank-reconciliation-tool)
 4. [Budget Health](/volunteering/budget-health)
@@ -178,7 +177,7 @@ This page shows **where** to set spending limits and rules, and **who** can chan
 
 Limits are set for each **grade** (seniority band), not for each person. You give each person the right grade on their Employee record, and they get that grade's limits. See [HR Configuration](/help/hr/configuration) for how to set a grade.
 
-**Open the page:** [My Expenses](/app/my-expenses) → **Approval & Advance Limits**, or go to [Approval and Advance Limits](/app/approval-and-advance-limits).
+**Open the page:** [Home](/volunteering/home) → Setup → **Approval & Advance Limits**, or go to [Approval and Advance Limits](/app/approval-and-advance-limits).
 
 Each grade has two separate limits:
 
