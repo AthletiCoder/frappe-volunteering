@@ -25,7 +25,10 @@ required_apps = ["hrms"]
 # ------------------
 
 # include js, css files in header of desk.html
-app_include_js = ["/assets/volunteering/js/form_hints.js"]
+app_include_js = [
+	"/assets/volunteering/js/form_hints.js",
+	"/assets/volunteering/js/home_redirect.js",
+]
 
 # Website route for Frappe UI SPA (falls back to Desk pages if not built)
 website_route_rules = [
@@ -62,6 +65,7 @@ doctype_js = {
     "Purchase Order": "public/js/accounting_workflow.js",
     "Employee Advance": "public/js/accounting_workflow.js",
     "Purchase Invoice": "public/js/purchase_invoice.js",
+    "Project": "public/js/project.js",
 }
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}

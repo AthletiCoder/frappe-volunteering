@@ -16,6 +16,9 @@ export async function call(method, args = {}) {
 			const server = JSON.parse(data._server_messages || "[]");
 			if (server[0]) msg = JSON.parse(server[0]).message || msg;
 		} catch (_) {}
+		if (typeof msg === "string") {
+			msg = msg.replace(/<[^>]+>/g, "");
+		}
 		throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
 	}
 	return data.message;

@@ -43,6 +43,12 @@ test.describe('Volunteering L1 smoke @smoke @volunteering', () => {
 			);
 			expect(user).toBe(PERSONAS.coordinator.email);
 		});
+
+		test('coordinator can open Home programs', async ({ page }) => {
+			await page.goto('/volunteering/home', { waitUntil: 'domcontentloaded' });
+			await expect(page).toHaveURL(/\/volunteering\/home/);
+			await expect(page.locator('#app')).toBeVisible();
+		});
 	});
 
 	test.describe('as volunteer', () => {
@@ -60,6 +66,24 @@ test.describe('Volunteering L1 smoke @smoke @volunteering', () => {
 	});
 
 	test.describe('API contracts @smoke @volunteering', () => {
+		test('get_home_payload returns allowed staff home', async ({ request }) => {
+			const payload = await callMethod<{
+				allowed: boolean;
+				todo_count: number;
+				actions: { time: { id: string; list_route?: string; pending?: number }[] };
+			}>(
+				request,
+				'volunteering.volunteering.home_service.get_home_payload',
+			);
+			expect(payload.allowed).toBe(true);
+			expect(Array.isArray(payload.actions.time)).toBeTruthy();
+			expect(typeof payload.todo_count).toBe('number');
+			const leave = payload.actions.time.find((row) => row.id === 'leave');
+			expect(leave?.list_route).toBe('/app/leave-application');
+			expect(typeof leave?.pending).toBe('number');
+			expect(leave?.pending).toBeGreaterThanOrEqual(0);
+		});
+
 		test('get_budget_health returns a list', async ({ request }) => {
 			const rows = await callMethod<unknown[]>(
 				request,

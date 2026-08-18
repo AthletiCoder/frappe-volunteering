@@ -2,7 +2,7 @@
 
 ERPNext app for NGO day-to-day work: volunteer events, staff attendance and leave, and controlled spending (advances, claims, vendor payments, and project budgets).
 
-**In the product, start here:** [My Work](/app/my-work) · [My Expenses](/app/my-expenses) · [Help](/help)
+**In the product, start here:** [Home](/volunteering/home) · [Help](/help)
 
 ---
 
@@ -12,8 +12,8 @@ Use Desk search (`Ctrl` / `Cmd` + `K`) or the hubs above. In-app help is the liv
 
 | I want to… | Open |
 |---|---|
-| Log work, leave, WFH, attendance | [My Work](/app/my-work) · [HR help](/help/hr/home) |
-| Request an advance or claim money back | [My Expenses](/app/my-expenses) · [Advance Portal](/volunteering/advances) |
+| Log work, leave, WFH, attendance | [Home](/volunteering/home) · [HR help](/help/hr/home) |
+| Request an advance or claim money back | [Home](/volunteering/home) · [Advance Portal](/volunteering/advances) |
 | See how to spend (vendor vs advance vs claim) | [How to spend](/help/accounts/how-to-spend) · [docs/how_to_spend.md](docs/how_to_spend.md) |
 | Check project budget | [Budget Health](/volunteering/budget-health) |
 | HR details (work log, leave, WFH) | [docs/hr_hrms_guide.md](docs/hr_hrms_guide.md) |

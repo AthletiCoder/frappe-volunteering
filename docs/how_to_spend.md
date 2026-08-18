@@ -2,7 +2,7 @@
 
 Mirror of the in-app Wiki page `How-to-Spend`. Prefer the Wiki in Desk after migrate.
 
-Every expenditure should follow **one** path. Hubs: **My Work** (attendance) and **My Expenses** (advances, claims, PO/PI).
+Every expenditure should follow **one** path. Start at **Home** (`/volunteering/home`) for leave, work, advances, claims, and payments.
 
 1. **Vendor payment (preferred)** — Purchase Order → Purchase Invoice → Payment Entry
 2. **Employee Advance** — float before buying (local purchase, travel, events); settle with Expense Claim

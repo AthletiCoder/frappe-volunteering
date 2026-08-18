@@ -26,6 +26,12 @@ volunteering.accounting_workflow.setup_form = function (doctype) {
 		grand_total(frm) {
 			volunteering.accounting_workflow.toggle_exception_fields(frm);
 		},
+		project(frm) {
+			volunteering.accounting_workflow.show_spend_hints(frm);
+		},
+		department(frm) {
+			volunteering.accounting_workflow.show_spend_hints(frm);
+		},
 		advance_amount(frm) {
 			volunteering.accounting_workflow.toggle_exception_fields(frm);
 		},
@@ -122,16 +128,55 @@ volunteering.accounting_workflow.show_advance_link_hints = function (frm) {
 	);
 };
 
-volunteering.accounting_workflow.show_spend_hints = function (frm) {
-	if (frm.doc.docstatus !== 0 || frm.doc.workflow_state !== "Draft") {
-		return;
-	}
-	volunteering.form_hints.set_headline(
-		frm,
-		__(
-			'Prefer vendor payments for larger spends. See <a href="/help/accounts/how-to-spend" target="_blank">How to spend</a>.'
-		)
+volunteering.accounting_workflow.spend_guide_html = function () {
+	return __(
+		'Prefer vendor payments for larger spends. See <a href="/help/accounts/how-to-spend" target="_blank">How to spend</a>.'
 	);
+};
+
+volunteering.accounting_workflow.show_spend_hints = function (frm) {
+	const show_spend =
+		frm.doc.docstatus === 0 && frm.doc.workflow_state === "Draft" && frm.doctype !== "Purchase Invoice";
+	volunteering.form_hints.run_once(frm, "spend_budget", () => {
+		const spend = show_spend ? volunteering.accounting_workflow.spend_guide_html() : "";
+		if (frm.doctype === "Employee Advance" || !frm.doc.project) {
+			if (spend) {
+				volunteering.form_hints.set_headline(frm, spend);
+			}
+			return Promise.resolve();
+		}
+		return frappe
+			.xcall("volunteering.volunteering.budget_service.get_budget_snapshot", {
+				project: frm.doc.project,
+				department: frm.doc.department,
+			})
+			.then((snap) => {
+				if (!snap) {
+					if (spend) volunteering.form_hints.set_headline(frm, spend);
+					return;
+				}
+				let budget = "";
+				if (snap.department && snap.department_allocated) {
+					budget = __(
+						"This department: spent {0} of {1} approved ({2} available).",
+						[
+							format_currency(snap.department_consumed),
+							format_currency(snap.department_allocated),
+							format_currency(snap.department_remaining),
+						]
+					);
+				} else if (snap.allocated) {
+					budget = __(
+						"Project: spent {0} of {1} approved.",
+						[format_currency(snap.consumed), format_currency(snap.allocated)]
+					);
+				}
+				const html = [spend, budget].filter(Boolean).join("<br>");
+				if (html) {
+					volunteering.form_hints.set_headline(frm, html);
+				}
+			});
+	});
 };
 
 volunteering.accounting_workflow.toggle_exception_fields = function (frm) {

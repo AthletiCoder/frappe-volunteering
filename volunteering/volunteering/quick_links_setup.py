@@ -207,7 +207,7 @@ def _ensure_workspace_once():
 
 
 def _rebuild_workspace():
-	"""Force shortcuts/links/content to the clean Self Service + Awaiting my Approval layout."""
+	"""Point the legacy hub at SPA Home — no duplicated shortcut cards."""
 	name = (
 		frappe.db.exists("Workspace", WORKSPACE_NAME)
 		or frappe.db.get_value("Workspace", {"label": WORKSPACE_NAME}, "name")
@@ -215,153 +215,20 @@ def _rebuild_workspace():
 	if not name:
 		return
 
+	from volunteering.volunteering.home_service import apply_moved_to_home_workspace
+
 	ws = frappe.get_doc("Workspace", name)
-	ws.set("shortcuts", [])
-	ws.set("links", [])
 	ws.set("roles", [])
-
-	# Card breaks + plain DocType links (navigation only; counts live on shortcuts)
-	ws.append("links", {"type": "Card Break", "label": "Self Service", "hidden": 0})
-	for spec in SELF_SERVICE_SHORTCUTS:
-		if not frappe.db.exists("DocType", spec["link_to"]):
-			continue
-		ws.append(
-			"links",
-			{
-				"type": "Link",
-				"label": spec["label"],
-				"link_type": "DocType",
-				"link_to": spec["link_to"],
-				"hidden": 0,
-			},
-		)
-		ws.append(
-			"shortcuts",
-			{
-				"type": "DocType",
-				"label": spec["label"],
-				"link_to": spec["link_to"],
-				"doc_view": "List",
-				"color": spec.get("color") or "Blue",
-				"stats_filter": spec.get("stats_filter") or "",
-			},
-		)
-
-	ws.append("links", {"type": "Card Break", "label": "Awaiting my Approval", "hidden": 0})
-	for spec in APPROVER_SHORTCUTS:
-		if not frappe.db.exists("DocType", spec["link_to"]):
-			continue
-		ws.append(
-			"links",
-			{
-				"type": "Link",
-				"label": spec["label"],
-				"link_type": "DocType",
-				"link_to": spec["link_to"],
-				"hidden": 0,
-			},
-		)
-		ws.append(
-			"shortcuts",
-			{
-				"type": "DocType",
-				"label": spec["label"],
-				"link_to": spec["link_to"],
-				"doc_view": "List",
-				"color": spec.get("color") or "Orange",
-				"stats_filter": spec.get("stats_filter") or "",
-			},
-		)
-
 	for role in ("Employee", "HR User", "HR Manager", "System Manager", "Leave Approver"):
 		if frappe.db.exists("Role", role):
 			ws.append("roles", {"role": role})
-
-	content = [
-		{
-			"id": "eh-header",
-			"type": "header",
-			"data": {"text": '<span class="h4">My Work</span>', "col": 12},
-		},
-		{
-			"id": "eh-intro",
-			"type": "paragraph",
-			"data": {
-				"text": (
-					"Self-service requests and your approval queues. "
-					"Orange cards show items awaiting your action — click to open the filtered list."
-				),
-				"col": 12,
-			},
-		},
-		{"id": "eh-spacer", "type": "spacer", "data": {"col": 12}},
-		{"id": "eh-card-self", "type": "card", "data": {"card_name": "Self Service", "col": 6}},
-		{
-			"id": "eh-card-appr",
-			"type": "card",
-			"data": {"card_name": "Awaiting my Approval", "col": 6},
-		},
-	]
-	for i, spec in enumerate(SELF_SERVICE_SHORTCUTS):
-		content.append(
-			{
-				"id": f"eh-ss-{i}",
-				"type": "shortcut",
-				"data": {"shortcut_name": spec["label"], "col": 4},
-			}
-		)
-	for i, spec in enumerate(APPROVER_SHORTCUTS):
-		content.append(
-			{
-				"id": f"eh-ap-{i}",
-				"type": "shortcut",
-				"data": {"shortcut_name": spec["label"], "col": 4},
-			}
-		)
-	ws.content = json.dumps(content)
-
-	ws.flags.ignore_links = True
-	ws.flags.ignore_permissions = True
-	ws.flags.ignore_validate = True
-	ws.save(ignore_permissions=True)
+	apply_moved_to_home_workspace(ws, WORKSPACE_NAME)
 
 
 def _ensure_minimal_sidebar():
-	"""Keep a sidebar shell so Desktop Icons (link_type=Workspace Sidebar) still open
-	the workspace page — but do not duplicate workspace shortcut destinations."""
-	_home = {
-		"type": "Link",
-		"label": WORKSPACE_NAME,
-		"link_to": WORKSPACE_NAME,
-		"link_type": "Workspace",
-		"icon": "briefcase",
-		"child": 0,
-		"collapsible": 0,
-		"indent": 0,
-		"keep_closed": 0,
-		"show_arrow": 0,
-	}
-	for legacy in LEGACY_SIDEBAR_NAMES:
-		if legacy != SIDEBAR_NAME and frappe.db.exists("Workspace Sidebar", legacy):
-			frappe.delete_doc("Workspace Sidebar", legacy, force=True, ignore_permissions=True)
+	from volunteering.volunteering.home_service import ensure_home_sidebar
 
-	if frappe.db.exists("Workspace Sidebar", SIDEBAR_NAME):
-		sidebar = frappe.get_doc("Workspace Sidebar", SIDEBAR_NAME)
-		sidebar.items = []
-		sidebar.append("items", _home)
-		sidebar.header_icon = "briefcase"
-		sidebar.flags.ignore_links = True
-		sidebar.save(ignore_permissions=True)
-		return
-
-	frappe.get_doc(
-		{
-			"doctype": "Workspace Sidebar",
-			"title": SIDEBAR_NAME,
-			"header_icon": "briefcase",
-			"items": [_home],
-		}
-	).insert(ignore_permissions=True)
+	ensure_home_sidebar(SIDEBAR_NAME, "briefcase", LEGACY_SIDEBAR_NAMES)
 
 
 def _doctype_item(doctype, icon, label=None):

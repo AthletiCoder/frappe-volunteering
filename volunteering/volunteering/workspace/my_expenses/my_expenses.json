@@ -1,7 +1,7 @@
 {
  "app": "volunteering",
  "charts": [],
- "content": "[{\"id\": \"ac-header\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">My Expenses</span>\", \"col\": 12}}, {\"id\": \"ac-intro\", \"type\": \"paragraph\", \"data\": {\"text\": \"Your spend requests, approvals awaiting you, and accounts ops queues. Orange cards show live pending counts \\u2014 click to open the filtered list.\", \"col\": 12}}, {\"id\": \"ac-spacer\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"ac-card-spend\", \"type\": \"card\", \"data\": {\"card_name\": \"My Spend\", \"col\": 4}}, {\"id\": \"ac-card-appr\", \"type\": \"card\", \"data\": {\"card_name\": \"Awaiting my Approval\", \"col\": 4}}, {\"id\": \"ac-card-ops\", \"type\": \"card\", \"data\": {\"card_name\": \"Accounts Ops\", \"col\": 4}}, {\"id\": \"ac-card-bud\", \"type\": \"card\", \"data\": {\"card_name\": \"Budgets\", \"col\": 4}}, {\"id\": \"ac-sc-0\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"My Expense Claims\", \"col\": 4}}, {\"id\": \"ac-sc-1\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"My Advances\", \"col\": 4}}, {\"id\": \"ac-sc-2\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"My Purchase Orders\", \"col\": 4}}, {\"id\": \"ac-sc-3\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Advance Portal\", \"col\": 4}}, {\"id\": \"ac-sc-4\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Expense Claims Pending Me\", \"col\": 4}}, {\"id\": \"ac-sc-5\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Advances Pending Me\", \"col\": 4}}, {\"id\": \"ac-sc-6\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Purchase Orders Pending Me\", \"col\": 4}}, {\"id\": \"ac-sc-7\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Claims to Reimburse\", \"col\": 4}}, {\"id\": \"ac-sc-8\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Vendor Invoices to Pay\", \"col\": 4}}, {\"id\": \"ac-sc-9\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Approval & Advance Limits\", \"col\": 4}}, {\"id\": \"ac-sc-budget\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Budget Health\", \"col\": 4}}, {\"id\": \"ac-sc-residual\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Advances with Residual\", \"col\": 4}}]",
+ "content": "[{\"id\": \"home-moved-header\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">My Expenses</span>\", \"col\": 12}}, {\"id\": \"home-moved-intro\", \"type\": \"paragraph\", \"data\": {\"text\": \"This hub moved to <a href='/volunteering/home'>Home</a>. Open Home for tasks, approvals, and accounts queues.\", \"col\": 12}}, {\"id\": \"home-moved-shortcut\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Home\", \"col\": 4}}]",
  "creation": "2026-07-22 08:00:00",
  "custom_blocks": [],
  "docstatus": 0,
@@ -13,146 +13,8 @@
  "indicator_color": "green",
  "is_hidden": 0,
  "label": "My Expenses",
- "links": [
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "My Spend",
-   "link_count": 0,
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "My Expense Claims",
-   "link_count": 0,
-   "link_to": "Expense Claim",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "My Advances",
-   "link_count": 0,
-   "link_to": "Employee Advance",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "My Purchase Orders",
-   "link_count": 0,
-   "link_to": "Purchase Order",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Awaiting my Approval",
-   "link_count": 0,
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Expense Claims Pending Me",
-   "link_count": 0,
-   "link_to": "Expense Claim",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Advances Pending Me",
-   "link_count": 0,
-   "link_to": "Employee Advance",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Purchase Orders Pending Me",
-   "link_count": 0,
-   "link_to": "Purchase Order",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Accounts Ops",
-   "link_count": 0,
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Claims to Reimburse",
-   "link_count": 0,
-   "link_to": "Expense Claim",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Vendor Invoices to Pay",
-   "link_count": 0,
-   "link_to": "Purchase Invoice",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Approval & Advance Limits",
-   "link_count": 0,
-   "link_to": "Approval and Advance Limits",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Budgets",
-   "link_count": 0,
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Advances with Residual",
-   "link_count": 0,
-   "link_to": "Employee Advances with Residual",
-   "link_type": "Report",
-   "onboard": 0,
-   "report_ref_doctype": "Employee Advance",
-   "type": "Link"
-  }
- ],
- "modified": "2026-07-26 14:18:21.624089",
+ "links": [],
+ "modified": "2026-08-18 11:49:00.337095",
  "modified_by": "Administrator",
  "module": "Volunteering",
  "name": "My Expenses",
@@ -186,96 +48,10 @@
  "shortcuts": [
   {
    "color": "Blue",
-   "doc_view": "List",
-   "label": "My Expense Claims",
-   "link_to": "Expense Claim",
-   "stats_filter": "[[\"Expense Claim\",\"docstatus\",\"=\",0],[\"Expense Claim\",\"workflow_state\",\"in\",[\"Draft\",\"Rejected\"]]]",
-   "type": "DocType"
-  },
-  {
-   "color": "Blue",
-   "doc_view": "List",
-   "label": "My Advances",
-   "link_to": "Employee Advance",
-   "stats_filter": "[[\"Employee Advance\",\"docstatus\",\"=\",0],[\"Employee Advance\",\"workflow_state\",\"in\",[\"Draft\",\"Rejected\"]]]",
-   "type": "DocType"
-  },
-  {
-   "color": "Blue",
-   "doc_view": "List",
-   "label": "My Purchase Orders",
-   "link_to": "Purchase Order",
-   "stats_filter": "[[\"Purchase Order\",\"docstatus\",\"=\",0],[\"Purchase Order\",\"workflow_state\",\"in\",[\"Draft\",\"Rejected\"]]]",
-   "type": "DocType"
-  },
-  {
-   "color": "Blue",
-   "doc_view": "List",
-   "label": "Advance Portal",
-   "type": "URL",
-   "url": "/volunteering/advances"
-  },
-  {
-   "color": "Orange",
-   "doc_view": "List",
-   "label": "Expense Claims Pending Me",
-   "link_to": "Expense Claim",
-   "stats_filter": "[[\"Expense Claim\",\"pending_approver\",\"=\",frappe.session.user]]",
-   "type": "DocType"
-  },
-  {
-   "color": "Orange",
-   "doc_view": "List",
-   "label": "Advances Pending Me",
-   "link_to": "Employee Advance",
-   "stats_filter": "[[\"Employee Advance\",\"pending_approver\",\"=\",frappe.session.user]]",
-   "type": "DocType"
-  },
-  {
-   "color": "Orange",
-   "doc_view": "List",
-   "label": "Purchase Orders Pending Me",
-   "link_to": "Purchase Order",
-   "stats_filter": "[[\"Purchase Order\",\"pending_approver\",\"=\",frappe.session.user]]",
-   "type": "DocType"
-  },
-  {
-   "color": "Orange",
-   "doc_view": "List",
-   "label": "Claims to Reimburse",
-   "link_to": "Expense Claim",
-   "stats_filter": "[[\"Expense Claim\",\"docstatus\",\"=\",1],[\"Expense Claim\",\"approval_status\",\"=\",\"Approved\"],[\"Expense Claim\",\"status\",\"=\",\"Unpaid\"]]",
-   "type": "DocType"
-  },
-  {
-   "color": "Orange",
-   "doc_view": "List",
-   "label": "Vendor Invoices to Pay",
-   "link_to": "Purchase Invoice",
-   "stats_filter": "[[\"Purchase Invoice\",\"docstatus\",\"=\",1],[\"Purchase Invoice\",\"outstanding_amount\",\">\",0]]",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "List",
-   "label": "Approval & Advance Limits",
-   "link_to": "Approval and Advance Limits",
-   "type": "DocType"
-  },
-  {
-   "color": "Green",
    "doc_view": "",
-   "label": "Budget Health",
+   "label": "Home",
    "type": "URL",
-   "url": "/volunteering/budget-health"
-  },
-  {
-   "color": "Orange",
-   "doc_view": "",
-   "label": "Advances with Residual",
-   "link_to": "Employee Advances with Residual",
-   "report_ref_doctype": "Employee Advance",
-   "type": "Report"
+   "url": "/volunteering/home"
   }
  ],
  "title": "My Expenses",

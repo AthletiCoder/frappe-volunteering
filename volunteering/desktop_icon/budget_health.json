@@ -1,0 +1,18 @@
+{
+ "app": "volunteering",
+ "doctype": "Desktop Icon",
+ "hidden": 0,
+ "icon": "pie-chart",
+ "icon_type": "Link",
+ "label": "Budget Health",
+ "link": "/volunteering/budget-health",
+ "link_type": "External",
+ "name": "Budget Health",
+ "roles": [
+  {"role": "Accounts Manager"},
+  {"role": "Accounts User"},
+  {"role": "NGO Coordinator"},
+  {"role": "System Manager"}
+ ],
+ "standard": 1
+}

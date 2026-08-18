@@ -10,6 +10,8 @@ export function appUrl(...segments: string[]): string {
 }
 
 export const ROUTES = {
+	home: appUrl('home'),
+	todos: appUrl('todos'),
 	budgetHealth: appUrl('budget-health'),
 	advances: appUrl('advances'),
 	advanceDetail: (name: string) => appUrl('advances', encodeURIComponent(name)),

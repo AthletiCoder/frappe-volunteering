@@ -256,9 +256,11 @@ def _rewrite_legacy_links(markdown: str) -> str:
 		"/app/org-help/hr-settings": "/help/hr/settings",
 		"/app/org-help/how-to-spend": "/help/accounts/how-to-spend",
 		"/app/org-help/accounts-tally": "/help/accounts/tally-to-erpnext",
-		"/app/pending-vendor-pay": "/app/my-expenses",
-		"/app/pending-reimburse": "/app/my-expenses",
-		"/app/pending-my-approval": "/app/my-expenses",
+		"/app/pending-vendor-pay": "/volunteering/home",
+		"/app/pending-reimburse": "/volunteering/home",
+		"/app/pending-my-approval": "/volunteering/home",
+		"/app/my-expenses": "/volunteering/home",
+		"/app/my-work": "/volunteering/home",
 	}
 	out = markdown
 	for old, new in replacements.items():

@@ -221,6 +221,39 @@ def refresh_project_budget_status(project):
 		frappe.db.set_value("Project", project, "budget_status", new_status, update_modified=False)
 
 
+@frappe.whitelist()
+def get_budget_snapshot(project, department=None):
+	"""Approved / spent / available for a project, optionally one department."""
+	if not project:
+		return {}
+	frappe.has_permission("Project", "read", throw=True)
+	status = frappe.db.get_value("Project", project, "budget_status")
+	total_allocated = get_project_total_allocated(project)
+	total_consumed = 0
+	for row in frappe.get_all(
+		"Project Department Budget",
+		filters={"parent": project, "parenttype": "Project"},
+		fields=["department"],
+	):
+		total_consumed += get_consumed_amount(project, row.department)
+	out = {
+		"project": project,
+		"budget_status": status or "Active",
+		"allocated": total_allocated,
+		"consumed": total_consumed,
+		"remaining": total_allocated - total_consumed,
+	}
+	if department:
+		allocated = get_allocated_budget(project, department)
+		consumed = get_consumed_amount(project, department)
+		out["department"] = department
+		out["department_allocated"] = allocated
+		out["department_consumed"] = consumed
+		out["department_remaining"] = allocated - consumed
+		out["utilisation_pct"] = (consumed / allocated * 100) if allocated else 0
+	return out
+
+
 def validate_project_department_budgets(doc, method=None):
 	"""Reject duplicate department rows on Project."""
 	seen = set()

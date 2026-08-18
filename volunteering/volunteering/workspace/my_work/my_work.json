@@ -1,7 +1,7 @@
 {
  "app": "volunteering",
  "charts": [],
- "content": "[{\"id\": \"eh-header\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">My Work</span>\", \"col\": 12}}, {\"id\": \"eh-intro\", \"type\": \"paragraph\", \"data\": {\"text\": \"Self-service requests and your approval queues. Orange cards show items awaiting your action \\u2014 click to open the filtered list.\", \"col\": 12}}, {\"id\": \"eh-spacer\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"eh-card-self\", \"type\": \"card\", \"data\": {\"card_name\": \"Self Service\", \"col\": 6}}, {\"id\": \"eh-card-appr\", \"type\": \"card\", \"data\": {\"card_name\": \"Awaiting my Approval\", \"col\": 6}}, {\"id\": \"eh-ss-0\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Track my Work\", \"col\": 4}}, {\"id\": \"eh-ss-1\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Work from Home\", \"col\": 4}}, {\"id\": \"eh-ss-2\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Apply for Leave\", \"col\": 4}}, {\"id\": \"eh-ss-3\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Attendance History\", \"col\": 4}}, {\"id\": \"eh-ss-4\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Change Attendance\", \"col\": 4}}, {\"id\": \"eh-ap-0\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Leave Applications\", \"col\": 4}}, {\"id\": \"eh-ap-1\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Work from Home Requests\", \"col\": 4}}]",
+ "content": "[{\"id\": \"home-moved-header\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">My Work</span>\", \"col\": 12}}, {\"id\": \"home-moved-intro\", \"type\": \"paragraph\", \"data\": {\"text\": \"This hub moved to <a href='/volunteering/home'>Home</a>. Open Home for tasks, approvals, and accounts queues.\", \"col\": 12}}, {\"id\": \"home-moved-shortcut\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Home\", \"col\": 4}}]",
  "creation": "2026-07-20 08:00:00",
  "custom_blocks": [],
  "docstatus": 0,
@@ -13,97 +13,8 @@
  "indicator_color": "green",
  "is_hidden": 0,
  "label": "My Work",
- "links": [
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Self Service",
-   "link_count": 0,
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Track my Work",
-   "link_count": 0,
-   "link_to": "Daily Work Log",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Work from Home",
-   "link_count": 0,
-   "link_to": "Attendance Request",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Apply for Leave",
-   "link_count": 0,
-   "link_to": "Leave Application",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Attendance History",
-   "link_count": 0,
-   "link_to": "Attendance",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Change Attendance",
-   "link_count": 0,
-   "link_to": "Attendance Regularization Request",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Awaiting my Approval",
-   "link_count": 0,
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Leave Applications",
-   "link_count": 0,
-   "link_to": "Leave Application",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Work from Home Requests",
-   "link_count": 0,
-   "link_to": "Attendance Request",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  }
- ],
- "modified": "2026-07-26 14:18:17.362907",
+ "links": [],
+ "modified": "2026-08-18 11:49:00.259915",
  "modified_by": "Administrator",
  "module": "Volunteering",
  "name": "My Work",
@@ -134,59 +45,10 @@
  "shortcuts": [
   {
    "color": "Blue",
-   "doc_view": "List",
-   "label": "Track my Work",
-   "link_to": "Daily Work Log",
-   "stats_filter": "[[\"Daily Work Log\",\"employee\",\"=\",frappe.boot.employee],[\"Daily Work Log\",\"docstatus\",\"=\",1],[\"Daily Work Log\",\"status\",\"!=\",\"Reviewed\"]]",
-   "type": "DocType"
-  },
-  {
-   "color": "Blue",
-   "doc_view": "List",
-   "label": "Work from Home",
-   "link_to": "Attendance Request",
-   "stats_filter": "[[\"Attendance Request\",\"employee\",\"=\",frappe.boot.employee],[\"Attendance Request\",\"docstatus\",\"=\",0]]",
-   "type": "DocType"
-  },
-  {
-   "color": "Blue",
-   "doc_view": "List",
-   "label": "Apply for Leave",
-   "link_to": "Leave Application",
-   "stats_filter": "[[\"Leave Application\",\"employee\",\"=\",frappe.boot.employee],[\"Leave Application\",\"status\",\"=\",\"Open\"],[\"Leave Application\",\"docstatus\",\"=\",0]]",
-   "type": "DocType"
-  },
-  {
-   "color": "Gray",
-   "doc_view": "List",
-   "label": "Attendance History",
-   "link_to": "Attendance",
-   "stats_filter": "[[\"Attendance\",\"employee\",\"=\",frappe.boot.employee]]",
-   "type": "DocType"
-  },
-  {
-   "color": "Blue",
-   "doc_view": "List",
-   "label": "Change Attendance",
-   "link_to": "Attendance Regularization Request",
-   "stats_filter": "[[\"Attendance Regularization Request\",\"employee\",\"=\",frappe.boot.employee],[\"Attendance Regularization Request\",\"docstatus\",\"=\",0]]",
-   "type": "DocType"
-  },
-  {
-   "color": "Orange",
-   "doc_view": "List",
-   "label": "Leave Applications",
-   "link_to": "Leave Application",
-   "stats_filter": "[[\"Leave Application\",\"leave_approver\",\"=\",frappe.session.user],[\"Leave Application\",\"employee\",\"!=\",frappe.boot.employee],[\"Leave Application\",\"status\",\"=\",\"Open\"],[\"Leave Application\",\"docstatus\",\"=\",0]]",
-   "type": "DocType"
-  },
-  {
-   "color": "Orange",
-   "doc_view": "List",
-   "label": "Work from Home Requests",
-   "link_to": "Attendance Request",
-   "stats_filter": "[[\"Attendance Request\",\"docstatus\",\"=\",0],[\"Attendance Request\",\"employee\",\"!=\",frappe.boot.employee]]",
-   "type": "DocType"
+   "doc_view": "",
+   "label": "Home",
+   "type": "URL",
+   "url": "/volunteering/home"
   }
  ],
  "title": "My Work",

@@ -35,8 +35,7 @@ Guides for daily work, attendance, leave, and work from home.
 | Request work from home | [Attendance Request](/app/attendance-request/new) |
 | Apply for leave | [Leave Application](/app/leave-application/new) |
 | Fix a wrong attendance day | [Attendance Regularization](/app/attendance-regularization-request/new) |
-| My work hub | [My Work](/app/my-work) |
-| My expenses hub | [My Expenses](/app/my-expenses) |
+| Home | [Home](/volunteering/home) |
 
 Related: [How to spend](/help/accounts/how-to-spend) · [Accounts: Tally → ERPNext](/help/accounts/tally-to-erpnext)
 """
@@ -228,8 +227,7 @@ You can write private notes about the people who report to you (at any level bel
 
 | Page | Who | Open |
 |------|-----|------|
-| My Work | Employees | [My Work](/app/my-work) |
-| My Expenses | Employees / Accounts | [My Expenses](/app/my-expenses) |
+| Home | Employees / Accounts / HR | [Home](/volunteering/home) |
 | HR Accountability | HR / System Manager | [HR Accountability](/app/hr-accountability) |
 | Missing Daily Logs | Managers / HR | [Report](/app/query-report/Missing%20Daily%20Logs%20Report) |
 

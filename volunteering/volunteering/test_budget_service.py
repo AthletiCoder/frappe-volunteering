@@ -25,3 +25,8 @@ class UnitTestBudgetService(UnitTestCase):
 
 	def test_get_allocated_budget_returns_zero_when_missing(self):
 		self.assertEqual(get_allocated_budget("_missing_project", "_missing_dept"), 0)
+
+	def test_get_budget_snapshot_empty_without_project(self):
+		from volunteering.volunteering.budget_service import get_budget_snapshot
+
+		self.assertEqual(get_budget_snapshot(""), {})

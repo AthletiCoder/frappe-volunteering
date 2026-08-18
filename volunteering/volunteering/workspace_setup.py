@@ -28,6 +28,8 @@ def ensure_defaults():
 	sync_volunteering_dashboard_filters()
 	ensure_donation_workspace_widgets()
 	ensure_donation_sidebar_link()
+	ensure_spa_workspace_shortcuts()
+	ensure_spa_sidebar_links()
 
 
 def backfill_participation_relationship_managers():
@@ -246,6 +248,129 @@ def ensure_donation_workspace_widgets():
 	workspace.content = json.dumps(blocks)
 	workspace.flags.ignore_links = True
 	workspace.save(ignore_permissions=True)
+
+
+SPA_LINKS_MARKER = "vw-spa-links-v1"
+
+
+def ensure_spa_workspace_shortcuts():
+	"""Keep campaign dashboard; add URL shortcuts to the Vue SPA pages."""
+	if not frappe.db.exists("Workspace", WORKSPACE_NAME):
+		return
+
+	from volunteering.volunteering.home_service import spa_workspace_shortcuts
+
+	workspace = frappe.get_doc("Workspace", WORKSPACE_NAME)
+	wanted = {row["label"]: row for row in spa_workspace_shortcuts()}
+	existing = {row.label: row for row in workspace.shortcuts}
+	changed = False
+	for label, spec in wanted.items():
+		row = existing.get(label)
+		if row:
+			if row.type != "URL" or (row.url or "") != spec["url"]:
+				row.type = "URL"
+				row.url = spec["url"]
+				row.link_to = ""
+				row.color = spec.get("color") or row.color
+				changed = True
+			continue
+		workspace.append("shortcuts", spec)
+		changed = True
+
+	content = workspace.content or ""
+	if SPA_LINKS_MARKER not in content:
+		try:
+			blocks = json.loads(content) if content else []
+		except json.JSONDecodeError:
+			blocks = []
+		workspace.content = json.dumps(_spa_shortcut_blocks() + blocks)
+		changed = True
+
+	if not changed:
+		return
+	workspace.flags.ignore_links = True
+	workspace.flags.ignore_permissions = True
+	workspace.save(ignore_permissions=True)
+
+
+def _spa_shortcut_blocks():
+	return [
+		{
+			"id": SPA_LINKS_MARKER,
+			"type": "header",
+			"data": {"text": '<span class="h4">Staff apps</span>', "col": 12},
+		},
+		{"id": "vw-spa-home", "type": "shortcut", "data": {"shortcut_name": "Home", "col": 3}},
+		{"id": "vw-spa-todo", "type": "shortcut", "data": {"shortcut_name": "To-do", "col": 3}},
+		{
+			"id": "vw-spa-advances",
+			"type": "shortcut",
+			"data": {"shortcut_name": "Advance Portal", "col": 3},
+		},
+		{
+			"id": "vw-spa-budget",
+			"type": "shortcut",
+			"data": {"shortcut_name": "Budget Health", "col": 3},
+		},
+	]
+
+
+def _url_sidebar_item(label, url, icon):
+	return {
+		"type": "Link",
+		"label": label,
+		"link_type": "URL",
+		"url": url,
+		"icon": icon,
+		"child": 0,
+		"collapsible": 0,
+		"indent": 0,
+		"keep_closed": 0,
+		"show_arrow": 0,
+	}
+
+
+def ensure_spa_sidebar_links():
+	if not frappe.db.exists("Workspace Sidebar", SIDEBAR_NAME):
+		return
+
+	from volunteering.volunteering.home_service import (
+		ADVANCES_URL,
+		BUDGET_HEALTH_URL,
+		HOME_URL,
+		TODOS_URL,
+	)
+
+	sidebar = frappe.get_doc("Workspace Sidebar", SIDEBAR_NAME)
+	labels = {row.label for row in sidebar.items}
+	needed = ("Home", "To-do", "Advance Portal", "Budget Health")
+	if labels.issuperset(needed):
+		return
+
+	prefix = [
+		{
+			"type": "Section Break",
+			"label": "Staff apps",
+			"icon": "home",
+			"collapsible": 0,
+			"indent": 0,
+			"keep_closed": 0,
+			"show_arrow": 0,
+			"child": 0,
+		},
+		_url_sidebar_item("Home", HOME_URL, "home"),
+		_url_sidebar_item("To-do", TODOS_URL, "check"),
+		_url_sidebar_item("Advance Portal", ADVANCES_URL, "money-coins-1"),
+		_url_sidebar_item("Budget Health", BUDGET_HEALTH_URL, "pie-chart"),
+	]
+	existing = [item.as_dict() for item in sidebar.items]
+	sidebar.set("items", [])
+	for row in prefix + existing:
+		for key in ("name", "parent", "parenttype", "parentfield", "idx"):
+			row.pop(key, None)
+		sidebar.append("items", row)
+	sidebar.flags.ignore_links = True
+	sidebar.save(ignore_permissions=True)
 
 
 def ensure_donation_sidebar_link():
