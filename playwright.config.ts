@@ -21,7 +21,7 @@ export default defineConfig({
 	reporter: process.env.CI
 		? [['github'], ['html', { open: 'never' }]]
 		: [['line'], ['html', { open: 'never' }]],
-	timeout: 60000,
+	timeout: 120000,
 
 	expect: {
 		timeout: 10000,

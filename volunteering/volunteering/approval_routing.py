@@ -312,6 +312,19 @@ def assign_expense_approver(doc):
 		doc.expense_approver = dept_head
 
 
+@frappe.whitelist()
+def get_expense_approver_for_employee(employee: str) -> str:
+	"""Client-side prefill for mandatory expense_approver before first save."""
+	if not employee:
+		return ""
+	doc = frappe._dict(doctype="Expense Claim", employee=employee, workflow_state="Draft")
+	if use_grade_approval():
+		assign_pending_approver(doc)
+		return doc.get("pending_approver") or doc.get("expense_approver") or ""
+	assign_expense_approver(doc)
+	return doc.get("expense_approver") or ""
+
+
 def validate_no_self_approval(doc):
 	if doc.workflow_state not in ("Approved",):
 		return
@@ -434,6 +447,15 @@ def before_accounting_document_save(doc, method=None):
 	validate_no_self_approval(doc)
 	validate_approver_authority(doc)
 	if doc.doctype == "Expense Claim":
+		from volunteering.volunteering.manager_float_service import (
+			settle_expense_claim_from_manager_float,
+			validate_manager_float_expense_claim,
+			validate_manager_float_on_approve,
+		)
+
+		validate_manager_float_expense_claim(doc)
+		validate_manager_float_on_approve(doc)
+		settle_expense_claim_from_manager_float(doc)
 		sync_approval_status_from_workflow(doc)
 
 
@@ -614,10 +636,15 @@ def get_approver_action_flags(doctype, name):
 	if use_grade_approval():
 		can_approve = user_can_approve_amount(frappe.session.user, amount)
 
-	return {
+	flags = {
 		"is_pending_approver": True,
 		"can_approve": can_approve,
 		"can_escalate": not can_approve,
 		"can_reject": True,
 		"amount": amount,
 	}
+	if doc.doctype == "Expense Claim":
+		from volunteering.volunteering.manager_float_service import enrich_approver_action_flags
+
+		flags = enrich_approver_action_flags(doc, flags)
+	return flags

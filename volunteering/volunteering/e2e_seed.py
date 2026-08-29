@@ -237,6 +237,11 @@ def _ensure_custom_docperm(doctype: str, role: str, **flags):
 
 def _ensure_e2e_doctype_permissions():
 	"""Employee self-service + manager notes need base DocPerm before custom hooks."""
+	from volunteering.volunteering.employee_spending_permissions import (
+		ensure_employee_self_service_permissions,
+	)
+
+	ensure_employee_self_service_permissions()
 	if frappe.db.exists("DocType", "Leave Application"):
 		_ensure_custom_docperm(
 			"Leave Application",

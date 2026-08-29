@@ -27,4 +27,20 @@ export class AdvancesPage {
 		await expect(this.page.locator('#app')).toBeVisible();
 		await expect(this.refreshButton()).toBeVisible({ timeout: 30000 });
 	}
+
+	managerFloatPanelHeading() {
+		return this.page.getByRole('heading', { name: 'Request from manager float', level: 2 });
+	}
+
+	teamFloatRequestsHeading() {
+		return this.page.getByRole('heading', { name: 'Team reimbursement requests', level: 2 });
+	}
+
+	outOfPocketClaimLink() {
+		return this.page.getByRole('link', { name: 'New claim (out of pocket)' });
+	}
+
+	managerFloatClaimLink() {
+		return this.page.getByRole('link', { name: 'New claim (manager float)' });
+	}
 }

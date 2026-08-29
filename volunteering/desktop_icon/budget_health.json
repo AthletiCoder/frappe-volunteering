@@ -1,18 +1,33 @@
 {
  "app": "volunteering",
+ "creation": "2026-08-23 11:52:32.256384",
+ "docstatus": 0,
  "doctype": "Desktop Icon",
  "hidden": 0,
  "icon": "pie-chart",
  "icon_type": "Link",
+ "idx": 0,
  "label": "Budget Health",
  "link": "/volunteering/budget-health",
  "link_type": "External",
+ "modified": "2026-08-28 19:38:08.310557",
+ "modified_by": "Administrator",
  "name": "Budget Health",
+ "owner": "Administrator",
+ "restrict_removal": 0,
  "roles": [
-  {"role": "Accounts Manager"},
-  {"role": "Accounts User"},
-  {"role": "NGO Coordinator"},
-  {"role": "System Manager"}
+  {
+   "role": "Accounts Manager"
+  },
+  {
+   "role": "Accounts User"
+  },
+  {
+   "role": "NGO Coordinator"
+  },
+  {
+   "role": "System Manager"
+  }
  ],
  "standard": 1
 }

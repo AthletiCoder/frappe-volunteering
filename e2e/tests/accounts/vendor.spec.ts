@@ -1,97 +1,137 @@
 import { expect, test } from '@playwright/test';
-import { e2eCall, getCast } from '../../helpers/e2e-api';
+import { e2eCall } from '../../helpers/e2e-api';
+import { expectFormError } from '../../helpers/dialogs';
+import { withPersona } from '../../helpers/persona-context';
 import { personaStorage } from '../../helpers/personas';
+import { getE2eMasters, getE2eProject } from '../../helpers/ui-fixtures';
+import { ExpenseClaimFormPage } from '../../pages/desk/expense-claim.page';
+import { PaymentEntryFormPage } from '../../pages/desk/payment-entry.page';
+import { PurchaseInvoiceFormPage } from '../../pages/desk/purchase-invoice.page';
+import { PurchaseOrderFormPage } from '../../pages/desk/purchase-order.page';
 
-test.describe('Vendor payment @accounts', () => {
-	test('AC-VEN-001 @regression @critical: Happy path PO approve', async ({ request }) => {
-		const po = await e2eCall<{ name: string; workflow_state: string }>(
-			request,
-			'create_purchase_order',
-			{ amount: 1500, submit: 1 },
-			'employee',
-		);
-		expect(po.workflow_state).toBe('Pending Approval');
+test.describe('Vendor payment @accounts @ui', () => {
+	test('AC-VEN-001 @regression @critical: Happy path PO approve', async ({ browser, request }) => {
+		const project = await getE2eProject(request);
+		const masters = await getE2eMasters(request);
 
-		const approved = await e2eCall<{ workflow_state: string; docstatus: number }>(
+		let poName = '';
+		await withPersona(browser, 'employee', async (page) => {
+			const po = new PurchaseOrderFormPage(page);
+			await po.openNew();
+			await po.fillPo({
+				supplier: masters.supplier_name,
+				project,
+				amount: 1500,
+				itemCode: masters.item_code,
+			});
+			poName = await po.saveAndSubmit();
+		});
+
+		const workflowState = await e2eCall<string>(
 			request,
-			'workflow_action',
-			{ doctype: 'Purchase Order', name: po.name, action: 'Approve' },
-			'manager',
+			'get_doc_field',
+			{ doctype: 'Purchase Order', name: poName, field: 'workflow_state' },
+			'admin',
 		);
-		expect(approved.workflow_state).toBe('Approved');
-		expect(approved.docstatus).toBe(1);
+		expect(workflowState).toBe('Pending Approval');
+
+		await withPersona(browser, 'manager', async (page) => {
+			const po = new PurchaseOrderFormPage(page);
+			await po.open(poName);
+			await po.approve();
+		});
+
+		const approvedState = await e2eCall<string>(
+			request,
+			'get_doc_field',
+			{ doctype: 'Purchase Order', name: poName, field: 'workflow_state' },
+			'admin',
+		);
+		const docstatus = await e2eCall<number>(
+			request,
+			'get_doc_field',
+			{ doctype: 'Purchase Order', name: poName, field: 'docstatus' },
+			'admin',
+		);
+		expect(approvedState).toBe('Approved');
+		expect(docstatus).toBe(1);
 	});
 
 	test('AC-VEN-002 @regression @critical: Purchase Invoice without approved PO blocked', async ({
+		browser,
 		request,
 	}) => {
-		const noPo = await e2eCall<{ ok: boolean; error?: string }>(
-			request,
-			'try_create_purchase_invoice',
-			{ amount: 1000, submit: 1 },
-			'accounts',
-		);
-		expect(noPo.ok).toBe(false);
-		expect((noPo.error || '').toLowerCase()).toMatch(/purchase order/);
+		const project = await getE2eProject(request);
+		const masters = await getE2eMasters(request);
 
-		const pendingPo = await e2eCall<{ name: string }>(
-			request,
-			'create_purchase_order',
-			{ amount: 1200, submit: 1 },
-			'employee',
-		);
-		const fromPending = await e2eCall<{ ok: boolean; error?: string }>(
-			request,
-			'try_create_purchase_invoice',
-			{ po_name: pendingPo.name, submit: 1 },
-			'accounts',
-		);
-		expect(fromPending.ok).toBe(false);
-		expect((fromPending.error || '').toLowerCase()).toMatch(
-			/not approved|submitted|purchase order|docstatus|cannot map/,
-		);
+		await withPersona(browser, 'accounts', async (page) => {
+			const pi = new PurchaseInvoiceFormPage(page);
+			await pi.openNew();
+			await pi.save();
+			await expectFormError(page, /purchase order/i);
+		});
+
+		let pendingPoName = '';
+		await withPersona(browser, 'employee', async (page) => {
+			const po = new PurchaseOrderFormPage(page);
+			await po.openNew();
+			await po.fillPo({
+				supplier: masters.supplier_name,
+				project,
+				amount: 1200,
+				itemCode: masters.item_code,
+			});
+			pendingPoName = await po.saveAndSubmit();
+		});
+
+		await withPersona(browser, 'accounts', async (page) => {
+			const pi = new PurchaseInvoiceFormPage(page);
+			await pi.createFromPo(pendingPoName);
+			await pi.save();
+			await pi.submit();
+			await expectFormError(page, /not approved|submitted|purchase order|docstatus|cannot map/i);
+		});
 	});
 
 	test.describe('as employee', () => {
 		test.use({ storageState: personaStorage('employee') });
 
 		test('AC-VEN-003 @regression @critical: Staff cannot create Payment Entry', async ({
+			page,
 			request,
+			browser,
 		}) => {
-			const allowed = await e2eCall<boolean>(
-				request,
-				'has_doctype_permission',
-				{ doctype: 'Payment Entry', ptype: 'create' },
-				'employee',
-			);
-			expect(allowed).toBe(false);
+			const pe = new PaymentEntryFormPage(page);
+			await pe.expectFormBlocked();
 
-			const po = await e2eCall<{ name: string }>(
-				request,
-				'create_purchase_order',
-				{ amount: 1500, submit: 1 },
-				'employee',
-			);
-			await e2eCall(
-				request,
-				'workflow_action',
-				{ doctype: 'Purchase Order', name: po.name, action: 'Approve' },
-				'manager',
-			);
-			const pe = await e2eCall<{ ok: boolean; error?: string }>(
-				request,
-				'try_create_supplier_payment_entry',
-				{
-					reference_doctype: 'Purchase Order',
-					reference_name: po.name,
-					submit: 1,
-				},
-				'employee',
-			);
-			expect(pe.ok).toBe(false);
+			const project = await getE2eProject(request);
+			const masters = await getE2eMasters(request);
+
+			let poName = '';
+			await withPersona(browser, 'employee', async (empPage) => {
+				const po = new PurchaseOrderFormPage(empPage);
+				await po.openNew();
+				await po.fillPo({
+					supplier: masters.supplier_name,
+					project,
+					amount: 1500,
+					itemCode: masters.item_code,
+				});
+				poName = await po.saveAndSubmit();
+			});
+
+			await withPersona(browser, 'manager', async (mgrPage) => {
+				const po = new PurchaseOrderFormPage(mgrPage);
+				await po.open(poName);
+				await po.approve();
+			});
+
+			await pe.openNew();
+			await pe.expectFormBlocked();
 		});
 
 		test('AC-VEN-007 @regression @critical: Above vendor threshold without override blocked', async ({
+			page,
 			request,
 		}) => {
 			await e2eCall(
@@ -104,21 +144,17 @@ test.describe('Vendor payment @accounts', () => {
 				},
 				'admin',
 			);
-			const cast = await getCast(request, 'employee');
-			const emp = cast.employee.employee!;
-			let blocked = false;
-			try {
-				await e2eCall(
-					request,
-					'create_expense_claim',
-					{ employee: emp, amount: 6000, submit: 1 },
-					'employee',
-				);
-			} catch (error) {
-				blocked = true;
-				expect(String(error).toLowerCase()).toMatch(/vendor|threshold|prefer/);
-			}
-			expect(blocked).toBe(true);
+			const project = await getE2eProject(request);
+			const masters = await getE2eMasters(request);
+
+			const claim = new ExpenseClaimFormPage(page);
+			await claim.openNew();
+			await claim.fillClaim({
+				project,
+				amount: 6000,
+				expenseType: masters.expense_type,
+			});
+			await claim.saveExpectVendorWarning();
 		});
 	});
 
@@ -126,96 +162,120 @@ test.describe('Vendor payment @accounts', () => {
 		test.use({ storageState: personaStorage('accounts') });
 
 		test('AC-VEN-004 @regression @critical: Accounts can open Payment Entry form', async ({
-			request,
+			page,
 		}) => {
-			const allowed = await e2eCall<boolean>(
-				request,
-				'has_doctype_permission',
-				{ doctype: 'Payment Entry', ptype: 'read' },
-				'accounts',
-			);
-			expect(allowed).toBe(true);
+			const pe = new PaymentEntryFormPage(page);
+			await pe.expectFormReachable();
 		});
 
 		test('AC-VEN-005 @regression @critical: Pay vendor before bill (advance against PO)', async ({
+			page,
 			request,
+			browser,
 		}) => {
-			const po = await e2eCall<{ name: string }>(
+			const project = await getE2eProject(request);
+			const masters = await getE2eMasters(request);
+
+			let poName = '';
+			await withPersona(browser, 'employee', async (empPage) => {
+				const po = new PurchaseOrderFormPage(empPage);
+				await po.openNew();
+				await po.fillPo({
+					supplier: masters.supplier_name,
+					project,
+					amount: 2000,
+					itemCode: masters.item_code,
+				});
+				poName = await po.saveAndSubmit();
+			});
+
+			await withPersona(browser, 'manager', async (mgrPage) => {
+				const po = new PurchaseOrderFormPage(mgrPage);
+				await po.open(poName);
+				await po.approve();
+			});
+
+			const po = new PurchaseOrderFormPage(page);
+			await po.open(poName);
+			const peName = await po.createPaymentEntry();
+
+			const docstatus = await e2eCall<number>(
 				request,
-				'create_purchase_order',
-				{ amount: 2000, submit: 1 },
-				'employee',
-			);
-			await e2eCall(
-				request,
-				'workflow_action',
-				{ doctype: 'Purchase Order', name: po.name, action: 'Approve' },
-				'manager',
-			);
-			const pe = await e2eCall<{
-				name: string;
-				docstatus: number;
-				party_type: string;
-			}>(
-				request,
-				'create_supplier_payment_entry',
-				{
-					reference_doctype: 'Purchase Order',
-					reference_name: po.name,
-					submit: 1,
-				},
+				'get_doc_field',
+				{ doctype: 'Payment Entry', name: peName, field: 'docstatus' },
 				'accounts',
 			);
-			expect(pe.name).toBeTruthy();
-			expect(pe.docstatus).toBe(1);
-			expect(pe.party_type).toBe('Supplier');
+			const partyType = await e2eCall<string>(
+				request,
+				'get_doc_field',
+				{ doctype: 'Payment Entry', name: peName, field: 'party_type' },
+				'accounts',
+			);
+			expect(peName).toBeTruthy();
+			expect(docstatus).toBe(1);
+			expect(partyType).toBe('Supplier');
 		});
 
 		test('AC-VEN-006 @regression @critical: Mark Paid outside system creates Payment Entry', async ({
+			page,
 			request,
+			browser,
 		}) => {
-			const po = await e2eCall<{ name: string }>(
-				request,
-				'create_purchase_order',
-				{ amount: 1500, submit: 1 },
-				'employee',
-			);
-			await e2eCall(
-				request,
-				'workflow_action',
-				{ doctype: 'Purchase Order', name: po.name, action: 'Approve' },
-				'manager',
-			);
-			const pi = await e2eCall<{ name: string; docstatus: number }>(
-				request,
-				'create_purchase_invoice',
-				{ po_name: po.name, submit: 1 },
-				'accounts',
-			);
-			expect(pi.docstatus).toBe(1);
+			const project = await getE2eProject(request);
+			const masters = await getE2eMasters(request);
 
-			const paid = await e2eCall<{ payment_entry: string }>(
-				request,
-				'mark_invoice_paid_outside',
-				{ name: pi.name, remarks: 'E2E cash to vendor' },
-				'accounts',
-			);
-			expect(paid.payment_entry).toBeTruthy();
-			const peStatus = await e2eCall<number>(
+			let poName = '';
+			await withPersona(browser, 'employee', async (empPage) => {
+				const po = new PurchaseOrderFormPage(empPage);
+				await po.openNew();
+				await po.fillPo({
+					supplier: masters.supplier_name,
+					project,
+					amount: 1500,
+					itemCode: masters.item_code,
+				});
+				poName = await po.saveAndSubmit();
+			});
+
+			await withPersona(browser, 'manager', async (mgrPage) => {
+				const po = new PurchaseOrderFormPage(mgrPage);
+				await po.open(poName);
+				await po.approve();
+			});
+
+			let piName = '';
+			await withPersona(browser, 'accounts', async (acctPage) => {
+				const pi = new PurchaseInvoiceFormPage(acctPage);
+				await pi.createFromPo(poName);
+				piName = await pi.saveAndSubmit();
+			});
+
+			const piDocstatus = await e2eCall<number>(
 				request,
 				'get_doc_field',
-				{ doctype: 'Payment Entry', name: paid.payment_entry, field: 'docstatus' },
+				{ doctype: 'Purchase Invoice', name: piName, field: 'docstatus' },
 				'accounts',
 			);
-			expect(Number(peStatus)).toBe(1);
+			expect(piDocstatus).toBe(1);
+
+			const pi = new PurchaseInvoiceFormPage(page);
+			await pi.open(piName);
+			await pi.markPaidOutside('E2E cash to vendor');
+
+			const outstanding = await e2eCall<number>(
+				request,
+				'get_doc_field',
+				{ doctype: 'Purchase Invoice', name: piName, field: 'outstanding_amount' },
+				'accounts',
+			);
+			expect(Number(outstanding)).toBe(0);
 		});
 	});
 
 	test('AC-VEN-008 @regression @critical: Above threshold allowed with Vendor Payment Override Reason', async ({
+		browser,
 		request,
 	}) => {
-		const cast = await getCast(request, 'employee');
-		const emp = cast.employee_b.employee!;
 		await e2eCall(
 			request,
 			'set_single_setting',
@@ -226,30 +286,36 @@ test.describe('Vendor payment @accounts', () => {
 			},
 			'admin',
 		);
-		const claim = await e2eCall<{ name: string; workflow_state: string }>(
-			request,
-			'create_expense_claim',
-			{
-				employee: emp,
+		const project = await getE2eProject(request);
+		const masters = await getE2eMasters(request);
+
+		let claimName = '';
+		await withPersona(browser, 'employee_b', async (page) => {
+			const claim = new ExpenseClaimFormPage(page);
+			await claim.openNew();
+			await claim.fillClaim({
+				project,
 				amount: 6000,
-				submit: 0,
-				vendor_override_reason: 'Vendor does not accept POs',
-			},
-			'employee',
-		);
-		const submitted = await e2eCall<{ workflow_state: string }>(
+				expenseType: masters.expense_type,
+				vendorOverrideReason: 'Vendor does not accept POs',
+			});
+			claimName = await claim.saveAndSubmit(request);
+		});
+
+		const workflowState = await e2eCall<string>(
 			request,
-			'workflow_action',
-			{ doctype: 'Expense Claim', name: claim.name, action: 'Submit' },
-			'employee',
+			'get_doc_field',
+			{ doctype: 'Expense Claim', name: claimName, field: 'workflow_state' },
+			'admin',
 		);
-		expect(submitted.workflow_state).toBe('Pending Approval');
+		expect(workflowState).toBe('Pending Approval');
+
 		const reason = await e2eCall<string>(
 			request,
 			'get_doc_field',
 			{
 				doctype: 'Expense Claim',
-				name: claim.name,
+				name: claimName,
 				field: 'vendor_override_reason',
 			},
 			'admin',

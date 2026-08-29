@@ -3,31 +3,37 @@ import {
 	addDays,
 	cleanupDay,
 	e2eCall,
-	expectErrorContains,
 	getCast,
 	todayLocal,
 	workingDayFromToday,
 } from '../../helpers/e2e-api';
+import { expectFormError } from '../../helpers/dialogs';
+import { withPersona } from '../../helpers/persona-context';
 import { personaStorage } from '../../helpers/personas';
+import { getE2eProject } from '../../helpers/ui-fixtures';
+import { DailyWorkLogFormPage } from '../../pages/desk/daily-work-log.page';
+import { DeskForm } from '../../helpers/desk';
 
-test.describe('HR Daily Work Log @hr', () => {
+test.describe('HR Daily Work Log @hr @ui', () => {
 	test.describe('as employee', () => {
 		test.use({ storageState: personaStorage('employee') });
 
 		test('HR-DWL-001 @regression @critical: Create and submit daily work log (happy path)', async ({
+			page,
 			request,
 		}) => {
 			const cast = await getCast(request, 'employee');
 			const emp = cast.employee.employee!;
 			const date = todayLocal();
+			const project = await getE2eProject(request);
 			await cleanupDay(request, emp, date, 'admin');
-			const res = await e2eCall<{ name: string; docstatus: number }>(
-				request,
-				'create_dwl',
-				{ employee: emp, date, hours: 6, submit: 1 },
-				'employee',
-			);
-			expect(res.docstatus).toBe(1);
+
+			const dwl = new DailyWorkLogFormPage(page);
+			await dwl.openNew();
+			await dwl.setDate(date);
+			await dwl.addItem({ project, hours: 6 });
+			await dwl.saveAndSubmit();
+
 			const att = await e2eCall<{ status: string } | null>(
 				request,
 				'get_attendance_status',
@@ -38,102 +44,118 @@ test.describe('HR Daily Work Log @hr', () => {
 		});
 
 		test('HR-DWL-002 @regression @critical: Project is required on work log item', async ({
+			page,
 			request,
 		}) => {
 			const cast = await getCast(request, 'employee');
 			const emp = cast.employee.employee!;
 			const date = addDays(todayLocal(), -1);
 			await cleanupDay(request, emp, date, 'admin');
-			const res = await e2eCall<{ ok: boolean; error?: string }>(
-				request,
-				'try_create_dwl',
-				{ employee: emp, date, hours: 6, include_project: 0 },
-				'employee',
-			);
-			expect(res.ok).toBe(false);
-			expectErrorContains(res.error || '', 'project');
+
+			const dwl = new DailyWorkLogFormPage(page);
+			await dwl.openNew();
+			await dwl.setDate(date);
+			await dwl.addItem({
+				hours: 6,
+				taskTitle: 'E2E Task',
+				description: 'Missing project on purpose',
+				skipProject: true,
+			});
+			await dwl.save();
+			await expectFormError(page, /project/i);
 		});
 
 		test('HR-DWL-003 @regression @critical: One work log per employee per day', async ({
+			page,
 			request,
 		}) => {
 			const cast = await getCast(request, 'employee');
 			const emp = cast.employee.employee!;
 			const date = addDays(todayLocal(), -1);
+			const project = await getE2eProject(request);
 			await cleanupDay(request, emp, date, 'admin');
-			await e2eCall(
-				request,
-				'create_dwl',
-				{ employee: emp, date, hours: 6, submit: 1 },
-				'employee',
-			);
-			const dup = await e2eCall<{ ok: boolean; error?: string }>(
-				request,
-				'try_create_dwl',
-				{ employee: emp, date, hours: 4 },
-				'employee',
-			);
-			expect(dup.ok).toBe(false);
-			expectErrorContains(dup.error || '', 'already exists');
+
+			const dwl = new DailyWorkLogFormPage(page);
+			await dwl.openNew();
+			await dwl.setDate(date);
+			await dwl.addItem({ project, hours: 6 });
+			await dwl.saveAndSubmit();
+
+			await dwl.openNew();
+			await dwl.setDate(date);
+			await dwl.addItem({ project, hours: 4 });
+			await dwl.save();
+			await expectFormError(page, /already exists/i);
 		});
 
-		test('HR-DWL-004 @regression @critical: Backdate within allowed limit', async ({ request }) => {
+		test('HR-DWL-004 @regression @critical: Backdate within allowed limit', async ({
+			page,
+			request,
+		}) => {
 			const cast = await getCast(request, 'employee');
 			const emp = cast.employee.employee!;
 			const date = addDays(todayLocal(), -2);
+			const project = await getE2eProject(request);
 			await cleanupDay(request, emp, date, 'admin');
-			const res = await e2eCall<{ docstatus: number }>(
-				request,
-				'create_dwl',
-				{ employee: emp, date, hours: 6, submit: 1 },
-				'employee',
-			);
-			expect(res.docstatus).toBe(1);
+
+			const dwl = new DailyWorkLogFormPage(page);
+			await dwl.openNew();
+			await dwl.setDate(date);
+			await dwl.addItem({ project, hours: 6 });
+			await dwl.saveAndSubmit();
 		});
 
 		test('HR-DWL-005 @regression @critical: Backdate beyond allowed limit blocked', async ({
+			page,
 			request,
 		}) => {
 			const cast = await getCast(request, 'employee');
 			const emp = cast.employee.employee!;
-		const date = addDays(todayLocal(), -20);
-			const res = await e2eCall<{ ok: boolean; error?: string }>(
-				request,
-				'try_create_dwl',
-				{ employee: emp, date, hours: 6 },
-				'employee',
-			);
-			expect(res.ok).toBe(false);
-			expectErrorContains(res.error || '', 'backdat');
+			const date = addDays(todayLocal(), -20);
+			const project = await getE2eProject(request);
+			await cleanupDay(request, emp, date, 'admin');
+
+			const dwl = new DailyWorkLogFormPage(page);
+			await dwl.openNew();
+			await dwl.setDate(date);
+			await dwl.addItem({ project, hours: 6 });
+			await dwl.save();
+			await expectFormError(page, /backdat/i);
 		});
 
-		test('HR-DWL-006 @regression: Soft warning when hours below minimum', async ({ request }) => {
+		test('HR-DWL-006 @regression: Soft warning when hours below minimum', async ({
+			page,
+			request,
+		}) => {
 			const cast = await getCast(request, 'employee');
 			const emp = cast.employee.employee!;
 			const date = addDays(todayLocal(), -1);
+			const project = await getE2eProject(request);
 			await cleanupDay(request, emp, date, 'admin');
-			const res = await e2eCall<{ docstatus: number }>(
-				request,
-				'create_dwl',
-				{ employee: emp, date, hours: 5, submit: 1 },
-				'employee',
-			);
-			expect(res.docstatus).toBe(1);
+
+			const dwl = new DailyWorkLogFormPage(page);
+			await dwl.openNew();
+			await dwl.setDate(date);
+			await dwl.addItem({ project, hours: 5 });
+			await dwl.saveAndSubmit({ expectLowHoursWarning: true });
 		});
 
 		test('HR-DWL-007 @regression @critical: Hours >= Present hours yields Present', async ({
+			page,
 			request,
 		}) => {
 			const cast = await getCast(request, 'employee');
 			const emp = cast.employee.employee!;
 			const date = addDays(todayLocal(), -1);
+			const project = await getE2eProject(request);
 			await cleanupDay(request, emp, date, 'admin');
-			await e2eCall(
-				request,
-				'create_dwl',
-				{ employee: emp, date, hours: 6, submit: 1 },
-				'employee',
-			);
+
+			const dwl = new DailyWorkLogFormPage(page);
+			await dwl.openNew();
+			await dwl.setDate(date);
+			await dwl.addItem({ project, hours: 6 });
+			await dwl.saveAndSubmit();
+
 			const att = await e2eCall<{ status: string }>(
 				request,
 				'get_attendance_status',
@@ -144,18 +166,21 @@ test.describe('HR Daily Work Log @hr', () => {
 		});
 
 		test('HR-DWL-008 @regression @critical: Hours between 0 and Present yields Half Day', async ({
+			page,
 			request,
 		}) => {
 			const cast = await getCast(request, 'employee');
 			const emp = cast.employee.employee!;
 			const date = addDays(todayLocal(), -1);
+			const project = await getE2eProject(request);
 			await cleanupDay(request, emp, date, 'admin');
-			await e2eCall(
-				request,
-				'create_dwl',
-				{ employee: emp, date, hours: 3, submit: 1 },
-				'employee',
-			);
+
+			const dwl = new DailyWorkLogFormPage(page);
+			await dwl.openNew();
+			await dwl.setDate(date);
+			await dwl.addItem({ project, hours: 3 });
+			await dwl.saveAndSubmit();
+
 			const att = await e2eCall<{ status: string }>(
 				request,
 				'get_attendance_status',
@@ -165,63 +190,83 @@ test.describe('HR Daily Work Log @hr', () => {
 			expect(att?.status).toBe('Half Day');
 		});
 
-		test('HR-DWL-011 @regression: Employee can only create own work log', async ({ request }) => {
+		test('HR-DWL-011 @regression: Employee can only create own work log', async ({
+			page,
+			request,
+		}) => {
 			const cast = await getCast(request, 'employee');
 			const other = cast.employee_b.employee!;
 			const date = addDays(todayLocal(), -1);
 			await cleanupDay(request, other, date, 'admin');
-			const res = await e2eCall<{ ok: boolean; error?: string }>(
-				request,
-				'try_create_dwl',
-				{ employee: other, date, hours: 6 },
-				'employee',
-			);
-			expect(res.ok).toBe(false);
+
+			const dwl = new DailyWorkLogFormPage(page);
+			await dwl.openNew();
+			await dwl.setEmployee(other);
+			await dwl.setDate(date);
+			await dwl.save();
+			await expectFormError(page, /yourself|only create/i);
 		});
 	});
 
-	test.describe('manager review HR-DWL-009 @regression @critical', () => {
-		test('Manager Mark as Reviewed locks employee edits', async ({ request }) => {
-			const cast = await getCast(request, 'admin');
-			const emp = cast.employee.employee!;
-			const date = addDays(todayLocal(), -1);
-			await cleanupDay(request, emp, date, 'admin');
-			const created = await e2eCall<{ name: string }>(
-				request,
-				'create_dwl',
-				{ employee: emp, date, hours: 6, submit: 1 },
-				'employee',
-			);
-			await e2eCall(
-				request,
-				'mark_dwl_reviewed',
-				{ name: created.name },
-				'manager',
-			);
-			const status = await e2eCall<string>(
-				request,
-				'get_doc_field',
-				{ doctype: 'Daily Work Log', name: created.name, field: 'status' },
-				'admin',
-			);
-			expect(status).toBe('Reviewed');
+	test('HR-DWL-009 @regression @critical: Manager Mark as Reviewed locks employee edits', async ({
+		browser,
+		request,
+	}) => {
+		const cast = await getCast(request, 'admin');
+		const emp = cast.employee.employee!;
+		const date = addDays(todayLocal(), -1);
+		const project = await getE2eProject(request);
+		await cleanupDay(request, emp, date, 'admin');
+
+		let logName = '';
+		await withPersona(browser, 'employee', async (page) => {
+			const dwl = new DailyWorkLogFormPage(page);
+			await dwl.openNew();
+			await dwl.setDate(date);
+			await dwl.addItem({ project, hours: 6 });
+			logName = await dwl.saveAndSubmit();
 		});
+
+		await withPersona(browser, 'manager', async (page) => {
+			const dwl = new DailyWorkLogFormPage(page);
+			await dwl.open(logName);
+			await dwl.markReviewed();
+		});
+
+		const status = await e2eCall<string>(
+			request,
+			'get_doc_field',
+			{ doctype: 'Daily Work Log', name: logName, field: 'status' },
+			'admin',
+		);
+		expect(status).toBe('Reviewed');
 	});
 
 	test('HR-DWL-010 @regression @critical: Cancel submitted log recalculates attendance', async ({
+		browser,
 		request,
 	}) => {
 		const cast = await getCast(request, 'admin');
 		const emp = cast.employee.employee!;
 		const date = workingDayFromToday(-2);
+		const project = await getE2eProject(request);
 		await cleanupDay(request, emp, date, 'admin');
-		const created = await e2eCall<{ name: string }>(
-			request,
-			'create_dwl',
-			{ employee: emp, date, hours: 6, submit: 1 },
-			'employee',
-		);
-		await e2eCall(request, 'cancel_dwl', { name: created.name }, 'employee');
+
+		let logName = '';
+		await withPersona(browser, 'employee', async (page) => {
+			const dwl = new DailyWorkLogFormPage(page);
+			await dwl.openNew();
+			await dwl.setDate(date);
+			await dwl.addItem({ project, hours: 6 });
+			logName = await dwl.saveAndSubmit();
+		});
+
+		await withPersona(browser, 'employee', async (page) => {
+			const dwl = new DailyWorkLogFormPage(page);
+			await dwl.open(logName);
+			await dwl.cancelDoc();
+		});
+
 		await e2eCall(request, 'trigger_attendance_job', { attendance_date: date }, 'admin');
 		const att = await e2eCall<{ status: string } | null>(
 			request,
@@ -233,9 +278,8 @@ test.describe('HR Daily Work Log @hr', () => {
 	});
 
 	test('HR-DWL-012 @regression: Missing Daily Logs Report lists missing days', async ({ page }) => {
-		await page.goto('/desk/query-report/Missing Daily Logs Report', {
-			waitUntil: 'domcontentloaded',
-		});
-		await expect(page.locator('body')).toBeVisible();
+		const desk = new DeskForm(page);
+		await desk.gotoReport('Missing Daily Logs Report');
+		await expect(page.locator('.report-wrapper, .query-report, .dt-scrollable').first()).toBeVisible();
 	});
 });

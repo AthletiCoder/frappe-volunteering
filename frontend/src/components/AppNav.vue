@@ -1,6 +1,6 @@
 <template>
 	<nav
-		:class="cn('flex', layout === 'bottom' ? 'justify-center gap-8' : 'gap-2 flex-wrap')"
+		:class="cn('flex', layout === 'bottom' ? 'justify-center gap-8' : 'gap-0.5')"
 		:aria-label="ariaLabel"
 	>
 		<RouterLink
@@ -13,7 +13,7 @@
 					'relative flex items-center gap-1.5 rounded-2xl text-sm font-medium transition-all duration-150',
 					layout === 'bottom'
 						? 'flex-col py-2 px-3 text-[11px] text-muted'
-						: 'px-3 py-1.5 text-muted hover:text-ink hover:bg-accent-soft',
+						: 'px-2 py-1.5 text-muted hover:text-accent hover:bg-accent-soft',
 					{ 'text-accent': isActive(item.to) }
 				)
 			"

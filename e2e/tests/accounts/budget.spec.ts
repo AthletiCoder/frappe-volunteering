@@ -1,11 +1,16 @@
 import { expect, test } from '@playwright/test';
-import { e2eCall, getCast, getFixtures } from '../../helpers/e2e-api';
+import { e2eCall, getFixtures } from '../../helpers/e2e-api';
+import { expectFormError } from '../../helpers/dialogs';
+import { withPersona } from '../../helpers/persona-context';
+import { getE2eMasters, getE2eProject } from '../../helpers/ui-fixtures';
+import { ExpenseClaimFormPage } from '../../pages/desk/expense-claim.page';
 
-test.describe('Budget controls @accounts', () => {
-	test('AC-BUD-001 @regression: Soft budget warning near budget', async ({ request }) => {
+test.describe('Budget controls @accounts @ui', () => {
+	test('AC-BUD-001 @regression: Soft budget warning near budget', async ({ browser, request }) => {
 		const fixtures = await getFixtures(request, 'admin');
-		const cast = await getCast(request, 'admin');
-		const emp = cast.employee.employee!;
+		const project = await getE2eProject(request);
+		const masters = await getE2eMasters(request);
+
 		await e2eCall(
 			request,
 			'set_single_setting',
@@ -27,26 +32,36 @@ test.describe('Budget controls @accounts', () => {
 			'admin',
 		);
 
-		const claim = await e2eCall<{ name: string; workflow_state: string }>(
-			request,
-			'create_expense_claim',
-			{
-				employee: emp,
+		let claimName = '';
+		await withPersona(browser, 'employee', async (page) => {
+			const claim = new ExpenseClaimFormPage(page);
+			await claim.openNew();
+			await claim.fillClaim({
+				project,
 				amount: 9000,
-				submit: 1,
-				vendor_override_reason: 'Urgent reimbursement; PO not feasible.',
-			},
-			'employee',
+				expenseType: masters.expense_type,
+				vendorOverrideReason: 'Urgent reimbursement; PO not feasible.',
+			});
+			claimName = await claim.saveAndSubmit(request, { expectBudgetWarning: true });
+		});
+
+		const workflowState = await e2eCall<string>(
+			request,
+			'get_doc_field',
+			{ doctype: 'Expense Claim', name: claimName, field: 'workflow_state' },
+			'admin',
 		);
-		expect(claim.workflow_state).toBe('Pending Approval');
+		expect(workflowState).toBe('Pending Approval');
 	});
 
 	test('AC-BUD-002 @regression @critical: Hard block when overspend exceeds Budget Hard-Block %', async ({
+		browser,
 		request,
 	}) => {
 		const fixtures = await getFixtures(request, 'admin');
-		const cast = await getCast(request, 'admin');
-		const emp = cast.employee_b.employee!;
+		const project = await getE2eProject(request);
+		const masters = await getE2eMasters(request);
+
 		await e2eCall(
 			request,
 			'set_project_budget',
@@ -58,33 +73,35 @@ test.describe('Budget controls @accounts', () => {
 			'admin',
 		);
 
-		const claim = await e2eCall<{ name: string }>(
-			request,
-			'create_expense_claim',
-			{
-				employee: emp,
+		let claimName = '';
+		await withPersona(browser, 'employee_b', async (page) => {
+			const claim = new ExpenseClaimFormPage(page);
+			await claim.openNew();
+			await claim.fillClaim({
+				project,
 				amount: 13000,
-				submit: 1,
-				vendor_override_reason: 'Urgent reimbursement; PO not feasible.',
-			},
-			'employee',
-		);
+				expenseType: masters.expense_type,
+				vendorOverrideReason: 'Urgent reimbursement; PO not feasible.',
+			});
+			claimName = await claim.saveAndSubmit(request);
+		});
 
-		const blocked = await e2eCall<{ ok: boolean }>(
-			request,
-			'try_workflow_action',
-			{ doctype: 'Expense Claim', name: claim.name, action: 'Approve' },
-			'manager',
-		);
-		expect(blocked.ok).toBe(false);
+		await withPersona(browser, 'manager', async (page) => {
+			const claim = new ExpenseClaimFormPage(page);
+			await claim.open(claimName);
+			await claim.approve();
+			await expectFormError(page, /budget|exceed|block/i);
+		});
 	});
 
 	test('AC-BUD-003 @regression @critical: Budget Override Role can exceed hard block', async ({
+		browser,
 		request,
 	}) => {
 		const fixtures = await getFixtures(request, 'admin');
-		const cast = await getCast(request, 'admin');
-		const emp = cast.associate.employee!;
+		const project = await getE2eProject(request);
+		const masters = await getE2eMasters(request);
+
 		await e2eCall(
 			request,
 			'set_project_budget',
@@ -96,36 +113,47 @@ test.describe('Budget controls @accounts', () => {
 			'admin',
 		);
 
-		const claim = await e2eCall<{ name: string }>(
-			request,
-			'create_expense_claim',
-			{
-				employee: emp,
+		let claimName = '';
+		await withPersona(browser, 'associate', async (page) => {
+			const claim = new ExpenseClaimFormPage(page);
+			await claim.openNew();
+			await claim.fillClaim({
+				project,
 				amount: 30000,
-				submit: 1,
-				vendor_override_reason: 'Urgent reimbursement; PO not feasible.',
-				budget_override_reason: 'Seasonal campaign overspend approved by dept.',
-			},
-			'associate',
-		);
+				expenseType: masters.expense_type,
+				vendorOverrideReason: 'Urgent reimbursement; PO not feasible.',
+				budgetOverrideReason: 'Seasonal campaign overspend approved by dept.',
+			});
+			claimName = await claim.saveAndSubmit(request);
+		});
 
-		const approved = await e2eCall<{ workflow_state: string }>(
+		await withPersona(browser, 'chair', async (page) => {
+			const claim = new ExpenseClaimFormPage(page);
+			await claim.open(claimName);
+			await claim.approve();
+		});
+
+		const workflowState = await e2eCall<string>(
 			request,
-			'workflow_action',
-			{ doctype: 'Expense Claim', name: claim.name, action: 'Approve' },
-			'chair',
+			'get_doc_field',
+			{ doctype: 'Expense Claim', name: claimName, field: 'workflow_state' },
+			'admin',
 		);
-		expect(approved.workflow_state).toBe('Approved');
+		expect(workflowState).toBe('Approved');
 	});
 
-	test('Expense Claim without project is blocked', async ({ request }) => {
-		const blocked = await e2eCall<{ ok: boolean; error?: string }>(
-			request,
-			'try_create_expense_claim',
-			{ amount: 500, include_project: 0 },
-			'employee',
-		);
-		expect(blocked.ok).toBe(false);
-		expect((blocked.error || '').toLowerCase()).toMatch(/project/);
+	test('Expense Claim without project is blocked', async ({ browser, request }) => {
+		const masters = await getE2eMasters(request);
+
+		await withPersona(browser, 'employee', async (page) => {
+			const claim = new ExpenseClaimFormPage(page);
+			await claim.openNew();
+			const rowIndex = await claim.getOrCreateEditableRow('expenses', 'description');
+			await claim.fillGridField('expenses', rowIndex, 'expense_type', masters.expense_type);
+			await claim.fillGridField('expenses', rowIndex, 'description', 'Missing project on purpose');
+			await claim.fillGridField('expenses', rowIndex, 'amount', '500');
+			await claim.save();
+			await expectFormError(page, /project/i);
+		});
 	});
 });

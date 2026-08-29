@@ -4,7 +4,9 @@ import { getList } from '../../helpers/frappe';
 import { personaStorage, PERSONAS } from '../../helpers/personas';
 import { DESK_WORKSPACE_RE, ROUTES } from '../../helpers/routes';
 
-test.describe('Ops email & digest config @ops', () => {
+import { DailyWorkLogSettingsPage } from '../../pages/desk/dwl-settings.page';
+
+test.describe('Ops email & digest config @ops @ui', () => {
 	test.describe('as hr', () => {
 		test.use({ storageState: personaStorage('hr') });
 
@@ -54,6 +56,15 @@ test.describe('Ops email & digest config @ops', () => {
 			expect(row.name).toBeTruthy();
 			expect(row.status).toBeTruthy();
 		}
+	});
+
+	test('Daily Work Log Settings Preview Summary in UI @smoke', async ({ page }) => {
+		const settings = new DailyWorkLogSettingsPage(page);
+		await settings.open();
+		await settings.previewSummary();
+		await expect(page.locator('.modal-dialog, .msgprint').first()).toBeVisible({
+			timeout: 15000,
+		});
 	});
 
 	test('Daily Work Log Settings form opens @smoke', async ({ page }) => {

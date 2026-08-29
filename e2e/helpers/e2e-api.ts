@@ -67,6 +67,14 @@ export async function cleanupEmployeeAdvances(
 	await callMethod(request, `${API}.cleanup_employee_advances`, { employee }, persona);
 }
 
+export async function cleanupExpenseClaimsForProject(
+	request: APIRequestContext,
+	project: string,
+	persona: PersonaKey = 'admin',
+): Promise<void> {
+	await callMethod(request, `${API}.cleanup_expense_claims_for_project`, { project }, persona);
+}
+
 export async function e2eCall<T>(
 	request: APIRequestContext,
 	method: string,
@@ -92,6 +100,11 @@ export function addDays(isoDate: string, days: number): string {
 	const d = parseLocalDate(isoDate);
 	d.setDate(d.getDate() + days);
 	return formatLocalDate(d);
+}
+
+export function formatDeskDate(isoDate: string): string {
+	const [year, month, day] = isoDate.split('-');
+	return `${day}-${month}-${year}`;
 }
 
 export function todayLocal(): string {

@@ -23,6 +23,7 @@
     "test:e2e:hr": "playwright test --grep @hr",
     "test:e2e:volunteering": "playwright test --grep @volunteering",
     "test:e2e:ops": "playwright test --grep @ops",
-    "test:e2e:persona": "playwright test --grep @persona"
+    "test:e2e:persona": "playwright test --grep @persona",
+    "test:e2e:ui-only": "playwright test --grep @ui"
   }
 }

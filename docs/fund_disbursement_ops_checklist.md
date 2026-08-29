@@ -23,8 +23,9 @@ bench --site YOUR_SITE clear-cache
 ## 2. Company / Accounts
 
 1. Default **Employee Advance Account** on Company (HR settings).
-2. Mode of Payment: Bank / UPI / NEFT; Cash for small amounts only.
-3. Projects: set **Project Type** (Campaign / Event / Admin), Cost Center, Department Budgets, Budget Status = Active.
+2. **Expense Claim Type** → Accounts: default expense account per company (Travel, Food, etc.).
+3. Mode of Payment: Bank / UPI / NEFT; Cash for small amounts only.
+4. Projects: set **Project Type** (Campaign / Event / Admin), Cost Center, Department Budgets, Budget Status = Active.
 4. Budget exceedance: on Approve, the pending manager must enter **Budget Exceedance Reason** if over budget. Above the hard-block %, escalate to the Budget Override Role (default NGO Board Chairperson).
 
 ## 3. Workflows

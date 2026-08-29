@@ -148,6 +148,43 @@ ACCOUNTING_CUSTOM_FIELDS = {
 			),
 		},
 		{
+			"fieldname": "reimbursement_section",
+			"fieldtype": "Section Break",
+			"label": "Reimbursement Source",
+			"insert_after": "vendor_override_reason",
+			"collapsible": 1,
+		},
+		{
+			"fieldname": "reimbursement_source",
+			"label": "Reimbursement Source",
+			"fieldtype": "Select",
+			"options": "Out of Pocket\nManager Advance",
+			"insert_after": "reimbursement_section",
+			"default": "Out of Pocket",
+			"description": (
+				"Manager Advance: settle from your reporting manager's paid advance "
+				"after approval (no bank reimbursement to you)."
+			),
+		},
+		{
+			"fieldname": "manager_float_holder",
+			"label": "Manager (Float Holder)",
+			"fieldtype": "Link",
+			"options": "Employee",
+			"insert_after": "reimbursement_source",
+			"read_only": 1,
+			"depends_on": "eval:doc.reimbursement_source=='Manager Advance'",
+		},
+		{
+			"fieldname": "manager_float_advance",
+			"label": "Manager Advance Used",
+			"fieldtype": "Link",
+			"options": "Employee Advance",
+			"insert_after": "manager_float_holder",
+			"read_only": 1,
+			"depends_on": "eval:doc.reimbursement_source=='Manager Advance' && doc.manager_float_advance",
+		},
+		{
 			"fieldname": "spend_guide_section",
 			"fieldtype": "Section Break",
 			"label": "Spend Guide",
@@ -208,7 +245,7 @@ ACCOUNTING_CUSTOM_FIELDS = {
 			"hidden": 1,
 			"description": "Auto-set for budget tracking; hidden from employees.",
 		},
-		*_approval_routing_fields("project", include_emergency=False),
+		*_approval_routing_fields("return_amount", include_emergency=False),
 		{
 			"fieldname": "spend_guide_section",
 			"fieldtype": "Section Break",

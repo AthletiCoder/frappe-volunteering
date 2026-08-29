@@ -7,9 +7,10 @@ from __future__ import annotations
 
 import frappe
 from frappe import _
-from frappe.utils import flt, formatdate
+from frappe.utils import flt, formatdate, format_datetime
 
 from volunteering.volunteering.authority import get_employee_for_user, get_grade_for_user
+from volunteering.volunteering.desk_routes import desk_route
 from volunteering.volunteering.employee_advance_controls import (
 	SETTLED_STATUSES,
 	advance_residual_amount,
@@ -71,7 +72,7 @@ def get_home_payload():
 	accounts_queues = _accounts_queues() if flags["show_accounts"] else []
 	pending = _own_pending(employee, user)
 	status = _status_rows(pending)
-	todos = _compose_todos(inbox, accounts_queues, status)
+	todos = _compose_todos(inbox, accounts_queues, status, employee)
 	payload = {
 		"allowed": True,
 		"persona": flags["persona"],
@@ -101,7 +102,7 @@ def get_home_payload():
 	return payload
 
 
-def _compose_todos(inbox, accounts_queues, status=None):
+def _compose_todos(inbox, accounts_queues, status=None, employee=None):
 	todos = []
 	for item in inbox or []:
 		todos.append({**item, "bucket": "review"})
@@ -121,6 +122,7 @@ def _compose_todos(inbox, accounts_queues, status=None):
 				"modified": "",
 			}
 		)
+	todos.extend(_employee_draft_todos(employee))
 	for row in status or []:
 		count = row.get("count") or 0
 		if not count:
@@ -137,6 +139,50 @@ def _compose_todos(inbox, accounts_queues, status=None):
 				"modified": "",
 			}
 		)
+	return todos
+
+
+def _employee_draft_todos(employee):
+	"""Individual draft advances / claims with raised-on timestamp."""
+	if not employee:
+		return []
+	todos = []
+	for doctype, kind, amount_field in (
+		("Employee Advance", _("Advance"), "advance_amount"),
+		("Expense Claim", _("Claim"), "total_claimed_amount"),
+	):
+		if not frappe.db.exists("DocType", doctype):
+			continue
+		fields = ["name", "creation", "modified", amount_field]
+		if frappe.db.has_column(doctype, "workflow_state"):
+			fields.append("workflow_state")
+		rows = frappe.get_all(
+			doctype,
+			filters={"employee": employee, "docstatus": 0},
+			fields=fields,
+			order_by="modified desc",
+			limit=8,
+		)
+		for row in rows:
+			amount = row.get(amount_field)
+			subtitle_parts = [format_datetime(row.creation, "dd MMM yyyy, HH:mm")]
+			if amount:
+				subtitle_parts.append(frappe.format_value(flt(amount), "Currency"))
+			state = row.get("workflow_state")
+			if state and state != "Draft":
+				subtitle_parts.append(state)
+			todos.append(
+				{
+					"id": f"{doctype}::{row.name}",
+					"kind": kind,
+					"title": row.name,
+					"subtitle": " · ".join(subtitle_parts),
+					"route": desk_route(doctype, row.name),
+					"bucket": "yours",
+					"modified": str(row.modified or ""),
+					"raised_at": str(row.creation or ""),
+				}
+			)
 	return todos
 
 
@@ -292,11 +338,14 @@ def _money_actions(pending=None):
 def _status_rows(pending):
 	rows = []
 	mapping = (
-		("leave", "open_leave", _("Open leave"), "/app/leave-application"),
-		("wfh", "open_wfh", _("Open WFH"), "/app/attendance-request"),
-		("fix_attendance", "open_arr", _("Attendance fixes"), "/app/attendance-regularization-request"),
-		("claim", "draft_claims", _("Draft claims"), "/app/expense-claim"),
-		("advance", "draft_advances", _("Draft advances"), "/app/employee-advance"),
+		("leave", "open_leave", _("Open leave"), desk_route("Leave Application")),
+		("wfh", "open_wfh", _("Open WFH"), desk_route("Attendance Request")),
+		(
+			"fix_attendance",
+			"open_arr",
+			_("Attendance fixes"),
+			desk_route("Attendance Regularization Request"),
+		),
 	)
 	for key, row_id, label, route in mapping:
 		count = (pending or {}).get(key) or 0
@@ -382,7 +431,7 @@ def _pending_approver_inbox(doctype, kind, user):
 		return []
 	if not frappe.db.has_column(doctype, "pending_approver"):
 		return []
-	fields = ["name", "modified"]
+	fields = ["name", "modified", "creation"]
 	if frappe.db.has_column(doctype, "employee_name"):
 		fields.append("employee_name")
 	if frappe.db.has_column(doctype, "supplier_name"):
@@ -404,17 +453,18 @@ def _pending_approver_inbox(doctype, kind, user):
 	for row in rows:
 		amount = row.get("grand_total") or row.get("total_claimed_amount") or row.get("advance_amount")
 		who = row.get("employee_name") or row.get("supplier_name") or row.name
-		subtitle = row.name
+		subtitle_parts = [format_datetime(row.creation, "dd MMM yyyy, HH:mm"), row.name]
 		if amount:
-			subtitle = f"{row.name} · {frappe.format_value(flt(amount), 'Currency')}"
+			subtitle_parts.append(frappe.format_value(flt(amount), "Currency"))
 		out.append(
 			{
 				"id": f"{doctype}::{row.name}",
 				"kind": kind,
 				"title": who,
-				"subtitle": subtitle,
-				"route": f"/app/{frappe.scrub(doctype)}/{row.name}",
+				"subtitle": " · ".join(subtitle_parts),
+				"route": desk_route(doctype, row.name),
 				"modified": str(row.modified or ""),
+				"raised_at": str(row.creation or ""),
 			}
 		)
 	return out

@@ -76,7 +76,13 @@ def after_migrate():
 	ensure_employee_advance_accounts()
 	ensure_expense_claim_payable_account()
 	ensure_employee_advance_field_visibility()
+	ensure_expense_claim_field_visibility()
 	ensure_budget_health_permissions()
+	from volunteering.volunteering.employee_spending_permissions import (
+		ensure_employee_self_service_permissions,
+	)
+
+	ensure_employee_self_service_permissions()
 	reload_accounting_workflows()
 	sync_workflow_submit_permissions()
 	from volunteering.volunteering.accounting_dashboard.setup import ensure_accounting_pages
@@ -224,6 +230,13 @@ def ensure_employee_advance_field_visibility():
 	"""Hide advance_account from non-Accounts; keep project hidden (advances are not tagged)."""
 	_ensure_property_setter(
 		"Employee Advance",
+		"employee",
+		"ignore_user_permissions",
+		"1",
+		"Check",
+	)
+	_ensure_property_setter(
+		"Employee Advance",
 		"advance_account",
 		"hidden",
 		"1",
@@ -242,6 +255,38 @@ def ensure_employee_advance_field_visibility():
 		"project",
 		"reqd",
 		"0",
+		"Check",
+	)
+	_ensure_property_setter(
+		"Employee Advance",
+		"currency_section",
+		"collapsed",
+		"1",
+		"Check",
+	)
+
+
+def ensure_expense_claim_field_visibility():
+	"""Hide GL accounts from staff; server sets them on save. Ignore perm on link fields."""
+	for doctype, fieldname in (
+		("Expense Claim", "payable_account"),
+		("Expense Claim Advance", "advance_account"),
+		("Expense Claim Detail", "default_account"),
+	):
+		_ensure_property_setter(doctype, fieldname, "ignore_user_permissions", "1", "Check")
+	_ensure_property_setter("Expense Claim Detail", "default_account", "hidden", "1", "Check")
+	_ensure_property_setter(
+		"Expense Claim",
+		"payable_account",
+		"hidden",
+		"1",
+		"Check",
+	)
+	_ensure_property_setter(
+		"Expense Claim",
+		"payable_account",
+		"read_only",
+		"1",
 		"Check",
 	)
 

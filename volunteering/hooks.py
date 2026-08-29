@@ -191,6 +191,7 @@ doc_events = {
 	},
 	"Expense Claim": {
 		"before_save": [
+			"volunteering.volunteering.accounting_controls.ensure_expense_claim_accounts",
 			"volunteering.volunteering.accounting_controls.validate_project_required",
 			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
 			"volunteering.volunteering.accounting_controls.validate_project_has_cost_center",
@@ -199,6 +200,7 @@ doc_events = {
 			"volunteering.volunteering.budget_service.validate_budget_on_save",
 			"volunteering.volunteering.spend_controls.validate_spend_controls",
 			"volunteering.volunteering.reimbursement_controls.validate_reimbursement_cap",
+			"volunteering.volunteering.manager_float_service.validate_manager_float_expense_claim",
 		],
 		# Approve sets docstatus=1 and calls submit() (skips before_save) — re-check budget here.
 		"before_submit": [
