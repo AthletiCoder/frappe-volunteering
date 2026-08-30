@@ -18,7 +18,8 @@ test.describe('Accounting settings @accounts @ui', () => {
 		}) => {
 			const limits = new ApprovalLimitsPage(page);
 			await limits.open();
-			await expect(page.locator('[data-fieldname="max_self_advance"]')).toBeVisible();
+			await expect(page.locator('[data-fieldname="designation_limits"]')).toBeVisible();
+			await expect(page.getByText('Max Self Advance', { exact: false }).first()).toBeVisible();
 			await expect(page.locator('.primary-action, button[data-label="Save"]').filter({ hasText: 'Save' })).toBeVisible();
 		});
 
@@ -82,7 +83,9 @@ test.describe('Accounting settings @accounts @ui', () => {
 				'accounts',
 			);
 			expect(project).toBeFalsy();
-			await expect(page.locator('[data-fieldname="project"]')).toBeHidden();
+			await expect(
+				page.locator('.form-layout:visible [data-fieldname="project"], .form-page:visible [data-fieldname="project"]').first(),
+			).toBeHidden();
 		});
 	});
 
@@ -92,7 +95,8 @@ test.describe('Accounting settings @accounts @ui', () => {
 		test('AC-SET-002 @regression @critical: HR Manager view-only on limits', async ({ page }) => {
 			const limits = new ApprovalLimitsPage(page);
 			await limits.open();
-			await expect(page.locator('[data-fieldname="max_self_advance"]')).toBeVisible();
+			await expect(page.locator('[data-fieldname="designation_limits"]')).toBeVisible();
+			await expect(page.getByText('Max Self Advance', { exact: false }).first()).toBeVisible();
 			await limits.expectReadOnly();
 		});
 	});

@@ -737,7 +737,7 @@ export class DeskForm {
 		if (!options?.expectError) {
 			await primary.waitFor({ state: 'visible', timeout: 30000 }).catch(() => {});
 		}
-		if ((await primary.isVisible().catch(() => false)) && !options?.expectError) {
+		if (await primary.isVisible().catch(() => false)) {
 			await primary.click();
 			await resolvePostActionModal(this.page, { allowConfirm: true, ...options });
 			return;

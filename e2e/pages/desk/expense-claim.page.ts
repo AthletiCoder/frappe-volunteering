@@ -1,5 +1,5 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
-import { modal, resolvePostActionModal } from '../../helpers/dialogs';
+import { modal, resolvePostActionModal, readVisibleModal } from '../../helpers/dialogs';
 import { DeskForm, formUrl } from '../../helpers/desk';
 import { attachClaimReceipt } from '../../helpers/ui-fixtures';
 
@@ -21,22 +21,35 @@ export class ExpenseClaimFormPage extends DeskForm {
 	}
 
 	async open(name: string): Promise<void> {
-		await this.page.goto('/desk', { waitUntil: 'domcontentloaded' });
-		await this.page.waitForFunction(
-			() => Boolean((window as unknown as { frappe?: { set_route?: unknown } }).frappe?.set_route),
-			undefined,
-			{ timeout: 45000 },
-		);
-		await this.page.evaluate(
-			([doctype, docname]) => {
-				(
-					window as unknown as {
-						frappe: { set_route: (type: string, doctype: string, name: string) => void };
-					}
-				).frappe.set_route('Form', doctype, docname);
-			},
-			['Expense Claim', name],
-		);
+		await this.gotoForm('Expense Claim', name);
+		const docLoaded = await this.page
+			.waitForFunction(
+				(expected) =>
+					(window as unknown as { cur_frm?: { doc?: { name?: string } } }).cur_frm?.doc?.name ===
+					expected,
+				name,
+				{ timeout: 15000 },
+			)
+			.then(() => true)
+			.catch(() => false);
+		if (!docLoaded) {
+			await this.page.goto('/desk', { waitUntil: 'domcontentloaded' });
+			await this.page.waitForFunction(
+				() => Boolean((window as unknown as { frappe?: { set_route?: unknown } }).frappe?.set_route),
+				undefined,
+				{ timeout: 45000 },
+			);
+			await this.page.evaluate(
+				([doctype, docname]) => {
+					(
+						window as unknown as {
+							frappe: { set_route: (type: string, doctype: string, name: string) => void };
+						}
+					).frappe.set_route('Form', doctype, docname);
+				},
+				['Expense Claim', name],
+			);
+		}
 		await this.page.waitForFunction(
 			(expected) =>
 				(window as unknown as { cur_frm?: { doc?: { name?: string } } }).cur_frm?.doc?.name ===
@@ -396,6 +409,48 @@ export class ExpenseClaimFormPage extends DeskForm {
 		);
 	}
 
+	async fillExpenseRowWithoutProject(options: {
+		expenseType: string;
+		description: string;
+		amount: number;
+	}): Promise<void> {
+		await this.ensureSelfEmployee();
+		await this.clickTab('Expenses & Advances');
+		await this.page.evaluate(
+			async ({ expenseType, description, amount }) => {
+				const win = window as unknown as {
+					cur_frm?: {
+						clear_table: (table: string) => void;
+						add_child: (table: string) => { doctype: string; name: string };
+						refresh_field: (table: string) => void;
+					};
+					frappe?: {
+						model: {
+							set_value: (
+								dt: string,
+								name: string,
+								field: string,
+								val: string | number,
+							) => Promise<void>;
+						};
+					};
+				};
+				const frm = win.cur_frm;
+				if (!frm || !win.frappe?.model) {
+					throw new Error('Expense Claim form is not loaded');
+				}
+				frm.clear_table('expenses');
+				const row = frm.add_child('expenses');
+				await win.frappe.model.set_value(row.doctype, row.name, 'expense_type', expenseType);
+				await win.frappe.model.set_value(row.doctype, row.name, 'description', description);
+				await win.frappe.model.set_value(row.doctype, row.name, 'amount', amount);
+				await win.frappe.model.set_value(row.doctype, row.name, 'sanctioned_amount', amount);
+				frm.refresh_field('expenses');
+			},
+			options,
+		);
+	}
+
 	async fillClaim(options: {
 		project: string;
 		amount: number;
@@ -422,7 +477,7 @@ export class ExpenseClaimFormPage extends DeskForm {
 			await this.setVendorOverrideReason(options.vendorOverrideReason);
 		}
 		if (options.budgetOverrideReason) {
-			await this.fillData('budget_override_reason', options.budgetOverrideReason);
+			await this.setBudgetOverrideReason(options.budgetOverrideReason);
 		}
 		if (options.vendorOverrideReason || options.budgetOverrideReason || options.reimbursementSource) {
 			await this.clickTab('Expenses & Advances');
@@ -443,6 +498,23 @@ export class ExpenseClaimFormPage extends DeskForm {
 			}
 			frm.set_df_property('vendor_override_reason', 'hidden', 0);
 			await frm.set_value('vendor_override_reason', value);
+		}, reason);
+	}
+
+	async setBudgetOverrideReason(reason: string): Promise<void> {
+		await this.clickTab('Approval & Routing');
+		await this.page.evaluate(async (value) => {
+			const frm = (window as unknown as {
+				cur_frm?: {
+					set_df_property: (f: string, p: string, v: number) => void;
+					set_value: (f: string, v: string) => Promise<unknown>;
+				};
+			}).cur_frm;
+			if (!frm) {
+				return;
+			}
+			frm.set_df_property('budget_override_reason', 'hidden', 0);
+			await frm.set_value('budget_override_reason', value);
 		}, reason);
 	}
 
@@ -581,6 +653,78 @@ export class ExpenseClaimFormPage extends DeskForm {
 		}
 		await this.submitSavedClaimInSession(name, options);
 		return name;
+	}
+
+	/** Approve via Desk workflow and expect server validation to surface in a modal. */
+	async approveExpectError(errorPattern: RegExp): Promise<void> {
+		await this.dismissBlockingModals();
+		await this.page.evaluate(() => {
+			const win = window as unknown as {
+				cur_frm?: unknown;
+				volunteering?: { accounting_workflow?: { render_actions?: (frm: unknown) => void } };
+			};
+			if (win.cur_frm && win.volunteering?.accounting_workflow?.render_actions) {
+				win.volunteering.accounting_workflow.render_actions(win.cur_frm);
+			}
+		});
+		const primaryApprove = this.page
+			.locator('.page-head .primary-action, .page-actions .primary-action')
+			.filter({ hasText: /^Approve$/ })
+			.first();
+		if (await primaryApprove.isVisible().catch(() => false)) {
+			await this.clickWorkflowAction('Approve', { expectError: errorPattern });
+			return;
+		}
+		if (await this.reviewMenuButton().isVisible().catch(() => false)) {
+			await this.openReviewMenu();
+			const approveItem = this.page
+				.locator('.dropdown-menu.show .dropdown-item, .dropdown-menu a, a.grey-link')
+				.filter({ hasText: /^(Review > )?Approve$/ })
+				.first();
+			if (await approveItem.isVisible().catch(() => false)) {
+				await approveItem.click();
+				await resolvePostActionModal(this.page, { expectError: errorPattern });
+				return;
+			}
+		}
+		await this.page.evaluate(async () => {
+			const win = window as unknown as {
+				cur_frm?: { doc?: { name?: string } };
+				frappe?: {
+					db: { get_doc: (dt: string, name: string) => Promise<unknown> };
+					xcall: (method: string, args: Record<string, unknown>) => Promise<unknown>;
+				};
+			};
+			const docname = win.cur_frm?.doc?.name;
+			if (!docname || !win.frappe) {
+				throw new Error('Expense Claim form is not loaded');
+			}
+			const doc = await win.frappe.db.get_doc('Expense Claim', docname);
+			try {
+				await win.frappe.xcall('frappe.model.workflow.apply_workflow', {
+					doc,
+					action: 'Approve',
+				});
+			} catch {
+				// Validation errors are surfaced via frappe.msgprint in Desk.
+			}
+		});
+		const modalContent = await readVisibleModal(this.page);
+		if (modalContent.visible) {
+			await resolvePostActionModal(this.page, { expectError: errorPattern });
+			return;
+		}
+		await this.page
+			.waitForFunction(
+				(pattern) => {
+					const dialog = document.querySelector('.modal.show .modal-body, .modal.show .msgprint');
+					return Boolean(dialog && new RegExp(pattern, 'i').test(dialog.textContent || ''));
+				},
+				errorPattern.source,
+				{ timeout: 15000 },
+			)
+			.catch(() => {});
+		await resolvePostActionModal(this.page, { expectError: errorPattern });
 	}
 
 	async approve(options?: { budgetOverrideReason?: string }): Promise<void> {

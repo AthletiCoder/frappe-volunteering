@@ -1,7 +1,12 @@
 import { expect, test } from '@playwright/test';
-import { e2eCall, getFixtures } from '../../helpers/e2e-api';
-import { expectFormError } from '../../helpers/dialogs';
+import {
+	cleanupExpenseClaimsForProject,
+	e2eCall,
+	getFixtures,
+	repairE2eReportsToChain,
+} from '../../helpers/e2e-api';
 import { withPersona } from '../../helpers/persona-context';
+import { PERSONAS } from '../../helpers/personas';
 import { getE2eMasters, getE2eProject } from '../../helpers/ui-fixtures';
 import { ExpenseClaimFormPage } from '../../pages/desk/expense-claim.page';
 
@@ -61,6 +66,8 @@ test.describe('Budget controls @accounts @ui', () => {
 		const fixtures = await getFixtures(request, 'admin');
 		const project = await getE2eProject(request);
 		const masters = await getE2eMasters(request);
+		await repairE2eReportsToChain(request);
+		await cleanupExpenseClaimsForProject(request, project);
 
 		await e2eCall(
 			request,
@@ -86,11 +93,18 @@ test.describe('Budget controls @accounts @ui', () => {
 			claimName = await claim.saveAndSubmit(request);
 		});
 
+		const pendingApprover = await e2eCall<string>(
+			request,
+			'get_doc_field',
+			{ doctype: 'Expense Claim', name: claimName, field: 'pending_approver' },
+			'admin',
+		);
+		expect(pendingApprover).toBe(PERSONAS.manager.email);
+
 		await withPersona(browser, 'manager', async (page) => {
 			const claim = new ExpenseClaimFormPage(page);
 			await claim.open(claimName);
-			await claim.approve();
-			await expectFormError(page, /budget|exceed|block/i);
+			await claim.approveExpectError(/budget|exceed|block/i);
 		});
 	});
 
@@ -148,12 +162,12 @@ test.describe('Budget controls @accounts @ui', () => {
 		await withPersona(browser, 'employee', async (page) => {
 			const claim = new ExpenseClaimFormPage(page);
 			await claim.openNew();
-			const rowIndex = await claim.getOrCreateEditableRow('expenses', 'description');
-			await claim.fillGridField('expenses', rowIndex, 'expense_type', masters.expense_type);
-			await claim.fillGridField('expenses', rowIndex, 'description', 'Missing project on purpose');
-			await claim.fillGridField('expenses', rowIndex, 'amount', '500');
-			await claim.save();
-			await expectFormError(page, /project/i);
+			await claim.fillExpenseRowWithoutProject({
+				expenseType: masters.expense_type,
+				description: 'Missing project on purpose',
+				amount: 500,
+			});
+			await claim.save({ expectError: /project/i });
 		});
 	});
 });
