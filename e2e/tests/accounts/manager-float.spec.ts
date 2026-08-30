@@ -17,6 +17,8 @@ import { getE2eProject } from '../../helpers/ui-fixtures';
 import { ExpenseClaimFormPage } from '../../pages/desk/expense-claim.page';
 
 test.describe('Manager float reimbursement @accounts @ui', () => {
+	test.describe.configure({ mode: 'serial' });
+
 	// API fixtures use admin persona via fetch — default project storageState.
 	test('AC-MFL-001 @regression @critical: Out of Pocket settles with the firm, not manager float', async ({
 		request,
@@ -71,6 +73,85 @@ test.describe('Manager float reimbursement @accounts @ui', () => {
 		expect(approved.manager_float_advance).toBe(advanceName);
 		expect(Number(approved.total_amount_reimbursed)).toBe(1500);
 		expect(Number(claimedAmount)).toBe(1500);
+	});
+
+	test('AC-MFL-006 @regression: Manager Advance blocked when employee has own paid advance', async ({
+		request,
+	}) => {
+		test.setTimeout(120_000);
+		const cast = await getCast(request, 'employee');
+		const empEmp = cast.employee.employee!;
+		const project = await getE2eProject(request);
+		await cleanupEmployeeAdvances(request, empEmp);
+		await cleanupExpenseClaimsForProject(request, project);
+		await setupManagerPaidAdvance(request, 5000);
+
+		await e2eCall(
+			request,
+			'seed_employee_paid_advance',
+			{ employee: empEmp, paid_amount: 1500 },
+			'admin',
+		);
+
+		const result = await e2eCall<{ ok: boolean; error?: string }>(
+			request,
+			'try_seed_expense_claim',
+			{
+				employee: empEmp,
+				amount: 1200,
+				reimbursement_source: 'Manager Advance',
+				submit: 0,
+			},
+			'admin',
+		);
+
+		expect(result.ok).toBe(false);
+		expect(result.error || '').toMatch(/Get Advances|unsettled Employee Advance/i);
+	});
+
+	test('AC-MFL-007 @regression: Manager Advance allowed when own advance is fully settled', async ({
+		request,
+	}) => {
+		test.setTimeout(120_000);
+		const cast = await getCast(request, 'employee');
+		const empEmp = cast.employee.employee!;
+		const project = await getE2eProject(request);
+		await cleanupEmployeeAdvances(request, empEmp);
+		await cleanupExpenseClaimsForProject(request, project);
+		await setupManagerPaidAdvance(request, 5000);
+
+		const ownAdvance = await e2eCall<{ name: string }>(
+			request,
+			'seed_employee_paid_advance',
+			{ employee: empEmp, paid_amount: 1500 },
+			'admin',
+		);
+		await e2eCall(
+			request,
+			'set_advance_settlement',
+			{
+				name: ownAdvance.name,
+				paid_amount: 1500,
+				claimed_amount: 1500,
+				status: 'Claimed',
+			},
+			'admin',
+		);
+
+		const result = await e2eCall<{ ok: boolean; data?: { reimbursement_source?: string } }>(
+			request,
+			'try_seed_expense_claim',
+			{
+				employee: empEmp,
+				amount: 1200,
+				reimbursement_source: 'Manager Advance',
+				submit: 0,
+			},
+			'admin',
+		);
+
+		expect(result.ok).toBe(true);
+		expect(result.data?.reimbursement_source).toBe('Manager Advance');
 	});
 
 	test.describe('as employee', () => {

@@ -838,6 +838,41 @@ def seed_manager_paid_advance(employee=None, paid_amount=5000):
 
 
 @frappe.whitelist()
+def seed_employee_paid_advance(employee=None, paid_amount=1500):
+	"""E2E fixture: employee's own paid advance with open residual (no Payment Entry)."""
+	_guard_e2e()
+	employee = employee or _cast_employee("employee")
+	paid_amount = flt(paid_amount)
+	cleanup_employee_advances(employee)
+	company = frappe.db.get_value("Employee", employee, "company")
+	doc = frappe.get_doc(
+		{
+			"doctype": "Employee Advance",
+			"employee": employee,
+			"company": company,
+			"purpose": "E2E employee float fixture",
+			"advance_amount": paid_amount,
+			"posting_date": nowdate(),
+		}
+	)
+	doc.insert(ignore_permissions=True)
+	frappe.db.set_value(
+		"Employee Advance",
+		doc.name,
+		{
+			"docstatus": 1,
+			"workflow_state": "Approved",
+			"paid_amount": flt(paid_amount),
+			"claimed_amount": 0,
+			"status": "Paid",
+		},
+		update_modified=False,
+	)
+	frappe.db.commit()
+	return {"name": doc.name, "paid_amount": flt(paid_amount)}
+
+
+@frappe.whitelist()
 def seed_expense_claim(
 	employee=None,
 	amount=1500,
@@ -1193,6 +1228,17 @@ def try_create_expense_claim(**kwargs):
 	_guard_e2e()
 	try:
 		return {"ok": True, "data": create_expense_claim(**_strip_rpc_kwargs(kwargs))}
+	except Exception as exc:
+		frappe.db.rollback()
+		return {"ok": False, "error": _exc_message(exc)}
+
+
+@frappe.whitelist()
+def try_seed_expense_claim(**kwargs):
+	"""E2E fixture: seed_expense_claim that returns ok/error instead of raising."""
+	_guard_e2e()
+	try:
+		return {"ok": True, "data": seed_expense_claim(**_strip_rpc_kwargs(kwargs))}
 	except Exception as exc:
 		frappe.db.rollback()
 		return {"ok": False, "error": _exc_message(exc)}

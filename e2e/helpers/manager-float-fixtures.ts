@@ -42,13 +42,17 @@ export async function seedManagerFloatClaim(
 ): Promise<SeededExpenseClaim> {
 	const cast = await getCast(request, 'employee');
 	const employee = options?.employee || cast.employee.employee!;
+	const reimbursementSource = options?.reimbursementSource ?? 'Out of Pocket';
+	if (reimbursementSource === 'Manager Advance') {
+		await cleanupEmployeeAdvances(request, employee);
+	}
 	return e2eCall<SeededExpenseClaim>(
 		request,
 		'seed_expense_claim',
 		{
 			employee,
 			amount: options?.amount ?? 1500,
-			reimbursement_source: options?.reimbursementSource ?? 'Out of Pocket',
+			reimbursement_source: reimbursementSource,
 			submit: 1,
 		},
 		'admin',

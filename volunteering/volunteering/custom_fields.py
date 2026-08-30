@@ -163,7 +163,8 @@ ACCOUNTING_CUSTOM_FIELDS = {
 			"default": "Out of Pocket",
 			"description": (
 				"Manager Advance: settle from your reporting manager's paid advance "
-				"after approval (no bank reimbursement to you)."
+				"after approval (no bank reimbursement to you). "
+				"Not available when you already have your own unsettled paid advance."
 			),
 		},
 		{

@@ -13,6 +13,7 @@ from volunteering.volunteering.approval_routing import get_document_amount, get_
 from volunteering.volunteering.desk_routes import desk_route
 from volunteering.volunteering.employee_advance_controls import (
 	advance_residual_amount,
+	is_blocking_advance,
 	list_open_advances_for_employee,
 )
 
@@ -132,6 +133,8 @@ def validate_manager_float_expense_claim(doc, method=None) -> None:
 	if not doc.get("employee"):
 		frappe.throw(_("Employee is required for a manager advance reimbursement request."))
 
+	_validate_employee_has_no_blocking_advance_for_manager_float(doc)
+
 	manager = doc.get("manager_float_holder")
 	if not manager:
 		frappe.throw(
@@ -144,6 +147,38 @@ def validate_manager_float_expense_claim(doc, method=None) -> None:
 	if doc.docstatus == 0 and doc.get("workflow_state") in (None, "", "Draft"):
 		# Draft: inform only; funding may appear before submit.
 		return
+
+
+def _validate_employee_has_no_blocking_advance_for_manager_float(doc) -> None:
+	"""Staff with their own paid, unsettled advance must settle via Get Advances, not manager float."""
+	from volunteering.volunteering.doctype.volunteering_accounting_settings.volunteering_accounting_settings import (
+		get_accounting_settings,
+	)
+
+	settings = get_accounting_settings()
+	replenish_pct = flt(settings.get("advance_replenish_residual_pct"))
+	if settings.get("advance_replenish_residual_pct") is None:
+		replenish_pct = 10.0
+
+	blocking = [
+		row
+		for row in list_open_advances_for_employee(doc.employee)
+		if row.docstatus == 1
+		and flt(row.paid_amount) > 0
+		and is_blocking_advance(row, replenish_pct)
+	]
+	if not blocking:
+		return
+
+	advance_name = blocking[0].name
+	frappe.throw(
+		_(
+			"You have an unsettled Employee Advance ({0}). "
+			"Link this expense to your advance with Get Advances, or choose Out of Pocket. "
+			"Manager Advance is for staff who do not have their own paid float."
+		).format(advance_name),
+		title=_("Use Your Own Advance"),
+	)
 
 
 def validate_manager_float_on_approve(doc) -> None:
