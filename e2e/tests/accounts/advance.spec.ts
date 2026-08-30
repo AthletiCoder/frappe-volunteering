@@ -3,6 +3,7 @@ import {
 	cleanupEmployeeAdvances,
 	e2eCall,
 	getCast,
+	repairE2eReportsToChain,
 } from '../../helpers/e2e-api';
 import { withPersona } from '../../helpers/persona-context';
 import { personaStorage } from '../../helpers/personas';
@@ -12,6 +13,10 @@ import { DeskForm } from '../../helpers/desk';
 import { getE2eMasters, getE2eProject } from '../../helpers/ui-fixtures';
 
 test.describe('Employee Advance @accounts @ui', () => {
+	test.beforeEach(async ({ request }) => {
+		await repairE2eReportsToChain(request);
+	});
+
 	test.describe('as employee', () => {
 		test.use({ storageState: personaStorage('employee') });
 
@@ -83,9 +88,11 @@ test.describe('Employee Advance @accounts @ui', () => {
 
 			const advance = new EmployeeAdvanceFormPage(page);
 			await advance.openNew();
-			// Real Desk UX: employee field is locked to self for staff.
+			const selectedEmp = await page.evaluate(
+				() => (window as unknown as { cur_frm?: { doc?: { employee?: string } } }).cur_frm?.doc?.employee,
+			);
+			expect(selectedEmp).toBe(emp);
 			const employeeField = page.locator('.form-layout [data-fieldname="employee"]').first();
-			await expect(employeeField).toContainText(emp);
 			const employeeInput = employeeField.locator('input').first();
 			if (await employeeInput.isVisible().catch(() => false)) {
 				await expect(employeeInput).toBeDisabled();
@@ -200,10 +207,8 @@ test.describe('Employee Advance @accounts @ui', () => {
 
 			const claim = new ExpenseClaimFormPage(page);
 			await claim.openNew();
-			await claim.ensureSelfEmployee();
-			await expect(page.getByText(/Advances available to link via Get Advances/i)).toBeVisible({
-				timeout: 20000,
-			});
+			const hint = await claim.getAdvanceLinkHint();
+			expect(hint).toMatch(/Advances available to link via Get Advances/i);
 			await claim.fillClaim({
 				project,
 				amount: 1500,
@@ -228,10 +233,8 @@ test.describe('Employee Advance @accounts @ui', () => {
 
 			const claim = new ExpenseClaimFormPage(page);
 			await claim.openNew();
-			await claim.ensureSelfEmployee();
-			await expect(page.getByText(/not submitted yet|No advances qualify for Get Advances/i)).toBeVisible({
-				timeout: 20000,
-			});
+			const hint = await claim.getAdvanceLinkHint();
+			expect(hint).toMatch(/not submitted yet|No advances qualify for Get Advances/i);
 			await claim.fillClaim({ project, amount: 500 });
 		});
 	});

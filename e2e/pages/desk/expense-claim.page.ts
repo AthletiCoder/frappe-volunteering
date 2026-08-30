@@ -921,6 +921,44 @@ export class ExpenseClaimFormPage extends DeskForm {
 		}, reason);
 	}
 
+	async refreshAdvanceLinkHints(): Promise<void> {
+		await this.ensureSelfEmployee();
+		await this.page.evaluate(() => {
+			const win = window as unknown as {
+				cur_frm?: unknown;
+				volunteering?: {
+					accounting_workflow?: { show_advance_link_hints?: (frm: unknown) => void };
+				};
+			};
+			if (win.cur_frm && win.volunteering?.accounting_workflow?.show_advance_link_hints) {
+				win.volunteering.accounting_workflow.show_advance_link_hints(win.cur_frm);
+			}
+		});
+		await this.page.waitForTimeout(800);
+	}
+
+	/** Same server hint the Desk form uses for Get Advances eligibility. */
+	async getAdvanceLinkHint(): Promise<string> {
+		await this.ensureSelfEmployee();
+		return this.page.evaluate(async () => {
+			const employee = (window as unknown as { cur_frm?: { doc?: { employee?: string } } }).cur_frm
+				?.doc?.employee;
+			if (!employee) {
+				return '';
+			}
+			return (
+				(window as unknown as {
+					frappe: {
+						xcall: (method: string, args: Record<string, string>) => Promise<string>;
+					};
+				}).frappe.xcall(
+					'volunteering.volunteering.employee_advance_controls.get_linkable_advances_hint',
+					{ employee },
+				) || ''
+			);
+		});
+	}
+
 	async expectApproveNotVisible(): Promise<void> {
 		const primaryApprove = this.page.locator('.page-head .primary-action').filter({ hasText: /^Approve$/ });
 		await expect(primaryApprove).toHaveCount(0);

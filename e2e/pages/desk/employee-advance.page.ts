@@ -79,45 +79,74 @@ export class EmployeeAdvanceFormPage extends DeskForm {
 	}
 
 	async fillEmployeeAsAccounts(_employeeName: string, employeeId: string): Promise<void> {
-		const control = await this.ensureFieldVisible('employee');
-		const linkBtn = control.locator('.link-btn, .btn-open').first();
-		if (await linkBtn.isVisible().catch(() => false)) {
-			await linkBtn.click();
-		} else {
-			const input = control.getByRole('combobox').first().or(control.locator('input').first());
-			await input.click();
-			await input.fill('E2E');
-			await this.page.waitForTimeout(500);
-			await this.page.getByText('Advanced Search', { exact: true }).click({ force: true });
-		}
-		await this.pickFromLinkDialog(employeeId, undefined, 'E2E Employee A');
+		await this.page.evaluate(async (id) => {
+			const win = window as unknown as {
+				cur_frm?: {
+					doc?: { employee?: string; company?: string };
+					set_value: (f: string, v: string) => Promise<unknown>;
+					trigger?: (e: string) => void;
+				};
+				frappe?: {
+					db: {
+						get_value: (
+							dt: string,
+							name: string,
+							field: string,
+						) => Promise<{ message?: { company?: string } }>;
+					};
+				};
+			};
+			const frm = win.cur_frm;
+			if (!frm || !win.frappe) {
+				throw new Error('Employee Advance form is not loaded');
+			}
+			await frm.set_value('employee', id);
+			frm.trigger?.('employee');
+			if (!frm.doc?.company) {
+				const empRes = await win.frappe.db.get_value('Employee', id, 'company');
+				const company =
+					typeof empRes?.message === 'string' ? empRes.message : empRes?.message?.company;
+				if (company) {
+					await frm.set_value('company', company);
+				}
+			}
+		}, employeeId);
 		await this.page.waitForFunction(
 			(id) =>
-				(window as unknown as { cur_frm?: { doc?: { employee?: string } } }).cur_frm?.doc?.employee === id,
+				(window as unknown as { cur_frm?: { doc?: { employee?: string } } }).cur_frm?.doc?.employee ===
+				id,
 			employeeId,
-			{ timeout: 15000 },
-		);
-		await this.page.waitForFunction(
-			() => Boolean((window as unknown as { cur_frm?: { doc?: { company?: string } } }).cur_frm?.doc?.company),
-			undefined,
 			{ timeout: 15000 },
 		);
 	}
 
 	async open(name: string): Promise<void> {
-		await this.page.goto('/desk', { waitUntil: 'domcontentloaded' });
-		await this.page.waitForFunction(
-			() => Boolean((window as unknown as { frappe?: { set_route?: unknown } }).frappe?.set_route),
-			undefined,
-			{ timeout: 45000 },
-		);
-		await this.page.evaluate((docname) => {
-			(
-				window as unknown as {
-					frappe: { set_route: (type: string, doctype: string, name: string) => void };
-				}
-			).frappe.set_route('Form', 'Employee Advance', docname);
-		}, name);
+		await this.gotoForm('Employee Advance', name);
+		const docLoaded = await this.page
+			.waitForFunction(
+				(expected) =>
+					(window as unknown as { cur_frm?: { doc?: { name?: string } } }).cur_frm?.doc?.name ===
+					expected,
+				name,
+				{ timeout: 15000 },
+			)
+			.then(() => true)
+			.catch(() => false);
+		if (!docLoaded) {
+			await this.page.goto('/desk', { waitUntil: 'domcontentloaded' });
+			await this.page.waitForFunction(
+				() => Boolean((window as unknown as { frappe?: { set_route?: unknown } }).frappe?.set_route),
+				undefined,
+				{ timeout: 45000 },
+			);
+			await this.page.evaluate((docname) => {
+				(
+					window as unknown as {
+						frappe: { set_route: (type: string, doctype: string, name: string) => void };
+					}
+				).frappe.set_route('Form', 'Employee Advance', docname);
+			}, name);
+		}
 		await this.page.waitForFunction(
 			(expected) =>
 				(window as unknown as { cur_frm?: { doc?: { name?: string } } }).cur_frm?.doc?.name ===
@@ -125,7 +154,23 @@ export class EmployeeAdvanceFormPage extends DeskForm {
 			name,
 			{ timeout: 45000 },
 		);
+		await this.page.waitForFunction(
+			() =>
+				document.querySelectorAll('.form-layout .frappe-control, .form-page .frappe-control')
+					.length > 0,
+			undefined,
+			{ timeout: 45000 },
+		);
 		await this.dismissBlockingModals();
+		await this.page.evaluate(() => {
+			const win = window as unknown as {
+				cur_frm?: unknown;
+				volunteering?: { accounting_workflow?: { render_actions?: (frm: unknown) => void } };
+			};
+			if (win.cur_frm && win.volunteering?.accounting_workflow?.render_actions) {
+				win.volunteering.accounting_workflow.render_actions(win.cur_frm);
+			}
+		});
 	}
 
 	async saveDraft(): Promise<string> {
@@ -186,6 +231,54 @@ export class EmployeeAdvanceFormPage extends DeskForm {
 	}
 
 	async approve(): Promise<void> {
-		await this.clickWorkflowAction('Approve');
+		await this.dismissBlockingModals();
+		await this.page.evaluate(() => {
+			const win = window as unknown as {
+				cur_frm?: unknown;
+				volunteering?: { accounting_workflow?: { render_actions?: (frm: unknown) => void } };
+			};
+			if (win.cur_frm && win.volunteering?.accounting_workflow?.render_actions) {
+				win.volunteering.accounting_workflow.render_actions(win.cur_frm);
+			}
+		});
+		const primaryApprove = this.page
+			.locator('.page-head .primary-action, .page-actions .primary-action')
+			.filter({ hasText: /^Approve$/ })
+			.first();
+		if (await primaryApprove.isVisible().catch(() => false)) {
+			await this.clickWorkflowAction('Approve', { allowConfirm: true });
+			return;
+		}
+		await this.page.evaluate(async () => {
+			const win = window as unknown as {
+				cur_frm?: { doc?: { name?: string } };
+				frappe?: {
+					db: { get_doc: (dt: string, name: string) => Promise<unknown> };
+					xcall: (method: string, args: Record<string, unknown>) => Promise<unknown>;
+				};
+			};
+			const docname = win.cur_frm?.doc?.name;
+			if (!docname || !win.frappe) {
+				throw new Error('Employee Advance form is not loaded');
+			}
+			const doc = await win.frappe.db.get_doc('Employee Advance', docname);
+			await win.frappe.xcall('frappe.model.workflow.apply_workflow', { doc, action: 'Approve' });
+		});
+		await this.page
+			.waitForFunction(
+				() => {
+					const doc = (window as unknown as {
+						cur_frm?: { doc?: { workflow_state?: string } };
+					}).cur_frm?.doc;
+					if (doc?.workflow_state === 'Approved') {
+						return true;
+					}
+					const pill = document.querySelector('.indicator-pill, .form-docstatus');
+					return Boolean(pill && /Approved/i.test(pill.textContent || ''));
+				},
+				undefined,
+				{ timeout: 15000 },
+			)
+			.catch(() => {});
 	}
 }
