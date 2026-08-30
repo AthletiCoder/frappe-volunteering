@@ -99,9 +99,9 @@ test.describe('Budget controls @accounts @ui', () => {
 			{ doctype: 'Expense Claim', name: claimName, field: 'pending_approver' },
 			'admin',
 		);
-		expect(pendingApprover).toBe(PERSONAS.manager.email);
+		expect(pendingApprover).toBe(PERSONAS.director.email);
 
-		await withPersona(browser, 'manager', async (page) => {
+		await withPersona(browser, 'director', async (page) => {
 			const claim = new ExpenseClaimFormPage(page);
 			await claim.open(claimName);
 			await claim.approveExpectError(/budget|exceed|block/i);

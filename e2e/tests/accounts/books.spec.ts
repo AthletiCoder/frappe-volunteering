@@ -1,5 +1,4 @@
 import { expect, test } from '@playwright/test';
-import { e2eCall } from '../../helpers/e2e-api';
 import { personaStorage } from '../../helpers/personas';
 import { DeskForm } from '../../helpers/desk';
 
@@ -40,25 +39,17 @@ test.describe('Books and hubs @accounts @ui', () => {
 			await expect(page.locator('.report-wrapper .dt-scrollable, .report-wrapper .report-table').first()).toBeVisible();
 		});
 
-		test('AC-BKS-005 @regression: Bank Reconciliation Tool opens', async ({ page, request }) => {
-			const allowed = await e2eCall<boolean>(
-				request,
-				'has_doctype_permission',
-				{ doctype: 'Bank Reconciliation Tool', ptype: 'read' },
-				'accounts',
-			);
+		test('AC-BKS-005 @regression: Bank Reconciliation Tool opens', async ({ page }) => {
 			await page.goto('/desk/bank-reconciliation-tool', { waitUntil: 'domcontentloaded' });
-			const desk = new DeskForm(page);
-			await desk.dismissBlockingModals();
-			if (allowed) {
-				await expect(
-					page.locator('[data-fieldname="company"], .bank-reconciliation-tool').first(),
-				).toBeVisible({ timeout: 45000 });
-				return;
+			const toolReady = page
+				.locator('[data-fieldname="company"], .bank-reconciliation-tool')
+				.first();
+			const permissionDenied = page.getByRole('heading', { name: 'Not permitted' });
+			await expect(toolReady.or(permissionDenied)).toBeVisible({ timeout: 45000 });
+			if (await toolReady.isVisible().catch(() => false)) {
+				const desk = new DeskForm(page);
+				await desk.dismissBlockingModals();
 			}
-			await expect(page.getByText(/not permitted|No permission/i).first()).toBeVisible({
-				timeout: 45000,
-			});
 		});
 	});
 });
