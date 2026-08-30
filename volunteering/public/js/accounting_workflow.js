@@ -369,6 +369,41 @@ volunteering.accounting_workflow.toggle_exception_fields = function (frm) {
 	}
 };
 
+volunteering.accounting_workflow.render_review_buttons = function (frm, flags, transitions) {
+	const actions = (transitions || []).filter((transition) =>
+		WORKFLOW_ACTIONS.includes(transition.action)
+	);
+	const by_name = {};
+	actions.forEach((t) => {
+		by_name[t.action] = t;
+	});
+
+	if (flags.can_approve && by_name.Approve) {
+		frm.page.set_primary_action(__("Approve"), () =>
+			volunteering.accounting_workflow.apply_action(frm, "Approve")
+		);
+	} else if (flags.manager_float_blocked && flags.manager_float_message) {
+		frm.dashboard.set_headline_alert(flags.manager_float_message, "orange");
+	}
+
+	if (by_name.Reject && flags.can_reject) {
+		frm.add_custom_button(
+			__("Reject"),
+			() => volunteering.accounting_workflow.apply_action(frm, "Reject"),
+			__("Review")
+		);
+	}
+
+	// Escalate uses approval_routing.escalate_document — not a workflow transition.
+	if (flags.can_escalate) {
+		frm.add_custom_button(
+			__("Escalate"),
+			() => volunteering.accounting_workflow.escalate(frm),
+			__("Review")
+		);
+	}
+};
+
 volunteering.accounting_workflow.render_actions = function (frm) {
 	if (frm.doc.docstatus !== 0 || !frm.doc.workflow_state) {
 		return;
@@ -387,39 +422,14 @@ volunteering.accounting_workflow.render_actions = function (frm) {
 				return;
 			}
 
-			frappe.workflow.get_transitions(frm.doc).then((transitions) => {
-				const actions = (transitions || []).filter((transition) =>
-					WORKFLOW_ACTIONS.includes(transition.action)
+			frappe.workflow
+				.get_transitions(frm.doc)
+				.then((transitions) =>
+					volunteering.accounting_workflow.render_review_buttons(frm, flags, transitions)
+				)
+				.catch(() =>
+					volunteering.accounting_workflow.render_review_buttons(frm, flags, [])
 				);
-				const by_name = {};
-				actions.forEach((t) => {
-					by_name[t.action] = t;
-				});
-
-				if (flags.can_approve && by_name.Approve) {
-					frm.page.set_primary_action(__("Approve"), () =>
-						volunteering.accounting_workflow.apply_action(frm, "Approve")
-					);
-				} else if (flags.manager_float_blocked && flags.manager_float_message) {
-					frm.dashboard.set_headline_alert(flags.manager_float_message, "orange");
-				}
-
-				if (by_name.Reject && flags.can_reject) {
-					frm.add_custom_button(
-						__("Reject"),
-						() => volunteering.accounting_workflow.apply_action(frm, "Reject"),
-						__("Review")
-					);
-				}
-
-				if (flags.can_escalate) {
-					frm.add_custom_button(
-						__("Escalate"),
-						() => volunteering.accounting_workflow.escalate(frm),
-						__("Review")
-					);
-				}
-			});
 		});
 };
 

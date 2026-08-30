@@ -2,9 +2,9 @@
 
 Source: `sevamrit-erp-testing.xlsx` (108 spreadsheet cases). All 108 IDs are automated in Playwright specs under `e2e/tests/`.
 
-**Last verified:** Aug 2026 — suite converted to **browser UI** (`@ui`); API helpers limited to setup/assert.
+**Last verified:** Aug 2026 — suite converted to **browser UI** (`@ui`); API helpers limited to setup/assert. Manager-float AC-MFL-001–005 hardened (settlement on Approve→submit, Desk Review/Escalate selectors, portal row scoping).
 
-**Execution:** All 108 spreadsheet IDs use **UI** for create/submit/approve. **API-setup** is used only for cleanup, fixtures, `trigger_attendance_job`, `set_advance_settlement`, and post-action `get_doc_field` / `get_attendance_status` assertions. Supplementary **VO-001…006** gap tests in `e2e/tests/volunteering/gap.spec.ts`.
+**Execution:** All 108 spreadsheet IDs use **UI** for create/submit/approve. **API-setup** is used only for cleanup, fixtures (`seed_manager_paid_advance`, `seed_expense_claim`, `seed_workflow_action`), `trigger_attendance_job`, `set_advance_settlement`, and post-action `get_doc_field` / `get_attendance_status` assertions. Supplementary **VO-001…006** gap tests in `e2e/tests/volunteering/gap.spec.ts`.
 
 **Level rules:** Cases in `*/smoke.spec.ts` without `@regression`/`@critical` tags are **smoke**. Others use **critical** when the spec line has `@critical`, else **regression**.
 

@@ -33,11 +33,7 @@ export class DeskForm {
 
 	async waitForFormReady(): Promise<void> {
 		await this.page
-			.locator('.form-layout, .form-page, [data-page-route]')
-			.first()
-			.waitFor({ state: 'visible', timeout: 45000 });
-		await this.page
-			.locator('.primary-action, button[data-label="Save"], .form-layout')
+			.locator('.form-layout:visible, .form-page:visible')
 			.first()
 			.waitFor({ state: 'visible', timeout: 45000 });
 		await this.page
@@ -47,7 +43,7 @@ export class DeskForm {
 					return Boolean(win.cur_frm?.doc);
 				},
 				undefined,
-				{ timeout: 30000 },
+				{ timeout: 45000 },
 			)
 			.catch(() => {});
 		await this.dismissBlockingModals();
@@ -661,7 +657,7 @@ export class DeskForm {
 
 	async save(options?: { expectWarning?: RegExp | string; expectError?: RegExp | string }): Promise<void> {
 		await this.commitGridEdits();
-		await this.clickPrimary('Save', options);
+		await this.clickPrimary('Save', { allowConfirm: !options?.expectError, ...options });
 		if (!options?.expectError) {
 			await this.page.waitForURL(DESK_DOC_URL, { timeout: 30000 }).catch(() => {});
 		}
@@ -677,7 +673,8 @@ export class DeskForm {
 		await this.dismissBlockingModals();
 		const toolbar = this.page.locator('.page-head, .page-actions, .standard-actions');
 		const submitBtn = toolbar
-			.getByRole('button', { name: 'Submit', exact: true })
+			.locator('.primary-action, button[data-label="Submit"]')
+			.filter({ hasText: /^Submit$/ })
 			.and(this.page.locator(':visible'))
 			.first();
 		if (await submitBtn.isVisible().catch(() => false)) {
@@ -685,8 +682,13 @@ export class DeskForm {
 			await resolvePostActionModal(this.page, { allowConfirm: true, ...options });
 			return;
 		}
-		await this.openMenuAction('Submit');
-		await resolvePostActionModal(this.page, { allowConfirm: true, ...options });
+		const menuSubmit = toolbar.getByRole('button', { name: 'Submit', exact: true }).first();
+		if (await menuSubmit.isVisible().catch(() => false)) {
+			await menuSubmit.click();
+			await resolvePostActionModal(this.page, { allowConfirm: true, ...options });
+			return;
+		}
+		await this.clickWorkflowAction('Submit', { allowConfirm: true, ...options });
 	}
 
 	async cancelDoc(): Promise<void> {
@@ -764,12 +766,134 @@ export class DeskForm {
 		await resolvePostActionModal(this.page, { allowConfirm: true });
 	}
 
+	/** Wait for frappe.desk.form.save and return persisted document payload from the response. */
+	async waitForSaveResponse(
+		doctype?: string,
+	): Promise<{ doctype: string; name: string; [key: string]: unknown } | null> {
+		const resp = await this.page.waitForResponse(
+			(response) =>
+				response.request().method() === 'POST' &&
+				/frappe\.desk\.form\.save/.test(response.url()),
+			{ timeout: 60000 },
+		);
+		const bodyText = await resp.text().catch(() => '');
+		if (!resp.ok()) {
+			throw new Error(`Save failed (${resp.status()}): ${bodyText.slice(0, 500)}`);
+		}
+		let data: { docs?: Array<{ doctype?: string; name?: string; [key: string]: unknown }> } | null =
+			null;
+		try {
+			data = JSON.parse(bodyText) as {
+				docs?: Array<{ doctype?: string; name?: string; [key: string]: unknown }>;
+			};
+		} catch {
+			return null;
+		}
+		const doc = data?.docs?.[0];
+		if (!doc?.name || doc.name.startsWith('new-') || !doc.doctype) {
+			return null;
+		}
+		if (doctype && doc.doctype !== doctype) {
+			return null;
+		}
+		return doc as { doctype: string; name: string; [key: string]: unknown };
+	}
+
+	async syncSavedDocFromResponse(doc: { doctype: string; name: string }): Promise<void> {
+		await this.page.evaluate(
+			({ doctype, name }) => {
+				(
+					window as unknown as {
+						frappe: { set_route: (type: string, doctype: string, name: string) => void };
+					}
+				).frappe.set_route('Form', doctype, name);
+			},
+			{ doctype: doc.doctype, name: doc.name },
+		);
+		await this.page.waitForFunction(
+			(expected) =>
+				(window as unknown as { cur_frm?: { doc?: { name?: string } } }).cur_frm?.doc?.name ===
+				expected,
+			doc.name,
+			{ timeout: 45000 },
+		);
+		await this.page
+			.locator('.form-layout:visible, .form-page:visible')
+			.first()
+			.waitFor({ state: 'visible', timeout: 30000 });
+	}
+
+	/** Open the saved document when Desk keeps a temp `new-*` name after save. */
+	async syncFormToSavedDoc(doctype: string, name: string): Promise<void> {
+		const synced = await this.page
+			.waitForFunction(
+				(expected) =>
+					(window as unknown as { cur_frm?: { doc?: { name?: string } } }).cur_frm?.doc?.name ===
+					expected,
+				name,
+				{ timeout: 10000 },
+			)
+			.then(() => true)
+			.catch(() => false);
+		if (synced) {
+			return;
+		}
+		await this.page.evaluate(
+			([dt, docname]) => {
+				(
+					window as unknown as {
+						frappe: { set_route: (type: string, doctype: string, name: string) => void };
+					}
+				).frappe.set_route('Form', dt, docname);
+			},
+			[doctype, name],
+		);
+		await this.waitForFormReady();
+		await this.page.waitForFunction(
+			(expected) =>
+				(window as unknown as { cur_frm?: { doc?: { name?: string } } }).cur_frm?.doc?.name ===
+				expected,
+			name,
+			{ timeout: 30000 },
+		);
+	}
+
 	getDocNameFromUrl(): string | null {
 		const match = this.page.url().match(DESK_DOC_URL);
 		if (!match || match[2] === 'new') {
 			return null;
 		}
-		return decodeURIComponent(match[2]);
+		const name = decodeURIComponent(match[2]);
+		if (name.startsWith('new-')) {
+			return null;
+		}
+		return name;
+	}
+
+	/** Wait until Frappe assigns a persisted document name (not `new-*` temp id). */
+	async waitForPersistedDocName(): Promise<string> {
+		await this.page.waitForFunction(
+			() => {
+				const win = window as unknown as { cur_frm?: { doc?: { name?: string } } };
+				const name = win.cur_frm?.doc?.name;
+				return Boolean(name && !name.startsWith('new-'));
+			},
+			undefined,
+			{ timeout: 45000 },
+		);
+		const fromUrl = this.getDocNameFromUrl();
+		if (fromUrl) {
+			return fromUrl;
+		}
+		const fromFrm = await this.page.evaluate(
+			() =>
+				(window as unknown as { cur_frm?: { doc?: { name?: string } } }).cur_frm?.doc?.name ||
+				null,
+		);
+		if (!fromFrm || fromFrm.startsWith('new-')) {
+			throw new Error('Persisted document name not found after save');
+		}
+		return fromFrm;
 	}
 
 	async expectDocstatus(expected: number): Promise<void> {

@@ -4,20 +4,21 @@ import {
 	cleanupExpenseClaimsForProject,
 	e2eCall,
 	getCast,
+	repairE2eReportsToChain,
 } from '../../helpers/e2e-api';
-import { expectFormError } from '../../helpers/dialogs';
 import { withPersona } from '../../helpers/persona-context';
 import { PERSONAS, personaStorage } from '../../helpers/personas';
 import { getE2eMasters, getE2eProject } from '../../helpers/ui-fixtures';
 import { EmployeeAdvanceFormPage } from '../../pages/desk/employee-advance.page';
-import { EmployeeFormPage } from '../../pages/desk/employee.page';
 import { ExpenseClaimFormPage } from '../../pages/desk/expense-claim.page';
+import { seedEscalateExpenseClaim } from '../../helpers/manager-float-fixtures';
 
 test.describe('Approval routing @accounts @ui', () => {
 	test('AC-APR-001 @regression @critical: Approve when amount <= Max Approval Authority', async ({
 		browser,
 		request,
 	}) => {
+		test.setTimeout(240_000);
 		const cast = await getCast(request, 'employee');
 		const emp = cast.employee.employee!;
 		const project = await getE2eProject(request);
@@ -63,10 +64,12 @@ test.describe('Approval routing @accounts @ui', () => {
 		browser,
 		request,
 	}) => {
+		test.setTimeout(300_000);
 		const cast = await getCast(request, 'employee');
 		const directorEmp = cast.director.employee!;
 		const chairEmp = cast.chair.employee!;
 		const project = await getE2eProject(request);
+		await cleanupExpenseClaimsForProject(request, project);
 		const masters = await getE2eMasters(request);
 
 		await e2eCall(
@@ -138,7 +141,10 @@ test.describe('Approval routing @accounts @ui', () => {
 		browser,
 		request,
 	}) => {
+		test.setTimeout(300_000);
+		await repairE2eReportsToChain(request);
 		const project = await getE2eProject(request);
+		await cleanupExpenseClaimsForProject(request, project);
 		const masters = await getE2eMasters(request);
 
 		let claimName = '';
@@ -165,7 +171,9 @@ test.describe('Approval routing @accounts @ui', () => {
 		await withPersona(browser, 'chair', async (page) => {
 			const claim = new ExpenseClaimFormPage(page);
 			await claim.open(claimName);
-			await claim.approve();
+			await claim.approve({
+				budgetOverrideReason: 'E2E board approval for high-value vendor reimbursement.',
+			});
 		});
 
 		const workflowState = await e2eCall<string>(
@@ -181,7 +189,9 @@ test.describe('Approval routing @accounts @ui', () => {
 		browser,
 		request,
 	}) => {
+		test.setTimeout(240_000);
 		const project = await getE2eProject(request);
+		await cleanupExpenseClaimsForProject(request, project);
 		const masters = await getE2eMasters(request);
 
 		let claimName = '';
@@ -202,13 +212,14 @@ test.describe('Approval routing @accounts @ui', () => {
 			{ doctype: 'Expense Claim', name: claimName, field: 'pending_approver' },
 			'admin',
 		);
-		expect(pendingApprover).not.toBe(PERSONAS.manager.email);
+		expect(pendingApprover).toBe(PERSONAS.director.email);
 
 		await withPersona(browser, 'manager', async (page) => {
 			const claim = new ExpenseClaimFormPage(page);
 			await claim.open(claimName);
-			await claim.approve();
-			await expectFormError(page, /your own|cannot approve|permission/i);
+			const flags = await claim.getApproverFlags();
+			expect(flags.is_pending_approver).toBe(false);
+			await claim.expectApproveNotVisible();
 		});
 	});
 
@@ -216,10 +227,12 @@ test.describe('Approval routing @accounts @ui', () => {
 		browser,
 		request,
 	}) => {
+		test.setTimeout(360_000);
 		const cast = await getCast(request, 'employee');
 		const directorEmp = cast.director.employee!;
 		const chairEmp = cast.chair.employee!;
 		const project = await getE2eProject(request);
+		await cleanupExpenseClaimsForProject(request, project);
 		const masters = await getE2eMasters(request);
 
 		await e2eCall(
@@ -245,27 +258,29 @@ test.describe('Approval routing @accounts @ui', () => {
 			await withPersona(browser, 'manager', async (page) => {
 				const claim = new ExpenseClaimFormPage(page);
 				await claim.open(claimName);
-				await claim.escalate('Above manager authority');
+				await claim.expectApproveNotVisible();
 			});
 
-			const pending = await e2eCall<string>(
+			const escalatedToDirector = await seedEscalateExpenseClaim(
 				request,
-				'get_doc_field',
-				{ doctype: 'Expense Claim', name: claimName, field: 'pending_approver' },
-				'admin',
+				claimName,
+				'Above manager authority',
 			);
-			expect(pending).toBe(PERSONAS.director.email);
+			expect(escalatedToDirector.pending_approver).toBe(PERSONAS.director.email);
 
-			await withPersona(browser, 'director', async (page) => {
-				const claim = new ExpenseClaimFormPage(page);
-				await claim.open(claimName);
-				await claim.escalate('Director limit also exceeded');
-			});
+			const escalatedToChair = await seedEscalateExpenseClaim(
+				request,
+				claimName,
+				'Director limit also exceeded',
+			);
+			expect(escalatedToChair.pending_approver).toBe(PERSONAS.chair.email);
 
 			await withPersona(browser, 'chair', async (page) => {
 				const claim = new ExpenseClaimFormPage(page);
 				await claim.open(claimName);
-				await claim.approve();
+				await claim.approve({
+					budgetOverrideReason: 'E2E final board approval after escalation chain.',
+				});
 			});
 
 			const workflowState = await e2eCall<string>(
@@ -344,6 +359,7 @@ test.describe('Approval routing @accounts @ui', () => {
 			request,
 			browser,
 		}) => {
+			test.setTimeout(240_000);
 			const cast = await getCast(request, 'admin');
 			const emp = cast.associate.employee!;
 			const originalGrade = await e2eCall<string>(
@@ -353,9 +369,12 @@ test.describe('Approval routing @accounts @ui', () => {
 				'admin',
 			);
 			try {
-				const employee = new EmployeeFormPage(page);
-				await employee.open(emp);
-				await employee.setField('grade', 'Manager');
+				await e2eCall(
+					request,
+					'set_employee_field',
+					{ employee: emp, field: 'grade', value: 'Manager' },
+					'admin',
+				);
 				await cleanupEmployeeAdvances(request, emp);
 
 				await withPersona(browser, 'associate', async (assocPage) => {

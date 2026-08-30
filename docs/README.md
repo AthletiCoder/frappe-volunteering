@@ -19,6 +19,7 @@ Start from the [app README](../README.md). In Desk, staff should use **[Help](/h
 | Doc | Topic |
 |---|---|
 | [e2e.md](e2e.md) | Playwright how to run |
+| [e2e-parallel.md](e2e-parallel.md) | Multi-site / parallel runs (16 GB sizing) |
 | [e2e-coverage.md](e2e-coverage.md) | Spreadsheet case matrix |
 | [e2e-personas.md](e2e-personas.md) | Seeded users |
 | [e2e-git.md](e2e-git.md) | What not to commit |

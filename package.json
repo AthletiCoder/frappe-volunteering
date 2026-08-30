@@ -24,6 +24,10 @@
     "test:e2e:volunteering": "playwright test --grep @volunteering",
     "test:e2e:ops": "playwright test --grep @ops",
     "test:e2e:persona": "playwright test --grep @persona",
-    "test:e2e:ui-only": "playwright test --grep @ui"
+    "test:e2e:ui-only": "playwright test --grep @ui",
+    "test:e2e:shard": "playwright test --shard=${SHARD:-1}/${TOTAL:-2} --project=chromium",
+    "test:e2e:parallel:hr": "BASE_URL=${BASE_URL:-http://sevamrita.local:8000} E2E_AUTH_DIR=${E2E_AUTH_DIR:-e2e/.auth-hr} playwright test --grep @hr --project=chromium",
+    "test:e2e:parallel:accounts": "BASE_URL=${BASE_URL_ACCOUNTS:-http://127.0.0.1:8001} E2E_AUTH_DIR=${E2E_AUTH_DIR_ACCOUNTS:-e2e/.auth-accounts} playwright test --grep @accounts --project=chromium",
+    "test:e2e:parallel:volunteering": "BASE_URL=${BASE_URL_VOL:-http://127.0.0.1:8002} E2E_AUTH_DIR=${E2E_AUTH_DIR_VOL:-e2e/.auth-vol} playwright test --grep '@volunteering|@ops|cross-module' --project=chromium"
   }
 }

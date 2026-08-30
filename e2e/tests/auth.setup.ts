@@ -1,10 +1,12 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import { expect, test as setup } from '@playwright/test';
 import { ensureAuthDir } from '../helpers/frappe';
 import {
 	DEFAULT_PERSONA,
 	type PersonaKey,
 	PERSONAS,
+	e2eAuthDir,
 } from '../helpers/personas';
 
 // Authenticating all personas needs more than the default 60s.
@@ -22,7 +24,7 @@ setup('authenticate personas', async () => {
 		keys.every((key) => fs.existsSync(PERSONAS[key].storageState));
 	if (reuseAuth) {
 		console.log(
-			'Reusing e2e/.auth sessions (set E2E_FORCE_AUTH=1 to log in again)',
+			`Reusing ${e2eAuthDir()} sessions (set E2E_FORCE_AUTH=1 to log in again)`,
 		);
 		return;
 	}
@@ -83,13 +85,14 @@ setup('authenticate personas', async () => {
 		await context.close();
 	}
 
+	const authDir = e2eAuthDir();
 	const adminState = PERSONAS[DEFAULT_PERSONA].storageState;
 	if (fs.existsSync(adminState)) {
-		fs.copyFileSync(adminState, 'e2e/.auth/user.json');
+		fs.copyFileSync(adminState, path.join(authDir, 'user.json'));
 	}
 	const adminCsrf = PERSONAS[DEFAULT_PERSONA].csrfFile;
 	if (fs.existsSync(adminCsrf)) {
-		fs.copyFileSync(adminCsrf, 'e2e/.auth/csrf.json');
+		fs.copyFileSync(adminCsrf, path.join(authDir, 'csrf.json'));
 	}
 	} finally {
 		await browser.close();

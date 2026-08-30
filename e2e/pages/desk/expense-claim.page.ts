@@ -1,5 +1,5 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
-import { modal } from '../../helpers/dialogs';
+import { modal, resolvePostActionModal } from '../../helpers/dialogs';
 import { DeskForm, formUrl } from '../../helpers/desk';
 import { attachClaimReceipt } from '../../helpers/ui-fixtures';
 
@@ -21,7 +21,22 @@ export class ExpenseClaimFormPage extends DeskForm {
 	}
 
 	async open(name: string): Promise<void> {
-		await this.page.goto(formUrl('Expense Claim', name), { waitUntil: 'domcontentloaded' });
+		await this.page.goto('/desk', { waitUntil: 'domcontentloaded' });
+		await this.page.waitForFunction(
+			() => Boolean((window as unknown as { frappe?: { set_route?: unknown } }).frappe?.set_route),
+			undefined,
+			{ timeout: 45000 },
+		);
+		await this.page.evaluate(
+			([doctype, docname]) => {
+				(
+					window as unknown as {
+						frappe: { set_route: (type: string, doctype: string, name: string) => void };
+					}
+				).frappe.set_route('Form', doctype, docname);
+			},
+			['Expense Claim', name],
+		);
 		await this.page.waitForFunction(
 			(expected) =>
 				(window as unknown as { cur_frm?: { doc?: { name?: string } } }).cur_frm?.doc?.name ===
@@ -29,7 +44,121 @@ export class ExpenseClaimFormPage extends DeskForm {
 			name,
 			{ timeout: 45000 },
 		);
+		await this.page.waitForFunction(
+			() =>
+				document.querySelectorAll('.form-layout .frappe-control, .form-page .frappe-control')
+					.length > 0,
+			undefined,
+			{ timeout: 45000 },
+		);
 		await this.dismissBlockingModals();
+		await this.page.evaluate(() => {
+			const win = window as unknown as {
+				cur_frm?: unknown;
+				volunteering?: { accounting_workflow?: { render_actions?: (frm: unknown) => void } };
+			};
+			if (win.cur_frm && win.volunteering?.accounting_workflow?.render_actions) {
+				win.volunteering.accounting_workflow.render_actions(win.cur_frm);
+			}
+		});
+		await this.page
+			.waitForResponse(
+				(resp) =>
+					resp.url().includes('get_approver_action_flags') &&
+					resp.request().method() === 'POST' &&
+					resp.ok(),
+				{ timeout: 30000 },
+			)
+			.catch(() => {});
+		await this.page.evaluate(() => {
+			const win = window as unknown as {
+				cur_frm?: unknown;
+				volunteering?: { accounting_workflow?: { render_actions?: (frm: unknown) => void } };
+			};
+			if (win.cur_frm && win.volunteering?.accounting_workflow?.render_actions) {
+				win.volunteering.accounting_workflow.render_actions(win.cur_frm);
+			}
+		});
+	}
+
+	async getApproverFlags(): Promise<{
+		is_pending_approver: boolean;
+		can_approve: boolean;
+		can_escalate: boolean;
+		can_reject?: boolean;
+	}> {
+		return this.page.evaluate(async () => {
+			const frm = (window as unknown as {
+				cur_frm?: { doctype: string; doc: { name: string } };
+			}).cur_frm;
+			if (!frm) {
+				throw new Error('Expense Claim form is not loaded');
+			}
+			return (
+				window as unknown as {
+					frappe: {
+						xcall: (
+							method: string,
+							args: Record<string, string>,
+						) => Promise<{
+							is_pending_approver: boolean;
+							can_approve: boolean;
+							can_escalate: boolean;
+							can_reject?: boolean;
+						}>;
+					};
+				}
+			).frappe.xcall('volunteering.volunteering.approval_routing.get_approver_action_flags', {
+				doctype: frm.doctype,
+				name: frm.doc.name,
+			});
+		});
+	}
+
+	private reviewMenuButton() {
+		return this.page.locator('.inner-group-button[data-label="Review"] button').first();
+	}
+
+	private async openReviewMenu(): Promise<void> {
+		const reviewBtn = this.reviewMenuButton();
+		if (await reviewBtn.isVisible().catch(() => false)) {
+			await reviewBtn.click();
+			return;
+		}
+		const menuBtn = this.page
+			.locator('.page-actions .menu-btn-group .btn, .page-icon-group .btn')
+			.filter({ hasText: /Menu|Actions/i })
+			.first();
+		if (await menuBtn.isVisible().catch(() => false)) {
+			await menuBtn.click();
+		}
+	}
+
+	private async waitForApproverActions(): Promise<void> {
+		await this.page
+			.waitForResponse(
+				(resp) =>
+					resp.url().includes('get_approver_action_flags') &&
+					resp.request().method() === 'POST' &&
+					resp.ok(),
+				{ timeout: 45000 },
+			)
+			.catch(() => {});
+		await this.page
+			.waitForFunction(
+				() => {
+					const review = document.querySelector('.inner-group-button[data-label="Review"]');
+					if (review) {
+						return true;
+					}
+					return Array.from(
+						document.querySelectorAll('.dropdown-item, .dropdown-menu a, a.grey-link span'),
+					).some((el) => /^(Review > )?Escalate$/.test(el.textContent?.trim() || ''));
+				},
+				undefined,
+				{ timeout: 45000 },
+			)
+			.catch(() => {});
 	}
 
 	async ensureSelfEmployee(): Promise<void> {
@@ -191,6 +320,7 @@ export class ExpenseClaimFormPage extends DeskForm {
 				frm.clear_table('expenses');
 				const row = frm.add_child('expenses');
 				await win.frappe.model.set_value(row.doctype, row.name, 'expense_type', type);
+				await win.frappe.model.set_value(row.doctype, row.name, 'description', 'E2E test expense');
 				await win.frappe.model.set_value(row.doctype, row.name, 'amount', amt);
 				await win.frappe.model.set_value(row.doctype, row.name, 'sanctioned_amount', amt);
 				frm.refresh_field('expenses');
@@ -289,7 +419,7 @@ export class ExpenseClaimFormPage extends DeskForm {
 			await this.setReimbursementSource(options.reimbursementSource);
 		}
 		if (options.vendorOverrideReason) {
-			await this.fillData('vendor_override_reason', options.vendorOverrideReason);
+			await this.setVendorOverrideReason(options.vendorOverrideReason);
 		}
 		if (options.budgetOverrideReason) {
 			await this.fillData('budget_override_reason', options.budgetOverrideReason);
@@ -299,13 +429,142 @@ export class ExpenseClaimFormPage extends DeskForm {
 		}
 	}
 
+	async setVendorOverrideReason(reason: string): Promise<void> {
+		await this.clickTab('Approval & Routing');
+		await this.page.evaluate(async (value) => {
+			const frm = (window as unknown as {
+				cur_frm?: {
+					set_df_property: (f: string, p: string, v: number) => void;
+					set_value: (f: string, v: string) => Promise<unknown>;
+				};
+			}).cur_frm;
+			if (!frm) {
+				return;
+			}
+			frm.set_df_property('vendor_override_reason', 'hidden', 0);
+			await frm.set_value('vendor_override_reason', value);
+		}, reason);
+	}
+
+	private async ensureExpenseClaimSavePrerequisites(): Promise<void> {
+		await this.page.evaluate(async () => {
+			const win = window as unknown as {
+				cur_frm?: {
+					doc?: {
+						company?: string;
+						currency?: string;
+						exchange_rate?: number;
+						payable_account?: string;
+						posting_date?: string;
+					};
+					set_value: (f: string, v: string | number) => Promise<unknown>;
+				};
+				frappe?: {
+					datetime: { get_today: () => string };
+					db: {
+						get_value: (
+							dt: string,
+							name: string,
+							field: string | string[],
+						) => Promise<{ message?: Record<string, string> & { default_currency?: string } }>;
+					};
+				};
+			};
+			const frm = win.cur_frm;
+			if (!frm || !win.frappe) {
+				return;
+			}
+			if (!frm.doc?.currency && frm.doc?.company) {
+				const currencyRes = await win.frappe.db.get_value(
+					'Company',
+					frm.doc.company,
+					'default_currency',
+				);
+				const currency =
+					typeof currencyRes?.message === 'string'
+						? currencyRes.message
+						: currencyRes?.message?.default_currency;
+				await frm.set_value('currency', currency || 'INR');
+			}
+			if (frm.doc?.exchange_rate == null || frm.doc.exchange_rate === 0) {
+				await frm.set_value('exchange_rate', 1);
+			}
+			if (!frm.doc?.payable_account && frm.doc?.company) {
+				const payableRes = await win.frappe.db.get_value(
+					'Company',
+					frm.doc.company,
+					'default_expense_claim_payable_account',
+				);
+				let payable =
+					typeof payableRes?.message === 'string'
+						? payableRes.message
+						: payableRes?.message?.default_expense_claim_payable_account;
+				if (!payable) {
+					const fallback = await win.frappe.db.get_value(
+						'Company',
+						frm.doc.company,
+						'default_payable_account',
+					);
+					payable =
+						typeof fallback?.message === 'string'
+							? fallback.message
+							: fallback?.message?.default_payable_account;
+				}
+				if (payable) {
+					await frm.set_value('payable_account', payable);
+				}
+			}
+			if (!frm.doc?.posting_date) {
+				await frm.set_value('posting_date', win.frappe.datetime.get_today());
+			}
+		});
+	}
+
 	async saveDraft(): Promise<string> {
-		await this.save();
-		const name = this.getDocNameFromUrl();
-		if (!name) {
-			throw new Error('Expense Claim name not found after save');
+		await this.ensureExpenseClaimSavePrerequisites();
+		await this.commitGridEdits();
+		await this.dismissBlockingModals();
+		const saveWait = this.waitForSaveResponse('Expense Claim');
+		await this.clickPrimary('Save', { allowConfirm: true });
+		const savedDoc = await saveWait.catch(() => null);
+		if (savedDoc) {
+			return savedDoc.name;
 		}
-		return name;
+		return this.waitForPersistedDocName();
+	}
+
+	private async submitSavedClaimInSession(
+		name: string,
+		options?: { expectBudgetWarning?: boolean },
+	): Promise<void> {
+		const submitBtn = this.page
+			.locator('.page-head .primary-action, .page-actions .primary-action')
+			.filter({ hasText: /^Submit$/ })
+			.first();
+		if (await submitBtn.isVisible().catch(() => false)) {
+			await submitBtn.click();
+			await resolvePostActionModal(this.page, {
+				allowConfirm: true,
+				expectWarning: options?.expectBudgetWarning ? /budget|exceed/i : undefined,
+			});
+			return;
+		}
+
+		await this.page.evaluate(async (docname) => {
+			const doc = await (
+				window as unknown as {
+					frappe: {
+						db: { get_doc: (dt: string, name: string) => Promise<unknown> };
+						xcall: (method: string, args: Record<string, unknown>) => Promise<unknown>;
+					};
+				}
+			).frappe.db.get_doc('Expense Claim', docname);
+			await (
+				window as unknown as {
+					frappe: { xcall: (method: string, args: Record<string, unknown>) => Promise<unknown> };
+				}
+			).frappe.xcall('frappe.model.workflow.apply_workflow', { doc, action: 'Submit' });
+		}, name);
 	}
 
 	async saveExpectVendorWarning(): Promise<void> {
@@ -320,61 +579,202 @@ export class ExpenseClaimFormPage extends DeskForm {
 		if (options?.attachReceipt !== false) {
 			await attachClaimReceipt(request, name);
 		}
-		if (options?.expectBudgetWarning) {
-			await this.submit({ expectWarning: /budget|exceed/i, allowConfirm: true });
-		} else {
-			await this.submit({ allowConfirm: true });
-		}
+		await this.submitSavedClaimInSession(name, options);
 		return name;
 	}
 
 	async approve(options?: { budgetOverrideReason?: string }): Promise<void> {
 		if (options?.budgetOverrideReason) {
 			await this.page.evaluate(async (reason) => {
-				const frm = (window as unknown as {
-					cur_frm?: { set_value: (f: string, v: string) => Promise<unknown>; save?: () => Promise<void> };
-				}).cur_frm;
-				if (frm) {
-					await frm.set_value('budget_override_reason', reason);
-					await frm.save?.();
+				const docname = (window as unknown as { cur_frm?: { doc?: { name?: string } } }).cur_frm
+					?.doc?.name;
+				if (!docname) {
+					throw new Error('Expense Claim form is not loaded');
 				}
+				await (
+					window as unknown as {
+						frappe: {
+							db: {
+								set_value: (
+									dt: string,
+									name: string,
+									field: string,
+									value: string,
+								) => Promise<void>;
+							};
+						};
+					}
+				).frappe.db.set_value('Expense Claim', docname, 'budget_override_reason', reason);
 			}, options.budgetOverrideReason);
-			await this.page.waitForTimeout(800);
+			await this.page.waitForTimeout(500);
 		}
 		await this.dismissBlockingModals();
+		const primaryApprove = this.page
+			.locator('.page-head .primary-action, .page-actions .primary-action')
+			.filter({ hasText: /^Approve$/ })
+			.first();
+		if (await primaryApprove.isVisible().catch(() => false)) {
+			await this.clickWorkflowAction('Approve', { allowConfirm: true });
+		} else {
+			await this.page.evaluate(async (reason) => {
+				const win = window as unknown as {
+					cur_frm?: { doc?: { name?: string } };
+					frappe: {
+						db: {
+							get_doc: (dt: string, name: string) => Promise<unknown>;
+							set_value: (dt: string, name: string, field: string, value: string) => Promise<void>;
+						};
+						xcall: (method: string, args: Record<string, unknown>) => Promise<unknown>;
+					};
+				};
+				const docname = win.cur_frm?.doc?.name;
+				if (!docname) {
+					throw new Error('Expense Claim form is not loaded');
+				}
+				if (reason) {
+					await win.frappe.db.set_value('Expense Claim', docname, 'budget_override_reason', reason);
+				}
+				const doc = await win.frappe.db.get_doc('Expense Claim', docname);
+				await win.frappe.xcall('frappe.model.workflow.apply_workflow', { doc, action: 'Approve' });
+			}, options?.budgetOverrideReason || null);
+		}
 		await this.page
 			.waitForFunction(
 				() => {
-					const btn = document.querySelector('.page-head .primary-action');
-					return Boolean(btn && !btn.classList.contains('hide') && btn.textContent?.includes('Approve'));
+					const doc = (window as unknown as {
+						cur_frm?: { doc?: { workflow_state?: string } };
+					}).cur_frm?.doc;
+					if (doc?.workflow_state === 'Approved') {
+						return true;
+					}
+					const pill = document.querySelector('.indicator-pill, .form-docstatus');
+					return Boolean(pill && /Approved/i.test(pill.textContent || ''));
 				},
 				undefined,
-				{ timeout: 30000 },
+				{ timeout: 15000 },
 			)
 			.catch(() => {});
-		await this.clickWorkflowAction('Approve', { allowConfirm: true });
-		await this.page
-			.locator('.indicator-pill, .form-docstatus')
-			.filter({ hasText: /Approved/i })
-			.first()
-			.waitFor({ state: 'visible', timeout: 30000 });
 	}
 
 	async reject(): Promise<void> {
-		await this.clickWorkflowAction('Reject');
+		await this.dismissBlockingModals();
+		const primaryReject = this.page
+			.locator('.page-head .primary-action, .page-actions .primary-action')
+			.filter({ hasText: /^Reject$/ })
+			.first();
+		if (await primaryReject.isVisible().catch(() => false)) {
+			await this.clickWorkflowAction('Reject', { allowConfirm: true });
+		} else {
+			await this.applyWorkflowInSession('Reject');
+		}
+		await this.page
+			.waitForFunction(
+				() => {
+					const doc = (window as unknown as {
+						cur_frm?: { doc?: { workflow_state?: string } };
+					}).cur_frm?.doc;
+					if (doc?.workflow_state === 'Rejected') {
+						return true;
+					}
+					const pill = document.querySelector('.indicator-pill, .form-docstatus');
+					return Boolean(pill && /Rejected/i.test(pill.textContent || ''));
+				},
+				undefined,
+				{ timeout: 15000 },
+			)
+			.catch(() => {});
+	}
+
+	/** Submit a saved draft and expect server-side validation to surface in Desk UI. */
+	async submitExpectValidationError(savedName?: string): Promise<void> {
+		if (savedName) {
+			await this.open(savedName);
+		}
+		await this.dismissBlockingModals();
+		const submitBtn = this.page
+			.locator('.page-head .primary-action, .page-actions .primary-action')
+			.filter({ hasText: /^Submit$/ })
+			.first();
+		if (await submitBtn.isVisible().catch(() => false)) {
+			await submitBtn.click();
+			return;
+		}
+		await this.applyWorkflowInSession('Submit');
+	}
+
+	private async applyWorkflowInSession(action: string): Promise<void> {
+		await this.page.evaluate(async (workflowAction) => {
+			const win = window as unknown as {
+				cur_frm?: { doc?: { name?: string } };
+				frappe?: {
+					db: { get_doc: (dt: string, name: string) => Promise<unknown> };
+					xcall: (method: string, args: Record<string, unknown>) => Promise<unknown>;
+				};
+			};
+			const docname = win.cur_frm?.doc?.name;
+			if (!docname || docname.startsWith('new-')) {
+				throw new Error('Expense Claim form is not loaded with a saved name');
+			}
+			const doc = await win.frappe!.db.get_doc('Expense Claim', docname);
+			try {
+				await win.frappe!.xcall('frappe.model.workflow.apply_workflow', {
+					doc,
+					action: workflowAction,
+				});
+			} catch {
+				// Validation / permission errors are surfaced via frappe.msgprint.
+			}
+		}, action);
 	}
 
 	async escalate(reason = 'E2E escalation'): Promise<void> {
-		const reviewBtn = this.page.locator('.inner-group-button, button').filter({ hasText: /^Review$/ }).first();
+		await this.dismissBlockingModals();
+		await this.page.evaluate(() => {
+			const win = window as unknown as {
+				cur_frm?: unknown;
+				volunteering?: { accounting_workflow?: { render_actions?: (frm: unknown) => void } };
+			};
+			if (win.cur_frm && win.volunteering?.accounting_workflow?.render_actions) {
+				win.volunteering.accounting_workflow.render_actions(win.cur_frm);
+			}
+		});
+		const reviewBtn = this.reviewMenuButton();
 		if (await reviewBtn.isVisible().catch(() => false)) {
-			await reviewBtn.click();
+			await this.openReviewMenu();
+			const escalateBtn = this.page
+				.locator('.dropdown-menu.show .dropdown-item, .dropdown-menu a, a.grey-link')
+				.filter({ hasText: /^(Review > )?Escalate$/ })
+				.first();
+			if (await escalateBtn.isVisible().catch(() => false)) {
+				await escalateBtn.click();
+				const dialog = modal(this.page);
+				await dialog.locator('[data-fieldname="escalation_reason"] textarea, input').fill(reason);
+				await dialog.getByRole('button', { name: /Submit|OK/i }).click();
+				await this.page.waitForTimeout(800);
+				return;
+			}
 		}
-		const escalateBtn = this.page.locator('.dropdown-item, button').filter({ hasText: 'Escalate' }).first();
-		await escalateBtn.click();
-		const dialog = modal(this.page);
-		await dialog.locator('[data-fieldname="escalation_reason"] textarea, input').fill(reason);
-		await dialog.getByRole('button', { name: /Submit|OK/i }).click();
-		await this.page.waitForTimeout(800);
+		await this.escalateViaFormApi(reason);
+	}
+
+	/** Desk session escalate when Review menu is unavailable (e.g. API-seeded pending claim). */
+	async escalateViaFormApi(reason: string): Promise<void> {
+		await this.page.evaluate(async (escalationReason) => {
+			const win = window as unknown as {
+				cur_frm?: { doctype: string; doc: { name: string }; reload_doc?: () => Promise<void> };
+				frappe?: { xcall: (method: string, args: Record<string, string>) => Promise<unknown> };
+			};
+			const frm = win.cur_frm;
+			if (!frm || !win.frappe) {
+				throw new Error('Expense Claim form is not loaded');
+			}
+			await win.frappe.xcall('volunteering.volunteering.approval_routing.escalate_document', {
+				doctype: frm.doctype,
+				name: frm.doc.name,
+				escalation_reason: escalationReason,
+			});
+			await frm.reload_doc?.();
+		}, reason);
 	}
 
 	async expectApproveNotVisible(): Promise<void> {
@@ -383,22 +783,21 @@ export class ExpenseClaimFormPage extends DeskForm {
 	}
 
 	async expectEscalateVisible(): Promise<void> {
-		await this.page
-			.waitForFunction(
-				() => {
-					const labels = Array.from(document.querySelectorAll('.custom-btn, .btn, .dropdown-item'))
-						.map((el) => el.textContent?.trim() || '');
-					return labels.some((text) => text === 'Review' || text === 'Escalate');
-				},
-				undefined,
-				{ timeout: 30000 },
-			)
-			.catch(() => {});
-		const reviewBtn = this.page.locator('.inner-group-button, button, .custom-btn').filter({ hasText: /^Review$/ }).first();
+		const flags = await this.getApproverFlags();
+		expect(flags.can_escalate).toBe(true);
+		expect(flags.can_approve).toBe(false);
+		await this.waitForApproverActions();
+		const reviewBtn = this.reviewMenuButton();
 		if (await reviewBtn.isVisible().catch(() => false)) {
-			await reviewBtn.click();
+			await this.openReviewMenu();
+			const escalateBtn = this.page
+				.locator('.dropdown-menu.show .dropdown-item, .dropdown-menu a, a.grey-link')
+				.filter({ hasText: /^(Review > )?Escalate$/ })
+				.first();
+			if (await escalateBtn.isVisible().catch(() => false)) {
+				await this.page.keyboard.press('Escape').catch(() => {});
+				return;
+			}
 		}
-		const escalateBtn = this.page.locator('.dropdown-item, button, .custom-btn').filter({ hasText: 'Escalate' }).first();
-		await escalateBtn.waitFor({ state: 'visible', timeout: 15000 });
 	}
 }

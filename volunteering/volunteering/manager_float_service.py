@@ -238,6 +238,26 @@ def settle_expense_claim_from_manager_float(doc) -> None:
 	doc.total_amount_reimbursed = amount
 
 
+def settle_manager_float_expense_claim_on_submit(doc, method=None) -> None:
+	"""Approve calls submit() after HRMS workflow; settle once GL/reimbursed fields are final."""
+	if doc.doctype != "Expense Claim" or not is_manager_float_claim(doc):
+		return
+	if doc.workflow_state != "Approved":
+		return
+
+	settle_expense_claim_from_manager_float(doc)
+	amount = flt(doc.total_sanctioned_amount or doc.total_claimed_amount or doc.grand_total)
+	if amount > 0 and doc.get("manager_float_advance"):
+		frappe.db.set_value(
+			"Expense Claim",
+			doc.name,
+			"total_amount_reimbursed",
+			amount,
+			update_modified=False,
+		)
+		doc.total_amount_reimbursed = amount
+
+
 def _update_advance_status(advance_name: str) -> None:
 	advance = frappe.get_doc("Employee Advance", advance_name)
 	paid = flt(advance.paid_amount)

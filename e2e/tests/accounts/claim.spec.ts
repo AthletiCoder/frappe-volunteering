@@ -180,7 +180,7 @@ test.describe('Expense Claim @accounts @ui', () => {
 				expenseType: masters.expense_type,
 			});
 			const draftName = await claim.saveDraft();
-			await claim.submit();
+			await claim.submitExpectValidationError(draftName);
 			await expectFormError(page, /receipt|attach/i);
 			expect(draftName).toBeTruthy();
 		});

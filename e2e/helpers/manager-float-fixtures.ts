@@ -72,3 +72,20 @@ export async function seedApproveExpenseClaim(
 		'admin',
 	);
 }
+
+export async function seedEscalateExpenseClaim(
+	request: APIRequestContext,
+	claimName: string,
+	escalationReason: string,
+): Promise<{ name: string; workflow_state?: string; pending_approver?: string }> {
+	return e2eCall(
+		request,
+		'seed_escalate_document',
+		{
+			doctype: 'Expense Claim',
+			name: claimName,
+			escalation_reason: escalationReason,
+		},
+		'admin',
+	);
+}

@@ -823,10 +823,10 @@ def seed_expense_claim(
 		claim.reimbursement_source = reimbursement_source
 	elif frappe.db.has_column("Expense Claim", "reimbursement_source"):
 		claim.reimbursement_source = "Out of Pocket"
-		if reimbursement_source == "Manager Advance":
-			from volunteering.volunteering.manager_float_service import sync_manager_float_holder
+	if claim.get("reimbursement_source") == "Manager Advance":
+		from volunteering.volunteering.manager_float_service import sync_manager_float_holder
 
-			sync_manager_float_holder(claim)
+		sync_manager_float_holder(claim)
 	claim.save(ignore_permissions=True)
 	if cint(submit):
 		_apply_workflow(claim, "Submit")
@@ -851,6 +851,10 @@ def seed_workflow_action(doctype, name, action, budget_override_reason=None, as_
 		doc.save(ignore_permissions=True)
 
 	actor = as_user or doc.get("pending_approver")
+	if not actor:
+		frappe.throw(_("No pending approver on {0} {1}.").format(doctype, name))
+	if not frappe.db.exists("User", actor):
+		frappe.throw(_("Pending approver {0} is not a User.").format(actor))
 	prev_user = frappe.session.user
 	if actor:
 		frappe.set_user(actor)
@@ -869,6 +873,34 @@ def seed_workflow_action(doctype, name, action, budget_override_reason=None, as_
 		"docstatus": doc.docstatus,
 		"manager_float_advance": doc.get("manager_float_advance"),
 		"total_amount_reimbursed": flt(doc.get("total_amount_reimbursed")),
+	}
+
+
+@frappe.whitelist()
+def seed_escalate_document(doctype, name, escalation_reason=None, as_user=None):
+	"""E2E fixture: escalate as pending approver (e.g. manager without float)."""
+	_guard_e2e()
+	doc = frappe.get_doc(doctype, name)
+	actor = as_user or doc.get("pending_approver")
+	if not actor:
+		frappe.throw(_("No pending approver on {0} {1}.").format(doctype, name))
+	if not frappe.db.exists("User", actor):
+		frappe.throw(_("Pending approver {0} is not a User.").format(actor))
+	reason = (escalation_reason or "E2E escalation").strip()
+	prev_user = frappe.session.user
+	frappe.set_user(actor)
+	try:
+		from volunteering.volunteering.approval_routing import escalate_document
+
+		escalate_document(doctype, name, escalation_reason=reason)
+		doc.reload()
+		frappe.db.commit()
+	finally:
+		frappe.set_user(prev_user)
+	return {
+		"name": doc.name,
+		"workflow_state": doc.get("workflow_state"),
+		"pending_approver": doc.get("pending_approver"),
 	}
 
 

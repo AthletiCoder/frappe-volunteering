@@ -75,6 +75,37 @@ export async function cleanupExpenseClaimsForProject(
 	await callMethod(request, `${API}.cleanup_expense_claims_for_project`, { project }, persona);
 }
 
+export async function repairE2eReportsToChain(request: APIRequestContext): Promise<void> {
+	const cast = await getCast(request, 'admin');
+	const manager = cast.manager.employee!;
+	const director = cast.director.employee!;
+	const chair = cast.chair.employee!;
+	for (const alias of ['employee', 'employee_b', 'associate', 'unpaid'] as const) {
+		const employee = cast[alias].employee;
+		if (employee) {
+			await e2eCall(
+				request,
+				'set_employee_reports_to',
+				{ employee, reports_to: manager },
+				'admin',
+			);
+		}
+	}
+	await e2eCall(
+		request,
+		'set_employee_reports_to',
+		{ employee: manager, reports_to: director },
+		'admin',
+	);
+	await e2eCall(
+		request,
+		'set_employee_reports_to',
+		{ employee: director, reports_to: chair },
+		'admin',
+	);
+	await e2eCall(request, 'set_employee_reports_to', { employee: chair, reports_to: '' }, 'admin');
+}
+
 export async function e2eCall<T>(
 	request: APIRequestContext,
 	method: string,

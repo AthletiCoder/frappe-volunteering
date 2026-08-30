@@ -43,4 +43,20 @@ export class AdvancesPage {
 	managerFloatClaimLink() {
 		return this.page.getByRole('link', { name: 'New claim (manager float)' });
 	}
+
+	teamFloatRequestRow(claimName: string) {
+		return this.page
+			.locator('section')
+			.filter({ has: this.teamFloatRequestsHeading() })
+			.locator('div.rounded-xl.border.p-3')
+			.filter({ has: this.page.getByRole('link', { name: claimName, exact: true }) });
+	}
+
+	teamFloatRequestStatus(claimName: string) {
+		return this.teamFloatRequestRow(claimName).getByText(/^(Can fund|Escalate)$/, { exact: true });
+	}
+
+	async waitForTeamRequestsLoaded(): Promise<void> {
+		await expect(this.page.getByText('Loading team requests…')).toBeHidden({ timeout: 30000 }).catch(() => {});
+	}
 }

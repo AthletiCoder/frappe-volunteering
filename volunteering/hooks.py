@@ -210,6 +210,7 @@ doc_events = {
 			"volunteering.volunteering.approval_routing.before_accounting_document_submit",
 			"volunteering.volunteering.budget_service.validate_budget_on_save",
 		],
+		"on_submit": "volunteering.volunteering.manager_float_service.settle_manager_float_expense_claim_on_submit",
 		"on_update": "volunteering.volunteering.approval_routing.on_accounting_workflow_state_change",
 	},
 	"Purchase Order": {

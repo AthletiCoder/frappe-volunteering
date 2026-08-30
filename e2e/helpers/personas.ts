@@ -50,7 +50,12 @@ export interface PersonaCreds {
 	csrfFile: string;
 }
 
-const AUTH_DIR = 'e2e/.auth';
+const AUTH_DIR = process.env.E2E_AUTH_DIR || 'e2e/.auth';
+
+/** Directory for Playwright storageState + CSRF files (override per site/shard). */
+export function e2eAuthDir(): string {
+	return AUTH_DIR;
+}
 
 function envPassword(): string {
 	return process.env.E2E_PASSWORD || 'E2eTestPass!26';
