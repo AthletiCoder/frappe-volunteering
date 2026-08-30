@@ -65,7 +65,7 @@ PERSONAS = {
 	"employee": {
 		"email": "e2e.employee@sevamrita.local",
 		"first_name": "E2E Employee A",
-		"roles": ["Employee"],
+		"roles": ["Employee", "Purchase User"],
 		"grade": "Associate",
 		"designation": "Program Officer",
 		"employee_name": "E2E Employee A",
@@ -73,7 +73,7 @@ PERSONAS = {
 	"employee_b": {
 		"email": "e2e.employee.b@sevamrita.local",
 		"first_name": "E2E Employee B",
-		"roles": ["Employee"],
+		"roles": ["Employee", "Purchase User"],
 		"grade": "Associate",
 		"designation": "Program Officer",
 		"employee_name": "E2E Employee B",
@@ -89,7 +89,7 @@ PERSONAS = {
 	"manager": {
 		"email": "e2e.manager@sevamrita.local",
 		"first_name": "E2E Manager",
-		"roles": ["Employee", "Leave Approver", "Expense Approver"],
+		"roles": ["Employee", "Leave Approver", "Expense Approver", "Purchase User"],
 		"grade": "Manager",
 		"designation": "Operations Manager",
 		"employee_name": "E2E Manager",
@@ -121,7 +121,7 @@ PERSONAS = {
 	"accounts": {
 		"email": "e2e.accounts@sevamrita.local",
 		"first_name": "E2E Accounts",
-		"roles": ["Accounts Manager", "Accounts User", "Employee"],
+		"roles": ["Accounts Manager", "Accounts User", "Employee", "Purchase User"],
 		"grade": "Manager",
 		"designation": "Accounts Manager",
 		"employee_name": "E2E Accounts",

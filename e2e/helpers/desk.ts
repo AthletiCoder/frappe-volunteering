@@ -52,6 +52,15 @@ export class DeskForm {
 	/** Dismiss known incidental modals (e.g. Account permission on Employee Advance). */
 	async dismissBlockingModals(): Promise<void> {
 		for (let i = 0; i < 15; i++) {
+			const skipOnboarding = this.page
+				.locator('button')
+				.filter({ hasText: /Skip All/i })
+				.first();
+			if (await skipOnboarding.isVisible().catch(() => false)) {
+				await skipOnboarding.click();
+				await this.page.waitForTimeout(200);
+				continue;
+			}
 			const permission = await dismissIncidentalPermissionModal(this.page);
 			if (permission) {
 				await this.page.waitForTimeout(200);

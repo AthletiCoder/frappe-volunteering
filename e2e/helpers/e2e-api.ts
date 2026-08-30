@@ -75,6 +75,14 @@ export async function cleanupExpenseClaimsForProject(
 	await callMethod(request, `${API}.cleanup_expense_claims_for_project`, { project }, persona);
 }
 
+export async function cleanupPurchaseOrdersForProject(
+	request: APIRequestContext,
+	project: string,
+	persona: PersonaKey = 'admin',
+): Promise<void> {
+	await callMethod(request, `${API}.cleanup_purchase_orders_for_project`, { project }, persona);
+}
+
 export async function repairE2eReportsToChain(request: APIRequestContext): Promise<void> {
 	const cast = await getCast(request, 'admin');
 	const manager = cast.manager.employee!;

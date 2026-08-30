@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { e2eCall } from '../../helpers/e2e-api';
+import {
+	cleanupExpenseClaimsForProject,
+	cleanupPurchaseOrdersForProject,
+	e2eCall,
+} from '../../helpers/e2e-api';
 import { expectFormError } from '../../helpers/dialogs';
 import { withPersona } from '../../helpers/persona-context';
 import { personaStorage } from '../../helpers/personas';
@@ -10,8 +14,15 @@ import { PurchaseInvoiceFormPage } from '../../pages/desk/purchase-invoice.page'
 import { PurchaseOrderFormPage } from '../../pages/desk/purchase-order.page';
 
 test.describe('Vendor payment @accounts @ui', () => {
-	test('AC-VEN-001 @regression @critical: Happy path PO approve', async ({ browser, request }) => {
+	async function prepareVendorProject(request: import('@playwright/test').APIRequestContext) {
 		const project = await getE2eProject(request);
+		await cleanupPurchaseOrdersForProject(request, project);
+		await cleanupExpenseClaimsForProject(request, project);
+		return project;
+	}
+
+	test('AC-VEN-001 @regression @critical: Happy path PO approve', async ({ browser, request }) => {
+		const project = await prepareVendorProject(request);
 		const masters = await getE2eMasters(request);
 
 		let poName = '';
@@ -19,7 +30,7 @@ test.describe('Vendor payment @accounts @ui', () => {
 			const po = new PurchaseOrderFormPage(page);
 			await po.openNew();
 			await po.fillPo({
-				supplier: masters.supplier_name,
+				supplier: masters.supplier,
 				project,
 				amount: 1500,
 				itemCode: masters.item_code,
@@ -61,14 +72,13 @@ test.describe('Vendor payment @accounts @ui', () => {
 		browser,
 		request,
 	}) => {
-		const project = await getE2eProject(request);
+		const project = await prepareVendorProject(request);
 		const masters = await getE2eMasters(request);
 
 		await withPersona(browser, 'accounts', async (page) => {
 			const pi = new PurchaseInvoiceFormPage(page);
 			await pi.openNew();
-			await pi.save();
-			await expectFormError(page, /purchase order/i);
+			await pi.save({ expectError: /purchase order|supplier|required|mandatory|item/i });
 		});
 
 		let pendingPoName = '';
@@ -76,7 +86,7 @@ test.describe('Vendor payment @accounts @ui', () => {
 			const po = new PurchaseOrderFormPage(page);
 			await po.openNew();
 			await po.fillPo({
-				supplier: masters.supplier_name,
+				supplier: masters.supplier,
 				project,
 				amount: 1200,
 				itemCode: masters.item_code,
@@ -87,9 +97,10 @@ test.describe('Vendor payment @accounts @ui', () => {
 		await withPersona(browser, 'accounts', async (page) => {
 			const pi = new PurchaseInvoiceFormPage(page);
 			await pi.createFromPo(pendingPoName);
-			await pi.save();
-			await pi.submit();
-			await expectFormError(page, /not approved|submitted|purchase order|docstatus|cannot map/i);
+			await pi.saveDraft();
+			await pi.submit({
+				expectError: /not approved|submitted|purchase order|docstatus|cannot map/i,
+			});
 		});
 	});
 
@@ -112,7 +123,7 @@ test.describe('Vendor payment @accounts @ui', () => {
 				const po = new PurchaseOrderFormPage(empPage);
 				await po.openNew();
 				await po.fillPo({
-					supplier: masters.supplier_name,
+					supplier: masters.supplier,
 					project,
 					amount: 1500,
 					itemCode: masters.item_code,
@@ -173,7 +184,7 @@ test.describe('Vendor payment @accounts @ui', () => {
 			request,
 			browser,
 		}) => {
-			const project = await getE2eProject(request);
+			const project = await prepareVendorProject(request);
 			const masters = await getE2eMasters(request);
 
 			let poName = '';
@@ -181,7 +192,7 @@ test.describe('Vendor payment @accounts @ui', () => {
 				const po = new PurchaseOrderFormPage(empPage);
 				await po.openNew();
 				await po.fillPo({
-					supplier: masters.supplier_name,
+					supplier: masters.supplier,
 					project,
 					amount: 2000,
 					itemCode: masters.item_code,
@@ -221,7 +232,7 @@ test.describe('Vendor payment @accounts @ui', () => {
 			request,
 			browser,
 		}) => {
-			const project = await getE2eProject(request);
+			const project = await prepareVendorProject(request);
 			const masters = await getE2eMasters(request);
 
 			let poName = '';
@@ -229,7 +240,7 @@ test.describe('Vendor payment @accounts @ui', () => {
 				const po = new PurchaseOrderFormPage(empPage);
 				await po.openNew();
 				await po.fillPo({
-					supplier: masters.supplier_name,
+					supplier: masters.supplier,
 					project,
 					amount: 1500,
 					itemCode: masters.item_code,

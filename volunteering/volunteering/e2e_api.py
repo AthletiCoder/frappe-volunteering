@@ -420,6 +420,36 @@ def cleanup_expense_claims_for_project(project):
 
 
 @frappe.whitelist()
+def cleanup_purchase_orders_for_project(project):
+	"""Remove POs on a project so vendor/budget E2E starts clean."""
+	_guard_e2e()
+	pi_names = frappe.get_all("Purchase Invoice", filters={"project": project}, pluck="name")
+	for name in pi_names:
+		try:
+			doc = frappe.get_doc("Purchase Invoice", name)
+			if doc.docstatus == 1:
+				doc.flags.ignore_permissions = True
+				with _skip_doc_perm_checks():
+					doc.cancel()
+			frappe.delete_doc("Purchase Invoice", name, force=1, ignore_permissions=True)
+		except Exception:
+			pass
+	names = frappe.get_all("Purchase Order", filters={"project": project}, pluck="name")
+	for name in names:
+		try:
+			doc = frappe.get_doc("Purchase Order", name)
+			if doc.docstatus == 1:
+				doc.flags.ignore_permissions = True
+				with _skip_doc_perm_checks():
+					doc.cancel()
+			frappe.delete_doc("Purchase Order", name, force=1, ignore_permissions=True)
+		except Exception:
+			pass
+	frappe.db.commit()
+	return True
+
+
+@frappe.whitelist()
 def has_doctype_permission(doctype, ptype="read"):
 	_guard_e2e()
 	if not frappe.db.exists("DocType", doctype):

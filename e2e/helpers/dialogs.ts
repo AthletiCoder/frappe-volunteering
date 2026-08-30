@@ -139,9 +139,22 @@ export async function resolvePostActionModal(
 	} = {},
 ): Promise<DeskModalContent | null> {
 	await page.waitForTimeout(300);
-	const content = await readVisibleModal(page);
+	let content = await readVisibleModal(page);
 	if (!content.visible) {
 		return null;
+	}
+
+	if (
+		options.expectError &&
+		content.kind === 'confirm' &&
+		(options.allowConfirm === undefined || options.allowConfirm)
+	) {
+		await answerConfirm(page, /.*/, 'Yes');
+		await page.waitForTimeout(400);
+		content = await readVisibleModal(page);
+		if (!content.visible) {
+			return null;
+		}
 	}
 
 	if (options.expectError) {
