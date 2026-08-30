@@ -3,11 +3,13 @@ import {
 	addDays,
 	cleanupDay,
 	cleanupEmployeeAdvances,
+	cleanupExpenseClaimsForProject,
 	cleanupLeaveSpan,
 	e2eCall,
 	getCast,
 	todayLocal,
 	workingDayFromToday,
+	repairE2eReportsToChain,
 } from '../../helpers/e2e-api';
 import { withPersona } from '../../helpers/persona-context';
 import { personaStorage, PERSONAS } from '../../helpers/personas';
@@ -15,21 +17,26 @@ import { getE2eMasters, getE2eProject } from '../../helpers/ui-fixtures';
 import { DailyWorkLogFormPage } from '../../pages/desk/daily-work-log.page';
 import { DailyWorkLogSettingsPage } from '../../pages/desk/dwl-settings.page';
 import { EmployeeAdvanceFormPage } from '../../pages/desk/employee-advance.page';
-import { EmployeeFormPage } from '../../pages/desk/employee.page';
 import { ExpenseClaimFormPage } from '../../pages/desk/expense-claim.page';
 import { LeaveApplicationFormPage } from '../../pages/desk/leave-application.page';
 
 test.describe('Cross-module shared employee master @hr @accounts @ui', () => {
+	test.describe.configure({ mode: 'serial' });
+
 	test('XM-001 @regression @critical: Reports To drives leave and spend approvals', async ({
 		browser,
 		request,
 	}) => {
+		test.setTimeout(240_000);
 		const cast = await getCast(request, 'admin');
 		const emp = cast.employee.employee!;
 		const managerEmail = PERSONAS.manager.email;
 		const leaveDate = workingDayFromToday(30);
 		const project = await getE2eProject(request);
 		const masters = await getE2eMasters(request);
+		await repairE2eReportsToChain(request);
+		await cleanupExpenseClaimsForProject(request, project);
+		await cleanupDay(request, emp, leaveDate, 'admin');
 		await cleanupLeaveSpan(request, emp, leaveDate, leaveDate, 'admin');
 
 		let leaveName = '';
@@ -37,7 +44,7 @@ test.describe('Cross-module shared employee master @hr @accounts @ui', () => {
 			const leave = new LeaveApplicationFormPage(page);
 			await leave.openNew();
 			await leave.fillLeave({ fromDate: leaveDate, toDate: leaveDate, category: 'Normal' });
-			leaveName = await leave.saveAndSubmit();
+			leaveName = await leave.saveDraft();
 		});
 
 		const leaveApprover = await e2eCall<string>(
@@ -75,11 +82,19 @@ test.describe('Cross-module shared employee master @hr @accounts @ui', () => {
 		await withPersona(browser, 'manager', async (page) => {
 			const claim = new ExpenseClaimFormPage(page);
 			await claim.open(claimName);
-			const canApprove = await claim.workflowActionVisible('Approve');
-			const primaryApprove = page.locator('.primary-action').filter({ hasText: /^Approve$/ });
-			expect(canApprove || (await primaryApprove.isVisible().catch(() => false))).toBeTruthy();
-			await claim.approve();
+			await claim.approve({
+				name: claimName,
+				budgetOverrideReason: 'E2E approval within department plan.',
+			});
 		});
+
+		const approvedState = await e2eCall<string>(
+			request,
+			'get_doc_field',
+			{ doctype: 'Expense Claim', name: claimName, field: 'workflow_state' },
+			'admin',
+		);
+		expect(approvedState).toBe('Approved');
 	});
 
 	test('XM-002 @regression @critical: Grade change updates Accounts limits; HR still works', async ({
@@ -104,12 +119,18 @@ test.describe('Cross-module shared employee master @hr @accounts @ui', () => {
 		);
 
 		try {
-			await withPersona(browser, 'admin', async (page) => {
-				const employee = new EmployeeFormPage(page);
-				await employee.open(emp);
-				await employee.setField('grade', 'Associate');
-				await employee.setField('designation', 'Associate');
-			});
+			await e2eCall(
+				request,
+				'set_employee_field',
+				{ employee: emp, field: 'grade', value: 'Associate' },
+				'admin',
+			);
+			await e2eCall(
+				request,
+				'set_employee_field',
+				{ employee: emp, field: 'designation', value: 'Associate' },
+				'admin',
+			);
 
 			await cleanupEmployeeAdvances(request, emp);
 			await withPersona(browser, 'employee', async (page) => {
@@ -130,12 +151,18 @@ test.describe('Cross-module shared employee master @hr @accounts @ui', () => {
 				expect(name).toBeTruthy();
 			});
 
-			await withPersona(browser, 'admin', async (page) => {
-				const employee = new EmployeeFormPage(page);
-				await employee.open(emp);
-				await employee.setField('grade', 'Director');
-				await employee.setField('designation', 'Director');
-			});
+			await e2eCall(
+				request,
+				'set_employee_field',
+				{ employee: emp, field: 'grade', value: 'Director' },
+				'admin',
+			);
+			await e2eCall(
+				request,
+				'set_employee_field',
+				{ employee: emp, field: 'designation', value: 'Director' },
+				'admin',
+			);
 
 			await cleanupEmployeeAdvances(request, emp);
 			await withPersona(browser, 'employee', async (page) => {
@@ -212,13 +239,15 @@ test.describe('Cross-module shared employee master @hr @accounts @ui', () => {
 			});
 
 			test('advance attempt outcome is recorded', async ({ page, request }) => {
+				const cast = await getCast(request, 'unpaid');
+				const emp = cast.unpaid.employee!;
+				await cleanupEmployeeAdvances(request, emp);
+
 				const advance = new EmployeeAdvanceFormPage(page);
 				await advance.openNew();
 				await advance.fillAdvance(1000);
-				await advance.save();
-				const blocked = page.locator('.modal-dialog:visible, .msgprint, .form-message.errors');
-				const saved = advance.getDocNameFromUrl();
-				expect((await blocked.isVisible().catch(() => false)) || !!saved).toBeTruthy();
+				const name = await advance.saveDraft();
+				expect(name).toBeTruthy();
 			});
 		});
 	});

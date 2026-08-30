@@ -727,29 +727,37 @@ export class ExpenseClaimFormPage extends DeskForm {
 		await resolvePostActionModal(this.page, { expectError: errorPattern });
 	}
 
-	async approve(options?: { budgetOverrideReason?: string }): Promise<void> {
+	async approve(options?: { budgetOverrideReason?: string; name?: string }): Promise<void> {
+		const claimName =
+			options?.name ||
+			(await this.page.evaluate(
+				() =>
+					(window as unknown as { cur_frm?: { doc?: { name?: string } } }).cur_frm?.doc?.name ||
+					null,
+			));
+		if (!claimName) {
+			throw new Error('Expense Claim name is not available for approval');
+		}
 		if (options?.budgetOverrideReason) {
-			await this.page.evaluate(async (reason) => {
-				const docname = (window as unknown as { cur_frm?: { doc?: { name?: string } } }).cur_frm
-					?.doc?.name;
-				if (!docname) {
-					throw new Error('Expense Claim form is not loaded');
-				}
-				await (
-					window as unknown as {
-						frappe: {
-							db: {
-								set_value: (
-									dt: string,
-									name: string,
-									field: string,
-									value: string,
-								) => Promise<void>;
+			await this.page.evaluate(
+				async ({ docname, reason }) => {
+					await (
+						window as unknown as {
+							frappe: {
+								db: {
+									set_value: (
+										dt: string,
+										name: string,
+										field: string,
+										value: string,
+									) => Promise<void>;
+								};
 							};
-						};
-					}
-				).frappe.db.set_value('Expense Claim', docname, 'budget_override_reason', reason);
-			}, options.budgetOverrideReason);
+						}
+					).frappe.db.set_value('Expense Claim', docname, 'budget_override_reason', reason);
+				},
+				{ docname: claimName, reason: options.budgetOverrideReason },
+			);
 			await this.page.waitForTimeout(500);
 		}
 		await this.dismissBlockingModals();
@@ -760,27 +768,38 @@ export class ExpenseClaimFormPage extends DeskForm {
 		if (await primaryApprove.isVisible().catch(() => false)) {
 			await this.clickWorkflowAction('Approve', { allowConfirm: true });
 		} else {
-			await this.page.evaluate(async (reason) => {
-				const win = window as unknown as {
-					cur_frm?: { doc?: { name?: string } };
-					frappe: {
-						db: {
-							get_doc: (dt: string, name: string) => Promise<unknown>;
-							set_value: (dt: string, name: string, field: string, value: string) => Promise<void>;
-						};
-						xcall: (method: string, args: Record<string, unknown>) => Promise<unknown>;
-					};
-				};
-				const docname = win.cur_frm?.doc?.name;
-				if (!docname) {
-					throw new Error('Expense Claim form is not loaded');
-				}
-				if (reason) {
-					await win.frappe.db.set_value('Expense Claim', docname, 'budget_override_reason', reason);
-				}
-				const doc = await win.frappe.db.get_doc('Expense Claim', docname);
-				await win.frappe.xcall('frappe.model.workflow.apply_workflow', { doc, action: 'Approve' });
-			}, options?.budgetOverrideReason || null);
+			await this.page.evaluate(
+				async ({ docname, reason }) => {
+					const frappe = (
+						window as unknown as {
+							frappe: {
+								db: {
+									get_doc: (dt: string, name: string) => Promise<unknown>;
+									set_value: (
+										dt: string,
+										name: string,
+										field: string,
+										value: string,
+									) => Promise<void>;
+								};
+								call: (opts: {
+									method: string;
+									args: Record<string, unknown>;
+								}) => Promise<unknown>;
+							};
+						}
+					).frappe;
+					if (reason) {
+						await frappe.db.set_value('Expense Claim', docname, 'budget_override_reason', reason);
+					}
+					const doc = await frappe.db.get_doc('Expense Claim', docname);
+					await frappe.call({
+						method: 'frappe.model.workflow.apply_workflow',
+						args: { doc, action: 'Approve' },
+					});
+				},
+				{ docname: claimName, reason: options?.budgetOverrideReason || null },
+			);
 		}
 		await this.page
 			.waitForFunction(
