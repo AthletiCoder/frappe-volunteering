@@ -3,7 +3,7 @@
 		<PageHeader
 			eyebrow="Money"
 			title="Advance Portal"
-			subtitle="Your advances, manager float requests, and claims settled from float."
+			subtitle="Your advances, manager's advance requests, and claims settled from a manager's advance."
 		>
 			<template #actions>
 				<a class="btn-secondary text-sm" href="/desk/employee-advance/new">New Advance</a>
@@ -51,7 +51,7 @@
 					<a class="text-accent hover:underline" :href="c.route">{{ c.name }}</a>
 					<span class="text-muted">
 						· {{ formatMoney(c.allocated_amount) }} · {{ c.status }}
-						<span v-if="c.reimbursement_source === 'Manager Advance'"> · manager float</span>
+						<span v-if="c.reimbursement_source === 'Manager Advance'"> · manager's advance</span>
 					</span>
 				</div>
 			</div>

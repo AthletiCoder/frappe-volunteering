@@ -173,7 +173,7 @@ test.describe('Manager float reimbursement @accounts @ui', () => {
 			await expect(advances.managerFloatPanelHeading()).toBeVisible();
 			await expect(advances.outOfPocketClaimLink()).toBeVisible();
 			await expect(advances.managerFloatClaimLink()).toBeVisible();
-			await expect(page.getByText(/Float available/i)).toBeVisible();
+			await expect(page.getByText(/Available/i).first()).toBeVisible();
 		});
 	});
 

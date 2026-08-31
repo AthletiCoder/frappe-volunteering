@@ -196,6 +196,7 @@ doc_events = {
 	},
 	"Expense Claim": {
 		"before_save": [
+			"volunteering.volunteering.expense_claim_permissions.validate_expense_claim_employee_self_only",
 			"volunteering.volunteering.accounting_controls.ensure_expense_claim_accounts",
 			"volunteering.volunteering.accounting_controls.validate_project_required",
 			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",

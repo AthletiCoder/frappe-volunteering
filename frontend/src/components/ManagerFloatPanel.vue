@@ -3,7 +3,7 @@
 		v-if="visible"
 		class="rounded-2xl border border-line bg-surface shadow-soft p-4 mb-6"
 	>
-		<h2 class="text-lg font-semibold text-ink">Request from manager float</h2>
+		<h2 class="text-lg font-semibold text-ink">Request from manager's advance</h2>
 		<p class="text-sm text-muted mt-1">
 			Submit an expense claim that settles from your reporting manager's paid advance after approval — no
 			bank reimbursement to you.
@@ -26,7 +26,7 @@
 						<div class="font-semibold text-ink">{{ context.manager_name || context.manager_employee }}</div>
 					</div>
 					<div class="rounded-xl bg-soft p-3">
-						<div class="text-xs text-muted">Float available</div>
+						<div class="text-xs text-muted">Available</div>
 						<div class="font-semibold text-ink">{{ formatMoney(context.total_residual) }}</div>
 					</div>
 					<div class="rounded-xl bg-soft p-3">
@@ -46,7 +46,7 @@
 				</p>
 
 				<div class="mt-4 flex flex-wrap gap-2">
-					<a class="btn-primary text-sm" :href="newClaimUrl">New claim (manager float)</a>
+					<a class="btn-primary text-sm" :href="newClaimUrl">New claim (manager's advance)</a>
 					<a class="btn-secondary text-sm" href="/desk/expense-claim/new">New claim (out of pocket)</a>
 				</div>
 			</template>
@@ -67,6 +67,16 @@ const loaded = ref(false);
 const newClaimUrl = computed(() => {
 	const base = "/desk/expense-claim/new";
 	const params = new URLSearchParams({ reimbursement_source: "Manager Advance" });
+	const ctx = context.value;
+	if (ctx?.employee) {
+		params.set("employee", ctx.employee);
+	}
+	if (ctx?.manager_employee) {
+		params.set("manager_float_holder", ctx.manager_employee);
+	}
+	if (ctx?.suggested_advance) {
+		params.set("manager_float_advance", ctx.suggested_advance);
+	}
 	return `${base}?${params.toString()}`;
 });
 

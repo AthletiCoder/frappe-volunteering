@@ -4,18 +4,18 @@
 			<div>
 				<h2 class="text-lg font-semibold text-ink">Team reimbursement requests</h2>
 				<p class="text-sm text-muted mt-1">
-					Reportees asked to settle from your advance float. Approve when you have residual; otherwise Escalate.
+					Reportees asked to settle from your paid advance. Approve when you have residual; otherwise Escalate.
 				</p>
 			</div>
 			<span v-if="fundable.length" class="text-sm text-muted">
-				Your float: {{ formatMoney(totalResidual) }} across {{ fundable.length }} advance(s)
+				Your advances: {{ formatMoney(totalResidual) }} across {{ fundable.length }} advance(s)
 			</span>
 		</div>
 
 		<div v-if="error" class="text-bad text-sm mt-3">{{ error }}</div>
 		<div v-else-if="loading" class="text-muted text-sm mt-3">Loading team requests…</div>
 
-		<div v-else-if="!requests.length" class="text-muted text-sm mt-3">No pending manager-float claims from your team.</div>
+		<div v-else-if="!requests.length" class="text-muted text-sm mt-3">No pending manager's-advance claims from your team.</div>
 
 		<div v-for="req in requests" :key="req.name" class="mt-4 rounded-xl border border-line p-3">
 			<div class="flex justify-between gap-3 flex-wrap">

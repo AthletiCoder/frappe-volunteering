@@ -58,6 +58,7 @@ volunteering.accounting_workflow.setup_form = function (doctype) {
 				volunteering.accounting_workflow.show_advance_disbursement_status(frm);
 			}
 			if (doctype === "Expense Claim") {
+				volunteering.accounting_workflow.lock_claim_employee(frm);
 				volunteering.accounting_workflow.show_advance_link_hints(frm);
 				volunteering.accounting_workflow.hide_expense_claim_account_fields(frm);
 				volunteering.accounting_workflow.show_manager_float_hint(frm);
@@ -116,6 +117,29 @@ volunteering.accounting_workflow.is_board_level = function () {
 };
 
 volunteering.accounting_workflow.lock_advance_employee = function (frm) {
+	volunteering.accounting_workflow._lock_employee_to_self(frm);
+};
+
+volunteering.accounting_workflow.lock_claim_employee = function (frm) {
+	volunteering.accounting_workflow._lock_employee_to_self(frm);
+	frm.set_query("employee", function () {
+		const staff_access = frappe.user.has_role([
+			"Accounts Manager",
+			"Accounts User",
+			"HR Manager",
+			"HR User",
+			"System Manager",
+		]);
+		if (staff_access) {
+			return { filters: { status: "Active" } };
+		}
+		return {
+			query: "volunteering.volunteering.expense_claim_permissions.expense_claim_employee_query",
+		};
+	});
+};
+
+volunteering.accounting_workflow._lock_employee_to_self = function (frm) {
 	const staff_access = frappe.user.has_role([
 		"Accounts Manager",
 		"Accounts User",
@@ -552,10 +576,17 @@ volunteering.accounting_workflow.show_manager_float_hint = function (frm) {
 			if (ctx.manager_employee && frm.fields_dict.manager_float_holder) {
 				frm.set_value("manager_float_holder", ctx.manager_employee);
 			}
+			if (
+				ctx.suggested_advance &&
+				!frm.doc.manager_float_advance &&
+				frm.fields_dict.manager_float_advance
+			) {
+				frm.set_value("manager_float_advance", ctx.suggested_advance);
+			}
 			const msg = ctx.total_residual
 				? __(
 						"Manager {0} has {1} available across {2} paid advance(s). After approval, " +
-							"this claim settles from their float (not your bank account).",
+							"this claim settles from their advance (not your bank account).",
 						[
 							ctx.manager_name || ctx.manager_employee,
 							format_currency(ctx.total_residual, frm.doc.currency),

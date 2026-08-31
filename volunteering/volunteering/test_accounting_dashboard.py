@@ -139,6 +139,16 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 		doc = frappe.get_doc("Expense Claim", claim.name)
 		self.assertFalse(has_permission(doc, "read", self.employee_email))
 
+	def test_employee_cannot_file_claim_for_another(self):
+		from volunteering.volunteering.expense_claim_permissions import (
+			validate_expense_claim_employee_self_only,
+		)
+
+		doc = frappe._dict(employee=self.other_employee)
+		frappe.set_user(self.employee_email)
+		with self.assertRaises(frappe.ValidationError):
+			validate_expense_claim_employee_self_only(doc)
+
 	def test_dept_head_cannot_read_other_department_claim(self):
 		claim = self._submit_claim_as(
 			self.other_employee_email, amount=1500, employee=self.other_employee

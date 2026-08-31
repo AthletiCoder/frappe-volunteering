@@ -181,7 +181,7 @@ ACCOUNTING_CUSTOM_FIELDS = {
 		},
 		{
 			"fieldname": "manager_float_holder",
-			"label": "Manager (Float Holder)",
+			"label": "Manager",
 			"fieldtype": "Link",
 			"options": "Employee",
 			"insert_after": "reimbursement_source",
@@ -191,13 +191,17 @@ ACCOUNTING_CUSTOM_FIELDS = {
 		},
 		{
 			"fieldname": "manager_float_advance",
-			"label": "Manager Advance Used",
+			"label": "Manager's Advance",
 			"fieldtype": "Link",
 			"options": "Employee Advance",
 			"insert_after": "manager_float_holder",
 			"read_only": 1,
-			"depends_on": "eval:doc.reimbursement_source=='Manager Advance' && doc.manager_float_advance",
+			"depends_on": "eval:doc.reimbursement_source=='Manager Advance'",
 			"ignore_user_permissions": 1,
+			"description": (
+				"Suggested from your manager's paid advances with residual. "
+				"Final settlement may use a different advance if the claim amount requires it."
+			),
 		},
 		{
 			"fieldname": "spend_guide_section",

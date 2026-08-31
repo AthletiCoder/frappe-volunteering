@@ -12,6 +12,7 @@ that is not their own (usually none). Row scope lives in these hooks;
 """
 
 import frappe
+from frappe import _
 
 from volunteering.volunteering.accounting_dashboard.constants import (
 	ACCOUNTS_ROLES,
@@ -26,6 +27,29 @@ from volunteering.volunteering.authority import (
 
 def _has_full_access(user, roles):
 	return bool(roles.intersection(ACCOUNTS_ROLES)) or user_is_board_level(user)
+
+
+_HR_ROLES = frozenset({"HR Manager", "HR User", "System Manager", "Administrator"})
+
+
+def validate_expense_claim_employee_self_only(doc, method=None):
+	"""Non-Accounts/HR users may only file Expense Claims for themselves.
+
+	Expense Claim.employee ignores User Permissions so Accounts lists work; this
+	server check (plus the Desk lock) restores self-only create for staff.
+	"""
+	if frappe.session.user == "Administrator":
+		return
+
+	roles = set(frappe.get_roles())
+	if roles.intersection(ACCOUNTS_ROLES | _HR_ROLES) or user_is_board_level(frappe.session.user):
+		return
+
+	own_employee = get_employee_for_user(frappe.session.user)
+	if not own_employee:
+		frappe.throw(_("Your user is not linked to an Employee record."))
+	if doc.get("employee") and doc.employee != own_employee:
+		frappe.throw(_("You can only create Expense Claims for yourself."))
 
 
 def get_permission_query_conditions(user):
@@ -97,3 +121,49 @@ def has_permission(doc, ptype, user):
 		return True
 
 	return False
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def expense_claim_employee_query(
+	doctype,
+	txt,
+	searchfield,
+	start,
+	page_len,
+	filters,
+	reference_doctype=None,
+	ignore_user_permissions=False,
+):
+	"""Non-staff Link search is limited to the session user's Employee."""
+	from erpnext.controllers.queries import employee_query
+
+	roles = set(frappe.get_roles())
+	staff = roles.intersection(
+		ACCOUNTS_ROLES | _HR_ROLES | {"System Manager", "Administrator"}
+	) or user_is_board_level(frappe.session.user)
+	if staff:
+		return employee_query(
+			doctype,
+			txt,
+			searchfield,
+			start,
+			page_len,
+			filters,
+			reference_doctype=reference_doctype,
+			ignore_user_permissions=True,
+		)
+
+	own = get_employee_for_user(frappe.session.user)
+	filters = dict(filters or {})
+	filters["name"] = own or "__never__"
+	return employee_query(
+		doctype,
+		txt,
+		searchfield,
+		start,
+		page_len,
+		filters,
+		reference_doctype=reference_doctype,
+		ignore_user_permissions=True,
+	)

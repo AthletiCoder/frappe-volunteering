@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Vadiraj Tirtha Das and contributors
 # For license information, please see license.txt
 
-"""Reimburse employee expense claims from a reporting manager's advance float."""
+"""Reimburse employee expense claims from a reporting manager's paid advance."""
 
 from __future__ import annotations
 
@@ -32,11 +32,30 @@ def get_direct_manager_employee(employee: str | None) -> str | None:
 
 
 def sync_manager_float_holder(doc) -> None:
-	"""Keep manager_float_holder aligned with reports_to when using manager advance."""
+	"""Keep manager holder (+ suggested advance) aligned when using manager's advance."""
 	if not is_manager_float_claim(doc) or not doc.get("employee"):
 		doc.manager_float_holder = None
+		doc.manager_float_advance = None
 		return
 	doc.manager_float_holder = get_direct_manager_employee(doc.employee)
+	_prefill_suggested_manager_advance(doc)
+
+
+def _prefill_suggested_manager_advance(doc) -> None:
+	"""Link the manager's best residual advance when none is set yet.
+
+	Final settlement may re-pick if the claim amount later needs a different advance.
+	"""
+	if doc.get("manager_float_advance") or not doc.get("manager_float_holder"):
+		return
+	amount = flt(get_document_amount(doc))
+	suggested = pick_manager_advance(doc.manager_float_holder, amount)
+	if not suggested:
+		# Amount may still be 0 on a new draft — offer the largest residual advance.
+		advances = list_fundable_manager_advances(doc.manager_float_holder, 0)
+		suggested = advances[0]["name"] if advances else None
+	if suggested:
+		doc.manager_float_advance = suggested
 
 
 def list_fundable_manager_advances(manager_employee: str, min_amount: float = 0) -> list[dict]:
@@ -179,7 +198,7 @@ def _validate_employee_has_no_blocking_advance_for_manager_float(doc) -> None:
 		_(
 			"You have an unsettled Employee Advance ({0}). "
 			"Link this expense to your advance with Get Advances, or choose Out of Pocket. "
-			"Manager Advance is for staff who do not have their own open float."
+			"Manager Advance is for staff who do not have their own unsettled advance."
 		).format(blocking.name),
 		title=_("Use Your Own Advance"),
 	)
@@ -341,6 +360,7 @@ def get_manager_float_context(employee=None):
 			if own_blocking
 			else None
 		),
+		"suggested_advance": advances[0]["name"] if advances else None,
 		"new_claim_url": desk_route("Expense Claim", "new"),
 	}
 
@@ -413,5 +433,5 @@ def _resolve_session_employee(employee=None):
 	if not session_employee:
 		frappe.throw(_("Your user is not linked to an Employee record."))
 	if employee and employee != session_employee and not staff:
-		frappe.throw(_("You can only view your own manager float options."))
+		frappe.throw(_("You can only view your own manager's advance options."))
 	return session_employee or employee

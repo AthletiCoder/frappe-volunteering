@@ -77,6 +77,7 @@ def after_migrate():
 	ensure_expense_claim_payable_account()
 	ensure_employee_advance_field_visibility()
 	ensure_expense_claim_field_visibility()
+	ensure_manager_advance_field_labels()
 	ensure_approval_routing_section_break()
 	ensure_budget_health_permissions()
 	from volunteering.volunteering.employee_spending_permissions import (
@@ -117,6 +118,35 @@ def ensure_approval_routing_section_break():
 			update_modified=False,
 		)
 		frappe.clear_cache(doctype=doctype)
+
+
+def ensure_manager_advance_field_labels():
+	"""User-facing copy uses Manager's Advance (not float)."""
+	updates = (
+		("manager_float_holder", "Manager", "eval:doc.reimbursement_source=='Manager Advance'", None),
+		(
+			"manager_float_advance",
+			"Manager's Advance",
+			"eval:doc.reimbursement_source=='Manager Advance'",
+			(
+				"Suggested from your manager's paid advances with residual. "
+				"Final settlement may use a different advance if the claim amount requires it."
+			),
+		),
+	)
+	for fieldname, label, depends_on, description in updates:
+		name = frappe.db.get_value(
+			"Custom Field",
+			{"dt": "Expense Claim", "fieldname": fieldname},
+			"name",
+		)
+		if not name:
+			continue
+		values = {"label": label, "depends_on": depends_on}
+		if description is not None:
+			values["description"] = description
+		frappe.db.set_value("Custom Field", name, values, update_modified=False)
+	frappe.clear_cache(doctype="Expense Claim")
 
 
 def ensure_budget_health_permissions():

@@ -29,7 +29,7 @@ export class AdvancesPage {
 	}
 
 	managerFloatPanelHeading() {
-		return this.page.getByRole('heading', { name: 'Request from manager float', level: 2 });
+		return this.page.getByRole('heading', { name: "Request from manager's advance", level: 2 });
 	}
 
 	teamFloatRequestsHeading() {
@@ -41,7 +41,7 @@ export class AdvancesPage {
 	}
 
 	managerFloatClaimLink() {
-		return this.page.getByRole('link', { name: 'New claim (manager float)' });
+		return this.page.getByRole('link', { name: "New claim (manager's advance)" });
 	}
 
 	teamFloatRequestRow(claimName: string) {
