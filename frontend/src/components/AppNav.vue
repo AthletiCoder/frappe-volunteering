@@ -1,6 +1,6 @@
 <template>
 	<nav
-		:class="cn('flex', layout === 'bottom' ? 'justify-center gap-8' : 'gap-0.5')"
+		:class="cn('flex', layout === 'bottom' ? 'w-full max-w-md mx-auto justify-between gap-1' : 'gap-0.5')"
 		:aria-label="ariaLabel"
 	>
 		<template v-for="item in items" :key="itemKey(item)">
@@ -13,7 +13,7 @@
 				<span :class="iconWrapClass(item, false)">
 					<Icon :name="item.icon" :size="layout === 'bottom' ? 'md' : 'sm'" />
 				</span>
-				<span>{{ item.label }}</span>
+				<span :class="layout === 'bottom' ? 'truncate max-w-full' : null">{{ item.label }}</span>
 			</a>
 			<RouterLink
 				v-else
@@ -25,10 +25,10 @@
 				<span :class="iconWrapClass(item, isActive(item.to))">
 					<Icon :name="item.icon" :size="layout === 'bottom' ? 'md' : 'sm'" />
 				</span>
-				<span>{{ item.label }}</span>
+				<span :class="layout === 'bottom' ? 'truncate max-w-full' : null">{{ item.label }}</span>
 				<span
 					v-if="item.badge"
-					class="absolute top-1 right-1/4 md:static md:ml-1 min-w-[1.1rem] h-4 px-1 rounded-full bg-todo text-on-todo text-[10px] font-bold inline-flex items-center justify-center"
+					class="absolute top-1 right-[18%] md:static md:ml-1 min-w-[1.1rem] h-4 px-1 rounded-full bg-todo text-on-todo text-[10px] font-bold inline-flex items-center justify-center"
 					>{{ item.badge > 9 ? "9+" : item.badge }}</span
 				>
 			</RouterLink>
@@ -57,7 +57,7 @@ function linkClass(item, active) {
 	return cn(
 		"relative flex items-center gap-1.5 rounded-2xl text-sm font-medium transition-all duration-150",
 		props.layout === "bottom"
-			? "flex-col py-2 px-3 text-[11px] text-muted"
+			? "flex-1 flex-col py-2 px-1 min-w-0 text-[11px] text-muted"
 			: "px-2 py-1.5 text-muted hover:text-accent hover:bg-accent-soft",
 		{ "text-accent": active }
 	);
@@ -66,7 +66,7 @@ function linkClass(item, active) {
 function iconWrapClass(item, active) {
 	return cn(
 		"flex items-center justify-center rounded-2xl transition-transform duration-150",
-		props.layout === "bottom" ? "w-10 h-8" : "",
+		props.layout === "bottom" ? "w-9 h-8" : "",
 		active && props.layout === "bottom" ? "bg-accent-soft scale-105" : "",
 		active && props.layout !== "bottom" ? "text-accent" : ""
 	);

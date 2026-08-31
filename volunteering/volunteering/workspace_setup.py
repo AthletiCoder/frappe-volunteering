@@ -30,6 +30,7 @@ def ensure_defaults():
 	ensure_donation_sidebar_link()
 	ensure_spa_workspace_shortcuts()
 	ensure_spa_sidebar_links()
+	ensure_volunteering_core_sidebar_links()
 
 
 def backfill_participation_relationship_managers():
@@ -145,17 +146,40 @@ def ensure_volunteering_sidebar():
 			"app": "volunteering",
 			"header_icon": "earth",
 			"standard": 0,
-			"items": [
-				_link("Volunteering", "Volunteering", "Workspace", "layout-dashboard"),
-				_link("Participation", "Participation", "DocType", "handshake"),
-				_link("Volunteers", "Volunteer", "DocType", "contact"),
-				_link("Events", "NGO Event", "DocType", "hand-heart"),
-				_link("Reciprocation", "Reciprocation", "DocType", "handbag"),
-				_link("Daily Work Log", "Daily Work Log", "DocType", "clipboard-list"),
-			],
+			"items": _core_sidebar_items(),
 		}
 	)
 	sidebar.insert(ignore_permissions=True)
+
+
+def _core_sidebar_items():
+	return [
+		_link("Volunteering", "Volunteering", "Workspace", "layout-dashboard"),
+		_link("Participation", "Participation", "DocType", "handshake"),
+		_link("Volunteers", "Volunteer", "DocType", "contact"),
+		_link("Events", "NGO Event", "DocType", "hand-heart"),
+		_link("Reciprocation", "Reciprocation", "DocType", "handbag"),
+		_link("Daily Work Log", "Daily Work Log", "DocType", "clipboard-list"),
+	]
+
+
+def ensure_volunteering_core_sidebar_links():
+	"""Re-add missing desk DocType links after SPA/accounts sidebar churn."""
+	if not frappe.db.exists("Workspace Sidebar", SIDEBAR_NAME):
+		return
+
+	sidebar = frappe.get_doc("Workspace Sidebar", SIDEBAR_NAME)
+	existing_keys = {_sidebar_item_key(item.as_dict()) for item in sidebar.items}
+	added = False
+	for row in _core_sidebar_items():
+		if _sidebar_item_key(row) in existing_keys:
+			continue
+		sidebar.append("items", row)
+		added = True
+	if not added:
+		return
+	sidebar.flags.ignore_links = True
+	sidebar.save(ignore_permissions=True)
 
 
 def _link(label, link_to, link_type, icon):
@@ -330,44 +354,95 @@ def _url_sidebar_item(label, url, icon):
 	}
 
 
+def _section_break(label, icon="home"):
+	return {
+		"type": "Section Break",
+		"label": label,
+		"icon": icon,
+		"collapsible": 0,
+		"indent": 0,
+		"keep_closed": 0,
+		"show_arrow": 0,
+		"child": 0,
+	}
+
+
+def _sidebar_item_key(item):
+	"""Identity for dedupe — ignore duplicate Staff apps / SPA URL rows."""
+	if isinstance(item, dict):
+		label = item.get("label") or ""
+		item_type = item.get("type") or ""
+		link_type = item.get("link_type") or ""
+		link_to = item.get("link_to") or ""
+		url = item.get("url") or ""
+	else:
+		label = item.label or ""
+		item_type = item.type or ""
+		link_type = item.link_type or ""
+		link_to = item.link_to or ""
+		url = item.url or ""
+	if item_type == "Section Break":
+		return ("section", label)
+	if link_type == "URL":
+		return ("url", label, url)
+	return ("link", label, link_type, link_to)
+
+
 def ensure_spa_sidebar_links():
+	"""Keep one Staff apps block (Home + To-do only).
+
+	Advance Portal / Budget Health belong in the SPA / My Expenses hub.
+	accounts_workspace_setup strips those labels from this sidebar on migrate —
+	older code kept re-prepending them, which duplicated Home / To-do forever.
+	"""
 	if not frappe.db.exists("Workspace Sidebar", SIDEBAR_NAME):
 		return
 
-	from volunteering.volunteering.home_service import (
-		ADVANCES_URL,
-		BUDGET_HEALTH_URL,
-		HOME_URL,
-		TODOS_URL,
-	)
+	from volunteering.volunteering.home_service import HOME_URL, TODOS_URL
 
 	sidebar = frappe.get_doc("Workspace Sidebar", SIDEBAR_NAME)
-	labels = {row.label for row in sidebar.items}
-	needed = ("Home", "To-do", "Advance Portal", "Budget Health")
-	if labels.issuperset(needed):
-		return
-
-	prefix = [
-		{
-			"type": "Section Break",
-			"label": "Staff apps",
-			"icon": "home",
-			"collapsible": 0,
-			"indent": 0,
-			"keep_closed": 0,
-			"show_arrow": 0,
-			"child": 0,
-		},
+	spa_prefix = [
+		_section_break("Staff apps", "home"),
 		_url_sidebar_item("Home", HOME_URL, "home"),
 		_url_sidebar_item("To-do", TODOS_URL, "check"),
-		_url_sidebar_item("Advance Portal", ADVANCES_URL, "money-coins-1"),
-		_url_sidebar_item("Budget Health", BUDGET_HEALTH_URL, "pie-chart"),
 	]
-	existing = [item.as_dict() for item in sidebar.items]
+	spa_keys = {_sidebar_item_key(row) for row in spa_prefix}
+
+	# Drop prior Staff apps / SPA Home+To-do copies; keep other desk links once.
+	rest = []
+	seen = set()
+	for item in sidebar.items:
+		row = item.as_dict()
+		key = _sidebar_item_key(row)
+		if key in spa_keys:
+			continue
+		if key in seen:
+			continue
+		seen.add(key)
+		for meta in ("name", "parent", "parenttype", "parentfield", "idx"):
+			row.pop(meta, None)
+		rest.append(row)
+
+	desired = spa_prefix + rest
+	current_keys = [_sidebar_item_key(item.as_dict()) for item in sidebar.items]
+	desired_keys = [_sidebar_item_key(row) for row in desired]
+	if current_keys == desired_keys:
+		# Still refresh Home / To-do URLs if they drifted.
+		url_by_label = {"Home": HOME_URL, "To-do": TODOS_URL}
+		changed = False
+		for item in sidebar.items:
+			if item.link_type == "URL" and item.label in url_by_label:
+				if (item.url or "") != url_by_label[item.label]:
+					item.url = url_by_label[item.label]
+					changed = True
+		if not changed:
+			return
+		sidebar.flags.ignore_links = True
+		sidebar.save(ignore_permissions=True)
+		return
+
 	sidebar.set("items", [])
-	for row in prefix + existing:
-		for key in ("name", "parent", "parenttype", "parentfield", "idx"):
-			row.pop(key, None)
+	for row in desired:
 		sidebar.append("items", row)
 	sidebar.flags.ignore_links = True
 	sidebar.save(ignore_permissions=True)

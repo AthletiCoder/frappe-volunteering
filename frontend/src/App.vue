@@ -31,7 +31,7 @@
 		<div
 			class="app-header md:hidden fixed bottom-0 inset-x-0 z-20 w-full border-t border-line pb-[env(safe-area-inset-bottom)]"
 		>
-			<div class="max-w-5xl mx-auto px-4">
+			<div class="max-w-5xl mx-auto px-3 sm:px-4">
 				<AppNav layout="bottom" :items="navItems" aria-label="Mobile" />
 			</div>
 		</div>

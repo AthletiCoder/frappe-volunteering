@@ -2,6 +2,10 @@
 
 {% block title %}Volunteering{% endblock %}
 
+{# SPA has its own chrome — hide Frappe website navbar/footer (logo toggle was confusing). #}
+{% block navbar %}{% endblock %}
+{% block footer %}{% endblock %}
+
 {% block head_include %}
 <script>
 	(function () {

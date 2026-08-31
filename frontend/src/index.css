@@ -35,10 +35,11 @@ html.dark {
 	--soft: #25221e;
 	--ink: #c9c2b8;
 	--muted: #8a8378;
-	--line: rgb(255 255 255 / 0.08);
-	--accent: #6f9e8f;
-	--accent-hover: #5d8779;
-	--accent-soft: rgb(111 158 143 / 0.12);
+	/* Warm muted edge — avoid bright white hairlines on dark surfaces */
+	--line: #2f2c28;
+	--accent: #3a7a64;
+	--accent-hover: #2f6553;
+	--accent-soft: rgb(58 122 100 / 0.16);
 	--on-accent: #ffffff;
 	--todo: #c4a07a;
 	--todo-soft: rgb(196 160 122 / 0.14);
@@ -49,13 +50,13 @@ html.dark {
 	--warn-soft: rgb(196 176 122 / 0.14);
 	--bad: #c48a82;
 	--bad-soft: rgb(196 138 130 / 0.14);
-	--shadow-soft: 0 0 0 1px rgb(255 255 255 / 0.04), 0 8px 20px rgb(0 0 0 / 0.35);
-	--shadow-lift: 0 0 0 1px rgb(255 255 255 / 0.06), 0 12px 24px rgb(0 0 0 / 0.4);
+	--shadow-soft: 0 8px 20px rgb(0 0 0 / 0.35);
+	--shadow-lift: 0 12px 24px rgb(0 0 0 / 0.4);
 	--header-bg: rgb(18 17 16 / 0.92);
-	--border-color: rgb(255 255 255 / 0.08);
-	--dark-border-color: rgb(255 255 255 / 0.08);
-	--gray-200: rgb(255 255 255 / 0.08);
-	--gray-300: rgb(255 255 255 / 0.1);
+	--border-color: #2f2c28;
+	--dark-border-color: #2f2c28;
+	--gray-200: #2f2c28;
+	--gray-300: #3a3630;
 }
 
 @layer base {
@@ -114,10 +115,18 @@ html.dark .navbar {
 
 html.dark input,
 html.dark select,
+html.dark textarea,
+html.dark .border,
+html.dark .border-line,
+html.dark [class*="border-line"] {
+	border-color: var(--line) !important;
+}
+
+html.dark input,
+html.dark select,
 html.dark textarea {
 	background-color: var(--surface);
 	color: var(--ink);
-	border-color: var(--line);
 	outline: none;
 	box-shadow: none;
 }
@@ -126,7 +135,7 @@ html.dark input:focus,
 html.dark select:focus,
 html.dark textarea:focus {
 	outline: none;
-	box-shadow: 0 0 0 2px rgb(111 158 143 / 0.28);
+	box-shadow: 0 0 0 2px rgb(58 122 100 / 0.35);
 }
 
 html.dark a:focus,
@@ -136,7 +145,7 @@ html.dark button:focus {
 
 html.dark a:focus-visible,
 html.dark button:focus-visible {
-	outline: 2px solid rgb(111 158 143 / 0.4);
+	outline: 2px solid rgb(58 122 100 / 0.5);
 	outline-offset: 2px;
 }
 
@@ -153,4 +162,22 @@ html.dark button:focus-visible {
 
 html.dark .app-scrim {
 	background: rgb(0 0 0 / 0.55);
+}
+
+/* Belt-and-suspenders: SPA owns chrome on /volunteering/* */
+body[data-path^="volunteering"] .navbar,
+body[data-path^="volunteering"] .web-footer {
+	display: none !important;
+}
+
+body[data-path^="volunteering"] .page-breadcrumbs,
+body[data-path^="volunteering"] .page-header-wrapper {
+	display: none;
+}
+
+body[data-path^="volunteering"] .page-content-wrapper,
+body[data-path^="volunteering"] .page_content {
+	padding: 0;
+	margin: 0;
+	min-height: 100vh;
 }
