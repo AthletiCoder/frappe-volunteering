@@ -144,10 +144,22 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 			validate_expense_claim_employee_self_only,
 		)
 
-		doc = frappe._dict(employee=self.other_employee)
+		doc = frappe.new_doc("Expense Claim")
+		doc.employee = self.other_employee
 		frappe.set_user(self.employee_email)
 		with self.assertRaises(frappe.ValidationError):
 			validate_expense_claim_employee_self_only(doc)
+
+	def test_approver_can_save_existing_claim_for_another(self):
+		from volunteering.volunteering.expense_claim_permissions import (
+			validate_expense_claim_employee_self_only,
+		)
+
+		claim = self._submit_claim_as(self.employee_email, amount=1500)
+		doc = frappe.get_doc("Expense Claim", claim.name)
+		frappe.set_user(self.dept_head_email)
+		# Existing claim, employee unchanged — escalate/approve path.
+		validate_expense_claim_employee_self_only(doc)
 
 	def test_dept_head_cannot_read_other_department_claim(self):
 		claim = self._submit_claim_as(

@@ -33,10 +33,13 @@ _HR_ROLES = frozenset({"HR Manager", "HR User", "System Manager", "Administrator
 
 
 def validate_expense_claim_employee_self_only(doc, method=None):
-	"""Non-Accounts/HR users may only file Expense Claims for themselves.
+	"""Non-Accounts/HR users may only *file* Expense Claims for themselves.
 
 	Expense Claim.employee ignores User Permissions so Accounts lists work; this
 	server check (plus the Desk lock) restores self-only create for staff.
+
+	Approvers/managers must still be able to save someone else's claim during
+	Approve / Escalate / Reject — only block create or reassigning ``employee``.
 	"""
 	if frappe.session.user == "Administrator":
 		return
@@ -48,8 +51,16 @@ def validate_expense_claim_employee_self_only(doc, method=None):
 	own_employee = get_employee_for_user(frappe.session.user)
 	if not own_employee:
 		frappe.throw(_("Your user is not linked to an Employee record."))
-	if doc.get("employee") and doc.employee != own_employee:
-		frappe.throw(_("You can only create Expense Claims for yourself."))
+
+	if doc.is_new():
+		if doc.get("employee") and doc.employee != own_employee:
+			frappe.throw(_("You can only create Expense Claims for yourself."))
+		return
+
+	previous = doc.get_doc_before_save()
+	if previous and doc.get("employee") and doc.employee != previous.employee:
+		if doc.employee != own_employee:
+			frappe.throw(_("You cannot reassign this Expense Claim to another employee."))
 
 
 def get_permission_query_conditions(user):
