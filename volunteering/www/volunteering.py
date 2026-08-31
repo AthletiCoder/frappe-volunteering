@@ -22,6 +22,8 @@ def get_context(context):
 	)
 	context.no_cache = 1
 	context.full_width = 1
+	context.no_header = 1
+	context.show_sidebar = 0
 	context.csrf_token = frappe.sessions.get_csrf_token()
 
 	frontend_dir = frappe.get_app_path("volunteering", "public", "frontend", "assets")
