@@ -44,7 +44,7 @@ test.describe('Volunteering product gaps @volunteering @ui', () => {
 		});
 
 		test('VO-004 @regression: Cashfree Settings form reachable', async ({ page }) => {
-			await page.goto('/app/cashfree-settings/Cashfree%20Settings', {
+			await page.goto('/desk/cashfree-settings/Cashfree%20Settings', {
 				waitUntil: 'domcontentloaded',
 			});
 			await expect(page.locator('.form-layout, [data-fieldname]').first()).toBeVisible({

@@ -5,21 +5,32 @@ import { HomePage } from '../../pages/home.page';
 import { personaStorage } from '../../helpers/personas';
 
 test.describe('Accounts L1 smoke @smoke @accounts', () => {
-	test('AC-BUD-004: Budget Health page loads', async ({ page }) => {
-		const budgetHealth = new BudgetHealthPage(page);
-		await budgetHealth.goto();
-		await budgetHealth.expectLoaded();
-		await expect(page.getByRole('columnheader', { name: 'Project' })).toBeVisible();
-	});
+	test.describe('as accounts', () => {
+		test.use({ storageState: personaStorage('accounts') });
 
-	test('Budget Health nav to Advances works', async ({ page }) => {
-		const budgetHealth = new BudgetHealthPage(page);
-		await budgetHealth.goto();
-		await page.getByRole('link', { name: 'Advances' }).first().click();
-		await expect(page).toHaveURL(/\/volunteering\/advances/);
-		await expect(
-			page.getByRole('heading', { name: 'Advance Portal', level: 1 }),
-		).toBeVisible();
+		test('AC-BUD-004: Budget Health page loads', async ({ page }) => {
+			const budgetHealth = new BudgetHealthPage(page);
+			await budgetHealth.goto();
+			await budgetHealth.expectLoaded();
+			await expect(page.getByRole('columnheader', { name: 'Project' })).toBeVisible();
+		});
+
+		test('Budget Health nav to Advances works', async ({ page }) => {
+			const budgetHealth = new BudgetHealthPage(page);
+			await budgetHealth.goto();
+			await page.getByRole('link', { name: 'Advances' }).first().click();
+			await expect(page).toHaveURL(/\/volunteering\/advances/);
+			await expect(
+				page.getByRole('heading', { name: 'Advance Portal', level: 1 }),
+			).toBeVisible();
+		});
+
+		test('AC-HOME-001: Accounts Home shows pay queues or empty Home', async ({ page }) => {
+			const home = new HomePage(page);
+			await home.goto();
+			await home.expectLoaded();
+			await expect(page.getByRole('link', { name: 'Home' }).first()).toBeVisible();
+		});
 	});
 
 	test.describe('as employee', () => {
@@ -42,17 +53,6 @@ test.describe('Accounts L1 smoke @smoke @accounts', () => {
 			await expect(page.getByRole('link', { name: 'Claim money back' })).toBeVisible();
 			await expect(page.getByRole('link', { name: 'Request an advance' })).toBeVisible();
 			await expect(page.getByText('To pay')).toHaveCount(0);
-		});
-	});
-
-	test.describe('as accounts', () => {
-		test.use({ storageState: personaStorage('accounts') });
-
-		test('AC-HOME-001: Accounts Home shows pay queues or empty Home', async ({ page }) => {
-			const home = new HomePage(page);
-			await home.goto();
-			await home.expectLoaded();
-			await expect(page.getByRole('link', { name: 'Home' }).first()).toBeVisible();
 		});
 	});
 });

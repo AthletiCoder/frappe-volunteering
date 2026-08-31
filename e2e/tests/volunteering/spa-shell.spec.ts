@@ -25,7 +25,7 @@ test.describe('SPA shell @smoke @volunteering', () => {
 			}>(request, 'volunteering.volunteering.home_service.get_home_payload', {}, 'employee');
 			const leave = payload.actions.time.find((row) => row.id === 'leave');
 			const pill = page.getByRole('link', { name: 'Previous leave' });
-			await expect(pill).toHaveAttribute('href', '/app/leave-application');
+			await expect(pill).toHaveAttribute('href', '/desk/leave-application');
 			await expect(pill).toContainText(String(leave?.pending ?? 0));
 		});
 

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { e2eCall, getCast } from '../../helpers/e2e-api';
 import { getList } from '../../helpers/frappe';
-import { personaStorage, PERSONAS } from '../../helpers/personas';
+import { personaStorage } from '../../helpers/personas';
 import { DESK_WORKSPACE_RE, ROUTES } from '../../helpers/routes';
 
 import { DailyWorkLogSettingsPage } from '../../pages/desk/dwl-settings.page';
@@ -45,44 +45,48 @@ test.describe('Ops email & digest config @ops @ui', () => {
 		});
 	});
 
-	test('Email Queue recent rows are readable @regression', async ({ request }) => {
-		const rows = await getList(request, 'Email Queue', {
-			fields: ['name', 'status', 'message_id', 'creation'],
-			limit: 10,
-			orderBy: 'creation desc',
-		});
-		expect(Array.isArray(rows)).toBeTruthy();
-		for (const row of rows) {
-			expect(row.name).toBeTruthy();
-			expect(row.status).toBeTruthy();
-		}
-	});
+	test.describe('as admin', () => {
+		test.use({ storageState: personaStorage('admin') });
 
-	test('Daily Work Log Settings Preview Summary in UI @smoke', async ({ page }) => {
-		const settings = new DailyWorkLogSettingsPage(page);
-		await settings.open();
-		await settings.previewSummary();
-		await expect(page.locator('.modal-dialog, .msgprint').first()).toBeVisible({
-			timeout: 15000,
+		test('Email Queue recent rows are readable @regression', async ({ request }) => {
+			const rows = await getList(request, 'Email Queue', {
+				fields: ['name', 'status', 'message_id', 'creation'],
+				limit: 10,
+				orderBy: 'creation desc',
+			});
+			expect(Array.isArray(rows)).toBeTruthy();
+			for (const row of rows) {
+				expect(row.name).toBeTruthy();
+				expect(row.status).toBeTruthy();
+			}
 		});
-	});
 
-	test('Daily Work Log Settings form opens @smoke', async ({ page }) => {
-		await page.goto('/desk/daily-work-log-settings/Daily%20Work%20Log%20Settings', {
-			waitUntil: 'domcontentloaded',
+		test('Daily Work Log Settings Preview Summary in UI @smoke', async ({ page }) => {
+			const settings = new DailyWorkLogSettingsPage(page);
+			await settings.open();
+			await settings.previewSummary();
+			await expect(page.locator('.modal-dialog, .msgprint').first()).toBeVisible({
+				timeout: 15000,
+			});
 		});
-		await expect(page.locator('body')).toBeVisible();
-		await expect(
-			page.locator('.layout-main, .page-container, #body, .desk-sidebar').first(),
-		).toBeVisible({ timeout: 30000 });
-	});
 
-	test('Email Queue desk list opens @smoke', async ({ page }) => {
-		await page.goto(ROUTES.emailQueue, { waitUntil: 'domcontentloaded' });
-		await expect(page).toHaveURL(DESK_WORKSPACE_RE.emailQueue);
-		await expect(
-			page.locator('.layout-main, .page-container, #body, .desk-sidebar').first(),
-		).toBeVisible({ timeout: 30000 });
+		test('Daily Work Log Settings form opens @smoke', async ({ page }) => {
+			await page.goto('/desk/daily-work-log-settings/Daily%20Work%20Log%20Settings', {
+				waitUntil: 'domcontentloaded',
+			});
+			await expect(page.locator('body')).toBeVisible();
+			await expect(
+				page.locator('.layout-main, .page-container, #body, .desk-sidebar').first(),
+			).toBeVisible({ timeout: 30000 });
+		});
+
+		test('Email Queue desk list opens @smoke', async ({ page }) => {
+			await page.goto(ROUTES.emailQueue, { waitUntil: 'domcontentloaded' });
+			await expect(page).toHaveURL(DESK_WORKSPACE_RE.emailQueue);
+			await expect(
+				page.locator('.layout-main, .page-container, #body, .desk-sidebar').first(),
+			).toBeVisible({ timeout: 30000 });
+		});
 	});
 
 	test.describe('as employee', () => {

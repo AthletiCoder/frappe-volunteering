@@ -86,7 +86,7 @@ test.describe('Volunteering L1 smoke @smoke @volunteering', () => {
 			expect(Array.isArray(payload.resume)).toBeTruthy();
 			expect(payload.todo_count).toBe(payload.waiting_count);
 			const leave = payload.actions.time.find((row) => row.id === 'leave');
-			expect(leave?.list_route).toBe('/app/leave-application');
+			expect(leave?.list_route).toBe('/desk/leave-application');
 			expect(typeof leave?.pending).toBe('number');
 			expect(leave?.pending).toBeGreaterThanOrEqual(0);
 		});
