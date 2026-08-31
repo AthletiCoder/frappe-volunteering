@@ -37,6 +37,7 @@ test.describe('SPA shell @smoke @volunteering', () => {
 			await expect(nav.getByRole('link', { name: 'Home' })).toBeVisible();
 			await expect(nav.getByRole('link', { name: 'To-do' })).toHaveCount(0);
 			await expect(nav.getByRole('link', { name: 'Advances' })).toBeVisible();
+			await expect(nav.getByRole('link', { name: 'Volunteering' })).toHaveCount(0);
 			await expect(nav.getByRole('link', { name: 'Budgets' })).toHaveCount(0);
 			await expect(
 				page.getByRole('heading', { name: /Waiting on you|You’re clear|You're clear/i, level: 2 }),
@@ -81,6 +82,22 @@ test.describe('SPA shell @smoke @volunteering', () => {
 				.click();
 			await expect(page).toHaveURL(/\/volunteering\/budget-health/);
 			await expect(page.getByRole('heading', { name: 'Budget Health', level: 1 })).toBeVisible();
+		});
+	});
+
+	test.describe('as coordinator', () => {
+		test.use({ storageState: personaStorage('coordinator') });
+
+		test('header nav includes Volunteering next to Home and Advances', async ({ page }) => {
+			const home = new HomePage(page);
+			await home.goto();
+			await home.expectLoaded();
+			const nav = page.getByRole('navigation', { name: 'Sections' });
+			await expect(nav.getByRole('link', { name: 'Home' })).toBeVisible();
+			await expect(nav.getByRole('link', { name: 'Advances' })).toBeVisible();
+			const volunteering = nav.getByRole('link', { name: 'Volunteering' });
+			await expect(volunteering).toBeVisible();
+			await expect(volunteering).toHaveAttribute('href', '/desk/volunteering');
 		});
 	});
 });

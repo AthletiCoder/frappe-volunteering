@@ -1,7 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { e2eCall, cleanupExpenseClaimsForProject, getCast } from '../../helpers/e2e-api';
 import { expectFormError } from '../../helpers/dialogs';
-import { formUrl } from '../../helpers/desk';
 import { withPersona } from '../../helpers/persona-context';
 import { personaStorage } from '../../helpers/personas';
 import { getE2eMasters, getE2eProject } from '../../helpers/ui-fixtures';
@@ -218,8 +217,11 @@ test.describe('Expense Claim @accounts @ui', () => {
 		expect(workflowState).toBe('Rejected');
 
 		await withPersona(browser, 'accounts', async (page) => {
-			await page.goto(formUrl('Expense Claim', claimName), { waitUntil: 'domcontentloaded' });
-			await expectFormError(page, /not permitted|reject|cannot|permission/i);
+			const claim = new ExpenseClaimFormPage(page);
+			await claim.open(claimName);
+			await expect(page.getByText(/^Rejected$/i).first()).toBeVisible();
+			// Accounts may view rejected claims; Approve must not stay available.
+			await claim.expectApproveNotVisible();
 		});
 	});
 });

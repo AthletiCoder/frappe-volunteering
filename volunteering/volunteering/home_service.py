@@ -55,7 +55,7 @@ def get_home_payload():
 			"full_name": full_name,
 			"greeting": PERSONA_GREETING["volunteer"],
 			"help_url": HELP_URL,
-			"nav": {"home": True, "advances": False, "budget_health": False},
+			"nav": {"home": True, "advances": False, "volunteering": False, "budget_health": False},
 			"inbox": [],
 			"waiting": [],
 			"waiting_count": 0,
@@ -89,6 +89,7 @@ def get_home_payload():
 		"nav": {
 			"home": True,
 			"advances": flags["show_advances"],
+			"volunteering": flags["show_programs"],
 			"budget_health": flags["show_budget_health"],
 		},
 		"inbox": inbox,

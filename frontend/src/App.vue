@@ -51,6 +51,7 @@ const dark = ref(false);
 
 const nav = computed(() => ({
 	advances: homePayload.value?.nav?.advances ?? true,
+	volunteering: homePayload.value?.nav?.volunteering ?? false,
 	budget_health: homePayload.value?.nav?.budget_health ?? false,
 }));
 
@@ -62,6 +63,9 @@ const navItems = computed(() => {
 	const items = [{ to: "/home", label: "Home", icon: "home", badge: todoCount.value }];
 	if (nav.value.advances) {
 		items.push({ to: "/advances", label: "Advances", icon: "wallet" });
+	}
+	if (nav.value.volunteering) {
+		items.push({ href: "/desk/volunteering", label: "Volunteering", icon: "people" });
 	}
 	if (nav.value.budget_health) {
 		items.push({ to: "/budget-health", label: "Budgets", icon: "chart" });

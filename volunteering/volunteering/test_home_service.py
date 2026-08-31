@@ -99,6 +99,7 @@ class UnitTestHomePayload(UnitTestCase):
 		self.assertEqual(payload["todo_count"], 0)
 		self.assertFalse(payload["nav"]["budget_health"])
 		self.assertFalse(payload["nav"]["advances"])
+		self.assertFalse(payload["nav"]["volunteering"])
 
 	def test_compose_todos_orders_review_pay_then_yours(self):
 		todos = _compose_todos(
