@@ -873,6 +873,162 @@ def seed_employee_paid_advance(employee=None, paid_amount=1500):
 
 
 @frappe.whitelist()
+def seed_leave_application(
+	employee=None,
+	category="Normal",
+	from_date=None,
+	to_date=None,
+	leave_type=None,
+	leave_approver=None,
+	submit=0,
+):
+	"""E2E fixture: create Leave Application (Open draft; approver submits separately)."""
+	_guard_e2e()
+	employee = employee or _cast_employee("employee")
+	from_date = getdate(from_date or add_days(nowdate(), 5))
+	to_date = getdate(to_date or from_date)
+	leave_type = leave_type or PRIVILEGE_LEAVE
+	doc = frappe.get_doc(
+		{
+			"doctype": "Leave Application",
+			"employee": employee,
+			"leave_type": leave_type,
+			"leave_category": category,
+			"from_date": from_date,
+			"to_date": to_date,
+			"description": "E2E leave application",
+			"leave_approver": leave_approver,
+			"status": "Open",
+		}
+	)
+	with _bypass_leave_access_check():
+		doc.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": doc.name, "status": doc.status, "docstatus": doc.docstatus}
+
+
+@frappe.whitelist()
+def seed_set_leave_status(name, status):
+	"""E2E fixture: set leave status and submit."""
+	_guard_e2e()
+	doc = frappe.get_doc("Leave Application", name)
+	with _bypass_leave_access_check():
+		doc.status = status
+		doc.flags.ignore_permissions = True
+		doc.save(ignore_permissions=True)
+		if doc.docstatus == 0:
+			doc.submit()
+	frappe.db.commit()
+	return {"name": doc.name, "status": doc.status, "docstatus": doc.docstatus}
+
+
+@frappe.whitelist()
+def seed_cancel_wfh(name):
+	"""E2E fixture: cancel submitted Attendance Request (manager/HR)."""
+	_guard_e2e()
+	from volunteering.volunteering.attendance_request_permissions import (
+		before_cancel_attendance_request,
+	)
+
+	doc = frappe.get_doc("Attendance Request", name)
+	if doc.docstatus == 1:
+		before_cancel_attendance_request(doc)
+		doc.flags.ignore_permissions = True
+		frappe.flags.ignore_permissions = True
+		try:
+			doc.cancel()
+		finally:
+			frappe.flags.ignore_permissions = False
+	frappe.db.commit()
+	return {"name": doc.name, "docstatus": doc.docstatus}
+
+
+@frappe.whitelist()
+def try_submit_attendance_request(name):
+	"""E2E fixture: attempt submit; returns ok/error instead of raising."""
+	_guard_e2e()
+	try:
+		doc = frappe.get_doc("Attendance Request", name)
+		if doc.docstatus == 0:
+			doc.submit()
+		frappe.db.commit()
+		return {"ok": True, "data": {"name": doc.name, "docstatus": doc.docstatus}}
+	except Exception as exc:
+		frappe.db.rollback()
+		return {"ok": False, "error": _exc_message(exc)}
+
+
+@frappe.whitelist()
+def seed_submit_attendance_request(name):
+	"""E2E fixture: submit a saved Attendance Request (manager approval)."""
+	_guard_e2e()
+	doc = frappe.get_doc("Attendance Request", name)
+	if doc.docstatus == 0:
+		doc.submit()
+	frappe.db.commit()
+	return {"name": doc.name, "docstatus": doc.docstatus}
+
+
+@frappe.whitelist()
+def seed_approve_regularization(name):
+	"""E2E fixture: approve Attendance Regularization Request."""
+	_guard_e2e()
+	doc = frappe.get_doc("Attendance Regularization Request", name)
+	doc.approve_request()
+	frappe.db.commit()
+	return {"name": doc.name, "status": doc.status}
+
+
+@frappe.whitelist()
+def seed_reject_regularization(name):
+	"""E2E fixture: reject Attendance Regularization Request."""
+	_guard_e2e()
+	doc = frappe.get_doc("Attendance Regularization Request", name)
+	doc.reject_request()
+	frappe.db.commit()
+	return {"name": doc.name, "status": doc.status}
+
+
+@frappe.whitelist()
+def seed_manager_note(employee, note_type="Appreciation", content="E2E note"):
+	"""E2E fixture: create Manager Note."""
+	_guard_e2e()
+	doc = frappe.get_doc(
+		{
+			"doctype": "Manager Note",
+			"employee": employee,
+			"note_type": note_type,
+			"content": content,
+		}
+	)
+	doc.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": doc.name, "note_type": doc.note_type}
+
+
+@frappe.whitelist()
+def seed_mark_dwl_reviewed(name, manager_remarks="Reviewed in E2E"):
+	"""E2E fixture: manager marks Daily Work Log reviewed."""
+	_guard_e2e()
+	doc = frappe.get_doc("Daily Work Log", name)
+	doc.mark_as_reviewed(manager_remarks)
+	frappe.db.commit()
+	return {"name": doc.name, "status": doc.status}
+
+
+@frappe.whitelist()
+def seed_cancel_dwl(name):
+	"""E2E fixture: cancel submitted Daily Work Log."""
+	_guard_e2e()
+	doc = frappe.get_doc("Daily Work Log", name)
+	if doc.docstatus == 1:
+		doc.flags.ignore_permissions = True
+		doc.cancel()
+	frappe.db.commit()
+	return {"name": doc.name, "docstatus": doc.docstatus}
+
+
+@frappe.whitelist()
 def seed_expense_claim(
 	employee=None,
 	amount=1500,

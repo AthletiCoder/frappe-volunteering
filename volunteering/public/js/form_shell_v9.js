@@ -151,29 +151,6 @@ volunteering.form_hints.start_blank_tab_guard = function () {
 			setTimeout(volunteering.form_hints.fix_blank_tabs, 800);
 		});
 	}
-
-	// Last resort: whenever a tab pane is marked hide, reopen content.
-	const observer = new MutationObserver(function () {
-		const frm = cur_frm;
-		if (!frm || !volunteering.form_hints.TAB_FIX_DOCTYPES[frm.doctype]) {
-			return;
-		}
-		const panes = document.querySelectorAll(".form-layout .tab-pane.hide");
-		if (!panes.length) {
-			return;
-		}
-		const anyVisible = document.querySelector(".form-layout .tab-pane.show.active:not(.hide)");
-		if (anyVisible && anyVisible.offsetHeight > 40) {
-			return;
-		}
-		volunteering.form_hints.fix_blank_tabs();
-	});
-	observer.observe(document.body, {
-		subtree: true,
-		attributes: true,
-		attributeFilter: ["class"],
-	});
-	volunteering.form_hints._tab_observer = observer;
 };
 
 volunteering.form_hints.start_blank_tab_guard();

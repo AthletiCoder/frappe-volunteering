@@ -2,6 +2,13 @@
 
 Accounts and board-level employees see everything. Department heads
 (`Department.department_head`) see their department's claims.
+Everyone else sees their own claims plus claims where they are the
+pending / expense approver.
+
+List filtering must not rely on Employee User Permissions: Accounts staff
+are also Employees, so an apply-to-all Employee UP would hide every claim
+that is not their own (usually none). Row scope lives in these hooks;
+``employee`` has ``ignore_user_permissions`` set for that reason.
 """
 
 import frappe
@@ -32,24 +39,33 @@ def get_permission_query_conditions(user):
 	if _has_full_access(user, roles):
 		return ""
 
-	departments = departments_headed_by(user)
-	if not departments:
-		# Legacy role holders without a department master stay locked down.
-		return "1=0" if DEPT_HEAD_ROLE in roles else ""
-
-	employees = frappe.get_all(
-		"Employee",
-		filters={"department": ["in", departments], "status": "Active"},
-		pluck="name",
-	)
+	conditions = []
 	own_employee = get_employee_for_user(user)
-	if own_employee and own_employee not in employees:
-		employees.append(own_employee)
-	if not employees:
+	if own_employee:
+		conditions.append(f"`tabExpense Claim`.employee = {frappe.db.escape(own_employee)}")
+
+	user_esc = frappe.db.escape(user)
+	conditions.append(f"`tabExpense Claim`.pending_approver = {user_esc}")
+	if frappe.db.has_column("Expense Claim", "expense_approver"):
+		conditions.append(f"`tabExpense Claim`.expense_approver = {user_esc}")
+
+	departments = departments_headed_by(user)
+	if departments:
+		employees = frappe.get_all(
+			"Employee",
+			filters={"department": ["in", departments], "status": "Active"},
+			pluck="name",
+		)
+		if employees:
+			escaped = ", ".join(frappe.db.escape(employee) for employee in employees)
+			conditions.append(f"`tabExpense Claim`.employee IN ({escaped})")
+	elif DEPT_HEAD_ROLE in roles and not own_employee:
 		return "1=0"
 
-	escaped = ", ".join(frappe.db.escape(employee) for employee in employees)
-	return f"`tabExpense Claim`.employee IN ({escaped})"
+	if not conditions:
+		return "1=0"
+
+	return "(" + " OR ".join(conditions) + ")"
 
 
 def has_permission(doc, ptype, user):
@@ -63,15 +79,21 @@ def has_permission(doc, ptype, user):
 	if _has_full_access(user, roles):
 		return True
 
-	if ptype not in ("read", "print", "email", "export", "select"):
+	own_employee = get_employee_for_user(user)
+	if own_employee and doc.get("employee") == own_employee:
+		return True
+
+	if doc.get("pending_approver") == user or doc.get("expense_approver") == user:
 		return True
 
 	departments = departments_headed_by(user)
-	if not departments:
-		return DEPT_HEAD_ROLE not in roles
+	if departments:
+		employee_department = frappe.db.get_value("Employee", doc.employee, "department")
+		if employee_department in departments:
+			return True
 
-	if doc.employee and doc.employee == get_employee_for_user(user):
+	# Create is gated by DocType roles + validate elsewhere.
+	if ptype == "create":
 		return True
 
-	employee_department = frappe.db.get_value("Employee", doc.employee, "department")
-	return employee_department in departments
+	return False

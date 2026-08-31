@@ -85,6 +85,21 @@ def classify_home_access(roles, has_employee, grade=None):
 	}
 
 
+def check_app_permission():
+	"""Whether to show Sevamrita on the Frappe apps screen."""
+	import frappe
+
+	if frappe.session.user in ("Guest",):
+		return False
+	if frappe.session.user in ("Administrator",):
+		return True
+	roles = frappe.get_roles()
+	has_employee = bool(
+		frappe.db.exists("Employee", {"user_id": frappe.session.user, "status": "Active"})
+	)
+	return bool(classify_home_access(roles, has_employee).get("allowed"))
+
+
 def _persona(
 	allowed,
 	is_admin_user,

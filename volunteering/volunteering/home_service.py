@@ -57,6 +57,9 @@ def get_home_payload():
 			"help_url": HELP_URL,
 			"nav": {"home": True, "advances": False, "budget_health": False},
 			"inbox": [],
+			"waiting": [],
+			"waiting_count": 0,
+			"resume": [],
 			"todos": [],
 			"todo_count": 0,
 			"accounts_queues": [],
@@ -72,7 +75,10 @@ def get_home_payload():
 	accounts_queues = _accounts_queues() if flags["show_accounts"] else []
 	pending = _own_pending(employee, user)
 	status = _status_rows(pending)
-	todos = _compose_todos(inbox, accounts_queues, status, employee)
+	waiting = _compose_waiting(inbox, accounts_queues)
+	resume = _employee_draft_todos(employee)
+	# Legacy alias: todos = waiting only (no status aggregates / drafts).
+	todos = waiting
 	payload = {
 		"allowed": True,
 		"persona": flags["persona"],
@@ -86,8 +92,11 @@ def get_home_payload():
 			"budget_health": flags["show_budget_health"],
 		},
 		"inbox": inbox,
+		"waiting": waiting,
+		"waiting_count": len(waiting),
+		"resume": resume,
 		"todos": todos,
-		"todo_count": len(todos),
+		"todo_count": len(waiting),
 		"accounts_queues": accounts_queues,
 		"actions": {
 			"time": _time_actions(pending) if flags["show_time"] else [],
@@ -102,15 +111,17 @@ def get_home_payload():
 	return payload
 
 
-def _compose_todos(inbox, accounts_queues, status=None, employee=None):
-	todos = []
+def _compose_waiting(inbox, accounts_queues):
+	"""Decisions and pay queues only — Home triage, oldest review first."""
+	waiting = []
 	for item in inbox or []:
-		todos.append({**item, "bucket": "review"})
+		waiting.append({**item, "bucket": "review"})
+	waiting.sort(key=lambda row: row.get("modified") or row.get("raised_at") or "")
 	for queue in accounts_queues or []:
 		count = queue.get("count") or 0
 		if not count:
 			continue
-		todos.append(
+		waiting.append(
 			{
 				"id": f"queue::{queue['id']}",
 				"kind": _("Pay"),
@@ -122,6 +133,12 @@ def _compose_todos(inbox, accounts_queues, status=None, employee=None):
 				"modified": "",
 			}
 		)
+	return waiting
+
+
+def _compose_todos(inbox, accounts_queues, status=None, employee=None):
+	"""Deprecated combiner kept for callers; prefer _compose_waiting + drafts."""
+	todos = _compose_waiting(inbox, accounts_queues)
 	todos.extend(_employee_draft_todos(employee))
 	for row in status or []:
 		count = row.get("count") or 0
@@ -178,7 +195,7 @@ def _employee_draft_todos(employee):
 					"title": row.name,
 					"subtitle": " · ".join(subtitle_parts),
 					"route": desk_route(doctype, row.name),
-					"bucket": "yours",
+					"bucket": "resume",
 					"modified": str(row.modified or ""),
 					"raised_at": str(row.creation or ""),
 				}
@@ -241,9 +258,9 @@ def _time_actions(pending=None):
 				"id": "log_work",
 				"label": _("Track work"),
 				"hint": _("Log today"),
-				"route": "/app/daily-work-log/new",
+				"route": "/desk/daily-work-log/new",
 			},
-			"/app/daily-work-log",
+			"/desk/daily-work-log",
 			_("Previous work logs"),
 			"log_work",
 			pending,
@@ -253,9 +270,9 @@ def _time_actions(pending=None):
 				"id": "wfh",
 				"label": _("Request WFH"),
 				"hint": _("Before you stay home"),
-				"route": "/app/attendance-request/new",
+				"route": "/desk/attendance-request/new",
 			},
-			"/app/attendance-request",
+			"/desk/attendance-request",
 			_("Previous WFH"),
 			"wfh",
 			pending,
@@ -265,9 +282,9 @@ def _time_actions(pending=None):
 				"id": "leave",
 				"label": _("Apply for leave"),
 				"hint": _("Normal or emergency"),
-				"route": "/app/leave-application/new",
+				"route": "/desk/leave-application/new",
 			},
-			"/app/leave-application",
+			"/desk/leave-application",
 			_("Previous leave"),
 			"leave",
 			pending,
@@ -277,9 +294,9 @@ def _time_actions(pending=None):
 				"id": "fix_attendance",
 				"label": _("Fix attendance"),
 				"hint": _("Wrong Present / Absent day"),
-				"route": "/app/attendance-regularization-request/new",
+				"route": "/desk/attendance-regularization-request/new",
 			},
-			"/app/attendance-regularization-request",
+			"/desk/attendance-regularization-request",
 			_("Previous attendance fixes"),
 			"fix_attendance",
 			pending,
@@ -295,9 +312,9 @@ def _money_actions(pending=None):
 				"id": "vendor",
 				"label": _("Pay a vendor"),
 				"hint": _("Preferred — organisation pays"),
-				"route": "/app/purchase-order/new",
+				"route": "/desk/purchase-order/new",
 			},
-			"/app/purchase-order",
+			"/desk/purchase-order",
 			_("Previous purchase orders"),
 			"vendor",
 			pending,
@@ -307,9 +324,9 @@ def _money_actions(pending=None):
 				"id": "advance",
 				"label": _("Request an advance"),
 				"hint": _("Float before you buy"),
-				"route": "/app/employee-advance/new",
+				"route": "/desk/employee-advance/new",
 			},
-			"/app/employee-advance",
+			"/desk/employee-advance",
 			_("Previous advances"),
 			"advance",
 			pending,
@@ -319,9 +336,9 @@ def _money_actions(pending=None):
 				"id": "claim",
 				"label": _("Claim money back"),
 				"hint": _("Only if vendor/advance was not possible"),
-				"route": "/app/expense-claim/new",
+				"route": "/desk/expense-claim/new",
 			},
-			"/app/expense-claim",
+			"/desk/expense-claim",
 			_("Previous claims"),
 			"claim",
 			pending,
@@ -391,7 +408,7 @@ def _leave_inbox(user, employee):
 				"kind": "Leave",
 				"title": row.employee_name or row.name,
 				"subtitle": f"{row.leave_type or ''} · {formatdate(row.from_date)} – {formatdate(row.to_date)}",
-				"route": f"/app/leave-application/{row.name}",
+				"route": f"/desk/leave-application/{row.name}",
 				"modified": str(row.modified or ""),
 			}
 		)
@@ -419,7 +436,7 @@ def _wfh_inbox(employee):
 				"kind": "WFH",
 				"title": row.employee_name or row.name,
 				"subtitle": f"{formatdate(row.from_date)} – {formatdate(row.to_date)}",
-				"route": f"/app/attendance-request/{row.name}",
+				"route": f"/desk/attendance-request/{row.name}",
 				"modified": str(row.modified or ""),
 			}
 		)
@@ -487,7 +504,7 @@ def _accounts_queues():
 				"id": "reimburse",
 				"label": _("Claims to reimburse"),
 				"count": reimburse,
-				"route": "/app/expense-claim",
+				"route": "/desk/expense-claim",
 			}
 		)
 	if vendor:
@@ -496,7 +513,7 @@ def _accounts_queues():
 				"id": "vendor_pay",
 				"label": _("Vendor invoices to pay"),
 				"count": vendor,
-				"route": "/app/purchase-invoice",
+				"route": "/desk/purchase-invoice",
 			}
 		)
 	if residual:
@@ -505,7 +522,7 @@ def _accounts_queues():
 				"id": "residual",
 				"label": _("Advances with leftover"),
 				"count": residual,
-				"route": "/app/query-report/Employee%20Advances%20with%20Residual",
+				"route": "/desk/query-report/Employee%20Advances%20with%20Residual",
 			}
 		)
 	return queues
@@ -531,8 +548,8 @@ def _programs_block():
 	return {
 		"event": event,
 		"registrations": registrations,
-		"workspace_route": "/app/volunteering",
-		"report_route": "/app/query-report/Generic%20Event%20Participation%20Report",
+		"workspace_route": "/desk/volunteering",
+		"report_route": "/desk/query-report/Generic%20Event%20Participation%20Report",
 	}
 
 
@@ -541,22 +558,22 @@ def _people_links():
 		{
 			"id": "missing_logs",
 			"label": _("Missing daily logs"),
-			"route": "/app/query-report/Missing%20Daily%20Logs%20Report",
+			"route": "/desk/query-report/Missing%20Daily%20Logs%20Report",
 		},
 		{
 			"id": "regularization",
 			"label": _("Attendance fixes"),
-			"route": "/app/attendance-regularization-request",
+			"route": "/desk/attendance-regularization-request",
 		},
 		{
 			"id": "attendance",
 			"label": _("Attendance"),
-			"route": "/app/attendance",
+			"route": "/desk/attendance",
 		},
 		{
 			"id": "hr_accountability",
 			"label": _("HR reports"),
-			"route": "/app/hr-accountability",
+			"route": "/desk/hr-accountability",
 		},
 	]
 
@@ -566,12 +583,12 @@ def _admin_links():
 		{
 			"id": "limits",
 			"label": _("Approval & Advance Limits"),
-			"route": "/app/approval-and-advance-limits",
+			"route": "/desk/approval-and-advance-limits",
 		},
 		{
 			"id": "acct_settings",
 			"label": _("Accounting Settings"),
-			"route": "/app/volunteering-accounting-settings",
+			"route": "/desk/volunteering-accounting-settings",
 		},
 	]
 

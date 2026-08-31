@@ -10,23 +10,28 @@ app_license = "mit"
 
 required_apps = ["hrms"]
 
-# Each item in the list will be shown as an app in the apps page
-# add_to_apps_screen = [
-# 	{
-# 		"name": "volunteering",
-# 		"logo": "/assets/volunteering/logo.png",
-# 		"title": "Volunteering",
-# 		"route": "/volunteering",
-# 		"has_permission": "volunteering.api.permission.has_app_permission"
-# 	}
-# ]
+# Shown on /apps; also used as default landing when set as User/System default_app
+add_to_apps_screen = [
+	{
+		"name": "volunteering",
+		"logo": "/assets/frappe/images/frappe-favicon.svg",
+		"title": "Sevamrita",
+		"route": "/volunteering/home",
+		"has_permission": "volunteering.volunteering.home_access.check_app_permission",
+	}
+]
+
+# Base site URL → staff Home (login required by the volunteering page)
+website_redirects = [
+	{"source": "/", "target": "/volunteering/home"},
+]
 
 # Includes in <head>
 # ------------------
 
 # include js, css files in header of desk.html
 app_include_js = [
-	"/assets/volunteering/js/form_hints.js",
+	"/assets/volunteering/js/form_shell_v9.js",
 	"/assets/volunteering/js/home_redirect.js",
 ]
 
@@ -61,9 +66,9 @@ doctype_js = {
     "Employee": "volunteering/doctype/daily_work_log/employee_daily_work_log.js",
     "Leave Application": "public/js/leave_application.js",
     "Attendance Request": "public/js/attendance_request.js",
-    "Expense Claim": "public/js/accounting_workflow.js",
-    "Purchase Order": "public/js/accounting_workflow.js",
-    "Employee Advance": "public/js/accounting_workflow.js",
+	"Expense Claim": "public/js/accounting_forms.js",
+	"Purchase Order": "public/js/accounting_forms.js",
+	"Employee Advance": "public/js/accounting_forms.js",
     "Purchase Invoice": "public/js/purchase_invoice.js",
     "Project": "public/js/project.js",
 }
@@ -254,6 +259,9 @@ doc_events = {
 		"validate": "volunteering.volunteering.attendance_request_permissions.validate_attendance_request",
 		"before_cancel": "volunteering.volunteering.attendance_request_permissions.before_cancel_attendance_request",
 	},
+	"Daily Work Log": {
+		"validate": "volunteering.volunteering.daily_work_log_permissions.validate_daily_work_log",
+	},
 	"Employee": {
 		"after_insert": "volunteering.volunteering.leave_setup.assign_default_leave_policy",
 		"validate": "volunteering.volunteering.leave_pending.sync_leave_approver_from_reports_to",
@@ -288,6 +296,9 @@ scheduler_events = {
 	"cron": {
 		"0 12 * * *": [
 			"volunteering.volunteering.api.attendance_digest.run_noon_attendance_jobs",
+		],
+		"0 * * * *": [
+			"volunteering.volunteering.api.work_log_reminder.run_morning_missing_log_reminders",
 		],
 		"*/15 * * * *": [
 			"volunteering.volunteering.api.reconcile.reconcile_pending_donations",

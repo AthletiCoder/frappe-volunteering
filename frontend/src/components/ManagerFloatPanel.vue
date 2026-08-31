@@ -1,5 +1,8 @@
 <template>
-	<section class="rounded-2xl border border-line bg-surface shadow-soft p-4 mb-6">
+	<section
+		v-if="visible"
+		class="rounded-2xl border border-line bg-surface shadow-soft p-4 mb-6"
+	>
 		<h2 class="text-lg font-semibold text-ink">Request from manager float</h2>
 		<p class="text-sm text-muted mt-1">
 			Submit an expense claim that settles from your reporting manager's paid advance after approval — no
@@ -44,7 +47,7 @@
 
 				<div class="mt-4 flex flex-wrap gap-2">
 					<a class="btn-primary text-sm" :href="newClaimUrl">New claim (manager float)</a>
-					<a class="btn-secondary text-sm" href="/app/expense-claim/new">New claim (out of pocket)</a>
+					<a class="btn-secondary text-sm" href="/desk/expense-claim/new">New claim (out of pocket)</a>
 				</div>
 			</template>
 		</template>
@@ -59,11 +62,19 @@ import { formatMoney } from "../lib/money";
 const context = ref(null);
 const loading = ref(false);
 const error = ref("");
+const loaded = ref(false);
 
 const newClaimUrl = computed(() => {
-	const base = "/app/expense-claim/new";
+	const base = "/desk/expense-claim/new";
 	const params = new URLSearchParams({ reimbursement_source: "Manager Advance" });
 	return `${base}?${params.toString()}`;
+});
+
+/** Hide entirely when the employee still has their own unsettled advance. */
+const visible = computed(() => {
+	if (!loaded.value) return false;
+	if (context.value?.own_blocking_advance) return false;
+	return true;
 });
 
 async function load() {
@@ -75,6 +86,7 @@ async function load() {
 		error.value = e.message || String(e);
 	} finally {
 		loading.value = false;
+		loaded.value = true;
 	}
 }
 

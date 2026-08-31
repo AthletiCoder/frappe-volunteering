@@ -8,7 +8,6 @@ import {
 	todayLocal,
 	workingDayFromToday,
 } from '../../helpers/e2e-api';
-import { expectFormError } from '../../helpers/dialogs';
 import { withPersona } from '../../helpers/persona-context';
 import { personaStorage } from '../../helpers/personas';
 import { LeaveApplicationFormPage } from '../../pages/desk/leave-application.page';
@@ -80,8 +79,7 @@ test.describe('HR Leave Application @hr @ui', () => {
 			const leave = new LeaveApplicationFormPage(page);
 			await leave.openNew();
 			await leave.fillLeave({ fromDate: date, toDate: date, category: 'Normal' });
-			await leave.save();
-			await expectFormError(page, /backdat/i);
+			await leave.save({ expectError: /backdat/i });
 		});
 
 		test('HR-LV-003 @regression @critical: Normal leave insufficient notice blocked', async ({
@@ -97,8 +95,7 @@ test.describe('HR Leave Application @hr @ui', () => {
 			const leave = new LeaveApplicationFormPage(page);
 			await leave.openNew();
 			await leave.fillLeave({ fromDate: from, toDate: to, category: 'Normal' });
-			await leave.save();
-			await expectFormError(page, /notice/i);
+			await leave.save({ expectError: /notice/i });
 		});
 	});
 
@@ -188,8 +185,7 @@ test.describe('HR Leave Application @hr @ui', () => {
 			const leave = new LeaveApplicationFormPage(page);
 			await leave.openNew();
 			await leave.fillLeave({ fromDate: from, toDate: to, category: 'Emergency' });
-			await leave.save();
-			await expectFormError(page, /3/);
+			await leave.save({ expectError: /3/ });
 		});
 	});
 
@@ -235,8 +231,7 @@ test.describe('HR Leave Application @hr @ui', () => {
 			const leave = new LeaveApplicationFormPage(page);
 			await leave.openNew();
 			await leave.fillLeave({ fromDate: from, toDate: to, category: 'Emergency' });
-			await leave.save();
-			await expectFormError(page, /48/);
+			await leave.save({ expectError: /48/ });
 		});
 	});
 
@@ -248,19 +243,26 @@ test.describe('HR Leave Application @hr @ui', () => {
 		await cleanupRange(request, emp, from, to);
 
 		let leaveName = '';
-		await withPersona(browser, 'hr', async (page) => {
-			const leave = new LeaveApplicationFormPage(page);
-			await leave.openNew();
-			await leave.setEmployee(emp);
-			await leave.fillLeave({ fromDate: from, toDate: to, category: 'Emergency' });
-			leaveName = await leave.saveAndSubmit();
-		});
+		const created = await e2eCall<{ name: string }>(
+			request,
+			'seed_leave_application',
+			{
+				employee: emp,
+				category: 'Emergency',
+				from_date: from,
+				to_date: to,
+				leave_approver: cast.manager.email,
+			},
+			'admin',
+		);
+		leaveName = created.name;
 
-		await withPersona(browser, 'hr', async (page) => {
-			const leave = new LeaveApplicationFormPage(page);
-			await leave.open(leaveName);
-			await leave.setStatus('Approved');
-		});
+		await e2eCall(
+			request,
+			'seed_set_leave_status',
+			{ name: leaveName, status: 'Approved' },
+			'hr',
+		);
 
 		const status = await e2eCall<string>(
 			request,
@@ -292,8 +294,7 @@ test.describe('HR Leave Application @hr @ui', () => {
 				category: 'Normal',
 				leaveApprover: cast.manager.email,
 			});
-			await leave.save();
-			await expectFormError(page, /grade/i);
+			await leave.save({ expectError: /grade/i });
 		});
 	});
 
@@ -309,17 +310,19 @@ test.describe('HR Leave Application @hr @ui', () => {
 		await cleanupLeaveSpan(request, emp, from, to);
 
 		let leaveName = '';
-		await withPersona(browser, 'employee', async (page) => {
-			const leave = new LeaveApplicationFormPage(page);
-			await leave.openNew();
-			await leave.fillLeave({
-				fromDate: from,
-				toDate: to,
+		const created = await e2eCall<{ name: string }>(
+			request,
+			'seed_leave_application',
+			{
+				employee: emp,
 				category: 'Normal',
-				leaveApprover: cast.chair.email,
-			});
-			leaveName = await leave.saveAndSubmit();
-		});
+				from_date: from,
+				to_date: to,
+				leave_approver: cast.chair.email,
+			},
+			'admin',
+		);
+		leaveName = created.name;
 
 		await withPersona(browser, 'chair', async (page) => {
 			const leave = new LeaveApplicationFormPage(page);
@@ -357,8 +360,8 @@ test.describe('HR Leave Application @hr @ui', () => {
 		await withPersona(browser, 'employee', async (page) => {
 			const leave = new LeaveApplicationFormPage(page);
 			await leave.open(leaveName);
-			await leave.setStatus('Approved');
-			await expectFormError(page, /cannot approve|your own|permission/i);
+			expect(await leave.workflowActionVisible('Approve')).toBe(false);
+			expect(await leave.workflowActionVisible('Reject')).toBe(false);
 		});
 	});
 

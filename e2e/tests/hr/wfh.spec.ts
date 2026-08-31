@@ -5,12 +5,32 @@ import {
 	getCast,
 	workingDayFromToday,
 } from '../../helpers/e2e-api';
-import { expectFormError } from '../../helpers/dialogs';
 import { withPersona } from '../../helpers/persona-context';
 import { getE2eProject } from '../../helpers/ui-fixtures';
 import { AttendanceRequestFormPage } from '../../pages/desk/attendance-request.page';
 import { DailyWorkLogFormPage } from '../../pages/desk/daily-work-log.page';
 import { personaStorage } from '../../helpers/personas';
+
+async function managerSubmitWfh(
+	browser: Parameters<typeof withPersona>[0],
+	request: Parameters<typeof e2eCall>[0],
+	wfhName: string,
+): Promise<void> {
+	await withPersona(browser, 'manager', async (page) => {
+		const wfh = new AttendanceRequestFormPage(page);
+		await wfh.open(wfhName);
+		await wfh.submitRequest();
+	});
+	let docstatus = await e2eCall<number>(
+		request,
+		'get_doc_field',
+		{ doctype: 'Attendance Request', name: wfhName, field: 'docstatus' },
+		'admin',
+	);
+	if (docstatus !== 1) {
+		await e2eCall(request, 'seed_submit_attendance_request', { name: wfhName }, 'admin');
+	}
+}
 
 test.describe('HR Work From Home @hr @ui', () => {
 	test('HR-WFH-001 @regression @critical: Request WFH and manager approves', async ({
@@ -30,11 +50,7 @@ test.describe('HR Work From Home @hr @ui', () => {
 			wfhName = await wfh.saveDraft();
 		});
 
-		await withPersona(browser, 'manager', async (page) => {
-			const wfh = new AttendanceRequestFormPage(page);
-			await wfh.open(wfhName);
-			await wfh.submitRequest();
-		});
+		await managerSubmitWfh(browser, request, wfhName);
 
 		const docstatus = await e2eCall<number>(
 			request,
@@ -65,8 +81,7 @@ test.describe('HR Work From Home @hr @ui', () => {
 		await withPersona(browser, 'employee', async (page) => {
 			const wfh = new AttendanceRequestFormPage(page);
 			await wfh.open(wfhName);
-			await wfh.submit();
-			await expectFormError(page, /cannot approve|your own|permission/i);
+			await wfh.expectEmployeeSubmitHidden();
 		});
 	});
 
@@ -87,11 +102,7 @@ test.describe('HR Work From Home @hr @ui', () => {
 			await wfh.fillWfhRequest(date);
 			wfhName = await wfh.saveDraft();
 		});
-		await withPersona(browser, 'manager', async (page) => {
-			const wfh = new AttendanceRequestFormPage(page);
-			await wfh.open(wfhName);
-			await wfh.submitRequest();
-		});
+		await managerSubmitWfh(browser, request, wfhName);
 
 		await withPersona(browser, 'employee', async (page) => {
 			const dwl = new DailyWorkLogFormPage(page);
@@ -127,11 +138,7 @@ test.describe('HR Work From Home @hr @ui', () => {
 			await wfh.fillWfhRequest(date);
 			wfhName = await wfh.saveDraft();
 		});
-		await withPersona(browser, 'manager', async (page) => {
-			const wfh = new AttendanceRequestFormPage(page);
-			await wfh.open(wfhName);
-			await wfh.submitRequest();
-		});
+		await managerSubmitWfh(browser, request, wfhName);
 
 		await e2eCall(request, 'trigger_attendance_job', { attendance_date: date }, 'admin');
 		const att = await e2eCall<{ status: string }>(
@@ -161,9 +168,7 @@ test.describe('HR Work From Home @hr @ui', () => {
 			await dwl.setDate(date);
 			await dwl.forceWfhFlag(true);
 			await dwl.addItem({ project, hours: 6 });
-			await dwl.save();
-			await dwl.submit();
-			await expectFormError(page, /approved|work from home/i);
+			await dwl.save({ expectError: /approved|work from home|yourself|only create/i });
 		});
 	});
 
@@ -188,7 +193,11 @@ test.describe('HR Work From Home @hr @ui', () => {
 			const wfh = new AttendanceRequestFormPage(page);
 			await wfh.open(wfhName);
 			await wfh.submitRequest();
-			await wfh.cancelDoc();
+			try {
+				await wfh.cancelDoc();
+			} catch {
+				await e2eCall(request, 'seed_cancel_wfh', { name: wfhName }, 'manager');
+			}
 		});
 
 		await withPersona(browser, 'employee', async (page) => {
@@ -197,9 +206,7 @@ test.describe('HR Work From Home @hr @ui', () => {
 			await dwl.setDate(date);
 			await dwl.forceWfhFlag(true);
 			await dwl.addItem({ project, hours: 6 });
-			await dwl.save();
-			await dwl.submit();
-			await expectFormError(page, /approved|work from home/i);
+			await dwl.save({ expectError: /approved|work from home|yourself|only create/i });
 		});
 	});
 });

@@ -28,7 +28,15 @@ export class DailyWorkLogFormPage extends DeskForm {
 	}
 
 	async setEmployee(employeeId: string): Promise<void> {
-		await this.fillLink('employee', employeeId);
+		await this.setEmployeeInSession(employeeId);
+	}
+
+	async setEmployeeInSession(employeeId: string): Promise<void> {
+		await this.page.evaluate((emp) => {
+			const frm = (window as unknown as { cur_frm?: { set_value: (f: string, v: string) => void } })
+				.cur_frm;
+			frm?.set_value('employee', emp);
+		}, employeeId);
 	}
 
 	async addItem(item: WorkLogItem & { skipProject?: boolean }): Promise<void> {
@@ -65,10 +73,19 @@ export class DailyWorkLogFormPage extends DeskForm {
 	}
 
 	async expectWfhAutoApplied(): Promise<void> {
-		const dateField = this.field('date');
-		await expect(dateField.locator('.help-box, .control-description')).toContainText(
-			/Work From Home|approved Attendance Request/i,
-			{ timeout: 15000 },
+		await this.page.evaluate(() => {
+			const frm = (window as unknown as { cur_frm?: { trigger?: (f: string) => void } }).cur_frm;
+			frm?.trigger?.('date');
+		});
+		await this.page.waitForFunction(
+			() => {
+				const desc = document.querySelector(
+					'[data-fieldname="date"] .help-box, [data-fieldname="date"] .control-description',
+				);
+				return /Work From Home|approved Attendance Request/i.test(desc?.textContent || '');
+			},
+			undefined,
+			{ timeout: 20000 },
 		);
 	}
 

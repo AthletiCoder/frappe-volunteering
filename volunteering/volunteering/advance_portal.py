@@ -82,10 +82,10 @@ def get_advance_detail(name):
 		"route": desk_route("Employee Advance", doc.name),
 		"expense_claims": _claims_for_advance(doc.name),
 		"new_expense_claim_url": (
-			f"/app/expense-claim/new?employee={doc.employee}"
+			f"/desk/expense-claim/new?employee={doc.employee}"
 			f"&company={doc.company or ''}"
 		),
-		"new_advance_url": "/app/employee-advance/new",
+		"new_advance_url": "/desk/employee-advance/new",
 	}
 
 

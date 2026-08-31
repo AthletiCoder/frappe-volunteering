@@ -1,4 +1,14 @@
 CUSTOM_FIELDS = {
+	"User": [
+		{
+			"fieldname": "work_log_reminder_opt_in",
+			"label": "Morning Work Log Reminder",
+			"fieldtype": "Check",
+			"insert_after": "email",
+			"default": "1",
+			"description": "Email me when yesterday's Daily Work Log is still missing (paid staff).",
+		}
+	],
 	"Leave Application": [
 		{
 			"fieldname": "leave_category",
@@ -50,9 +60,10 @@ def _approval_routing_fields(
 	fields = [
 		{
 			"fieldname": "approval_routing_tab",
-			"fieldtype": "Tab Break",
+			"fieldtype": "Section Break",
 			"label": "Approval & Routing",
 			"insert_after": insert_after_anchor,
+			"collapsible": 1,
 		},
 		{
 			"fieldname": "approval_level",
@@ -70,6 +81,7 @@ def _approval_routing_fields(
 			"insert_after": "approval_level",
 			"read_only": 1,
 			"depends_on": _PENDING_STATES_DEPENDS,
+			"ignore_user_permissions": 1,
 		},
 		{
 			"fieldname": "escalation_reason",
@@ -175,6 +187,7 @@ ACCOUNTING_CUSTOM_FIELDS = {
 			"insert_after": "reimbursement_source",
 			"read_only": 1,
 			"depends_on": "eval:doc.reimbursement_source=='Manager Advance'",
+			"ignore_user_permissions": 1,
 		},
 		{
 			"fieldname": "manager_float_advance",
@@ -184,6 +197,7 @@ ACCOUNTING_CUSTOM_FIELDS = {
 			"insert_after": "manager_float_holder",
 			"read_only": 1,
 			"depends_on": "eval:doc.reimbursement_source=='Manager Advance' && doc.manager_float_advance",
+			"ignore_user_permissions": 1,
 		},
 		{
 			"fieldname": "spend_guide_section",

@@ -161,6 +161,10 @@ test.describe('Manager float reimbursement @accounts @ui', () => {
 			page,
 			request,
 		}) => {
+			const cast = await getCast(request, 'employee');
+			// Panel is hidden when the employee has their own unsettled advance
+			// (serial suite may leave fixtures from AC-MFL-006).
+			await cleanupEmployeeAdvances(request, cast.employee.employee!);
 			await setupManagerPaidAdvance(request, 5000);
 
 			const advances = new AdvancesPage(page);

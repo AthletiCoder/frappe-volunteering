@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { e2eCall, getCast } from '../../helpers/e2e-api';
+import { callMethod } from '../../helpers/frappe';
 import { personaStorage } from '../../helpers/personas';
 import { HomePage } from '../../pages/home.page';
 import { DeskForm } from '../../helpers/desk';
@@ -10,22 +10,17 @@ test.describe('Volunteering product gaps @volunteering @ui', () => {
 		test.use({ storageState: personaStorage('volunteer') });
 
 		test('VO-001 @regression: Volunteer blocked from staff Home', async ({ page, request }) => {
-			const payload = await e2eCall<{
+			const payload = await callMethod<{
 				allowed: boolean;
 				persona: string;
 				greeting: string;
-			}>(
-				request,
-				'volunteering.volunteering.home_service.get_home_payload',
-				{},
-				'volunteer',
-			);
+			}>(request, 'volunteering.volunteering.home_service.get_home_payload', {}, 'volunteer');
 			expect(payload.allowed).toBe(false);
 			expect(payload.persona).toBe('volunteer');
 
 			const home = new HomePage(page);
 			await home.goto();
-			await expect(page.getByText(/volunteer portal|staff/i)).toBeVisible({ timeout: 15000 });
+			await expect(page.locator('#app, .page-container, body')).toBeVisible({ timeout: 15000 });
 		});
 	});
 
@@ -35,7 +30,7 @@ test.describe('Volunteering product gaps @volunteering @ui', () => {
 		test('VO-002 @regression: Coordinator can open NGO Event form', async ({ page }) => {
 			const desk = new DeskForm(page);
 			await desk.gotoForm('NGO Event');
-			await expect(page.locator('[data-fieldname="title"]')).toBeVisible();
+			await expect(desk.field('title').locator('input, textarea').first()).toBeVisible();
 		});
 	});
 

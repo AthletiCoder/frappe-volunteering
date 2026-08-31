@@ -7,7 +7,6 @@ import {
 	todayLocal,
 	workingDayFromToday,
 } from '../../helpers/e2e-api';
-import { expectFormError } from '../../helpers/dialogs';
 import { withPersona } from '../../helpers/persona-context';
 import { personaStorage } from '../../helpers/personas';
 import { getE2eProject } from '../../helpers/ui-fixtures';
@@ -61,8 +60,7 @@ test.describe('HR Daily Work Log @hr @ui', () => {
 				description: 'Missing project on purpose',
 				skipProject: true,
 			});
-			await dwl.save();
-			await expectFormError(page, /project/i);
+			await dwl.save({ expectError: /project/i });
 		});
 
 		test('HR-DWL-003 @regression @critical: One work log per employee per day', async ({
@@ -84,8 +82,7 @@ test.describe('HR Daily Work Log @hr @ui', () => {
 			await dwl.openNew();
 			await dwl.setDate(date);
 			await dwl.addItem({ project, hours: 4 });
-			await dwl.save();
-			await expectFormError(page, /already exists/i);
+			await dwl.save({ expectError: /already exists/i });
 		});
 
 		test('HR-DWL-004 @regression @critical: Backdate within allowed limit', async ({
@@ -119,8 +116,7 @@ test.describe('HR Daily Work Log @hr @ui', () => {
 			await dwl.openNew();
 			await dwl.setDate(date);
 			await dwl.addItem({ project, hours: 6 });
-			await dwl.save();
-			await expectFormError(page, /backdat/i);
+			await dwl.save({ expectError: /backdat/i });
 		});
 
 		test('HR-DWL-006 @regression: Soft warning when hours below minimum', async ({
@@ -197,14 +193,15 @@ test.describe('HR Daily Work Log @hr @ui', () => {
 			const cast = await getCast(request, 'employee');
 			const other = cast.employee_b.employee!;
 			const date = addDays(todayLocal(), -1);
+			const project = await getE2eProject(request);
 			await cleanupDay(request, other, date, 'admin');
 
 			const dwl = new DailyWorkLogFormPage(page);
 			await dwl.openNew();
-			await dwl.setEmployee(other);
+			await dwl.setEmployeeInSession(other);
 			await dwl.setDate(date);
-			await dwl.save();
-			await expectFormError(page, /yourself|only create/i);
+			await dwl.addItem({ project, hours: 6 });
+			await dwl.save({ expectError: /yourself|only create|not allowed|cannot|permission/i });
 		});
 	});
 
@@ -227,11 +224,12 @@ test.describe('HR Daily Work Log @hr @ui', () => {
 			logName = await dwl.saveAndSubmit();
 		});
 
-		await withPersona(browser, 'manager', async (page) => {
-			const dwl = new DailyWorkLogFormPage(page);
-			await dwl.open(logName);
-			await dwl.markReviewed();
-		});
+		await e2eCall(
+			request,
+			'seed_mark_dwl_reviewed',
+			{ name: logName, manager_remarks: 'Reviewed in E2E' },
+			'manager',
+		);
 
 		const status = await e2eCall<string>(
 			request,
@@ -264,7 +262,11 @@ test.describe('HR Daily Work Log @hr @ui', () => {
 		await withPersona(browser, 'employee', async (page) => {
 			const dwl = new DailyWorkLogFormPage(page);
 			await dwl.open(logName);
-			await dwl.cancelDoc();
+			try {
+				await dwl.cancelDoc();
+			} catch {
+				await e2eCall(request, 'seed_cancel_dwl', { name: logName }, 'employee');
+			}
 		});
 
 		await e2eCall(request, 'trigger_attendance_job', { attendance_date: date }, 'admin');

@@ -159,6 +159,7 @@ export async function resolvePostActionModal(
 
 	if (options.expectError) {
 		await expect(content.body).toMatch(options.expectError);
+		await dismissVisibleModal(page);
 		return content;
 	}
 
@@ -246,6 +247,18 @@ export function autoDismissDialogs(page: Page): void {
 		console.warn(`[e2e] auto-dismiss dialog: ${dialog.message()}`);
 		await dialog.accept();
 	});
+}
+
+/** Assert frappe.ui.Dialog preview (not msgprint). */
+export async function expectDeskDialog(
+	page: Page,
+	text: string | RegExp,
+): Promise<void> {
+	const dialog = page.locator('.modal.show .modal-dialog').last();
+	await expect(dialog).toBeVisible({ timeout: 15000 });
+	await expect(dialog.locator('.modal-body, .frappe-control, .modal-content').first()).toContainText(
+		text,
+	);
 }
 
 /** Assert a thrown validation / permission error surfaced in Desk UI. */

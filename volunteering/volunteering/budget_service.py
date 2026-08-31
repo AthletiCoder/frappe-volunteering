@@ -303,7 +303,7 @@ def get_budget_health(project=None):
 					"consumed": consumed,
 					"remaining": remaining,
 					"utilisation_pct": (consumed / allocated * 100) if allocated else 0,
-					"route": f"/app/project/{project_name}",
+					"route": f"/desk/project/{project_name}",
 				}
 			)
 

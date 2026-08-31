@@ -687,7 +687,8 @@ export class DeskForm {
 			.and(this.page.locator(':visible'))
 			.first();
 		if (await submitBtn.isVisible().catch(() => false)) {
-			await submitBtn.click();
+			await this.dismissBlockingModals();
+			await submitBtn.click({ force: true });
 			await resolvePostActionModal(this.page, { allowConfirm: true, ...options });
 			return;
 		}

@@ -3,12 +3,17 @@
  "creation": "2026-06-07 12:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": [
+  "field_order": [
   "backdate_limit_days",
   "min_hours_warning",
   "present_hours_threshold",
   "attendance_section",
   "enable_attendance_job",
+  "reminder_section",
+  "enable_missing_log_reminder",
+  "missing_log_reminder_hour",
+  "reminder_column_break",
+  "missing_log_reminder_sender",
   "digest_section",
   "enable_board_digest",
   "digest_frequency",
@@ -47,6 +52,36 @@
    "fieldname": "enable_attendance_job",
    "fieldtype": "Check",
    "label": "Enable Attendance Job"
+  },
+  {
+   "fieldname": "reminder_section",
+   "fieldtype": "Section Break",
+   "label": "Missing Work Log Reminder"
+  },
+  {
+   "default": "1",
+   "description": "Email paid employees who have not submitted a Daily Work Log for the previous working day. Skips holidays, weekly offs, approved leave, and anyone who already logged.",
+   "fieldname": "enable_missing_log_reminder",
+   "fieldtype": "Check",
+   "label": "Enable Morning Missing-Log Reminder"
+  },
+  {
+   "default": "9",
+   "description": "Hour of day in site timezone (0–23). Scheduler checks hourly and sends only at this hour.",
+   "fieldname": "missing_log_reminder_hour",
+   "fieldtype": "Int",
+   "label": "Reminder Hour"
+  },
+  {
+   "fieldname": "reminder_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Optional. Blank = system default outgoing email.",
+   "fieldname": "missing_log_reminder_sender",
+   "fieldtype": "Data",
+   "label": "Reminder Send From (email)",
+   "options": "Email"
   },
   {
    "fieldname": "digest_section",
@@ -94,7 +129,7 @@
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-07-26 12:00:00",
+ "modified": "2026-08-31 10:00:00",
  "modified_by": "Administrator",
  "module": "Volunteering",
  "name": "Daily Work Log Settings",

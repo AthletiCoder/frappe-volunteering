@@ -9,6 +9,77 @@ export class LeaveApplicationFormPage extends DeskForm {
 
 	async openNew(): Promise<void> {
 		await this.gotoForm('Leave Application');
+		await this.waitForEmployeeDefault();
+	}
+
+	private async waitForEmployeeDefault(): Promise<void> {
+		await this.page.waitForFunction(
+			() =>
+				Boolean(
+					(window as unknown as { cur_frm?: { doc?: { employee?: string } } }).cur_frm?.doc
+						?.employee,
+				),
+			undefined,
+			{ timeout: 15000 },
+		);
+	}
+
+	async ensureLeaveApprover(explicit?: string): Promise<void> {
+		if (explicit) {
+			await this.setLeaveApprover(explicit);
+		}
+		await this.page.evaluate(async () => {
+			const win = window as unknown as {
+				cur_frm?: {
+					doc?: { employee?: string; leave_approver?: string };
+					set_value: (field: string, value: string) => Promise<void>;
+				};
+				frappe?: {
+					db: {
+						get_value: (
+							doctype: string,
+							name: string,
+							field: string | string[],
+						) => Promise<{ message?: Record<string, string> }>;
+					};
+				};
+			};
+			const frm = win.cur_frm;
+			if (!frm?.doc?.employee || frm.doc.leave_approver) {
+				return;
+			}
+			const employee = await win.frappe?.db.get_value('Employee', frm.doc.employee, [
+				'leave_approver',
+				'reports_to',
+			]);
+			let approver = employee?.message?.leave_approver;
+			if (!approver && employee?.message?.reports_to) {
+				const manager = await win.frappe?.db.get_value(
+					'Employee',
+					employee.message.reports_to,
+					'user_id',
+				);
+				approver = manager?.message?.user_id;
+			}
+			if (approver) {
+				await frm.set_value('leave_approver', approver);
+				const fullName = await win.frappe?.db.get_value('User', approver, 'full_name');
+				if (fullName?.message?.full_name) {
+					await frm.set_value('leave_approver_name', fullName.message.full_name);
+				}
+			}
+		});
+		await this.page
+			.waitForFunction(
+				() =>
+					Boolean(
+						(window as unknown as { cur_frm?: { doc?: { leave_approver?: string } } }).cur_frm
+							?.doc?.leave_approver,
+					),
+				undefined,
+				{ timeout: 15000 },
+			)
+			.catch(() => {});
 	}
 
 	async open(name: string): Promise<void> {
@@ -16,10 +87,19 @@ export class LeaveApplicationFormPage extends DeskForm {
 	}
 
 	async setEmployee(employeeId: string): Promise<void> {
-		await this.fillLink('employee', employeeId);
+		try {
+			await this.fillLink('employee', employeeId);
+		} catch {
+			await this.page.evaluate((emp) => {
+				const frm = (window as unknown as { cur_frm?: { set_value: (f: string, v: string) => void } })
+					.cur_frm;
+				frm?.set_value('employee', emp);
+			}, employeeId);
+		}
 	}
 
 	async saveDraft(): Promise<string> {
+		await this.ensureLeaveApprover();
 		const saveWait = this.waitForSaveResponse('Leave Application');
 		await this.save();
 		const savedDoc = await saveWait.catch(() => null);
@@ -27,6 +107,36 @@ export class LeaveApplicationFormPage extends DeskForm {
 			return savedDoc.name;
 		}
 		return this.waitForPersistedDocName();
+	}
+
+	async setLeaveApprover(approverEmail: string): Promise<void> {
+		try {
+			await this.fillLink('leave_approver', approverEmail);
+		} catch {
+			await this.page.evaluate(async (email) => {
+				const frm = (window as unknown as {
+					cur_frm?: { set_value: (f: string, v: string) => Promise<void> };
+				}).cur_frm;
+				await frm?.set_value('leave_approver', email);
+				const fullName = await (
+					window as unknown as {
+						frappe: { db: { get_value: (d: string, n: string, f: string) => Promise<{ message?: { full_name?: string } }> } };
+					}
+				).frappe.db.get_value('User', email, 'full_name');
+				if (fullName?.message?.full_name) {
+					await frm?.set_value('leave_approver_name', fullName.message.full_name);
+				}
+			}, approverEmail);
+		}
+		await this.page
+			.waitForFunction(
+				(email) =>
+					(window as unknown as { cur_frm?: { doc?: { leave_approver?: string } } }).cur_frm?.doc
+						?.leave_approver === email,
+				approverEmail,
+				{ timeout: 10000 },
+			)
+			.catch(() => {});
 	}
 
 	async fillLeave(options: {
@@ -51,64 +161,24 @@ export class LeaveApplicationFormPage extends DeskForm {
 			await this.fillData('description', 'E2E leave application');
 		}
 		if (options.leaveApprover) {
-			await this.fillLink('leave_approver', options.leaveApprover);
+			await this.setLeaveApprover(options.leaveApprover);
+		} else {
+			await this.ensureLeaveApprover();
 		}
 	}
 
+	/** Employee path: save draft (Open). Manager submits separately. */
 	async saveAndSubmit(): Promise<string> {
 		const name = await this.saveDraft();
-		await this.submitSavedLeaveInSession(name);
-		const fromUrl = this.getDocNameFromUrl();
-		if (fromUrl) {
-			return fromUrl;
-		}
-		const fromFrm = await this.page.evaluate(
-			() =>
-				(window as unknown as { cur_frm?: { doc?: { name?: string } } }).cur_frm?.doc?.name || null,
-		);
-		if (fromFrm && !fromFrm.startsWith('new-')) {
-			return fromFrm;
-		}
-		return name;
-	}
-
-	private async submitSavedLeaveInSession(name: string): Promise<void> {
 		const submitBtn = this.page
 			.locator('.page-head .primary-action, .page-actions .primary-action')
 			.filter({ hasText: /^Submit$/ })
 			.first();
-		if (await submitBtn.isVisible().catch(() => false)) {
+		if (await submitBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
 			await submitBtn.click();
 			await resolvePostActionModal(this.page, { allowConfirm: true });
-			return;
 		}
-		await this.page.evaluate(async (docname) => {
-			const doc = await (
-				window as unknown as {
-					frappe: {
-						db: { get_doc: (dt: string, n: string) => Promise<unknown> };
-						call: (opts: { method: string; args: Record<string, unknown> }) => Promise<unknown>;
-					};
-				}
-			).frappe.db.get_doc('Leave Application', docname);
-			await (
-				window as unknown as {
-					frappe: { call: (opts: { method: string; args: Record<string, unknown> }) => Promise<unknown> };
-				}
-			).frappe.call({ method: 'frappe.client.submit', args: { doc } });
-		}, name);
-		await this.page
-			.waitForFunction(
-				() => {
-					const doc = (window as unknown as {
-						cur_frm?: { doc?: { docstatus?: number } };
-					}).cur_frm?.doc;
-					return doc?.docstatus === 1;
-				},
-				undefined,
-				{ timeout: 30000 },
-			)
-			.catch(() => {});
+		return this.getDocNameFromUrl() || name;
 	}
 
 	async approve(): Promise<void> {
@@ -119,11 +189,18 @@ export class LeaveApplicationFormPage extends DeskForm {
 		await this.clickWorkflowAction('Reject');
 	}
 
-	async setStatus(status: 'Approved' | 'Rejected' | 'Open'): Promise<void> {
+	async setStatus(
+		status: 'Approved' | 'Rejected' | 'Open',
+		options?: { expectError?: RegExp | string },
+	): Promise<void> {
 		await this.fillSelect('status', status);
-		await this.save();
-		if (status !== 'Open') {
-			await this.submit();
+		await this.save(options?.expectError ? { expectError: options.expectError } : undefined);
+		if (status === 'Open' || options?.expectError) {
+			if (options?.expectError) {
+				await this.submit({ expectError: options.expectError });
+			}
+			return;
 		}
+		await this.submit();
 	}
 }

@@ -15,9 +15,10 @@
 					>
 						<Icon :name="dark ? 'sun' : 'moon'" />
 					</button>
-					<button type="button" class="btn-ghost" :title="notifyTitle" @click="onNotifyClick">
-						<Icon name="bell" />
-					</button>
+					<NotifyMenu />
+					<a href="/desk" class="btn-ghost" title="Open Desk" aria-label="Open Desk">
+						<Icon name="desk" />
+					</a>
 					<a href="/help" class="btn-ghost" aria-label="Help">
 						<Icon name="help" />
 					</a>
@@ -41,12 +42,11 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { RouterView } from "vue-router";
 import { homePayload, loadHomePayload, startHomePoll, stopHomePoll } from "./lib/home";
-import { notifyPermission, requestNotifyPermission } from "./lib/notify";
 import { isDark, toggleTheme } from "./lib/theme";
 import AppNav from "./components/AppNav.vue";
 import Icon from "./components/Icon.vue";
+import NotifyMenu from "./components/NotifyMenu.vue";
 
-const permission = ref(notifyPermission());
 const dark = ref(false);
 
 const nav = computed(() => ({
@@ -54,7 +54,9 @@ const nav = computed(() => ({
 	budget_health: homePayload.value?.nav?.budget_health ?? false,
 }));
 
-const todoCount = computed(() => homePayload.value?.todo_count || 0);
+const todoCount = computed(
+	() => homePayload.value?.waiting_count ?? homePayload.value?.todo_count ?? 0
+);
 
 const navItems = computed(() => {
 	const items = [{ to: "/home", label: "Home", icon: "home", badge: todoCount.value }];
@@ -66,16 +68,6 @@ const navItems = computed(() => {
 	}
 	return items;
 });
-
-const notifyTitle = computed(() => {
-	if (permission.value === "granted") return "Notifications on";
-	if (permission.value === "denied") return "Notifications blocked in the browser";
-	return "Turn on notifications";
-});
-
-async function onNotifyClick() {
-	permission.value = await requestNotifyPermission();
-}
 
 function onThemeClick() {
 	dark.value = toggleTheme();

@@ -149,8 +149,10 @@ def validate_manager_float_expense_claim(doc, method=None) -> None:
 		return
 
 
-def _validate_employee_has_no_blocking_advance_for_manager_float(doc) -> None:
-	"""Staff with their own paid, unsettled advance must settle via Get Advances, not manager float."""
+def _employee_own_blocking_advance(employee: str | None):
+	"""Open own advance that should force Get Advances / Out of Pocket (not manager float)."""
+	if not employee:
+		return None
 	from volunteering.volunteering.doctype.volunteering_accounting_settings.volunteering_accounting_settings import (
 		get_accounting_settings,
 	)
@@ -160,23 +162,25 @@ def _validate_employee_has_no_blocking_advance_for_manager_float(doc) -> None:
 	if settings.get("advance_replenish_residual_pct") is None:
 		replenish_pct = 10.0
 
-	blocking = [
-		row
-		for row in list_open_advances_for_employee(doc.employee)
-		if row.docstatus == 1
-		and flt(row.paid_amount) > 0
-		and is_blocking_advance(row, replenish_pct)
-	]
+	for row in list_open_advances_for_employee(employee):
+		# Cancelled already excluded; drafts and unpaid residuals still block manager float.
+		if is_blocking_advance(row, replenish_pct):
+			return row
+	return None
+
+
+def _validate_employee_has_no_blocking_advance_for_manager_float(doc) -> None:
+	"""Staff with their own unsettled advance must settle via Get Advances, not manager float."""
+	blocking = _employee_own_blocking_advance(doc.employee)
 	if not blocking:
 		return
 
-	advance_name = blocking[0].name
 	frappe.throw(
 		_(
 			"You have an unsettled Employee Advance ({0}). "
 			"Link this expense to your advance with Get Advances, or choose Out of Pocket. "
-			"Manager Advance is for staff who do not have their own paid float."
-		).format(advance_name),
+			"Manager Advance is for staff who do not have their own open float."
+		).format(blocking.name),
 		title=_("Use Your Own Advance"),
 	)
 
@@ -319,6 +323,8 @@ def get_manager_float_context(employee=None):
 	manager_name = frappe.db.get_value("Employee", manager, "employee_name") if manager else None
 	advances = list_fundable_manager_advances(manager) if manager else []
 	total_residual = sum(flt(a["residual"]) for a in advances)
+	own_blocking = _employee_own_blocking_advance(employee)
+	can_request = bool(manager) and not own_blocking
 
 	return {
 		"employee": employee,
@@ -327,7 +333,14 @@ def get_manager_float_context(employee=None):
 		"manager_user": get_reports_to_user(employee) if employee else None,
 		"fundable_advances": advances,
 		"total_residual": total_residual,
-		"can_request": bool(manager),
+		"can_request": can_request,
+		"own_blocking_advance": own_blocking.name if own_blocking else None,
+		"block_reason": (
+			_("You have an unsettled Employee Advance ({0}). Use Get Advances or Out of Pocket.")
+			.format(own_blocking.name)
+			if own_blocking
+			else None
+		),
 		"new_claim_url": desk_route("Expense Claim", "new"),
 	}
 

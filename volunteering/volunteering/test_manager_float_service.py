@@ -76,6 +76,28 @@ class TestManagerFloatService(IntegrationTestCase):
 	@patch(
 		"volunteering.volunteering.doctype.volunteering_accounting_settings.volunteering_accounting_settings.get_accounting_settings"
 	)
+	def test_manager_float_blocked_when_employee_has_draft_advance(self, mock_settings, mock_list):
+		mock_settings.return_value = frappe._dict(advance_replenish_residual_pct=10)
+		mock_list.return_value = [
+			frappe._dict(
+				name="ADV-DRAFT-1",
+				docstatus=0,
+				status="Draft",
+				advance_amount=500,
+				paid_amount=0,
+				claimed_amount=0,
+				return_amount=0,
+			)
+		]
+		doc = frappe._dict(employee="EMP-1")
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			_validate_employee_has_no_blocking_advance_for_manager_float(doc)
+		self.assertIn("ADV-DRAFT-1", str(ctx.exception))
+
+	@patch("volunteering.volunteering.manager_float_service.list_open_advances_for_employee")
+	@patch(
+		"volunteering.volunteering.doctype.volunteering_accounting_settings.volunteering_accounting_settings.get_accounting_settings"
+	)
 	def test_manager_float_allowed_when_own_advance_fully_settled(self, mock_settings, mock_list):
 		mock_settings.return_value = frappe._dict(advance_replenish_residual_pct=10)
 		mock_list.return_value = [

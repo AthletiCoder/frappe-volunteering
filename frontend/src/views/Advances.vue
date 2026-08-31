@@ -6,7 +6,7 @@
 			subtitle="Your advances, manager float requests, and claims settled from float."
 		>
 			<template #actions>
-				<a class="btn-secondary text-sm" href="/app/employee-advance/new">New Advance</a>
+				<a class="btn-secondary text-sm" href="/desk/employee-advance/new">New Advance</a>
 				<button class="btn-primary text-sm" type="button" :disabled="loading" @click="load">
 					{{ loading ? "Loading…" : "Refresh" }}
 				</button>
@@ -59,7 +59,7 @@
 			<div class="mt-3 flex flex-wrap gap-2">
 				<a
 					class="btn-primary text-sm"
-					:href="`/app/expense-claim/new?employee=${encodeURIComponent(adv.employee)}`"
+					:href="`/desk/expense-claim/new?employee=${encodeURIComponent(adv.employee)}`"
 					>New Expense Claim</a
 				>
 				<a class="btn-secondary text-sm" :href="adv.route">Open Advance</a>
