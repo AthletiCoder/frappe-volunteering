@@ -11,6 +11,7 @@ Start from the [app README](../README.md). In Desk, staff should use **[Help](/h
 | [unpaid_and_leave_ops.md](unpaid_and_leave_ops.md) | HR — unpaid staff and leave ops |
 | [tally_to_erpnext_accounts_guide.md](tally_to_erpnext_accounts_guide.md) | Accounts |
 | [fund_disbursement_ops_checklist.md](fund_disbursement_ops_checklist.md) | Accounts — payouts |
+| [accounts-setup-prod-checklist.md](accounts-setup-prod-checklist.md) | Accounts — full COA & Company defaults (prod mirror) |
 | [cashfree_accounting_checklist.md](cashfree_accounting_checklist.md) | Accounts — Cashfree |
 
 ## Developers
@@ -18,6 +19,7 @@ Start from the [app README](../README.md). In Desk, staff should use **[Help](/h
 | Doc | Topic |
 |---|---|
 | [e2e.md](e2e.md) | Playwright how to run |
+| [e2e-parallel.md](e2e-parallel.md) | Multi-site / parallel runs (16 GB sizing) |
 | [e2e-coverage.md](e2e-coverage.md) | Spreadsheet case matrix |
 | [e2e-personas.md](e2e-personas.md) | Seeded users |
 | [e2e-git.md](e2e-git.md) | What not to commit |

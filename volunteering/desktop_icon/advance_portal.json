@@ -1,23 +1,48 @@
 {
  "app": "volunteering",
+ "creation": "2026-08-23 11:52:32.242995",
+ "docstatus": 0,
  "doctype": "Desktop Icon",
  "hidden": 0,
  "icon": "money-coins-1",
  "icon_type": "Link",
+ "idx": 0,
  "label": "Advance Portal",
  "link": "/volunteering/advances",
  "link_type": "External",
+ "modified": "2026-08-31 11:32:12.827734",
+ "modified_by": "Administrator",
  "name": "Advance Portal",
+ "owner": "Administrator",
+ "restrict_removal": 0,
  "roles": [
-  {"role": "Accounts Manager"},
-  {"role": "Accounts User"},
-  {"role": "Employee"},
-  {"role": "Expense Approver"},
-  {"role": "HR Manager"},
-  {"role": "HR User"},
-  {"role": "Leave Approver"},
-  {"role": "NGO Coordinator"},
-  {"role": "System Manager"}
+  {
+   "role": "Accounts Manager"
+  },
+  {
+   "role": "Accounts User"
+  },
+  {
+   "role": "Employee"
+  },
+  {
+   "role": "Expense Approver"
+  },
+  {
+   "role": "HR Manager"
+  },
+  {
+   "role": "HR User"
+  },
+  {
+   "role": "Leave Approver"
+  },
+  {
+   "role": "NGO Coordinator"
+  },
+  {
+   "role": "System Manager"
+  }
  ],
  "standard": 1
 }

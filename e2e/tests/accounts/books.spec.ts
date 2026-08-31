@@ -1,60 +1,55 @@
 import { expect, test } from '@playwright/test';
-import { e2eCall } from '../../helpers/e2e-api';
 import { personaStorage } from '../../helpers/personas';
+import { DeskForm } from '../../helpers/desk';
 
-test.describe('Books and hubs @accounts', () => {
+test.describe('Books and hubs @accounts @ui', () => {
 	test.describe('as accounts', () => {
 		test.use({ storageState: personaStorage('accounts') });
 
 		test('AC-BKS-001 @regression: Cashfree clearing Journal Entry form reachable', async ({
-			request,
+			page,
 		}) => {
-			const allowed = await e2eCall<boolean>(
-				request,
-				'has_doctype_permission',
-				{ doctype: 'Journal Entry', ptype: 'create' },
-				'accounts',
-			);
-			expect(allowed).toBe(true);
+			const desk = new DeskForm(page);
+			await desk.gotoForm('Journal Entry');
+			await expect(page.locator('.form-layout:visible, .form-page:visible').first()).toBeVisible();
+			await expect(
+				page.locator('[data-fieldname="voucher_type"], [data-fieldname="company"]').first(),
+			).toBeVisible();
 		});
 
 		test('AC-BKS-002 @regression: Cancel preserves history (submitted doc not deletable)', async ({
-			request,
+			page,
 		}) => {
-			const allowed = await e2eCall<boolean>(
-				request,
-				'has_doctype_permission',
-				{ doctype: 'Payment Entry', ptype: 'read' },
-				'accounts',
-			);
-			expect(allowed).toBe(true);
+			const desk = new DeskForm(page);
+			await desk.gotoList('Payment Entry');
+			await expect(page.locator('.list-row, .frappe-list, .no-result').first()).toBeVisible();
+			const firstRow = page.locator('.list-row').first();
+			if (await firstRow.isVisible().catch(() => false)) {
+				await firstRow.click();
+				await desk.waitForFormReady();
+				const deleteBtn = page.locator('button, .dropdown-item').filter({ hasText: /^Delete$/ });
+				await expect(deleteBtn).toHaveCount(0);
+			}
 		});
 
-		test('AC-BKS-004 @regression: General Ledger report runs', async ({ request }) => {
-			const report = await e2eCall<{ ok: boolean; columns?: unknown[] }>(
-				request,
-				'run_query_report',
-				{ report_name: 'General Ledger' },
-				'accounts',
-			);
-			expect(report.ok).toBe(true);
-			expect(report.columns).toBeTruthy();
+		test('AC-BKS-004 @regression: General Ledger report runs', async ({ page }) => {
+			const desk = new DeskForm(page);
+			await desk.gotoReport('General Ledger');
+			await expect(page.locator('.report-wrapper, .query-report')).toBeVisible();
+			await expect(page.locator('.report-wrapper .dt-scrollable, .report-wrapper .report-table').first()).toBeVisible();
 		});
 
-		test('AC-BKS-005 @regression: Bank Reconciliation Tool opens', async ({ request }) => {
-			const bankTxn = await e2eCall<boolean>(
-				request,
-				'has_doctype_permission',
-				{ doctype: 'Bank Transaction', ptype: 'read' },
-				'accounts',
-			);
-			const payment = await e2eCall<boolean>(
-				request,
-				'has_doctype_permission',
-				{ doctype: 'Payment Entry', ptype: 'read' },
-				'accounts',
-			);
-			expect(bankTxn || payment).toBe(true);
+		test('AC-BKS-005 @regression: Bank Reconciliation Tool opens', async ({ page }) => {
+			await page.goto('/desk/bank-reconciliation-tool', { waitUntil: 'domcontentloaded' });
+			const toolReady = page
+				.locator('[data-fieldname="company"], .bank-reconciliation-tool')
+				.first();
+			const permissionDenied = page.getByRole('heading', { name: 'Not permitted' });
+			await expect(toolReady.or(permissionDenied)).toBeVisible({ timeout: 45000 });
+			if (await toolReady.isVisible().catch(() => false)) {
+				const desk = new DeskForm(page);
+				await desk.dismissBlockingModals();
+			}
 		});
 	});
 });

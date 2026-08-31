@@ -42,7 +42,7 @@ def get_pending_reimbursements():
 	for row in claims:
 		row.amount = flt(row.grand_total or row.total_claimed_amount)
 		row.modified_label = formatdate(row.modified)
-		row.route = f"/app/expense-claim/{row.name}"
+		row.route = f"/desk/expense-claim/{row.name}"
 
 	return claims
 
@@ -77,6 +77,6 @@ def get_pending_vendor_payments():
 		row.amount = flt(row.outstanding_amount or row.grand_total)
 		row.modified_label = formatdate(row.modified)
 		row.due_date_label = formatdate(row.due_date) if row.due_date else ""
-		row.route = f"/app/purchase-invoice/{row.name}"
+		row.route = f"/desk/purchase-invoice/{row.name}"
 
 	return invoices

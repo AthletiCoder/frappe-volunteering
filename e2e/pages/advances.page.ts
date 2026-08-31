@@ -27,4 +27,36 @@ export class AdvancesPage {
 		await expect(this.page.locator('#app')).toBeVisible();
 		await expect(this.refreshButton()).toBeVisible({ timeout: 30000 });
 	}
+
+	managerFloatPanelHeading() {
+		return this.page.getByRole('heading', { name: "Request from manager's advance", level: 2 });
+	}
+
+	teamFloatRequestsHeading() {
+		return this.page.getByRole('heading', { name: 'Team reimbursement requests', level: 2 });
+	}
+
+	outOfPocketClaimLink() {
+		return this.page.getByRole('link', { name: 'New claim (out of pocket)' });
+	}
+
+	managerFloatClaimLink() {
+		return this.page.getByRole('link', { name: "New claim (manager's advance)" });
+	}
+
+	teamFloatRequestRow(claimName: string) {
+		return this.page
+			.locator('section')
+			.filter({ has: this.teamFloatRequestsHeading() })
+			.locator('div.rounded-xl.border.p-3')
+			.filter({ has: this.page.getByRole('link', { name: claimName, exact: true }) });
+	}
+
+	teamFloatRequestStatus(claimName: string) {
+		return this.teamFloatRequestRow(claimName).getByText(/^(Can fund|Escalate)$/, { exact: true });
+	}
+
+	async waitForTeamRequestsLoaded(): Promise<void> {
+		await expect(this.page.getByText('Loading team requests…')).toBeHidden({ timeout: 30000 }).catch(() => {});
+	}
 }

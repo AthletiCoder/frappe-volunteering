@@ -33,8 +33,14 @@ class AttendanceRegularizationRequest(Document):
 			)
 
 	def before_submit(self):
-		if self.status == "Open":
-			self.status = "Approved"
+		if self.status != "Open":
+			return
+		if not _can_approve(self):
+			frappe.throw(
+				_("Only your reporting manager or HR can approve this request."),
+				frappe.PermissionError,
+			)
+		self.status = "Approved"
 
 	def on_submit(self):
 		if self.status != "Approved":

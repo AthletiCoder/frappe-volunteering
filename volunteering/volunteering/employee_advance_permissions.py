@@ -86,6 +86,54 @@ def has_permission(doc, ptype, user):
 	return False
 
 
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def employee_advance_employee_query(
+	doctype,
+	txt,
+	searchfield,
+	start,
+	page_len,
+	filters,
+	reference_doctype=None,
+	ignore_user_permissions=False,
+):
+	"""Staff may pick any active employee; others stay on their own record."""
+	from erpnext.controllers.queries import employee_query
+
+	if _has_full_access(frappe.session.user):
+		return employee_query(
+			doctype,
+			txt,
+			searchfield,
+			start,
+			page_len,
+			filters,
+			reference_doctype="Employee Advance",
+			ignore_user_permissions=True,
+		)
+	return employee_query(
+		doctype,
+		txt,
+		searchfield,
+		start,
+		page_len,
+		filters,
+		reference_doctype=reference_doctype,
+		ignore_user_permissions=ignore_user_permissions,
+	)
+
+
+@frappe.whitelist()
+def get_employee_company(employee: str) -> str:
+	"""Resolve company for EA when staff pick another employee (user perms hide Employee)."""
+	if not employee:
+		return ""
+	if not _has_full_access(frappe.session.user):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	return frappe.db.get_value("Employee", employee, "company") or ""
+
+
 def validate_employee_self_only(doc, method=None):
 	"""Non-Accounts/HR users may only create advances for themselves."""
 	if frappe.session.user == "Administrator":

@@ -3,71 +3,108 @@ import {
 	addDays,
 	cleanupDay,
 	cleanupEmployeeAdvances,
+	cleanupExpenseClaimsForProject,
 	cleanupLeaveSpan,
 	e2eCall,
 	getCast,
 	todayLocal,
 	workingDayFromToday,
+	repairE2eReportsToChain,
 } from '../../helpers/e2e-api';
+import { withPersona } from '../../helpers/persona-context';
 import { personaStorage, PERSONAS } from '../../helpers/personas';
+import { getE2eMasters, getE2eProject } from '../../helpers/ui-fixtures';
+import { DailyWorkLogFormPage } from '../../pages/desk/daily-work-log.page';
+import { DailyWorkLogSettingsPage } from '../../pages/desk/dwl-settings.page';
+import { EmployeeAdvanceFormPage } from '../../pages/desk/employee-advance.page';
+import { ExpenseClaimFormPage } from '../../pages/desk/expense-claim.page';
+import { LeaveApplicationFormPage } from '../../pages/desk/leave-application.page';
 
-test.describe('Cross-module shared employee master @hr @accounts', () => {
+test.describe('Cross-module shared employee master @hr @accounts @ui', () => {
+	test.describe.configure({ mode: 'serial' });
+
 	test('XM-001 @regression @critical: Reports To drives leave and spend approvals', async ({
+		browser,
 		request,
 	}) => {
+		test.setTimeout(240_000);
 		const cast = await getCast(request, 'admin');
 		const emp = cast.employee.employee!;
 		const managerEmail = PERSONAS.manager.email;
 		const leaveDate = workingDayFromToday(30);
+		const project = await getE2eProject(request);
+		const masters = await getE2eMasters(request);
+		await repairE2eReportsToChain(request);
+		await cleanupExpenseClaimsForProject(request, project);
+		await cleanupDay(request, emp, leaveDate, 'admin');
 		await cleanupLeaveSpan(request, emp, leaveDate, leaveDate, 'admin');
 
-		const leave = await e2eCall<{ name: string }>(
-			request,
-			'create_leave_application',
-			{
-				employee: emp,
-				from_date: leaveDate,
-				to_date: leaveDate,
-				submit: 1,
-			},
-			'employee',
-		);
+		let leaveName = '';
+		await withPersona(browser, 'employee', async (page) => {
+			const leave = new LeaveApplicationFormPage(page);
+			await leave.openNew();
+			await leave.fillLeave({ fromDate: leaveDate, toDate: leaveDate, category: 'Normal' });
+			leaveName = await leave.saveDraft();
+		});
+
 		const leaveApprover = await e2eCall<string>(
 			request,
 			'get_doc_field',
 			{
 				doctype: 'Leave Application',
-				name: leave.name,
+				name: leaveName,
 				field: 'leave_approver',
 			},
 			'admin',
 		);
 		expect(leaveApprover).toBe(managerEmail);
 
-		const claim = await e2eCall<{ name: string; pending_approver?: string }>(
-			request,
-			'create_expense_claim',
-			{ employee: emp, amount: 1500, submit: 1 },
-			'employee',
-		);
-		expect(claim.pending_approver).toBe(managerEmail);
+		let claimName = '';
+		await withPersona(browser, 'employee', async (page) => {
+			const claim = new ExpenseClaimFormPage(page);
+			await claim.openNew();
+			await claim.fillClaim({
+				project,
+				amount: 1500,
+				expenseType: masters.expense_type,
+			});
+			claimName = await claim.saveAndSubmit(request);
+		});
 
-		const flags = await e2eCall<{ is_pending_approver: boolean; can_approve: boolean }>(
+		const pendingApprover = await e2eCall<string>(
 			request,
-			'get_approver_flags',
-			{ doctype: 'Expense Claim', name: claim.name },
-			'manager',
+			'get_doc_field',
+			{ doctype: 'Expense Claim', name: claimName, field: 'pending_approver' },
+			'admin',
 		);
-		expect(flags.is_pending_approver).toBe(true);
-		expect(flags.can_approve).toBe(true);
+		expect(pendingApprover).toBe(managerEmail);
+
+		await withPersona(browser, 'manager', async (page) => {
+			const claim = new ExpenseClaimFormPage(page);
+			await claim.open(claimName);
+			await claim.approve({
+				name: claimName,
+				budgetOverrideReason: 'E2E approval within department plan.',
+			});
+		});
+
+		const approvedState = await e2eCall<string>(
+			request,
+			'get_doc_field',
+			{ doctype: 'Expense Claim', name: claimName, field: 'workflow_state' },
+			'admin',
+		);
+		expect(approvedState).toBe('Approved');
 	});
 
 	test('XM-002 @regression @critical: Grade change updates Accounts limits; HR still works', async ({
+		browser,
 		request,
 	}) => {
 		test.setTimeout(120000);
 		const cast = await getCast(request, 'admin');
 		const emp = cast.employee.employee!;
+		const project = await getE2eProject(request);
 		const originalGrade = await e2eCall<string>(
 			request,
 			'get_doc_field',
@@ -96,24 +133,23 @@ test.describe('Cross-module shared employee master @hr @accounts', () => {
 			);
 
 			await cleanupEmployeeAdvances(request, emp);
-			const overAssociateLimit = await e2eCall<{ ok: boolean; error?: string }>(
-				request,
-				'try_create_advance',
-				{ employee: emp, amount: 10000 },
-				'employee',
-			);
-			expect(overAssociateLimit.ok).toBe(false);
-			expect(overAssociateLimit.error?.toLowerCase()).toMatch(/limit|exceed/);
+			await withPersona(browser, 'employee', async (page) => {
+				const advance = new EmployeeAdvanceFormPage(page);
+				await advance.openNew();
+				await advance.fillAdvance(10000);
+				await advance.trySaveExpectError(/limit|exceed/i);
+			});
 
 			const date = workingDayFromToday(-1);
 			await cleanupDay(request, emp, date, 'admin');
-			const dwl = await e2eCall<{ docstatus: number }>(
-				request,
-				'create_dwl',
-				{ employee: emp, date, hours: 6, submit: 1 },
-				'employee',
-			);
-			expect(dwl.docstatus).toBe(1);
+			await withPersona(browser, 'employee', async (page) => {
+				const dwl = new DailyWorkLogFormPage(page);
+				await dwl.openNew();
+				await dwl.setDate(date);
+				await dwl.addItem({ project, hours: 6 });
+				const name = await dwl.saveAndSubmit();
+				expect(name).toBeTruthy();
+			});
 
 			await e2eCall(
 				request,
@@ -129,13 +165,13 @@ test.describe('Cross-module shared employee master @hr @accounts', () => {
 			);
 
 			await cleanupEmployeeAdvances(request, emp);
-			const withinDirectorLimit = await e2eCall<{ ok: boolean }>(
-				request,
-				'try_create_advance',
-				{ employee: emp, amount: 10000 },
-				'employee',
-			);
-			expect(withinDirectorLimit.ok).toBe(true);
+			await withPersona(browser, 'employee', async (page) => {
+				const advance = new EmployeeAdvanceFormPage(page);
+				await advance.openNew();
+				await advance.fillAdvance(10000);
+				const name = await advance.saveAndSubmit();
+				expect(name).toBeTruthy();
+			});
 		} finally {
 			if (originalGrade) {
 				await e2eCall(
@@ -157,7 +193,7 @@ test.describe('Cross-module shared employee master @hr @accounts', () => {
 	});
 
 	test.describe('XM-003 @regression: Unpaid employee HR exclusions', () => {
-		test('digest preview omits unpaid staff', async ({ request }) => {
+		test('digest preview omits unpaid staff', async ({ browser, request }) => {
 			const cast = await getCast(request, 'admin');
 			const unpaidEmp = cast.unpaid.employee!;
 			const employeeName = await e2eCall<string>(
@@ -167,16 +203,14 @@ test.describe('Cross-module shared employee master @hr @accounts', () => {
 				'admin',
 			);
 
-			const preview = await e2eCall<{
-				html: string;
-				recipients: string[];
-				frequency: string;
-				label: string;
-			}>(request, 'preview_work_log_digest', {}, 'hr');
-
-			expect(preview.html.length).toBeGreaterThan(0);
-			expect(preview.html).not.toContain(employeeName);
-			expect(preview.recipients).not.toContain(PERSONAS.unpaid.email);
+			await withPersona(browser, 'hr', async (page) => {
+				const settings = new DailyWorkLogSettingsPage(page);
+				await settings.open();
+				await settings.previewSummary();
+				const dialog = page.locator('.modal-dialog:visible');
+				await expect(dialog).toBeVisible();
+				await expect(dialog.locator('.modal-body')).not.toContainText(employeeName);
+			});
 		});
 
 		test.describe('as unpaid', () => {
@@ -204,17 +238,16 @@ test.describe('Cross-module shared employee master @hr @accounts', () => {
 				expect(att?.status || att).toBeFalsy();
 			});
 
-			test('advance attempt outcome is recorded', async ({ request }) => {
-				const outcome = await e2eCall<{ ok: boolean; error?: string }>(
-					request,
-					'try_create_advance',
-					{ amount: 1000 },
-					'unpaid',
-				);
-				expect(typeof outcome.ok).toBe('boolean');
-				if (!outcome.ok) {
-					expect(outcome.error).toBeTruthy();
-				}
+			test('advance attempt outcome is recorded', async ({ page, request }) => {
+				const cast = await getCast(request, 'unpaid');
+				const emp = cast.unpaid.employee!;
+				await cleanupEmployeeAdvances(request, emp);
+
+				const advance = new EmployeeAdvanceFormPage(page);
+				await advance.openNew();
+				await advance.fillAdvance(1000);
+				const name = await advance.saveDraft();
+				expect(name).toBeTruthy();
 			});
 		});
 	});

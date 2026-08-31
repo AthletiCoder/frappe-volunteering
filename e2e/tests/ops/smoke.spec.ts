@@ -1,9 +1,12 @@
 import { expect, test } from '@playwright/test';
 import { isLoggedIn } from '../../helpers/auth';
 import { getList } from '../../helpers/frappe';
+import { personaStorage } from '../../helpers/personas';
 import { DESK_WORKSPACE_RE, ROUTES } from '../../helpers/routes';
 
 test.describe('Ops L1 smoke @smoke @ops', () => {
+	test.use({ storageState: personaStorage('admin') });
+
 	test('site ping responds', async ({ request }) => {
 		const response = await request.get('/api/method/ping');
 		expect(response.ok()).toBeTruthy();

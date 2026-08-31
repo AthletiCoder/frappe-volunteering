@@ -12,6 +12,19 @@ export interface FrappeResponse<T = unknown> {
 
 const csrfCache = new Map<string, string>();
 
+function apiBaseUrl(): string {
+	return process.env.BASE_URL || 'http://sevamrita.local:8000';
+}
+
+/** Drop cached CSRF after auth.setup rewrites e2e/.auth (optional persona). */
+export function clearPersonaCsrfCache(persona?: PersonaKey): void {
+	if (persona) {
+		csrfCache.delete(persona);
+		return;
+	}
+	csrfCache.clear();
+}
+
 function personaCookieHeader(persona: PersonaKey = DEFAULT_PERSONA): Record<string, string> {
 	try {
 		const statePath = PERSONAS[persona].storageState;
@@ -65,6 +78,82 @@ function getCsrfToken(persona: PersonaKey = DEFAULT_PERSONA): string {
 function csrfHeaders(persona: PersonaKey = DEFAULT_PERSONA): Record<string, string> {
 	const csrfToken = getCsrfToken(persona);
 	return csrfToken ? { 'X-Frappe-CSRF-Token': csrfToken } : {};
+}
+
+function isGuestApiResponse(body: string): boolean {
+	return body.includes('"full_name":"Guest"') || body.includes('PermissionError');
+}
+
+function parseSetCookieHeader(header: string): { name: string; value: string } | null {
+	const [pair] = header.split(';');
+	if (!pair) {
+		return null;
+	}
+	const eq = pair.indexOf('=');
+	if (eq <= 0) {
+		return null;
+	}
+	return { name: pair.slice(0, eq).trim(), value: pair.slice(eq + 1).trim() };
+}
+
+/** Re-login via API when e2e/.auth sessions expire; updates storageState + CSRF files. */
+export async function refreshPersonaAuth(persona: PersonaKey = DEFAULT_PERSONA): Promise<void> {
+	const creds = PERSONAS[persona];
+	const loginResponse = await fetch(`${apiBaseUrl()}/api/method/login`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+		body: new URLSearchParams({ usr: creds.email, pwd: creds.password }),
+	});
+	if (!loginResponse.ok) {
+		throw new Error(`Login failed for ${persona}: ${await loginResponse.text()}`);
+	}
+
+	const setCookies =
+		typeof loginResponse.headers.getSetCookie === 'function'
+			? loginResponse.headers.getSetCookie()
+			: [];
+	const cookieMap = new Map<string, string>();
+	for (const header of setCookies) {
+		const parsed = parseSetCookieHeader(header);
+		if (parsed) {
+			cookieMap.set(parsed.name, parsed.value);
+		}
+	}
+	const cookieHeader = [...cookieMap.entries()].map(([k, v]) => `${k}=${v}`).join('; ');
+
+	const landing = persona === 'volunteer' ? '/' : '/desk';
+	const deskResponse = await fetch(`${apiBaseUrl()}${landing}`, {
+		headers: cookieHeader ? { Cookie: cookieHeader } : {},
+	});
+	const deskHtml = await deskResponse.text();
+	const csrfMatch = deskHtml.match(/csrf_token\s*[:=]\s*["']([^"']+)["']/);
+	const csrfToken = csrfMatch?.[1] || cookieMap.get('csrf_token') || '';
+
+	const host = new URL(apiBaseUrl()).hostname;
+	const cookies = [...cookieMap.entries()].map(([name, value]) => ({
+		name,
+		value,
+		domain: host,
+		path: '/',
+		expires: -1,
+		httpOnly: name === 'sid',
+		secure: false,
+		sameSite: 'Lax' as const,
+	}));
+
+	ensureAuthDir();
+	fs.writeFileSync(creds.storageState, JSON.stringify({ cookies }, null, 2));
+	if (csrfToken) {
+		fs.writeFileSync(creds.csrfFile, JSON.stringify({ csrf_token: csrfToken }));
+	}
+	clearPersonaCsrfCache(persona);
+
+	if (persona === DEFAULT_PERSONA) {
+		fs.copyFileSync(creds.storageState, path.join(path.dirname(creds.storageState), 'user.json'));
+		if (csrfToken) {
+			fs.copyFileSync(creds.csrfFile, path.join(path.dirname(creds.csrfFile), 'csrf.json'));
+		}
+	}
 }
 
 export async function createDoc<T = Record<string, unknown>>(
@@ -159,24 +248,35 @@ export async function deleteDoc(
 }
 
 export async function callMethod<T = unknown>(
-	request: APIRequestContext,
+	_request: APIRequestContext,
 	method: string,
 	args: Record<string, unknown> = {},
 	persona: PersonaKey = DEFAULT_PERSONA,
 ): Promise<T> {
-	const response = await request.post(`/api/method/${method}`, {
-		data: args,
-		headers: {
-			'Content-Type': 'application/json',
-			...personaHeaders(persona),
-		},
-	});
+	const invoke = async () => {
+		const response = await fetch(`${apiBaseUrl()}/api/method/${method}`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				...personaHeaders(persona),
+			},
+			body: JSON.stringify(args),
+		});
+		const body = await response.text();
+		return { response, body };
+	};
 
-	if (!response.ok()) {
-		throw new Error(`Failed to call ${method}: ${await response.text()}`);
+	let { response, body } = await invoke();
+	if (!response.ok || isGuestApiResponse(body)) {
+		await refreshPersonaAuth(persona);
+		({ response, body } = await invoke());
 	}
 
-	const result: FrappeResponse<T> = await response.json();
+	if (!response.ok) {
+		throw new Error(`Failed to call ${method}: ${body}`);
+	}
+
+	const result: FrappeResponse<T> = JSON.parse(body);
 	return result.message as T;
 }
 

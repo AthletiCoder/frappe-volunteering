@@ -1,40 +1,76 @@
 import { expect, test } from '@playwright/test';
-import { e2eCall, getCast } from '../../helpers/e2e-api';
-import { callMethod } from '../../helpers/frappe';
+import { e2eCall, cleanupExpenseClaimsForProject, getCast } from '../../helpers/e2e-api';
+import { expectFormError } from '../../helpers/dialogs';
+import { withPersona } from '../../helpers/persona-context';
 import { personaStorage } from '../../helpers/personas';
+import { getE2eMasters, getE2eProject } from '../../helpers/ui-fixtures';
+import { ExpenseClaimFormPage } from '../../pages/desk/expense-claim.page';
 
-test.describe('Expense Claim @accounts', () => {
+test.describe('Expense Claim @accounts @ui', () => {
 	test.describe('as employee', () => {
 		test.use({ storageState: personaStorage('employee') });
 
 		test('AC-CLM-001 @regression @critical: Reimbursement happy path to Approved', async ({
+			page,
 			request,
+			browser,
 		}) => {
-			const cast = await getCast(request, 'employee');
-			const emp = cast.employee.employee!;
-			const claim = await e2eCall<{ name: string; workflow_state: string }>(
-				request,
-				'create_expense_claim',
-				{ employee: emp, amount: 1500, submit: 1 },
-				'employee',
-			);
-			expect(claim.workflow_state).toBe('Pending Approval');
+			test.setTimeout(240_000);
+			const project = await getE2eProject(request);
+			await cleanupExpenseClaimsForProject(request, project);
+			const masters = await getE2eMasters(request);
 
-			const approved = await e2eCall<{ workflow_state: string; docstatus: number }>(
+			let claimName = '';
+			const claim = new ExpenseClaimFormPage(page);
+			await claim.openNew();
+			await claim.fillClaim({
+				project,
+				amount: 1500,
+				expenseType: masters.expense_type,
+			});
+			claimName = await claim.saveAndSubmit(request);
+
+			const workflowState = await e2eCall<string>(
 				request,
-				'workflow_action',
-				{ doctype: 'Expense Claim', name: claim.name, action: 'Approve' },
-				'manager',
+				'get_doc_field',
+				{ doctype: 'Expense Claim', name: claimName, field: 'workflow_state' },
+				'admin',
 			);
-			expect(approved.workflow_state).toBe('Approved');
-			expect(approved.docstatus).toBe(1);
+			expect(workflowState).toBe('Pending Approval');
+
+			await withPersona(browser, 'manager', async (mgrPage) => {
+				const mgrClaim = new ExpenseClaimFormPage(mgrPage);
+				await mgrClaim.open(claimName);
+				await mgrClaim.approve({
+					budgetOverrideReason: 'E2E approval within department plan.',
+				});
+			});
+
+			const approvedState = await e2eCall<string>(
+				request,
+				'get_doc_field',
+				{ doctype: 'Expense Claim', name: claimName, field: 'workflow_state' },
+				'admin',
+			);
+			const docstatus = await e2eCall<number>(
+				request,
+				'get_doc_field',
+				{ doctype: 'Expense Claim', name: claimName, field: 'docstatus' },
+				'admin',
+			);
+			expect(approvedState).toBe('Approved');
+			expect(docstatus).toBe(1);
 		});
 
 		test('AC-CLM-002 @regression @critical: Monthly Reimbursement Cap blocks excess', async ({
 			request,
+			browser,
 		}) => {
+			test.setTimeout(300_000);
 			const cast = await getCast(request, 'employee_b');
 			const emp = cast.employee_b.employee!;
+			const project = await getE2eProject(request);
+			const masters = await getE2eMasters(request);
 			await e2eCall(request, 'cleanup_expense_claims', { employee: emp }, 'admin');
 			await e2eCall(
 				request,
@@ -47,25 +83,25 @@ test.describe('Expense Claim @accounts', () => {
 				'admin',
 			);
 			try {
-				await e2eCall(
-					request,
-					'create_expense_claim',
-					{ employee: emp, amount: 2500, submit: 1 },
-					'employee_b',
-				);
-				let blocked = false;
-				try {
-					await e2eCall(
-						request,
-						'create_expense_claim',
-						{ employee: emp, amount: 1000, submit: 1 },
-						'employee_b',
-					);
-				} catch (error) {
-					blocked = true;
-					expect(String(error).toLowerCase()).toMatch(/cap|exceed/);
-				}
-				expect(blocked).toBe(true);
+				await withPersona(browser, 'employee_b', async (empPage) => {
+					const first = new ExpenseClaimFormPage(empPage);
+					await first.openNew();
+					await first.fillClaim({
+						project,
+						amount: 2500,
+						expenseType: masters.expense_type,
+					});
+					await first.saveAndSubmit(request);
+
+					const second = new ExpenseClaimFormPage(empPage);
+					await second.openNew();
+					await second.fillClaim({
+						project,
+						amount: 1000,
+						expenseType: masters.expense_type,
+					});
+					await second.save({ expectError: /cap|exceed/i });
+				});
 			} finally {
 				await e2eCall(
 					request,
@@ -82,9 +118,11 @@ test.describe('Expense Claim @accounts', () => {
 
 		test('AC-CLM-003 @regression: Monthly Reimbursement Cap 0 = unlimited', async ({
 			request,
+			browser,
 		}) => {
-			const cast = await getCast(request, 'associate');
-			const emp = cast.associate.employee!;
+			test.setTimeout(300_000);
+			const project = await getE2eProject(request);
+			const masters = await getE2eMasters(request);
 			await e2eCall(
 				request,
 				'set_single_setting',
@@ -95,88 +133,95 @@ test.describe('Expense Claim @accounts', () => {
 				},
 				'admin',
 			);
-			await e2eCall(
+
+			let secondName = '';
+			await withPersona(browser, 'associate', async (page) => {
+				const first = new ExpenseClaimFormPage(page);
+				await first.openNew();
+				await first.fillClaim({
+					project,
+					amount: 1500,
+					expenseType: masters.expense_type,
+				});
+				await first.saveAndSubmit(request);
+
+				const second = new ExpenseClaimFormPage(page);
+				await second.openNew();
+				await second.fillClaim({
+					project,
+					amount: 1500,
+					expenseType: masters.expense_type,
+				});
+				secondName = await second.saveAndSubmit(request);
+			});
+
+			const workflowState = await e2eCall<string>(
 				request,
-				'create_expense_claim',
-				{ employee: emp, amount: 1500, submit: 1 },
-				'associate',
+				'get_doc_field',
+				{ doctype: 'Expense Claim', name: secondName, field: 'workflow_state' },
+				'admin',
 			);
-			const second = await e2eCall<{ workflow_state: string }>(
-				request,
-				'create_expense_claim',
-				{ employee: emp, amount: 1500, submit: 1 },
-				'associate',
-			);
-			expect(second.workflow_state).toBe('Pending Approval');
+			expect(workflowState).toBe('Pending Approval');
 		});
 
 		test('AC-CLM-005 @regression: Claim requires receipts before submit', async ({
+			page,
 			request,
 		}) => {
-			const cast = await getCast(request, 'employee');
-			const emp = cast.employee.employee!;
-			const draft = await e2eCall<{ name: string }>(
-				request,
-				'create_expense_claim',
-				{ employee: emp, amount: 1200, submit: 0 },
-				'employee',
-			);
-			const files = await callMethod<Array<{ name: string }>>(
-				request,
-				'frappe.client.get_list',
-				{
-					doctype: 'File',
-					filters: {
-						attached_to_doctype: 'Expense Claim',
-						attached_to_name: draft.name,
-					},
-					fields: ['name'],
-				},
-				'admin',
-			);
-			for (const file of files) {
-				await callMethod(
-					request,
-					'frappe.client.delete',
-					{ doctype: 'File', name: file.name },
-					'admin',
-				);
-			}
+			const project = await getE2eProject(request);
+			const masters = await getE2eMasters(request);
 
-			const res = await e2eCall<{ ok: boolean; error?: string }>(
-				request,
-				'try_workflow_action',
-				{ doctype: 'Expense Claim', name: draft.name, action: 'Submit' },
-				'employee',
-			);
-			expect(res.ok).toBe(false);
-			expect(res.error).toBeTruthy();
+			const claim = new ExpenseClaimFormPage(page);
+			await claim.openNew();
+			await claim.fillClaim({
+				project,
+				amount: 1200,
+				expenseType: masters.expense_type,
+			});
+			const draftName = await claim.saveDraft();
+			await claim.submitExpectValidationError(draftName);
+			await expectFormError(page, /receipt|attach/i);
+			expect(draftName).toBeTruthy();
 		});
 	});
 
-	test('AC-CLM-004 @regression: Reject expense claim', async ({ request }) => {
-		const cast = await getCast(request, 'employee');
-		const emp = cast.employee.employee!;
-		const claim = await e2eCall<{ name: string }>(
-			request,
-			'create_expense_claim',
-			{ employee: emp, amount: 1200, submit: 1 },
-			'employee',
-		);
-		const rejected = await e2eCall<{ workflow_state: string }>(
-			request,
-			'workflow_action',
-			{ doctype: 'Expense Claim', name: claim.name, action: 'Reject' },
-			'manager',
-		);
-		expect(rejected.workflow_state).toBe('Rejected');
+	test('AC-CLM-004 @regression: Reject expense claim', async ({ browser, request }) => {
+		test.setTimeout(240_000);
+		const project = await getE2eProject(request);
+		const masters = await getE2eMasters(request);
 
-		const payAttempt = await e2eCall<{ ok: boolean }>(
+		let claimName = '';
+		await withPersona(browser, 'employee', async (page) => {
+			const claim = new ExpenseClaimFormPage(page);
+			await claim.openNew();
+			await claim.fillClaim({
+				project,
+				amount: 1200,
+				expenseType: masters.expense_type,
+			});
+			claimName = await claim.saveAndSubmit(request);
+		});
+
+		await withPersona(browser, 'manager', async (page) => {
+			const claim = new ExpenseClaimFormPage(page);
+			await claim.open(claimName);
+			await claim.reject();
+		});
+
+		const workflowState = await e2eCall<string>(
 			request,
-			'try_workflow_action',
-			{ doctype: 'Expense Claim', name: claim.name, action: 'Approve' },
-			'accounts',
+			'get_doc_field',
+			{ doctype: 'Expense Claim', name: claimName, field: 'workflow_state' },
+			'admin',
 		);
-		expect(payAttempt.ok).toBe(false);
+		expect(workflowState).toBe('Rejected');
+
+		await withPersona(browser, 'accounts', async (page) => {
+			const claim = new ExpenseClaimFormPage(page);
+			await claim.open(claimName);
+			await expect(page.getByText(/^Rejected$/i).first()).toBeVisible();
+			// Accounts may view rejected claims; Approve must not stay available.
+			await claim.expectApproveNotVisible();
+		});
 	});
 });

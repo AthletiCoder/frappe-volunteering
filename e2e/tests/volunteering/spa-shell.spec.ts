@@ -25,11 +25,11 @@ test.describe('SPA shell @smoke @volunteering', () => {
 			}>(request, 'volunteering.volunteering.home_service.get_home_payload', {}, 'employee');
 			const leave = payload.actions.time.find((row) => row.id === 'leave');
 			const pill = page.getByRole('link', { name: 'Previous leave' });
-			await expect(pill).toHaveAttribute('href', '/app/leave-application');
+			await expect(pill).toHaveAttribute('href', '/desk/leave-application');
 			await expect(pill).toContainText(String(leave?.pending ?? 0));
 		});
 
-		test('header nav opens Advances and keeps To-do on Home', async ({ page }) => {
+		test('header nav opens Advances and shows Waiting on Home', async ({ page }) => {
 			const home = new HomePage(page);
 			await home.goto();
 			await home.expectLoaded();
@@ -37,17 +37,21 @@ test.describe('SPA shell @smoke @volunteering', () => {
 			await expect(nav.getByRole('link', { name: 'Home' })).toBeVisible();
 			await expect(nav.getByRole('link', { name: 'To-do' })).toHaveCount(0);
 			await expect(nav.getByRole('link', { name: 'Advances' })).toBeVisible();
+			await expect(nav.getByRole('link', { name: 'Volunteering' })).toHaveCount(0);
 			await expect(nav.getByRole('link', { name: 'Budgets' })).toHaveCount(0);
-			await expect(page.getByRole('heading', { name: 'To-do', level: 2 })).toBeVisible();
+			await expect(
+				page.getByRole('heading', { name: /Waiting on you|You’re clear|You're clear/i, level: 2 }),
+			).toBeVisible();
 			await nav.getByRole('link', { name: 'Advances' }).click();
 			await expect(page).toHaveURL(/\/volunteering\/advances/);
 			await expect(page.getByRole('heading', { name: 'Advance Portal', level: 1 })).toBeVisible();
 		});
 
-		test('/todos redirects to Home to-do section', async ({ page }) => {
+		test('/todos opens Waiting workbench', async ({ page }) => {
 			await page.goto('/volunteering/todos');
-			await expect(page).toHaveURL(/\/volunteering\/home#todos/);
-			await expect(page.locator('#todos')).toBeVisible();
+			await expect(page).toHaveURL(/\/volunteering\/todos/);
+			await expect(page.getByRole('heading', { name: 'Waiting', level: 1 })).toBeVisible();
+			await expect(page.getByRole('button', { name: /All/i })).toBeVisible();
 		});
 
 		test('theme toggle flips html.dark', async ({ page }) => {
@@ -78,6 +82,22 @@ test.describe('SPA shell @smoke @volunteering', () => {
 				.click();
 			await expect(page).toHaveURL(/\/volunteering\/budget-health/);
 			await expect(page.getByRole('heading', { name: 'Budget Health', level: 1 })).toBeVisible();
+		});
+	});
+
+	test.describe('as coordinator', () => {
+		test.use({ storageState: personaStorage('coordinator') });
+
+		test('header nav includes Volunteering next to Home and Advances', async ({ page }) => {
+			const home = new HomePage(page);
+			await home.goto();
+			await home.expectLoaded();
+			const nav = page.getByRole('navigation', { name: 'Sections' });
+			await expect(nav.getByRole('link', { name: 'Home' })).toBeVisible();
+			await expect(nav.getByRole('link', { name: 'Advances' })).toBeVisible();
+			const volunteering = nav.getByRole('link', { name: 'Volunteering' });
+			await expect(volunteering).toBeVisible();
+			await expect(volunteering).toHaveAttribute('href', '/desk/volunteering');
 		});
 	});
 });

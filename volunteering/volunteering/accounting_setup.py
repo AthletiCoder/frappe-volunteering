@@ -1,6 +1,6 @@
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
-from frappe.utils import flt
+from frappe.utils import cint, flt
 
 from volunteering.volunteering.custom_fields import ACCOUNTING_CUSTOM_FIELDS
 from volunteering.volunteering.doctype.volunteering_accounting_settings.volunteering_accounting_settings import (
@@ -76,7 +76,15 @@ def after_migrate():
 	ensure_employee_advance_accounts()
 	ensure_expense_claim_payable_account()
 	ensure_employee_advance_field_visibility()
+	ensure_expense_claim_field_visibility()
+	ensure_manager_advance_field_labels()
+	ensure_approval_routing_section_break()
 	ensure_budget_health_permissions()
+	from volunteering.volunteering.employee_spending_permissions import (
+		ensure_employee_self_service_permissions,
+	)
+
+	ensure_employee_self_service_permissions()
 	reload_accounting_workflows()
 	sync_workflow_submit_permissions()
 	from volunteering.volunteering.accounting_dashboard.setup import ensure_accounting_pages
@@ -84,6 +92,61 @@ def after_migrate():
 
 	ensure_accounting_pages()
 	ensure_help_wikis()
+
+
+def ensure_approval_routing_section_break():
+	"""Approval & Routing must be a Section Break, not a Tab Break.
+
+	A Tab Break on Expense Claim / Employee Advance / Purchase Order left Desk
+	forms blank for staff (both tab panes stayed ``hide`` after refresh).
+	"""
+	for doctype in ("Expense Claim", "Purchase Order", "Employee Advance"):
+		name = frappe.db.get_value(
+			"Custom Field",
+			{"dt": doctype, "fieldname": "approval_routing_tab"},
+			"name",
+		)
+		if not name:
+			continue
+		current = frappe.db.get_value("Custom Field", name, ["fieldtype", "collapsible"], as_dict=True)
+		if current and current.fieldtype == "Section Break" and cint(current.collapsible) == 1:
+			continue
+		frappe.db.set_value(
+			"Custom Field",
+			name,
+			{"fieldtype": "Section Break", "collapsible": 1},
+			update_modified=False,
+		)
+		frappe.clear_cache(doctype=doctype)
+
+
+def ensure_manager_advance_field_labels():
+	"""User-facing copy uses Manager's Advance (not float)."""
+	updates = (
+		("manager_float_holder", "Manager", "eval:doc.reimbursement_source=='Manager Advance'", None),
+		(
+			"manager_float_advance",
+			"Manager's Advance",
+			"eval:doc.reimbursement_source=='Manager Advance'",
+			(
+				"Suggested from your manager's paid advances with residual. "
+				"Final settlement may use a different advance if the claim amount requires it."
+			),
+		),
+	)
+	for fieldname, label, depends_on, description in updates:
+		name = frappe.db.get_value(
+			"Custom Field",
+			{"dt": "Expense Claim", "fieldname": fieldname},
+			"name",
+		)
+		if not name:
+			continue
+		values = {"label": label, "depends_on": depends_on}
+		if description is not None:
+			values["description"] = description
+		frappe.db.set_value("Custom Field", name, values, update_modified=False)
+	frappe.clear_cache(doctype="Expense Claim")
 
 
 def ensure_budget_health_permissions():
@@ -224,6 +287,13 @@ def ensure_employee_advance_field_visibility():
 	"""Hide advance_account from non-Accounts; keep project hidden (advances are not tagged)."""
 	_ensure_property_setter(
 		"Employee Advance",
+		"employee",
+		"ignore_user_permissions",
+		"1",
+		"Check",
+	)
+	_ensure_property_setter(
+		"Employee Advance",
 		"advance_account",
 		"hidden",
 		"1",
@@ -242,6 +312,67 @@ def ensure_employee_advance_field_visibility():
 		"project",
 		"reqd",
 		"0",
+		"Check",
+	)
+	_ensure_property_setter(
+		"Employee Advance",
+		"currency_section",
+		"collapsed",
+		"1",
+		"Check",
+	)
+
+
+def ensure_expense_claim_field_visibility():
+	"""Hide GL accounts from staff; ignore User Permissions on Link fields.
+
+	Employees get a User Permission on their own Employee (and Company). Any other
+	Employee/User/Project/… Link on the claim then blocks *read* of their own
+	document (e.g. manager_float_holder → manager).
+
+	``employee`` must ignore UP too: Accounts users are Employees, so apply-to-all
+	Employee UP would empty their Expense Claim list. Row scope is
+	``expense_claim_permissions`` (own / approver / dept head / accounts).
+	"""
+	for doctype, fieldname in (
+		("Expense Claim", "employee"),
+		("Expense Claim", "payable_account"),
+		("Expense Claim", "project"),
+		("Expense Claim", "department"),
+		("Expense Claim", "cost_center"),
+		("Expense Claim", "expense_approver"),
+		("Expense Claim", "pending_approver"),
+		("Expense Claim", "manager_float_holder"),
+		("Expense Claim", "manager_float_advance"),
+		("Expense Claim", "currency"),
+		("Expense Claim Advance", "advance_account"),
+		("Expense Claim Advance", "employee_advance"),
+		("Expense Claim Detail", "default_account"),
+		("Expense Claim Detail", "cost_center"),
+		("Expense Claim Detail", "expense_type"),
+		("Expense Claim Detail", "project"),
+	):
+		if not frappe.db.exists("DocType", doctype):
+			continue
+		if not frappe.db.exists("DocField", {"parent": doctype, "fieldname": fieldname}) and not frappe.db.exists(
+			"Custom Field", {"dt": doctype, "fieldname": fieldname}
+		):
+			continue
+		_ensure_property_setter(doctype, fieldname, "ignore_user_permissions", "1", "Check")
+
+	_ensure_property_setter("Expense Claim Detail", "default_account", "hidden", "1", "Check")
+	_ensure_property_setter(
+		"Expense Claim",
+		"payable_account",
+		"hidden",
+		"1",
+		"Check",
+	)
+	_ensure_property_setter(
+		"Expense Claim",
+		"payable_account",
+		"read_only",
+		"1",
 		"Check",
 	)
 

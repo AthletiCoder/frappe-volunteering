@@ -11,6 +11,7 @@
 	--muted: #6f675c;
 	--line: #e4ddd3;
 	--accent: #0f6e56;
+	--accent-hover: #0c5e49;
 	--accent-soft: #dceee7;
 	--on-accent: #ffffff;
 	--todo: #c2410c;
@@ -36,8 +37,9 @@ html.dark {
 	--muted: #8a8378;
 	--line: rgb(255 255 255 / 0.08);
 	--accent: #6f9e8f;
+	--accent-hover: #5d8779;
 	--accent-soft: rgb(111 158 143 / 0.12);
-	--on-accent: #121110;
+	--on-accent: #ffffff;
 	--todo: #c4a07a;
 	--todo-soft: rgb(196 160 122 / 0.14);
 	--on-todo: #121110;
@@ -66,10 +68,31 @@ html.dark {
 
 @layer components {
 	.btn-primary {
-		@apply inline-flex items-center justify-center px-3 py-1.5 rounded-xl bg-accent text-on-accent hover:brightness-110 active:scale-[0.98] transition-all duration-150;
+		@apply inline-flex items-center justify-center px-3 py-1.5 rounded-xl font-medium text-white;
+		@apply active:scale-[0.98] transition-all duration-150;
+		background-color: var(--accent);
+	}
+	.btn-primary:hover {
+		background-color: var(--accent-hover);
 	}
 	.btn-secondary {
-		@apply inline-flex items-center justify-center px-3 py-1.5 rounded-xl border border-line bg-surface text-ink hover:bg-soft transition-all duration-150;
+		@apply inline-flex items-center justify-center px-3 py-1.5 rounded-xl border font-medium;
+		@apply active:scale-[0.98] transition-all duration-150;
+		color: var(--ink);
+		background-color: var(--surface);
+		border-color: var(--line);
+	}
+	a.btn-secondary:hover,
+	a.btn-secondary:focus-visible,
+	.btn-secondary:hover,
+	.btn-secondary:focus-visible {
+		color: var(--ink);
+		background-color: var(--accent-soft);
+		border-color: var(--line);
+	}
+	.btn-ghost {
+		@apply inline-flex items-center justify-center p-2 rounded-xl text-muted;
+		@apply hover:text-ink hover:bg-soft transition-all duration-150;
 	}
 }
 

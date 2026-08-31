@@ -5,11 +5,15 @@ import {
 	e2eCall,
 	getCast,
 	todayLocal,
+	workingDayFromToday,
 } from '../../helpers/e2e-api';
-import { callMethod } from '../../helpers/frappe';
+import { withPersona } from '../../helpers/persona-context';
 import { personaStorage } from '../../helpers/personas';
+import { getE2eProject } from '../../helpers/ui-fixtures';
+import { DailyWorkLogFormPage } from '../../pages/desk/daily-work-log.page';
+import { DeskForm } from '../../helpers/desk';
 
-test.describe('HR Manager Notes & Dashboards @hr', () => {
+test.describe('HR Manager Notes & Dashboards @hr @ui', () => {
 	test.describe('as manager', () => {
 		test.use({ storageState: personaStorage('manager') });
 
@@ -19,9 +23,9 @@ test.describe('HR Manager Notes & Dashboards @hr', () => {
 			const cast = await getCast(request, 'manager');
 			const emp = cast.employee.employee!;
 
-			const name = await e2eCall<string>(
+			const created = await e2eCall<{ name: string }>(
 				request,
-				'create_manager_note',
+				'seed_manager_note',
 				{
 					employee: emp,
 					note_type: 'Appreciation',
@@ -29,12 +33,12 @@ test.describe('HR Manager Notes & Dashboards @hr', () => {
 				},
 				'manager',
 			);
-			expect(name).toBeTruthy();
+			expect(created.name).toBeTruthy();
 
 			const noteType = await e2eCall<string>(
 				request,
 				'get_doc_field',
-				{ doctype: 'Manager Note', name, field: 'note_type' },
+				{ doctype: 'Manager Note', name: created.name, field: 'note_type' },
 				'admin',
 			);
 			expect(noteType).toBe('Appreciation');
@@ -46,9 +50,9 @@ test.describe('HR Manager Notes & Dashboards @hr', () => {
 			const cast = await getCast(request, 'manager');
 			const emp = cast.employee.employee!;
 
-			const coaching = await e2eCall<string>(
+			const coaching = await e2eCall<{ name: string }>(
 				request,
-				'create_manager_note',
+				'seed_manager_note',
 				{
 					employee: emp,
 					note_type: 'Coaching',
@@ -56,9 +60,9 @@ test.describe('HR Manager Notes & Dashboards @hr', () => {
 				},
 				'manager',
 			);
-			const warning = await e2eCall<string>(
+			const warning = await e2eCall<{ name: string }>(
 				request,
-				'create_manager_note',
+				'seed_manager_note',
 				{
 					employee: emp,
 					note_type: 'Warning',
@@ -71,7 +75,7 @@ test.describe('HR Manager Notes & Dashboards @hr', () => {
 				await e2eCall<string>(
 					request,
 					'get_doc_field',
-					{ doctype: 'Manager Note', name: coaching, field: 'note_type' },
+					{ doctype: 'Manager Note', name: coaching.name, field: 'note_type' },
 					'admin',
 				),
 			).toBe('Coaching');
@@ -79,7 +83,7 @@ test.describe('HR Manager Notes & Dashboards @hr', () => {
 				await e2eCall<string>(
 					request,
 					'get_doc_field',
-					{ doctype: 'Manager Note', name: warning, field: 'note_type' },
+					{ doctype: 'Manager Note', name: warning.name, field: 'note_type' },
 					'admin',
 				),
 			).toBe('Warning');
@@ -87,28 +91,34 @@ test.describe('HR Manager Notes & Dashboards @hr', () => {
 
 		test('HR-MGR-005 @regression: Manager sees team work logs and marks reviewed', async ({
 			request,
+			browser,
 		}) => {
 			const cast = await getCast(request, 'manager');
 			const emp = cast.employee.employee!;
-			const date = addDays(todayLocal(), -1);
+			const date = workingDayFromToday(-1);
+			const project = await getE2eProject(request);
 			await cleanupDay(request, emp, date, 'admin');
 
-			const created = await e2eCall<{ name: string }>(
-				request,
-				'create_dwl',
-				{ employee: emp, date, hours: 6, submit: 1 },
-				'employee',
-			);
+			let logName = '';
+			await withPersona(browser, 'employee', async (empPage) => {
+				const dwl = new DailyWorkLogFormPage(empPage);
+				await dwl.openNew();
+				await dwl.setDate(date);
+				await dwl.addItem({ project, hours: 6 });
+				logName = await dwl.saveAndSubmit();
+			});
+
 			await e2eCall(
 				request,
-				'mark_dwl_reviewed',
-				{ name: created.name },
+				'seed_mark_dwl_reviewed',
+				{ name: logName, manager_remarks: 'Reviewed in E2E' },
 				'manager',
 			);
+
 			const status = await e2eCall<string>(
 				request,
 				'get_doc_field',
-				{ doctype: 'Daily Work Log', name: created.name, field: 'status' },
+				{ doctype: 'Daily Work Log', name: logName, field: 'status' },
 				'admin',
 			);
 			expect(status).toBe('Reviewed');
@@ -119,14 +129,16 @@ test.describe('HR Manager Notes & Dashboards @hr', () => {
 		test.use({ storageState: personaStorage('employee') });
 
 		test('HR-MGR-002 @regression @critical: Employee cannot see manager notes', async ({
+			page,
 			request,
+			browser,
 		}) => {
 			const cast = await getCast(request, 'employee');
 			const emp = cast.employee.employee!;
 
 			await e2eCall(
 				request,
-				'create_manager_note',
+				'seed_manager_note',
 				{
 					employee: emp,
 					note_type: 'Appreciation',
@@ -135,18 +147,11 @@ test.describe('HR Manager Notes & Dashboards @hr', () => {
 				'manager',
 			);
 
-			const notes = await callMethod<{ name: string }[]>(
-				request,
-				'frappe.client.get_list',
-				{
-					doctype: 'Manager Note',
-					filters: { employee: emp },
-					fields: ['name'],
-					limit_page_length: 10,
-				},
-				'employee',
-			);
-			expect(notes.length).toBe(0);
+			const desk = new DeskForm(page);
+			await desk.gotoList('Manager Note');
+			await expect(page.locator('.frappe-list').first()).toBeVisible();
+			const rows = page.locator('.list-row-container .list-row');
+			await expect(rows).toHaveCount(0);
 		});
 	});
 

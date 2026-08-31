@@ -92,7 +92,7 @@
 							<a
 								v-if="row.department"
 								class="text-accent hover:underline"
-								:href="`/app/department/${encodeURIComponent(row.department)}`"
+								:href="`/desk/department/${encodeURIComponent(row.department)}`"
 								>{{ row.department }}</a
 							>
 						</td>
@@ -175,7 +175,7 @@ function barStyle(pct) {
 }
 
 function spendRoute(row) {
-	return `/app/expense-claim?project=${encodeURIComponent(row.project || "")}`;
+	return `/desk/expense-claim?project=${encodeURIComponent(row.project || "")}`;
 }
 
 async function load() {

@@ -2,7 +2,9 @@
 
 Source: `sevamrit-erp-testing.xlsx` (108 spreadsheet cases). All 108 IDs are automated in Playwright specs under `e2e/tests/`.
 
-**Last verified:** 16 Aug 2026 — HR `@regression` **59/59 passed**; Accounts `@regression` **44/44 passed**; cross-module `@regression` **XM-001…003 passed** (chromium).
+**Last verified:** Aug 2026 — suite converted to **browser UI** (`@ui`); API helpers limited to setup/assert. Manager-float AC-MFL-001–005 hardened (settlement on Approve→submit, Desk Review/Escalate selectors, portal row scoping).
+
+**Execution:** All 108 spreadsheet IDs use **UI** for create/submit/approve. **API-setup** is used only for cleanup, fixtures (`seed_manager_paid_advance`, `seed_expense_claim`, `seed_workflow_action`), `trigger_attendance_job`, `set_advance_settlement`, and post-action `get_doc_field` / `get_attendance_status` assertions. Supplementary **VO-001…006** gap tests in `e2e/tests/volunteering/gap.spec.ts`.
 
 **Level rules:** Cases in `*/smoke.spec.ts` without `@regression`/`@critical` tags are **smoke**. Others use **critical** when the spec line has `@critical`, else **regression**.
 
@@ -109,6 +111,11 @@ Source: `sevamrit-erp-testing.xlsx` (108 spreadsheet cases). All 108 IDs are aut
 | AC-CLM-003 | Monthly Reimbursement Cap 0 = unlimited | regression | `e2e/tests/accounts/claim.spec.ts` | automated |
 | AC-CLM-004 | Reject expense claim | regression | `e2e/tests/accounts/claim.spec.ts` | automated |
 | AC-CLM-005 | Claim requires receipts before submit | regression | `e2e/tests/accounts/claim.spec.ts` | automated |
+| AC-MFL-001 | Out of Pocket firm reimbursement (not manager float) | critical | `e2e/tests/accounts/manager-float.spec.ts` | automated |
+| AC-MFL-002 | Manager Advance approve settles from manager paid advance | critical | `e2e/tests/accounts/manager-float.spec.ts` | automated |
+| AC-MFL-003 | Manager without float blocks Approve and allows Escalate | critical | `e2e/tests/accounts/manager-float.spec.ts` | automated |
+| AC-MFL-004 | Advance Portal shows manager float panel | regression | `e2e/tests/accounts/manager-float.spec.ts` | automated |
+| AC-MFL-005 | Advance Portal lists pending team manager-float request | regression | `e2e/tests/accounts/manager-float.spec.ts` | automated |
 | AC-SET-001 | Accounts Manager edits Approval & Advance Limits | critical | `e2e/tests/accounts/settings.spec.ts` | automated |
 | AC-SET-002 | HR Manager view-only on limits | critical | `e2e/tests/accounts/settings.spec.ts` | automated |
 | AC-SET-003 | Edit Vendor Payment Threshold and Cash Payment Limit | regression | `e2e/tests/accounts/settings.spec.ts` | automated |
@@ -159,8 +166,9 @@ Infrastructure and persona checks without spreadsheet IDs (not counted in the 10
 | Module | Count | Smoke | Regression | Critical |
 |--------|------:|------:|-----------:|---------:|
 | HR | 59 | 1 | 21 | 37 |
-| Accounts | 46 | 3 | 15 | 28 |
+| Accounts | 51 | 3 | 17 | 31 |
 | Cross-module | 3 | 0 | 1 | 2 |
 | Ops / Volunteering smoke | 15 | 12 | 2 | 0 |
-| **Spreadsheet total** | **108** | **4** | **37** | **67** |
+| Volunteering gaps (VO-*) | 6 | 1 | 5 | 0 |
+| **Spreadsheet total** | **113** | **4** | **39** | **70** |
 

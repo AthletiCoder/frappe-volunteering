@@ -38,6 +38,38 @@ def assign_department_from_employee(doc, method=None):
 		doc.department = department
 
 
+def ensure_expense_claim_accounts(doc, method=None):
+	"""Set GL accounts server-side so employees never need Account DocPerm."""
+	if doc.doctype != "Expense Claim" or not doc.get("company"):
+		return
+
+	if not doc.get("payable_account"):
+		doc.payable_account = _company_payable_account(doc.company)
+
+	for row in doc.get("expenses") or []:
+		if row.get("default_account") or not row.get("expense_type"):
+			continue
+		account = frappe.db.get_value(
+			"Expense Claim Account",
+			{"parent": row.expense_type, "company": doc.company},
+			"default_account",
+		)
+		if account:
+			row.default_account = account
+
+
+def _company_payable_account(company: str) -> str | None:
+	for fieldname in ("default_expense_claim_payable_account", "default_payable_account"):
+		account = frappe.db.get_value("Company", company, fieldname)
+		if account and frappe.db.get_value("Account", account, "account_type") == "Payable":
+			return account
+	return frappe.db.get_value(
+		"Account",
+		{"company": company, "account_type": "Payable", "is_group": 0, "disabled": 0},
+		"name",
+	)
+
+
 def assign_department_from_owner(doc, method=None):
 	if doc.doctype not in ("Purchase Order", "Purchase Invoice") or doc.get("department"):
 		return

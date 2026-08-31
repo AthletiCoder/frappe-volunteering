@@ -2,6 +2,11 @@ frappe.ui.form.on("Daily Work Log Settings", {
 	refresh(frm) {
 		frm.add_custom_button(__("Preview Summary"), () => preview_digest(frm), __("Work Log Summary"));
 		frm.add_custom_button(__("Send Summary Now"), () => send_digest_now(frm), __("Work Log Summary"));
+		frm.add_custom_button(
+			__("Send Missing-Log Reminders Now"),
+			() => send_reminders_now(frm),
+			__("Missing Log Reminder")
+		);
 	},
 });
 
@@ -53,6 +58,39 @@ function send_digest_now(frm) {
 					}
 					frappe.show_alert({
 						message: __("Summary sent to {0} recipient(s).", [(data.recipients || []).length]),
+						indicator: "green",
+					});
+				},
+			});
+		}
+	);
+}
+
+function send_reminders_now(frm) {
+	frappe.confirm(
+		__(
+			"Email paid employees who are missing a submitted work log for yesterday? (Holidays, leave, and people who already logged are skipped.)"
+		),
+		() => {
+			frappe.call({
+				method: "volunteering.volunteering.api.work_log_reminder.send_missing_log_reminders_now",
+				freeze: true,
+				freeze_message: __("Sending reminders…"),
+				callback(r) {
+					const data = r.message || {};
+					if (data.skipped) {
+						frappe.msgprint({
+							title: __("Not Sent"),
+							message: __("Skipped: {0}", [data.reason || "unknown"]),
+							indicator: "orange",
+						});
+						return;
+					}
+					frappe.show_alert({
+						message: __("Reminders sent: {0}. Skipped: {1}.", [
+							data.sent || 0,
+							data.skipped || 0,
+						]),
 						indicator: "green",
 					});
 				},

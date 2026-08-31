@@ -159,6 +159,8 @@ def get_daily_work_log_settings():
 		"min_hours_warning": 6,
 		"present_hours_threshold": 6,
 		"enable_attendance_job": 1,
+		"enable_missing_log_reminder": 1,
+		"missing_log_reminder_hour": 9,
 		"enable_board_digest": 1,
 		"digest_frequency": "Daily",
 		"digest_recipient_roles": "",

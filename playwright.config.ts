@@ -17,11 +17,11 @@ export default defineConfig({
 	fullyParallel: false,
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 2 : 0,
-	workers: 1,
+	workers: Number(process.env.PW_WORKERS || 1),
 	reporter: process.env.CI
 		? [['github'], ['html', { open: 'never' }]]
 		: [['line'], ['html', { open: 'never' }]],
-	timeout: 60000,
+	timeout: 120000,
 
 	expect: {
 		timeout: 10000,

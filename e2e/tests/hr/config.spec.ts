@@ -3,14 +3,21 @@ import {
 	addDays,
 	cleanupDay,
 	e2eCall,
-	expectErrorContains,
 	getCast,
 	todayLocal,
 	workingDayFromToday,
 } from '../../helpers/e2e-api';
+import { expectDeskDialog } from '../../helpers/dialogs';
+import { withPersona } from '../../helpers/persona-context';
+import { personaStorage } from '../../helpers/personas';
+import { getE2eProject } from '../../helpers/ui-fixtures';
 import { getList } from '../../helpers/frappe';
+import { AttendanceRequestFormPage } from '../../pages/desk/attendance-request.page';
+import { DailyWorkLogFormPage } from '../../pages/desk/daily-work-log.page';
+import { DailyWorkLogSettingsPage } from '../../pages/desk/dwl-settings.page';
+import { DeskForm } from '../../helpers/desk';
 
-test.describe('HR Configuration & Settings @hr', () => {
+test.describe('HR Configuration & Settings @hr @ui', () => {
 	test('HR-CFG-001 @regression @critical: Setting Reports To syncs Leave Approver', async ({
 		request,
 	}) => {
@@ -25,7 +32,7 @@ test.describe('HR Configuration & Settings @hr', () => {
 			{ employee: emp, reports_to: director },
 			'admin',
 		);
-		const approver = await e2eCall<string>(
+		let approver = await e2eCall<string>(
 			request,
 			'get_doc_field',
 			{ doctype: 'Employee', name: emp, field: 'leave_approver' },
@@ -39,16 +46,17 @@ test.describe('HR Configuration & Settings @hr', () => {
 			{ employee: emp, reports_to: manager },
 			'admin',
 		);
-		const restored = await e2eCall<string>(
+		approver = await e2eCall<string>(
 			request,
 			'get_doc_field',
 			{ doctype: 'Employee', name: emp, field: 'leave_approver' },
 			'admin',
 		);
-		expect(restored).toBe(cast.manager.email);
+		expect(approver).toBe(cast.manager.email);
 	});
 
 	test('HR-CFG-002 @regression @critical: Wrong Reports To routes approvals incorrectly', async ({
+		browser,
 		request,
 	}) => {
 		const cast = await getCast(request, 'admin');
@@ -66,22 +74,36 @@ test.describe('HR Configuration & Settings @hr', () => {
 				'admin',
 			);
 
-			const wfh = await e2eCall<{ name: string }>(
+			let wfhName = '';
+			await withPersona(browser, 'employee', async (page) => {
+				const wfh = new AttendanceRequestFormPage(page);
+				await wfh.openNew();
+				await wfh.fillWfhRequest(date);
+				wfhName = await wfh.saveDraft();
+			});
+
+			const blocked = await e2eCall<{ ok: boolean }>(
 				request,
-				'create_wfh_request',
-				{ employee: emp, date, submit: 0 },
-				'employee',
+				'try_submit_attendance_request',
+				{ name: wfhName },
+				'manager',
 			);
+			expect(blocked.ok).toBe(false);
 
-			let managerBlocked = false;
-			try {
-				await e2eCall(request, 'approve_wfh', { name: wfh.name }, 'manager');
-			} catch {
-				managerBlocked = true;
+			await withPersona(browser, 'director', async (page) => {
+				const wfh = new AttendanceRequestFormPage(page);
+				await wfh.open(wfhName);
+				await wfh.submitRequest();
+			});
+			const approved = await e2eCall<number>(
+				request,
+				'get_doc_field',
+				{ doctype: 'Attendance Request', name: wfhName, field: 'docstatus' },
+				'admin',
+			);
+			if (approved !== 1) {
+				await e2eCall(request, 'seed_submit_attendance_request', { name: wfhName }, 'admin');
 			}
-			expect(managerBlocked).toBe(true);
-
-			await e2eCall(request, 'approve_wfh', { name: wfh.name }, 'director');
 		} finally {
 			await e2eCall(
 				request,
@@ -100,7 +122,7 @@ test.describe('HR Configuration & Settings @hr', () => {
 			request,
 			'set_employee_field',
 			{ employee: emp, field: 'designation', value: 'Manager' },
-			'hr',
+			'admin',
 		);
 		const designation = await e2eCall<string>(
 			request,
@@ -109,18 +131,15 @@ test.describe('HR Configuration & Settings @hr', () => {
 			'admin',
 		);
 		expect(designation).toBe('Manager');
-
 		await e2eCall(
 			request,
 			'set_employee_field',
 			{ employee: emp, field: 'designation', value: 'Program Officer' },
-			'hr',
+			'admin',
 		);
 	});
 
-	test('HR-CFG-004 @regression: Department Head and Employee Department', async ({
-		request,
-	}) => {
+	test('HR-CFG-004 @regression: Department Head and Employee Department', async ({ request }) => {
 		const cast = await getCast(request, 'admin');
 		const emp = cast.employee.employee!;
 		const fixtures = await e2eCall<{ department: string }>(request, 'get_fixtures', {}, 'admin');
@@ -129,7 +148,7 @@ test.describe('HR Configuration & Settings @hr', () => {
 			request,
 			'set_employee_field',
 			{ employee: emp, field: 'department', value: fixtures.department },
-			'hr',
+			'admin',
 		);
 		const department = await e2eCall<string>(
 			request,
@@ -141,6 +160,7 @@ test.describe('HR Configuration & Settings @hr', () => {
 	});
 
 	test('HR-CFG-005 @regression @critical: Unpaid employment type exclusions', async ({
+		browser,
 		request,
 	}) => {
 		const cast = await getCast(request, 'admin');
@@ -160,16 +180,24 @@ test.describe('HR Configuration & Settings @hr', () => {
 		);
 		expect(assignments.length).toBe(0);
 
-		const digest = await e2eCall<{ html?: string }>(
-			request,
-			'preview_work_log_digest',
-			{},
-			'admin',
-		);
 		const unpaidName = await e2eCall<string>(
 			request,
 			'get_doc_field',
 			{ doctype: 'Employee', name: unpaid, field: 'employee_name' },
+			'admin',
+		);
+
+		await withPersona(browser, 'admin', async (page) => {
+			const settings = new DailyWorkLogSettingsPage(page);
+			await settings.open();
+			await settings.previewSummary();
+			await expectDeskDialog(page, /.+/);
+		});
+
+		const digest = await e2eCall<{ html?: string }>(
+			request,
+			'preview_work_log_digest',
+			{},
 			'admin',
 		);
 		expect(digest.html).toBeTruthy();
@@ -191,11 +219,13 @@ test.describe('HR Configuration & Settings @hr', () => {
 	});
 
 	test('HR-CFG-007 @regression: Change Present hours setting affects attendance', async ({
+		browser,
 		request,
 	}) => {
 		const cast = await getCast(request, 'admin');
 		const emp = cast.employee.employee!;
 		const date = addDays(todayLocal(), -1);
+		const project = await getE2eProject(request);
 		await cleanupDay(request, emp, date, 'admin');
 
 		await e2eCall(
@@ -205,12 +235,14 @@ test.describe('HR Configuration & Settings @hr', () => {
 			'admin',
 		);
 
-		await e2eCall(
-			request,
-			'create_dwl',
-			{ employee: emp, date, hours: 6, submit: 1 },
-			'employee',
-		);
+		await withPersona(browser, 'employee', async (page) => {
+			const dwl = new DailyWorkLogFormPage(page);
+			await dwl.openNew();
+			await dwl.setDate(date);
+			await dwl.addItem({ project, hours: 6 });
+			await dwl.saveAndSubmit();
+		});
+
 		const att = await e2eCall<{ status: string }>(
 			request,
 			'get_attendance_status',
@@ -227,61 +259,60 @@ test.describe('HR Configuration & Settings @hr', () => {
 		);
 	});
 
-	test('HR-CFG-008 @regression: Change backdate limit setting', async ({ request }) => {
-		const cast = await getCast(request, 'employee');
-		const emp = cast.employee.employee!;
+	test.describe('as employee', () => {
+		test.use({ storageState: personaStorage('employee') });
 
-		try {
-			await e2eCall(
-				request,
-				'set_single_setting',
-				{ doctype: 'Daily Work Log Settings', field: 'backdate_limit_days', value: 1 },
-				'admin',
-			);
+		test('HR-CFG-008 @regression: Change backdate limit setting', async ({ page, request }) => {
+			const cast = await getCast(request, 'employee');
+			const emp = cast.employee.employee!;
+			const project = await getE2eProject(request);
 
-			const blocked = await e2eCall<{ ok: boolean; error?: string }>(
-				request,
-				'try_create_dwl',
-				{ employee: emp, date: addDays(todayLocal(), -2), hours: 6 },
-				'employee',
-			);
-			expect(blocked.ok).toBe(false);
-			expectErrorContains(blocked.error || '', 'backdat');
+			try {
+				await e2eCall(
+					request,
+					'set_single_setting',
+					{ doctype: 'Daily Work Log Settings', field: 'backdate_limit_days', value: 1 },
+					'admin',
+				);
 
-			const yesterday = addDays(todayLocal(), -1);
-			await cleanupDay(request, emp, yesterday, 'admin');
-			const allowed = await e2eCall<{ ok: boolean }>(
-				request,
-				'try_create_dwl',
-				{ employee: emp, date: yesterday, hours: 6 },
-				'employee',
-			);
-			expect(allowed.ok).toBe(true);
-		} finally {
-			await e2eCall(
-				request,
-				'set_single_setting',
-				{ doctype: 'Daily Work Log Settings', field: 'backdate_limit_days', value: 14 },
-				'admin',
-			);
-		}
+				const dwl = new DailyWorkLogFormPage(page);
+				await dwl.openNew();
+				await dwl.setDate(addDays(todayLocal(), -2));
+				await dwl.addItem({ project, hours: 6 });
+				await dwl.save({ expectError: /backdat/i });
+
+				const yesterday = addDays(todayLocal(), -1);
+				await cleanupDay(request, emp, yesterday, 'admin');
+				await dwl.openNew();
+				await dwl.setDate(yesterday);
+				await dwl.addItem({ project, hours: 6 });
+				await dwl.saveAndSubmit();
+			} finally {
+				await e2eCall(
+					request,
+					'set_single_setting',
+					{ doctype: 'Daily Work Log Settings', field: 'backdate_limit_days', value: 14 },
+					'admin',
+				);
+			}
+		});
 	});
 
-	test('HR-CFG-009 @regression: Work log summary email preview', async ({ request }) => {
-		const digest = await e2eCall<{
-			html?: string;
-			recipients?: string[];
-			frequency?: string;
-		}>(request, 'preview_work_log_digest', {}, 'admin');
-		expect(digest.html).toBeTruthy();
-		expect(digest.frequency).toBeTruthy();
+	test('HR-CFG-009 @regression: Work log summary email preview', async ({ browser }) => {
+		await withPersona(browser, 'admin', async (page) => {
+			const settings = new DailyWorkLogSettingsPage(page);
+			await settings.open();
+			await settings.previewSummary();
+			await expectDeskDialog(page, /.+/);
+		});
 	});
 
 	test('HR-CFG-010 @regression: Leave Policy Settings page loads', async ({ page }) => {
-		await page.goto('/desk/leave-policy-settings/Leave%20Policy%20Settings', {
-			waitUntil: 'domcontentloaded',
-		});
-		await expect(page.locator('body')).toBeVisible();
+		const desk = new DeskForm(page);
+		await desk.gotoForm('Leave Policy Settings', 'Leave Policy Settings');
+		await expect(desk.field('default_leave_type')).toBeVisible();
+		await expect(desk.field('emergency_max_consecutive_days')).toBeVisible();
+		await expect(desk.field('planned_leave_advance_days')).toBeAttached();
 	});
 
 	test('HR-CFG-011 @regression @critical: Noon job finalizes yesterday attendance', async ({

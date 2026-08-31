@@ -25,8 +25,34 @@ def before_employee_advance_save(doc, method=None):
 	if doc.get("project"):
 		doc.project = None
 
+	_ensure_currency(doc)
+	_ensure_advance_account(doc)
 	_validate_max_unsettled(doc)
 	_validate_grade_advance_limit(doc)
+
+
+def _ensure_currency(doc):
+	if doc.get("currency"):
+		return
+	company = doc.get("company")
+	if not company and doc.get("employee"):
+		company = frappe.db.get_value("Employee", doc.employee, "company")
+	if company:
+		doc.currency = frappe.db.get_value("Company", company, "default_currency") or "INR"
+	else:
+		doc.currency = "INR"
+
+
+def _ensure_advance_account(doc):
+	if doc.get("advance_account") or not doc.get("employee"):
+		return
+	account = frappe.db.get_value("Employee", doc.employee, "employee_advance_account")
+	if not account and doc.get("company"):
+		account = frappe.db.get_value(
+			"Company", doc.company, "default_employee_advance_account"
+		)
+	if account:
+		doc.advance_account = account
 
 
 def advance_residual_amount(row) -> float:
@@ -151,6 +177,34 @@ def residual_advances_for_employee(employee):
 		for r in rows
 		if advance_residual_amount(r) > 0
 	]
+
+
+@frappe.whitelist()
+def get_grade_advance_limit_for_employee(employee):
+	"""Max self-service advance for the employee's grade (for Desk form hint)."""
+	from volunteering.volunteering.approval_routing import get_approval_band_for_employee
+
+	if not employee:
+		return {}
+	grade = get_approval_band_for_employee(employee)
+	if not grade:
+		return {"grade": None, "limit": None, "label": ""}
+	limit = grade_advance_limit(grade)
+	if limit is None:
+		return {"grade": grade, "limit": None, "label": _("No advance limit configured for {0}.").format(grade)}
+	if limit >= 10**11:
+		return {
+			"grade": grade,
+			"limit": None,
+			"label": _("No self-service advance cap for {0}.").format(grade),
+		}
+	return {
+		"grade": grade,
+		"limit": limit,
+		"label": _("Max self advance for {0}: {1}").format(
+			grade, frappe.format_value(limit, "Currency")
+		),
+	}
 
 
 @frappe.whitelist()

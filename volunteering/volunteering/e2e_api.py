@@ -39,6 +39,44 @@ E2E_PROJECT_NAME = "_E2E Test Project"
 PRIVILEGE_LEAVE = "Privilege Leave"
 LWP_LEAVE = "Leave Without Pay"
 
+# User-facing doc actions must go through Playwright Desk UI (see e2e/tests).
+_USER_ACTION_METHODS = frozenset(
+	{
+		"create_dwl",
+		"mark_dwl_reviewed",
+		"cancel_dwl",
+		"create_wfh_request",
+		"approve_wfh",
+		"cancel_wfh",
+		"create_leave_application",
+		"set_leave_status",
+		"create_regularization",
+		"approve_regularization",
+		"reject_regularization",
+		"create_expense_claim",
+		"create_employee_advance",
+		"workflow_action",
+		"escalate_document",
+		"create_purchase_order",
+		"create_purchase_invoice",
+		"create_supplier_payment_entry",
+		"mark_invoice_paid_outside",
+		"create_manager_note",
+	}
+)
+
+
+def _reject_user_action(method_name: str):
+	"""Block direct RPC for actions that specs must perform in the browser."""
+	if method_name in _USER_ACTION_METHODS and not frappe.local.form_dict.get("_e2e_allow_api_action"):
+		frappe.throw(
+			_(
+				"E2E user action '{0}' must be performed via browser UI. "
+				"Use Desk forms in Playwright specs."
+			).format(method_name),
+			frappe.ValidationError,
+		)
+
 
 def _guard_e2e():
 	site = frappe.local.site or ""
@@ -173,6 +211,33 @@ def _strip_rpc_kwargs(kwargs: dict) -> dict:
 		"ignore_mandatory",
 	}
 	return {k: v for k, v in kwargs.items() if k not in skip}
+
+
+@frappe.whitelist()
+def get_masters():
+	"""Desk link-field values for UI tests (setup-only)."""
+	_guard_e2e()
+	from volunteering.volunteering.accounting_test_utils import get_or_create_purchase_item
+
+	project = get_or_create_project_with_cost_center()
+	return {
+		"project": project,
+		"project_name": frappe.db.get_value("Project", project, "project_name") or project,
+		"supplier": get_or_create_supplier(),
+		"supplier_name": "_Test Accounting Supplier",
+		"item_code": get_or_create_purchase_item(),
+		"expense_type": get_or_create_expense_claim_type(),
+	}
+
+
+@frappe.whitelist()
+def attach_claim_receipt(name):
+	"""Attach a test receipt to a draft Expense Claim (setup-only)."""
+	_guard_e2e()
+	claim = frappe.get_doc("Expense Claim", name)
+	attach_test_receipt(claim)
+	frappe.db.commit()
+	return True
 
 
 @frappe.whitelist()
@@ -336,6 +401,55 @@ def cleanup_expense_claims(employee):
 
 
 @frappe.whitelist()
+def cleanup_expense_claims_for_project(project):
+	"""Remove all expense claims on a project so department budget E2E starts clean."""
+	_guard_e2e()
+	names = frappe.get_all("Expense Claim", filters={"project": project}, pluck="name")
+	for name in names:
+		try:
+			doc = frappe.get_doc("Expense Claim", name)
+			if doc.docstatus == 1:
+				doc.flags.ignore_permissions = True
+				with _skip_doc_perm_checks():
+					doc.cancel()
+			frappe.delete_doc("Expense Claim", name, force=1, ignore_permissions=True)
+		except Exception:
+			pass
+	frappe.db.commit()
+	return True
+
+
+@frappe.whitelist()
+def cleanup_purchase_orders_for_project(project):
+	"""Remove POs on a project so vendor/budget E2E starts clean."""
+	_guard_e2e()
+	pi_names = frappe.get_all("Purchase Invoice", filters={"project": project}, pluck="name")
+	for name in pi_names:
+		try:
+			doc = frappe.get_doc("Purchase Invoice", name)
+			if doc.docstatus == 1:
+				doc.flags.ignore_permissions = True
+				with _skip_doc_perm_checks():
+					doc.cancel()
+			frappe.delete_doc("Purchase Invoice", name, force=1, ignore_permissions=True)
+		except Exception:
+			pass
+	names = frappe.get_all("Purchase Order", filters={"project": project}, pluck="name")
+	for name in names:
+		try:
+			doc = frappe.get_doc("Purchase Order", name)
+			if doc.docstatus == 1:
+				doc.flags.ignore_permissions = True
+				with _skip_doc_perm_checks():
+					doc.cancel()
+			frappe.delete_doc("Purchase Order", name, force=1, ignore_permissions=True)
+		except Exception:
+			pass
+	frappe.db.commit()
+	return True
+
+
+@frappe.whitelist()
 def has_doctype_permission(doctype, ptype="read"):
 	_guard_e2e()
 	if not frappe.db.exists("DocType", doctype):
@@ -396,6 +510,7 @@ def create_dwl(
 	include_project=1,
 	description="E2E daily work log task description here",
 ):
+	_reject_user_action("create_dwl")
 	_guard_e2e()
 	employee = employee or _cast_employee("employee")
 	user = frappe.session.user
@@ -432,6 +547,7 @@ def create_dwl(
 
 @frappe.whitelist()
 def mark_dwl_reviewed(name, manager_remarks="Reviewed in E2E"):
+	_reject_user_action("mark_dwl_reviewed")
 	_guard_e2e()
 	doc = frappe.get_doc("Daily Work Log", name)
 	doc.mark_as_reviewed(manager_remarks)
@@ -441,6 +557,7 @@ def mark_dwl_reviewed(name, manager_remarks="Reviewed in E2E"):
 
 @frappe.whitelist()
 def cancel_dwl(name):
+	_reject_user_action("cancel_dwl")
 	_guard_e2e()
 	doc = frappe.get_doc("Daily Work Log", name)
 	if doc.docstatus == 1:
@@ -462,6 +579,7 @@ def trigger_attendance_job(attendance_date=None):
 
 @frappe.whitelist()
 def create_wfh_request(employee=None, date=None, submit=1):
+	_reject_user_action("create_wfh_request")
 	_guard_e2e()
 	employee = employee or _cast_employee("employee")
 	date = getdate(date or nowdate())
@@ -485,6 +603,7 @@ def create_wfh_request(employee=None, date=None, submit=1):
 
 @frappe.whitelist()
 def approve_wfh(name):
+	_reject_user_action("approve_wfh")
 	_guard_e2e()
 	doc = frappe.get_doc("Attendance Request", name)
 	employee_user = frappe.db.get_value("Employee", doc.employee, "user_id")
@@ -517,6 +636,7 @@ def create_leave_application(
 	leave_approver=None,
 	submit=0,
 ):
+	_reject_user_action("create_leave_application")
 	_guard_e2e()
 	employee = employee or _cast_employee("employee")
 	from_date = getdate(from_date or add_days(nowdate(), 5))
@@ -543,6 +663,7 @@ def create_leave_application(
 
 @frappe.whitelist()
 def set_leave_status(name, status):
+	_reject_user_action("set_leave_status")
 	_guard_e2e()
 	doc = frappe.get_doc("Leave Application", name)
 	session_emp = frappe.db.get_value("Employee", {"user_id": frappe.session.user}, "name")
@@ -573,6 +694,7 @@ def create_expense_claim(
 	budget_override_reason=None,
 	include_project=1,
 ):
+	_reject_user_action("create_expense_claim")
 	_guard_e2e()
 	employee = employee or _cast_employee("employee")
 	project = get_or_create_project_with_cost_center() if cint(include_project) else None
@@ -596,6 +718,7 @@ def create_expense_claim(
 
 @frappe.whitelist()
 def workflow_action(doctype, name, action):
+	_reject_user_action("workflow_action")
 	_guard_e2e()
 	doc = frappe.get_doc(doctype, name)
 	_apply_workflow(doc, action)
@@ -611,6 +734,7 @@ def workflow_action(doctype, name, action):
 
 @frappe.whitelist()
 def escalate_document(doctype, name, escalation_reason="E2E escalation"):
+	_reject_user_action("escalate_document")
 	_guard_e2e()
 	from volunteering.volunteering.approval_routing import escalate_document as _escalate
 
@@ -634,6 +758,7 @@ def get_approver_flags(doctype, name):
 
 @frappe.whitelist()
 def create_employee_advance(employee=None, amount=2000, submit=0):
+	_reject_user_action("create_employee_advance")
 	_guard_e2e()
 	employee = employee or _cast_employee("employee")
 	company = frappe.db.get_value("Employee", employee, "company")
@@ -671,7 +796,338 @@ def set_advance_settlement(name, paid_amount=0, claimed_amount=0, status="Paid")
 
 
 @frappe.whitelist()
+def seed_manager_paid_advance(employee=None, paid_amount=5000):
+	"""E2E fixture: submitted, paid Employee Advance for manager-float tests."""
+	_guard_e2e()
+	employee = employee or _cast_employee("manager")
+	paid_amount = flt(paid_amount)
+	cleanup_employee_advances(employee)
+	company = frappe.db.get_value("Employee", employee, "company")
+	doc = frappe.get_doc(
+		{
+			"doctype": "Employee Advance",
+			"employee": employee,
+			"company": company,
+			"purpose": "E2E manager float fixture",
+			"advance_amount": paid_amount,
+			"posting_date": nowdate(),
+		}
+	)
+	doc.insert(ignore_permissions=True)
+	_apply_workflow(doc, "Submit")
+	doc.reload()
+	previous_user = frappe.session.user
+	try:
+		frappe.set_user(PERSONAS["director"]["email"])
+		_apply_workflow(doc, "Approve")
+		doc.reload()
+	finally:
+		frappe.set_user(previous_user)
+	frappe.db.set_value(
+		"Employee Advance",
+		doc.name,
+		{
+			"paid_amount": flt(paid_amount),
+			"claimed_amount": 0,
+			"status": "Paid",
+		},
+		update_modified=False,
+	)
+	frappe.db.commit()
+	return {"name": doc.name, "paid_amount": flt(paid_amount)}
+
+
+@frappe.whitelist()
+def seed_employee_paid_advance(employee=None, paid_amount=1500):
+	"""E2E fixture: employee's own paid advance with open residual (no Payment Entry)."""
+	_guard_e2e()
+	employee = employee or _cast_employee("employee")
+	paid_amount = flt(paid_amount)
+	cleanup_employee_advances(employee)
+	company = frappe.db.get_value("Employee", employee, "company")
+	doc = frappe.get_doc(
+		{
+			"doctype": "Employee Advance",
+			"employee": employee,
+			"company": company,
+			"purpose": "E2E employee float fixture",
+			"advance_amount": paid_amount,
+			"posting_date": nowdate(),
+		}
+	)
+	doc.insert(ignore_permissions=True)
+	frappe.db.set_value(
+		"Employee Advance",
+		doc.name,
+		{
+			"docstatus": 1,
+			"workflow_state": "Approved",
+			"paid_amount": flt(paid_amount),
+			"claimed_amount": 0,
+			"status": "Paid",
+		},
+		update_modified=False,
+	)
+	frappe.db.commit()
+	return {"name": doc.name, "paid_amount": flt(paid_amount)}
+
+
+@frappe.whitelist()
+def seed_leave_application(
+	employee=None,
+	category="Normal",
+	from_date=None,
+	to_date=None,
+	leave_type=None,
+	leave_approver=None,
+	submit=0,
+):
+	"""E2E fixture: create Leave Application (Open draft; approver submits separately)."""
+	_guard_e2e()
+	employee = employee or _cast_employee("employee")
+	from_date = getdate(from_date or add_days(nowdate(), 5))
+	to_date = getdate(to_date or from_date)
+	leave_type = leave_type or PRIVILEGE_LEAVE
+	doc = frappe.get_doc(
+		{
+			"doctype": "Leave Application",
+			"employee": employee,
+			"leave_type": leave_type,
+			"leave_category": category,
+			"from_date": from_date,
+			"to_date": to_date,
+			"description": "E2E leave application",
+			"leave_approver": leave_approver,
+			"status": "Open",
+		}
+	)
+	with _bypass_leave_access_check():
+		doc.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": doc.name, "status": doc.status, "docstatus": doc.docstatus}
+
+
+@frappe.whitelist()
+def seed_set_leave_status(name, status):
+	"""E2E fixture: set leave status and submit."""
+	_guard_e2e()
+	doc = frappe.get_doc("Leave Application", name)
+	with _bypass_leave_access_check():
+		doc.status = status
+		doc.flags.ignore_permissions = True
+		doc.save(ignore_permissions=True)
+		if doc.docstatus == 0:
+			doc.submit()
+	frappe.db.commit()
+	return {"name": doc.name, "status": doc.status, "docstatus": doc.docstatus}
+
+
+@frappe.whitelist()
+def seed_cancel_wfh(name):
+	"""E2E fixture: cancel submitted Attendance Request (manager/HR)."""
+	_guard_e2e()
+	from volunteering.volunteering.attendance_request_permissions import (
+		before_cancel_attendance_request,
+	)
+
+	doc = frappe.get_doc("Attendance Request", name)
+	if doc.docstatus == 1:
+		before_cancel_attendance_request(doc)
+		doc.flags.ignore_permissions = True
+		frappe.flags.ignore_permissions = True
+		try:
+			doc.cancel()
+		finally:
+			frappe.flags.ignore_permissions = False
+	frappe.db.commit()
+	return {"name": doc.name, "docstatus": doc.docstatus}
+
+
+@frappe.whitelist()
+def try_submit_attendance_request(name):
+	"""E2E fixture: attempt submit; returns ok/error instead of raising."""
+	_guard_e2e()
+	try:
+		doc = frappe.get_doc("Attendance Request", name)
+		if doc.docstatus == 0:
+			doc.submit()
+		frappe.db.commit()
+		return {"ok": True, "data": {"name": doc.name, "docstatus": doc.docstatus}}
+	except Exception as exc:
+		frappe.db.rollback()
+		return {"ok": False, "error": _exc_message(exc)}
+
+
+@frappe.whitelist()
+def seed_submit_attendance_request(name):
+	"""E2E fixture: submit a saved Attendance Request (manager approval)."""
+	_guard_e2e()
+	doc = frappe.get_doc("Attendance Request", name)
+	if doc.docstatus == 0:
+		doc.submit()
+	frappe.db.commit()
+	return {"name": doc.name, "docstatus": doc.docstatus}
+
+
+@frappe.whitelist()
+def seed_approve_regularization(name):
+	"""E2E fixture: approve Attendance Regularization Request."""
+	_guard_e2e()
+	doc = frappe.get_doc("Attendance Regularization Request", name)
+	doc.approve_request()
+	frappe.db.commit()
+	return {"name": doc.name, "status": doc.status}
+
+
+@frappe.whitelist()
+def seed_reject_regularization(name):
+	"""E2E fixture: reject Attendance Regularization Request."""
+	_guard_e2e()
+	doc = frappe.get_doc("Attendance Regularization Request", name)
+	doc.reject_request()
+	frappe.db.commit()
+	return {"name": doc.name, "status": doc.status}
+
+
+@frappe.whitelist()
+def seed_manager_note(employee, note_type="Appreciation", content="E2E note"):
+	"""E2E fixture: create Manager Note."""
+	_guard_e2e()
+	doc = frappe.get_doc(
+		{
+			"doctype": "Manager Note",
+			"employee": employee,
+			"note_type": note_type,
+			"content": content,
+		}
+	)
+	doc.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": doc.name, "note_type": doc.note_type}
+
+
+@frappe.whitelist()
+def seed_mark_dwl_reviewed(name, manager_remarks="Reviewed in E2E"):
+	"""E2E fixture: manager marks Daily Work Log reviewed."""
+	_guard_e2e()
+	doc = frappe.get_doc("Daily Work Log", name)
+	doc.mark_as_reviewed(manager_remarks)
+	frappe.db.commit()
+	return {"name": doc.name, "status": doc.status}
+
+
+@frappe.whitelist()
+def seed_cancel_dwl(name):
+	"""E2E fixture: cancel submitted Daily Work Log."""
+	_guard_e2e()
+	doc = frappe.get_doc("Daily Work Log", name)
+	if doc.docstatus == 1:
+		doc.flags.ignore_permissions = True
+		doc.cancel()
+	frappe.db.commit()
+	return {"name": doc.name, "docstatus": doc.docstatus}
+
+
+@frappe.whitelist()
+def seed_expense_claim(
+	employee=None,
+	amount=1500,
+	reimbursement_source=None,
+	submit=1,
+):
+	"""E2E fixture: expense claim with optional manager-float reimbursement source."""
+	_guard_e2e()
+	employee = employee or _cast_employee("employee")
+	project = get_or_create_project_with_cost_center()
+	claim = make_expense_claim(employee, project, amount=flt(amount))
+	if reimbursement_source:
+		claim.reimbursement_source = reimbursement_source
+	elif frappe.db.has_column("Expense Claim", "reimbursement_source"):
+		claim.reimbursement_source = "Out of Pocket"
+	if claim.get("reimbursement_source") == "Manager Advance":
+		from volunteering.volunteering.manager_float_service import sync_manager_float_holder
+
+		sync_manager_float_holder(claim)
+	claim.save(ignore_permissions=True)
+	if cint(submit):
+		_apply_workflow(claim, "Submit")
+		claim.reload()
+	frappe.db.commit()
+	return {
+		"name": claim.name,
+		"workflow_state": claim.get("workflow_state"),
+		"pending_approver": claim.get("pending_approver"),
+		"reimbursement_source": claim.get("reimbursement_source"),
+		"manager_float_holder": claim.get("manager_float_holder"),
+	}
+
+
+@frappe.whitelist()
+def seed_workflow_action(doctype, name, action, budget_override_reason=None, as_user=None):
+	"""E2E fixture: apply workflow (e.g. Approve) as pending approver."""
+	_guard_e2e()
+	doc = frappe.get_doc(doctype, name)
+	if budget_override_reason and doctype == "Expense Claim":
+		doc.budget_override_reason = budget_override_reason
+		doc.save(ignore_permissions=True)
+
+	actor = as_user or doc.get("pending_approver")
+	if not actor:
+		frappe.throw(_("No pending approver on {0} {1}.").format(doctype, name))
+	if not frappe.db.exists("User", actor):
+		frappe.throw(_("Pending approver {0} is not a User.").format(actor))
+	prev_user = frappe.session.user
+	if actor:
+		frappe.set_user(actor)
+	try:
+		doc = frappe.get_doc(doctype, name)
+		if budget_override_reason and doctype == "Expense Claim":
+			doc.budget_override_reason = budget_override_reason
+		_apply_workflow(doc, action)
+		doc.reload()
+		frappe.db.commit()
+	finally:
+		frappe.set_user(prev_user)
+	return {
+		"name": doc.name,
+		"workflow_state": doc.get("workflow_state"),
+		"docstatus": doc.docstatus,
+		"manager_float_advance": doc.get("manager_float_advance"),
+		"total_amount_reimbursed": flt(doc.get("total_amount_reimbursed")),
+	}
+
+
+@frappe.whitelist()
+def seed_escalate_document(doctype, name, escalation_reason=None, as_user=None):
+	"""E2E fixture: escalate as pending approver (e.g. manager without float)."""
+	_guard_e2e()
+	doc = frappe.get_doc(doctype, name)
+	actor = as_user or doc.get("pending_approver")
+	if not actor:
+		frappe.throw(_("No pending approver on {0} {1}.").format(doctype, name))
+	if not frappe.db.exists("User", actor):
+		frappe.throw(_("Pending approver {0} is not a User.").format(actor))
+	reason = (escalation_reason or "E2E escalation").strip()
+	prev_user = frappe.session.user
+	frappe.set_user(actor)
+	try:
+		from volunteering.volunteering.approval_routing import escalate_document
+
+		escalate_document(doctype, name, escalation_reason=reason)
+		doc.reload()
+		frappe.db.commit()
+	finally:
+		frappe.set_user(prev_user)
+	return {
+		"name": doc.name,
+		"workflow_state": doc.get("workflow_state"),
+		"pending_approver": doc.get("pending_approver"),
+	}
+
+
+@frappe.whitelist()
 def create_purchase_order(amount=1500, submit=0):
+	_reject_user_action("create_purchase_order")
 	_guard_e2e()
 	project = get_or_create_project_with_cost_center()
 	with _allow_account_read():
@@ -686,6 +1142,7 @@ def create_purchase_order(amount=1500, submit=0):
 @frappe.whitelist()
 def create_purchase_invoice(po_name=None, amount=1500, submit=0):
 	"""Create a PI. Omit po_name to hit the 'must link PO' rule on submit."""
+	_reject_user_action("create_purchase_invoice")
 	_guard_e2e()
 	project = get_or_create_project_with_cost_center()
 	with _skip_doc_perm_checks(), _allow_buying_read():
@@ -717,6 +1174,7 @@ def try_create_purchase_invoice(**kwargs):
 
 @frappe.whitelist()
 def create_supplier_payment_entry(reference_doctype, reference_name, submit=0):
+	_reject_user_action("create_supplier_payment_entry")
 	_guard_e2e()
 	roles = set(frappe.get_roles())
 	if not roles.intersection({"Accounts Manager", "Accounts User", "System Manager"}):
@@ -755,6 +1213,7 @@ def try_create_supplier_payment_entry(**kwargs):
 
 @frappe.whitelist()
 def mark_invoice_paid_outside(name, remarks="E2E paid outside"):
+	_reject_user_action("mark_invoice_paid_outside")
 	_guard_e2e()
 	from volunteering.volunteering.reimbursement_controls import (
 		mark_purchase_invoice_paid_outside,
@@ -804,6 +1263,7 @@ def set_employee_field(employee, field, value):
 
 @frappe.whitelist()
 def create_manager_note(employee, note_type="Appreciation", content="E2E note"):
+	_reject_user_action("create_manager_note")
 	_guard_e2e()
 	doc = frappe.get_doc(
 		{
@@ -830,6 +1290,7 @@ def set_employee_reports_to(employee, reports_to):
 
 @frappe.whitelist()
 def create_regularization(employee, attendance_date, requested_status="Present", reason="E2E regularization"):
+	_reject_user_action("create_regularization")
 	_guard_e2e()
 	doc = frappe.get_doc(
 		{
@@ -848,6 +1309,7 @@ def create_regularization(employee, attendance_date, requested_status="Present",
 
 @frappe.whitelist()
 def approve_regularization(name):
+	_reject_user_action("approve_regularization")
 	_guard_e2e()
 	doc = frappe.get_doc("Attendance Regularization Request", name)
 	doc.approve_request()
@@ -857,6 +1319,7 @@ def approve_regularization(name):
 
 @frappe.whitelist()
 def reject_regularization(name):
+	_reject_user_action("reject_regularization")
 	_guard_e2e()
 	doc = frappe.get_doc("Attendance Regularization Request", name)
 	doc.reject_request()
@@ -866,6 +1329,7 @@ def reject_regularization(name):
 
 @frappe.whitelist()
 def cancel_wfh(name):
+	_reject_user_action("cancel_wfh")
 	_guard_e2e()
 	from volunteering.volunteering.attendance_request_permissions import (
 		before_cancel_attendance_request,
@@ -920,6 +1384,17 @@ def try_create_expense_claim(**kwargs):
 	_guard_e2e()
 	try:
 		return {"ok": True, "data": create_expense_claim(**_strip_rpc_kwargs(kwargs))}
+	except Exception as exc:
+		frappe.db.rollback()
+		return {"ok": False, "error": _exc_message(exc)}
+
+
+@frappe.whitelist()
+def try_seed_expense_claim(**kwargs):
+	"""E2E fixture: seed_expense_claim that returns ok/error instead of raising."""
+	_guard_e2e()
+	try:
+		return {"ok": True, "data": seed_expense_claim(**_strip_rpc_kwargs(kwargs))}
 	except Exception as exc:
 		frappe.db.rollback()
 		return {"ok": False, "error": _exc_message(exc)}

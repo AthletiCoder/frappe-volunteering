@@ -3,17 +3,22 @@
 		<PageHeader
 			eyebrow="Money"
 			title="Advance Portal"
-			subtitle="Status, leftover cash, and claims tagged to each advance."
+			subtitle="Your advances, manager's advance requests, and claims settled from a manager's advance."
 		>
 			<template #actions>
-				<a class="btn-secondary text-sm" href="/app/employee-advance/new">New Advance</a>
+				<a class="btn-secondary text-sm" href="/desk/employee-advance/new">New Advance</a>
 				<button class="btn-primary text-sm" type="button" :disabled="loading" @click="load">
 					{{ loading ? "Loading…" : "Refresh" }}
 				</button>
 			</template>
 		</PageHeader>
 
+		<ManagerFloatPanel />
+		<TeamFloatRequests />
+
 		<div v-if="error" class="text-bad mb-4">{{ error }}</div>
+
+		<h2 class="text-lg font-semibold text-ink mb-3">My advances</h2>
 
 		<div
 			v-for="adv in advances"
@@ -44,12 +49,17 @@
 				<div v-if="!(adv.expense_claims || []).length" class="text-muted">No expense claims linked yet.</div>
 				<div v-for="c in adv.expense_claims || []" :key="c.name" class="mb-1">
 					<a class="text-accent hover:underline" :href="c.route">{{ c.name }}</a>
-					<span class="text-muted"> · {{ formatMoney(c.allocated_amount) }} · {{ c.status }}</span>
+					<span class="text-muted">
+						· {{ formatMoney(c.allocated_amount) }} · {{ c.status }}
+						<span v-if="c.reimbursement_source === 'Manager Advance'"> · manager's advance</span>
+					</span>
 				</div>
 			</div>
 
 			<div class="mt-3 flex flex-wrap gap-2">
-				<a class="btn-primary text-sm" :href="`/app/expense-claim/new?employee=${encodeURIComponent(adv.employee)}`"
+				<a
+					class="btn-primary text-sm"
+					:href="`/desk/expense-claim/new?employee=${encodeURIComponent(adv.employee)}`"
 					>New Expense Claim</a
 				>
 				<a class="btn-secondary text-sm" :href="adv.route">Open Advance</a>
@@ -57,7 +67,7 @@
 		</div>
 
 		<div v-if="!advances.length && !loading" class="text-center text-muted py-10">
-			No advances yet. Request one, get it paid by Accounts, then link claims via Get Advances.
+			No advances yet. Request one, get it paid by Accounts, then link claims or fund your team's requests.
 		</div>
 	</div>
 </template>
@@ -67,6 +77,8 @@ import { onMounted, ref } from "vue";
 import { call } from "../lib/frappe";
 import { formatMoney } from "../lib/money";
 import PageHeader from "../components/PageHeader.vue";
+import ManagerFloatPanel from "../components/ManagerFloatPanel.vue";
+import TeamFloatRequests from "../components/TeamFloatRequests.vue";
 
 const advances = ref([]);
 const loading = ref(false);

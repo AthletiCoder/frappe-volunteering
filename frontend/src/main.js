@@ -4,6 +4,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import { initTheme } from "./lib/theme";
 import App from "./App.vue";
 import Home from "./views/Home.vue";
+import Todos from "./views/Todos.vue";
 import BudgetHealth from "./views/BudgetHealth.vue";
 import Advances from "./views/Advances.vue";
 
@@ -14,7 +15,7 @@ const router = createRouter({
 	routes: [
 		{ path: "/", redirect: "/home" },
 		{ path: "/home", component: Home, name: "Home" },
-		{ path: "/todos", redirect: { path: "/home", hash: "#todos" } },
+		{ path: "/todos", component: Todos, name: "Todos" },
 		{ path: "/budget-health", component: BudgetHealth, name: "BudgetHealth" },
 		{ path: "/advances", component: Advances, name: "Advances" },
 		{ path: "/advances/:name", component: Advances, name: "AdvanceDetail" },

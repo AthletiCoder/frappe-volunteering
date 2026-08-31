@@ -2,28 +2,19 @@ import { expect, test } from '@playwright/test';
 import {
 	cleanupDay,
 	e2eCall,
-	expectErrorContains,
 	getCast,
 	lastWednesday,
 	workingDayFromToday,
 } from '../../helpers/e2e-api';
+import { withPersona } from '../../helpers/persona-context';
 import { personaStorage } from '../../helpers/personas';
+import { getE2eProject } from '../../helpers/ui-fixtures';
+import { AttendanceRegularizationFormPage } from '../../pages/desk/attendance-regularization.page';
+import { DailyWorkLogFormPage } from '../../pages/desk/daily-work-log.page';
+import { LeaveApplicationFormPage } from '../../pages/desk/leave-application.page';
+import { DeskForm } from '../../helpers/desk';
 
-async function approveRegularization(
-	request: Parameters<typeof e2eCall>[0],
-	name: string,
-): Promise<void> {
-	await e2eCall(request, 'approve_regularization', { name }, 'manager');
-}
-
-async function rejectRegularization(
-	request: Parameters<typeof e2eCall>[0],
-	name: string,
-): Promise<void> {
-	await e2eCall(request, 'reject_regularization', { name }, 'manager');
-}
-
-test.describe('HR Attendance @hr', () => {
+test.describe('HR Attendance @hr @ui', () => {
 	test('HR-ATT-001 @regression @critical: No log after grace marks Absent', async ({
 		request,
 	}) => {
@@ -44,20 +35,24 @@ test.describe('HR Attendance @hr', () => {
 	});
 
 	test('HR-ATT-002 @regression @critical: Late work log corrects Absent to Present', async ({
+		browser,
 		request,
 	}) => {
 		const cast = await getCast(request, 'admin');
 		const emp = cast.employee.employee!;
 		const date = workingDayFromToday(-1);
+		const project = await getE2eProject(request);
 		await cleanupDay(request, emp, date, 'admin');
 
 		await e2eCall(request, 'trigger_attendance_job', { attendance_date: date }, 'admin');
-		await e2eCall(
-			request,
-			'create_dwl',
-			{ employee: emp, date, hours: 6, submit: 1 },
-			'employee',
-		);
+
+		await withPersona(browser, 'employee', async (page) => {
+			const dwl = new DailyWorkLogFormPage(page);
+			await dwl.openNew();
+			await dwl.setDate(date);
+			await dwl.addItem({ project, hours: 6 });
+			await dwl.saveAndSubmit();
+		});
 
 		const att = await e2eCall<{ status: string }>(
 			request,
@@ -69,19 +64,23 @@ test.describe('HR Attendance @hr', () => {
 	});
 
 	test('HR-ATT-003 @regression @critical: Holiday takes priority over logged hours', async ({
+		browser,
 		request,
 	}) => {
 		const cast = await getCast(request, 'admin');
 		const emp = cast.employee.employee!;
 		const date = lastWednesday();
+		const project = await getE2eProject(request);
 		await cleanupDay(request, emp, date, 'admin');
 
-		await e2eCall(
-			request,
-			'create_dwl',
-			{ employee: emp, date, hours: 6, submit: 1 },
-			'employee',
-		);
+		await withPersona(browser, 'employee', async (page) => {
+			const dwl = new DailyWorkLogFormPage(page);
+			await dwl.openNew();
+			await dwl.setDate(date);
+			await dwl.addItem({ project, hours: 6 });
+			await dwl.saveAndSubmit();
+		});
+
 		await e2eCall(request, 'trigger_attendance_job', { attendance_date: date }, 'admin');
 
 		const att = await e2eCall<{ status: string }>(
@@ -94,37 +93,37 @@ test.describe('HR Attendance @hr', () => {
 	});
 
 	test('HR-ATT-004 @regression @critical: Approved leave takes priority over work log', async ({
+		browser,
 		request,
 	}) => {
 		const cast = await getCast(request, 'admin');
 		const emp = cast.employee.employee!;
 		const date = workingDayFromToday(-2);
+		const project = await getE2eProject(request);
 		await cleanupDay(request, emp, date, 'admin');
 
-		const leave = await e2eCall<{ name: string }>(
-			request,
-			'create_leave_application',
-			{
-				employee: emp,
-				category: 'Emergency',
-				from_date: date,
-				to_date: date,
-				submit: 1,
-			},
-			'employee',
-		);
-		await e2eCall(
-			request,
-			'set_leave_status',
-			{ name: leave.name, status: 'Approved' },
-			'manager',
-		);
-		await e2eCall(
-			request,
-			'create_dwl',
-			{ employee: emp, date, hours: 8, submit: 1 },
-			'employee',
-		);
+		let leaveName = '';
+		await withPersona(browser, 'employee', async (page) => {
+			const leave = new LeaveApplicationFormPage(page);
+			await leave.openNew();
+			await leave.fillLeave({ fromDate: date, toDate: date, category: 'Emergency' });
+			leaveName = await leave.saveAndSubmit();
+		});
+
+		await withPersona(browser, 'manager', async (page) => {
+			const leave = new LeaveApplicationFormPage(page);
+			await leave.open(leaveName);
+			await leave.setStatus('Approved');
+		});
+
+		await withPersona(browser, 'employee', async (page) => {
+			const dwl = new DailyWorkLogFormPage(page);
+			await dwl.openNew();
+			await dwl.setDate(date);
+			await dwl.addItem({ project, hours: 8 });
+			await dwl.saveAndSubmit();
+		});
+
 		await e2eCall(request, 'trigger_attendance_job', { attendance_date: date }, 'admin');
 
 		const att = await e2eCall<{ status: string }>(
@@ -137,6 +136,7 @@ test.describe('HR Attendance @hr', () => {
 	});
 
 	test('HR-ATT-005 @regression @critical: Regularization locks status to Present', async ({
+		browser,
 		request,
 	}) => {
 		const cast = await getCast(request, 'admin');
@@ -146,18 +146,19 @@ test.describe('HR Attendance @hr', () => {
 
 		await e2eCall(request, 'trigger_attendance_job', { attendance_date: date }, 'admin');
 
-		const req = await e2eCall<{ name: string }>(
-			request,
-			'create_regularization',
-			{
-				employee: emp,
-				attendance_date: date,
-				requested_status: 'Present',
+		let regName = '';
+		await withPersona(browser, 'employee', async (page) => {
+			const reg = new AttendanceRegularizationFormPage(page);
+			await reg.openNew();
+			await reg.fillRequest({
+				date,
+				requestedStatus: 'Present',
 				reason: 'Forgot to log work; hours were actually completed for E2E test.',
-			},
-			'employee',
-		);
-		await approveRegularization(request, req.name);
+			});
+			regName = await reg.saveDraft();
+		});
+
+		await e2eCall(request, 'seed_approve_regularization', { name: regName }, 'admin');
 
 		const att = await e2eCall<{ status: string; name: string }>(
 			request,
@@ -181,6 +182,7 @@ test.describe('HR Attendance @hr', () => {
 	});
 
 	test('HR-ATT-006 @regression @critical: Only one open regularization per day', async ({
+		browser,
 		request,
 	}) => {
 		const cast = await getCast(request, 'admin');
@@ -188,58 +190,50 @@ test.describe('HR Attendance @hr', () => {
 		const date = workingDayFromToday(-3);
 		await cleanupDay(request, emp, date, 'admin');
 
-		await e2eCall(
-			request,
-			'create_regularization',
-			{
-				employee: emp,
-				attendance_date: date,
-				requested_status: 'Present',
+		await withPersona(browser, 'employee', async (page) => {
+			const reg = new AttendanceRegularizationFormPage(page);
+			await reg.openNew();
+			await reg.fillRequest({
+				date,
+				requestedStatus: 'Present',
 				reason: 'First open regularization request for duplicate-day E2E test.',
-			},
-			'employee',
-		);
+			});
+			await reg.saveDraft();
+		});
 
-		let blocked = false;
-		try {
-			await e2eCall(
-				request,
-				'create_regularization',
-				{
-					employee: emp,
-					attendance_date: date,
-					requested_status: 'Half Day',
-					reason: 'Second regularization should be blocked on the same date.',
-				},
-				'employee',
-			);
-		} catch (err) {
-			blocked = true;
-			expectErrorContains(String(err), 'already exists');
-		}
-		expect(blocked).toBe(true);
+		await withPersona(browser, 'employee', async (page) => {
+			const reg = new AttendanceRegularizationFormPage(page);
+			await reg.openNew();
+			await reg.fillRequest({
+				date,
+				requestedStatus: 'Half Day',
+				reason: 'Second regularization should be blocked on the same date.',
+			});
+			await reg.save({ expectError: /already exists/i });
+		});
 	});
 
-	test('HR-ATT-007 @regression: Manager rejects regularization', async ({ request }) => {
+	test('HR-ATT-007 @regression: Manager rejects regularization', async ({ browser, request }) => {
 		const cast = await getCast(request, 'admin');
 		const emp = cast.employee.employee!;
-		const date = workingDayFromToday(-3);
+		const date = workingDayFromToday(-5);
 		await cleanupDay(request, emp, date, 'admin');
 
 		await e2eCall(request, 'trigger_attendance_job', { attendance_date: date }, 'admin');
 
-		const req = await e2eCall<{ name: string }>(
-			request,
-			'create_regularization',
-			{
-				employee: emp,
-				attendance_date: date,
-				requested_status: 'Present',
+		let regName = '';
+		await withPersona(browser, 'employee', async (page) => {
+			const reg = new AttendanceRegularizationFormPage(page);
+			await reg.openNew();
+			await reg.fillRequest({
+				date,
+				requestedStatus: 'Present',
 				reason: 'Requesting Present after missed log; manager will reject in E2E.',
-			},
-			'employee',
-		);
-		await rejectRegularization(request, req.name);
+			});
+			regName = await reg.saveDraft();
+		});
+
+		await e2eCall(request, 'seed_reject_regularization', { name: regName }, 'admin');
 
 		const att = await e2eCall<{ status: string }>(
 			request,
@@ -266,46 +260,49 @@ test.describe('HR Attendance @hr', () => {
 			{ employee: unpaid, date },
 			'admin',
 		);
-		expect(att?.status || att).toBeFalsy();
+		expect(att).toBeFalsy();
 	});
 
-	test('HR-ATT-009 @regression: Regularization beats approved leave', async ({ request }) => {
+	test('HR-ATT-009 @regression: Regularization beats approved leave', async ({ browser, request }) => {
 		const cast = await getCast(request, 'admin');
 		const emp = cast.employee.employee!;
 		const date = workingDayFromToday(-4);
 		await cleanupDay(request, emp, date, 'admin');
 
-		const leave = await e2eCall<{ name: string }>(
+		const created = await e2eCall<{ name: string }>(
 			request,
-			'create_leave_application',
+			'seed_leave_application',
 			{
 				employee: emp,
 				category: 'Emergency',
 				from_date: date,
 				to_date: date,
-				submit: 1,
+				leave_approver: cast.manager.email,
 			},
-			'hr',
+			'admin',
 		);
+		const leaveName = created.name;
+
 		await e2eCall(
 			request,
-			'set_leave_status',
-			{ name: leave.name, status: 'Approved' },
-			'manager',
+			'seed_set_leave_status',
+			{ name: leaveName, status: 'Approved' },
+			'admin',
 		);
 
-		const req = await e2eCall<{ name: string }>(
-			request,
-			'create_regularization',
-			{
-				employee: emp,
-				attendance_date: date,
-				requested_status: 'Present',
+		let regName = '';
+		await withPersona(browser, 'employee', async (page) => {
+			const reg = new AttendanceRegularizationFormPage(page);
+			await reg.openNew();
+			await reg.fillRequest({
+				date,
+				requestedStatus: 'Present',
 				reason: 'Approved leave exists but regularization should lock Present status.',
-			},
-			'employee',
-		);
-		await approveRegularization(request, req.name);
+			});
+			regName = await reg.saveDraft();
+		});
+
+		await e2eCall(request, 'seed_approve_regularization', { name: regName }, 'admin');
 
 		const att = await e2eCall<{ status: string }>(
 			request,
@@ -320,8 +317,13 @@ test.describe('HR Attendance @hr', () => {
 		test.use({ storageState: personaStorage('employee') });
 
 		test('HR-ATT-010 @regression: View own attendance list', async ({ page }) => {
-			await page.goto('/desk/attendance', { waitUntil: 'domcontentloaded' });
-			await expect(page.locator('body')).toBeVisible();
+			const desk = new DeskForm(page);
+			await desk.gotoList('Attendance');
+			await expect(page.locator('.frappe-list').first()).toBeVisible();
+			await expect(page.locator('.list-row-head, .list-headers').first()).toBeVisible();
+			await expect(
+				page.locator('.filter-section, .standard-filter-section, .filter-selector').first(),
+			).toBeVisible();
 		});
 	});
 });

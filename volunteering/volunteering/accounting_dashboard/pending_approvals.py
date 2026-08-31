@@ -184,7 +184,7 @@ def _enrich_action(row, user, roles):
 			"modified": modified,
 			"modified_label": formatdate(modified),
 			"available_actions": available_actions,
-			"route": f"/app/{frappe.scrub(row.reference_doctype)}/{row.reference_name}",
+			"route": f"/desk/{frappe.scrub(row.reference_doctype)}/{row.reference_name}",
 		}
 	)
 	return row

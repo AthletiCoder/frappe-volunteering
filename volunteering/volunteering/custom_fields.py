@@ -1,4 +1,14 @@
 CUSTOM_FIELDS = {
+	"User": [
+		{
+			"fieldname": "work_log_reminder_opt_in",
+			"label": "Morning Work Log Reminder",
+			"fieldtype": "Check",
+			"insert_after": "email",
+			"default": "1",
+			"description": "Email me when yesterday's Daily Work Log is still missing (paid staff).",
+		}
+	],
 	"Leave Application": [
 		{
 			"fieldname": "leave_category",
@@ -50,9 +60,10 @@ def _approval_routing_fields(
 	fields = [
 		{
 			"fieldname": "approval_routing_tab",
-			"fieldtype": "Tab Break",
+			"fieldtype": "Section Break",
 			"label": "Approval & Routing",
 			"insert_after": insert_after_anchor,
+			"collapsible": 1,
 		},
 		{
 			"fieldname": "approval_level",
@@ -70,6 +81,7 @@ def _approval_routing_fields(
 			"insert_after": "approval_level",
 			"read_only": 1,
 			"depends_on": _PENDING_STATES_DEPENDS,
+			"ignore_user_permissions": 1,
 		},
 		{
 			"fieldname": "escalation_reason",
@@ -148,6 +160,50 @@ ACCOUNTING_CUSTOM_FIELDS = {
 			),
 		},
 		{
+			"fieldname": "reimbursement_section",
+			"fieldtype": "Section Break",
+			"label": "Reimbursement Source",
+			"insert_after": "vendor_override_reason",
+			"collapsible": 1,
+		},
+		{
+			"fieldname": "reimbursement_source",
+			"label": "Reimbursement Source",
+			"fieldtype": "Select",
+			"options": "Out of Pocket\nManager Advance",
+			"insert_after": "reimbursement_section",
+			"default": "Out of Pocket",
+			"description": (
+				"Manager Advance: settle from your reporting manager's paid advance "
+				"after approval (no bank reimbursement to you). "
+				"Not available when you already have your own unsettled paid advance."
+			),
+		},
+		{
+			"fieldname": "manager_float_holder",
+			"label": "Manager",
+			"fieldtype": "Link",
+			"options": "Employee",
+			"insert_after": "reimbursement_source",
+			"read_only": 1,
+			"depends_on": "eval:doc.reimbursement_source=='Manager Advance'",
+			"ignore_user_permissions": 1,
+		},
+		{
+			"fieldname": "manager_float_advance",
+			"label": "Manager's Advance",
+			"fieldtype": "Link",
+			"options": "Employee Advance",
+			"insert_after": "manager_float_holder",
+			"read_only": 1,
+			"depends_on": "eval:doc.reimbursement_source=='Manager Advance'",
+			"ignore_user_permissions": 1,
+			"description": (
+				"Suggested from your manager's paid advances with residual. "
+				"Final settlement may use a different advance if the claim amount requires it."
+			),
+		},
+		{
 			"fieldname": "spend_guide_section",
 			"fieldtype": "Section Break",
 			"label": "Spend Guide",
@@ -208,7 +264,7 @@ ACCOUNTING_CUSTOM_FIELDS = {
 			"hidden": 1,
 			"description": "Auto-set for budget tracking; hidden from employees.",
 		},
-		*_approval_routing_fields("project", include_emergency=False),
+		*_approval_routing_fields("return_amount", include_emergency=False),
 		{
 			"fieldname": "spend_guide_section",
 			"fieldtype": "Section Break",

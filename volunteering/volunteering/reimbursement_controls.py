@@ -48,6 +48,14 @@ def mark_purchase_invoice_paid_outside(name, remarks=None, posting_date=None):
 		pe = get_payment_entry("Purchase Invoice", pi.name)
 		pe.posting_date = posting_date
 		pe.remarks = remarks
+		cash_account = frappe.db.get_value("Company", pe.company, "default_cash_account")
+		if cash_account:
+			pe.mode_of_payment = "Cash"
+			pe.paid_from = cash_account
+		if not pe.reference_no:
+			pe.reference_no = f"OUTSIDE-{pi.name}"
+		if not pe.reference_date:
+			pe.reference_date = posting_date
 		if pe.meta.has_field("is_cash_payment"):
 			pe.is_cash_payment = 1
 		pe.insert(ignore_permissions=True)

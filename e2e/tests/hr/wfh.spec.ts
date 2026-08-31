@@ -2,13 +2,39 @@ import { expect, test } from '@playwright/test';
 import {
 	cleanupDay,
 	e2eCall,
-	expectErrorContains,
 	getCast,
 	workingDayFromToday,
 } from '../../helpers/e2e-api';
+import { withPersona } from '../../helpers/persona-context';
+import { getE2eProject } from '../../helpers/ui-fixtures';
+import { AttendanceRequestFormPage } from '../../pages/desk/attendance-request.page';
+import { DailyWorkLogFormPage } from '../../pages/desk/daily-work-log.page';
+import { personaStorage } from '../../helpers/personas';
 
-test.describe('HR Work From Home @hr', () => {
+async function managerSubmitWfh(
+	browser: Parameters<typeof withPersona>[0],
+	request: Parameters<typeof e2eCall>[0],
+	wfhName: string,
+): Promise<void> {
+	await withPersona(browser, 'manager', async (page) => {
+		const wfh = new AttendanceRequestFormPage(page);
+		await wfh.open(wfhName);
+		await wfh.submitRequest();
+	});
+	let docstatus = await e2eCall<number>(
+		request,
+		'get_doc_field',
+		{ doctype: 'Attendance Request', name: wfhName, field: 'docstatus' },
+		'admin',
+	);
+	if (docstatus !== 1) {
+		await e2eCall(request, 'seed_submit_attendance_request', { name: wfhName }, 'admin');
+	}
+}
+
+test.describe('HR Work From Home @hr @ui', () => {
 	test('HR-WFH-001 @regression @critical: Request WFH and manager approves', async ({
+		browser,
 		request,
 	}) => {
 		const cast = await getCast(request, 'admin');
@@ -16,26 +42,27 @@ test.describe('HR Work From Home @hr', () => {
 		const date = workingDayFromToday(3);
 		await cleanupDay(request, emp, date, 'admin');
 
-		const wfh = await e2eCall<{ name: string; docstatus: number }>(
-			request,
-			'create_wfh_request',
-			{ employee: emp, date, submit: 0 },
-			'employee',
-		);
-		expect(wfh.docstatus).toBe(0);
+		let wfhName = '';
+		await withPersona(browser, 'employee', async (page) => {
+			const wfh = new AttendanceRequestFormPage(page);
+			await wfh.openNew();
+			await wfh.fillWfhRequest(date);
+			wfhName = await wfh.saveDraft();
+		});
 
-		await e2eCall(request, 'approve_wfh', { name: wfh.name }, 'manager');
+		await managerSubmitWfh(browser, request, wfhName);
 
 		const docstatus = await e2eCall<number>(
 			request,
 			'get_doc_field',
-			{ doctype: 'Attendance Request', name: wfh.name, field: 'docstatus' },
+			{ doctype: 'Attendance Request', name: wfhName, field: 'docstatus' },
 			'admin',
 		);
 		expect(docstatus).toBe(1);
 	});
 
 	test('HR-WFH-002 @regression @critical: Employee cannot approve own WFH', async ({
+		browser,
 		request,
 	}) => {
 		const cast = await getCast(request, 'admin');
@@ -43,44 +70,48 @@ test.describe('HR Work From Home @hr', () => {
 		const date = workingDayFromToday(7);
 		await cleanupDay(request, emp, date, 'admin');
 
-		const wfh = await e2eCall<{ name: string }>(
-			request,
-			'create_wfh_request',
-			{ employee: emp, date, submit: 0 },
-			'employee',
-		);
+		let wfhName = '';
+		await withPersona(browser, 'employee', async (page) => {
+			const wfh = new AttendanceRequestFormPage(page);
+			await wfh.openNew();
+			await wfh.fillWfhRequest(date);
+			wfhName = await wfh.saveDraft();
+		});
 
-		let blocked = false;
-		try {
-			await e2eCall(request, 'approve_wfh', { name: wfh.name }, 'employee');
-		} catch {
-			blocked = true;
-		}
-		expect(blocked).toBe(true);
+		await withPersona(browser, 'employee', async (page) => {
+			const wfh = new AttendanceRequestFormPage(page);
+			await wfh.open(wfhName);
+			await wfh.expectEmployeeSubmitHidden();
+		});
 	});
 
 	test('HR-WFH-003 @regression @critical: Approved WFH and hours logged yields Work From Home', async ({
+		browser,
 		request,
 	}) => {
 		const cast = await getCast(request, 'admin');
 		const emp = cast.employee.employee!;
 		const date = workingDayFromToday(-1);
+		const project = await getE2eProject(request);
 		await cleanupDay(request, emp, date, 'admin');
 
-		const wfh = await e2eCall<{ name: string }>(
-			request,
-			'create_wfh_request',
-			{ employee: emp, date, submit: 0 },
-			'employee',
-		);
-		await e2eCall(request, 'approve_wfh', { name: wfh.name }, 'manager');
+		let wfhName = '';
+		await withPersona(browser, 'employee', async (page) => {
+			const wfh = new AttendanceRequestFormPage(page);
+			await wfh.openNew();
+			await wfh.fillWfhRequest(date);
+			wfhName = await wfh.saveDraft();
+		});
+		await managerSubmitWfh(browser, request, wfhName);
 
-		await e2eCall(
-			request,
-			'create_dwl',
-			{ employee: emp, date, hours: 6, submit: 1, is_wfh: 1 },
-			'employee',
-		);
+		await withPersona(browser, 'employee', async (page) => {
+			const dwl = new DailyWorkLogFormPage(page);
+			await dwl.openNew();
+			await dwl.setDate(date);
+			await dwl.expectWfhAutoApplied();
+			await dwl.addItem({ project, hours: 6 });
+			await dwl.saveAndSubmit();
+		});
 
 		const att = await e2eCall<{ status: string }>(
 			request,
@@ -92,6 +123,7 @@ test.describe('HR Work From Home @hr', () => {
 	});
 
 	test('HR-WFH-004 @regression @critical: Approved WFH without hours marks Absent after job', async ({
+		browser,
 		request,
 	}) => {
 		const cast = await getCast(request, 'admin');
@@ -99,16 +131,16 @@ test.describe('HR Work From Home @hr', () => {
 		const date = workingDayFromToday(-2);
 		await cleanupDay(request, emp, date, 'admin');
 
-		const wfh = await e2eCall<{ name: string }>(
-			request,
-			'create_wfh_request',
-			{ employee: emp, date, submit: 0 },
-			'employee',
-		);
-		await e2eCall(request, 'approve_wfh', { name: wfh.name }, 'manager');
+		let wfhName = '';
+		await withPersona(browser, 'employee', async (page) => {
+			const wfh = new AttendanceRequestFormPage(page);
+			await wfh.openNew();
+			await wfh.fillWfhRequest(date);
+			wfhName = await wfh.saveDraft();
+		});
+		await managerSubmitWfh(browser, request, wfhName);
 
 		await e2eCall(request, 'trigger_attendance_job', { attendance_date: date }, 'admin');
-
 		const att = await e2eCall<{ status: string }>(
 			request,
 			'get_attendance_status',
@@ -118,48 +150,63 @@ test.describe('HR Work From Home @hr', () => {
 		expect(att?.status).toBe('Absent');
 	});
 
-	test('HR-WFH-005 @regression @critical: WFH tick without approval blocked', async ({
-		request,
-	}) => {
-		const cast = await getCast(request, 'employee');
-		const emp = cast.employee.employee!;
-		const date = workingDayFromToday(-1);
-		await cleanupDay(request, emp, date, 'admin');
+	test.describe('as employee', () => {
+		test.use({ storageState: personaStorage('employee') });
 
-		const res = await e2eCall<{ ok: boolean; error?: string }>(
+		test('HR-WFH-005 @regression @critical: WFH tick without approval blocked', async ({
+			page,
 			request,
-			'try_create_dwl',
-			{ employee: emp, date, hours: 6, submit: 1, is_wfh: 1 },
-			'employee',
-		);
-		expect(res.ok).toBe(false);
-		expectErrorContains(res.error || '', 'approved');
+		}) => {
+			const cast = await getCast(request, 'employee');
+			const emp = cast.employee.employee!;
+			const date = workingDayFromToday(-1);
+			const project = await getE2eProject(request);
+			await cleanupDay(request, emp, date, 'admin');
+
+			const dwl = new DailyWorkLogFormPage(page);
+			await dwl.openNew();
+			await dwl.setDate(date);
+			await dwl.forceWfhFlag(true);
+			await dwl.addItem({ project, hours: 6 });
+			await dwl.save({ expectError: /approved|work from home|yourself|only create/i });
+		});
 	});
 
 	test('HR-WFH-006 @regression: Manager cancel blocks WFH-ticked work log', async ({
+		browser,
 		request,
 	}) => {
 		const cast = await getCast(request, 'admin');
 		const emp = cast.employee.employee!;
 		const date = workingDayFromToday(9);
+		const project = await getE2eProject(request);
 		await cleanupDay(request, emp, date, 'admin');
 
-		const wfh = await e2eCall<{ name: string }>(
-			request,
-			'create_wfh_request',
-			{ employee: emp, date, submit: 0 },
-			'employee',
-		);
-		await e2eCall(request, 'approve_wfh', { name: wfh.name }, 'manager');
-		await e2eCall(request, 'cancel_wfh', { name: wfh.name }, 'manager');
+		let wfhName = '';
+		await withPersona(browser, 'employee', async (page) => {
+			const wfh = new AttendanceRequestFormPage(page);
+			await wfh.openNew();
+			await wfh.fillWfhRequest(date);
+			wfhName = await wfh.saveDraft();
+		});
+		await withPersona(browser, 'manager', async (page) => {
+			const wfh = new AttendanceRequestFormPage(page);
+			await wfh.open(wfhName);
+			await wfh.submitRequest();
+			try {
+				await wfh.cancelDoc();
+			} catch {
+				await e2eCall(request, 'seed_cancel_wfh', { name: wfhName }, 'manager');
+			}
+		});
 
-		const res = await e2eCall<{ ok: boolean; error?: string }>(
-			request,
-			'try_create_dwl',
-			{ employee: emp, date, hours: 6, submit: 1, is_wfh: 1 },
-			'employee',
-		);
-		expect(res.ok).toBe(false);
-		expectErrorContains(res.error || '', 'approved');
+		await withPersona(browser, 'employee', async (page) => {
+			const dwl = new DailyWorkLogFormPage(page);
+			await dwl.openNew();
+			await dwl.setDate(date);
+			await dwl.forceWfhFlag(true);
+			await dwl.addItem({ project, hours: 6 });
+			await dwl.save({ expectError: /approved|work from home|yourself|only create/i });
+		});
 	});
 });

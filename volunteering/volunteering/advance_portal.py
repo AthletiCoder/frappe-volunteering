@@ -9,6 +9,7 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 
+from volunteering.volunteering.desk_routes import desk_route
 from volunteering.volunteering.employee_advance_controls import (
 	advance_residual_amount,
 	advance_residual_ratio,
@@ -47,7 +48,7 @@ def get_my_advances(employee=None):
 				**row,
 				"residual": residual,
 				"residual_pct": flt(advance_residual_ratio(row) * 100, 2),
-				"route": f"/app/employee-advance/{row.name}",
+				"route": desk_route("Employee Advance", row.name),
 				"expense_claims": _claims_for_advance(row.name),
 			}
 		)
@@ -78,54 +79,79 @@ def get_advance_detail(name):
 		**row,
 		"residual": residual,
 		"residual_pct": flt(advance_residual_ratio(row) * 100, 2),
-		"route": f"/app/employee-advance/{doc.name}",
+		"route": desk_route("Employee Advance", doc.name),
 		"expense_claims": _claims_for_advance(doc.name),
 		"new_expense_claim_url": (
-			f"/app/expense-claim/new?employee={doc.employee}"
+			f"/desk/expense-claim/new?employee={doc.employee}"
 			f"&company={doc.company or ''}"
 		),
-		"new_advance_url": "/app/employee-advance/new",
+		"new_advance_url": "/desk/employee-advance/new",
 	}
 
 
 def _claims_for_advance(advance_name):
-	"""Expense Claims that allocate against this advance (via advances child table)."""
-	if not frappe.db.exists("DocType", "Expense Claim Advance"):
-		return []
-
-	links = frappe.get_all(
-		"Expense Claim Advance",
-		filters={"employee_advance": advance_name},
-		fields=["parent", "allocated_amount"],
-	)
+	"""Expense Claims linked via advances child table or manager_float_advance."""
+	seen = set()
 	out = []
-	for link in links:
-		ec = frappe.db.get_value(
+
+	if frappe.db.exists("DocType", "Expense Claim Advance"):
+		links = frappe.get_all(
+			"Expense Claim Advance",
+			filters={"employee_advance": advance_name},
+			fields=["parent", "allocated_amount"],
+		)
+		for link in links:
+			seen.add(link.parent)
+			row = _claim_row(link.parent, link.allocated_amount)
+			if row:
+				out.append(row)
+
+	if frappe.db.has_column("Expense Claim", "manager_float_advance"):
+		for name in frappe.get_all(
 			"Expense Claim",
-			link.parent,
-			[
-				"name",
-				"employee",
-				"status",
-				"approval_status",
-				"workflow_state",
-				"total_claimed_amount",
+			filters={"manager_float_advance": advance_name, "docstatus": ["!=", 2]},
+			pluck="name",
+		):
+			if name in seen:
+				continue
+			seen.add(name)
+			amount = frappe.db.get_value(
+				"Expense Claim",
+				name,
 				"total_sanctioned_amount",
-				"posting_date",
-				"docstatus",
-			],
-			as_dict=True,
-		)
-		if not ec:
-			continue
-		out.append(
-			{
-				**ec,
-				"allocated_amount": link.allocated_amount,
-				"route": f"/app/expense-claim/{ec.name}",
-			}
-		)
+			) or frappe.db.get_value("Expense Claim", name, "total_claimed_amount")
+			row = _claim_row(name, amount)
+			if row:
+				out.append(row)
+
 	return out
+
+
+def _claim_row(name, allocated_amount):
+	ec = frappe.db.get_value(
+		"Expense Claim",
+		name,
+		[
+			"name",
+			"employee",
+			"status",
+			"approval_status",
+			"workflow_state",
+			"total_claimed_amount",
+			"total_sanctioned_amount",
+			"posting_date",
+			"docstatus",
+			"reimbursement_source",
+		],
+		as_dict=True,
+	)
+	if not ec:
+		return None
+	return {
+		**ec,
+		"allocated_amount": allocated_amount,
+		"route": desk_route("Expense Claim", ec.name),
+	}
 
 
 def _resolve_employee(employee=None):

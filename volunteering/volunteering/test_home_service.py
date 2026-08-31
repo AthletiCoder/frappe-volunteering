@@ -99,6 +99,7 @@ class UnitTestHomePayload(UnitTestCase):
 		self.assertEqual(payload["todo_count"], 0)
 		self.assertFalse(payload["nav"]["budget_health"])
 		self.assertFalse(payload["nav"]["advances"])
+		self.assertFalse(payload["nav"]["volunteering"])
 
 	def test_compose_todos_orders_review_pay_then_yours(self):
 		todos = _compose_todos(
@@ -108,7 +109,7 @@ class UnitTestHomePayload(UnitTestCase):
 					"kind": "Leave",
 					"title": "Ada",
 					"subtitle": "Casual",
-					"route": "/app/leave-application/L1",
+					"route": "/desk/leave-application/L1",
 					"modified": "1",
 				}
 			],
@@ -117,16 +118,16 @@ class UnitTestHomePayload(UnitTestCase):
 					"id": "reimburse",
 					"label": "Claims to reimburse",
 					"count": 2,
-					"route": "/app/expense-claim",
+					"route": "/desk/expense-claim",
 				},
-				{"id": "empty", "label": "Skip", "count": 0, "route": "/app/x"},
+				{"id": "empty", "label": "Skip", "count": 0, "route": "/desk/x"},
 			],
 			[
 				{
 					"id": "draft_claims",
 					"label": "Draft claims",
 					"count": 1,
-					"route": "/app/expense-claim",
+					"route": "/desk/expense-claim",
 				}
 			],
 		)
@@ -136,7 +137,7 @@ class UnitTestHomePayload(UnitTestCase):
 
 	def test_new_request_actions_link_to_previous_lists(self):
 		leave = next(row for row in _time_actions({"leave": 2}) if row["id"] == "leave")
-		self.assertEqual(leave["route"], "/app/leave-application/new")
-		self.assertEqual(leave["list_route"], "/app/leave-application")
+		self.assertEqual(leave["route"], "/desk/leave-application/new")
+		self.assertEqual(leave["list_route"], "/desk/leave-application")
 		self.assertEqual(leave["list_label"], "Previous leave")
 		self.assertEqual(leave["pending"], 2)
