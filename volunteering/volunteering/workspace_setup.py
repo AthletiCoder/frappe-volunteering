@@ -388,61 +388,55 @@ def _sidebar_item_key(item):
 	return ("link", label, link_type, link_to)
 
 
-def ensure_spa_sidebar_links():
-	"""Keep one Staff apps block (Home + To-do only).
+SPA_SIDEBAR_LABELS = frozenset({"Staff apps", "Home", "To-do"})
 
-	Advance Portal / Budget Health belong in the SPA / My Expenses hub.
-	accounts_workspace_setup strips those labels from this sidebar on migrate —
-	older code kept re-prepending them, which duplicated Home / To-do forever.
-	"""
-	if not frappe.db.exists("Workspace Sidebar", SIDEBAR_NAME):
-		return
 
+def _strip_spa_url_sidebar_items(sidebar) -> list[dict]:
+	"""Remove Home / To-do URL rows — those live on Desktop Icons."""
 	from volunteering.volunteering.home_service import HOME_URL, TODOS_URL
 
-	sidebar = frappe.get_doc("Workspace Sidebar", SIDEBAR_NAME)
-	spa_prefix = [
-		_section_break("Staff apps", "home"),
-		_url_sidebar_item("Home", HOME_URL, "home"),
-		_url_sidebar_item("To-do", TODOS_URL, "check"),
-	]
-	spa_keys = {_sidebar_item_key(row) for row in spa_prefix}
-
-	# Drop prior Staff apps / SPA Home+To-do copies; keep other desk links once.
-	rest = []
-	seen = set()
+	spa_urls = {HOME_URL, TODOS_URL}
+	rest: list[dict] = []
+	seen: set = set()
 	for item in sidebar.items:
 		row = item.as_dict()
-		key = _sidebar_item_key(row)
-		if key in spa_keys:
+		label = row.get("label") or ""
+		if label in SPA_SIDEBAR_LABELS:
 			continue
+		if row.get("type") == "Section Break" and label == "Staff apps":
+			continue
+		if row.get("link_type") == "URL" and (
+			(row.get("url") or "") in spa_urls or label in {"Home", "To-do"}
+		):
+			continue
+		key = _sidebar_item_key(row)
 		if key in seen:
 			continue
 		seen.add(key)
 		for meta in ("name", "parent", "parenttype", "parentfield", "idx"):
 			row.pop(meta, None)
 		rest.append(row)
+	return rest
 
-	desired = spa_prefix + rest
+
+def ensure_spa_sidebar_links():
+	"""Strip duplicate Home / To-do from the Volunteering workspace sidebar.
+
+	Those SPA pages are linked from Desktop Icons (``ensure_desk_icons`` on migrate).
+	Keeping them in the workspace sidebar as well doubled Home and To-do in Desk.
+	"""
+	if not frappe.db.exists("Workspace Sidebar", SIDEBAR_NAME):
+		return
+
+	sidebar = frappe.get_doc("Workspace Sidebar", SIDEBAR_NAME)
+	rest = _strip_spa_url_sidebar_items(sidebar)
 	current_keys = [_sidebar_item_key(item.as_dict()) for item in sidebar.items]
-	desired_keys = [_sidebar_item_key(row) for row in desired]
+	desired_keys = [_sidebar_item_key(row) for row in rest]
 	if current_keys == desired_keys:
-		# Still refresh Home / To-do URLs if they drifted.
-		url_by_label = {"Home": HOME_URL, "To-do": TODOS_URL}
-		changed = False
-		for item in sidebar.items:
-			if item.link_type == "URL" and item.label in url_by_label:
-				if (item.url or "") != url_by_label[item.label]:
-					item.url = url_by_label[item.label]
-					changed = True
-		if not changed:
-			return
-		sidebar.flags.ignore_links = True
-		sidebar.save(ignore_permissions=True)
 		return
 
 	sidebar.set("items", [])
-	for row in desired:
+	for row in rest:
 		sidebar.append("items", row)
 	sidebar.flags.ignore_links = True
 	sidebar.save(ignore_permissions=True)

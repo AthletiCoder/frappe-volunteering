@@ -14,6 +14,7 @@ from frappe import _
 from frappe.utils import cint, flt
 
 from volunteering.volunteering.api import cashfree_client
+from volunteering.volunteering.api.journal_entry import create_income_journal_entry_for_donation
 from volunteering.volunteering.api.payment_entry import create_payment_entry_for_donation
 from volunteering.volunteering.api.volunteer_donor import upsert_volunteer_for_donation
 from volunteering.volunteering.doctype.cashfree_settings.cashfree_settings import (
@@ -279,6 +280,7 @@ def get_donation_status(donation_id: str | None = None, status_token: str | None
 		"full_name": donation.full_name,
 		"want_80g": cint(donation.want_80g),
 		"payment_entry": donation.payment_entry,
+		"journal_entry": donation.journal_entry,
 	}
 
 
@@ -416,21 +418,41 @@ def _process_webhook_payload(payload: dict[str, Any]):
 
 
 def _mark_donation_success(donation, cf_payment_id: str | None = None):
-	if donation.status == "Success" and donation.payment_entry:
+	was_success = donation.status == "Success"
+
+	if was_success and donation.payment_entry and donation.journal_entry:
 		return
 
-	updates = {"status": "Success"}
-	if cf_payment_id:
-		updates["cf_payment_id"] = cf_payment_id
-	donation.db_set(updates, update_modified=True)
-	donation.reload()
+	if was_success and donation.payment_entry:
+		try:
+			create_income_journal_entry_for_donation(donation.name)
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), f"Income JE failed for {donation.name}")
+		return
+
+	if not was_success:
+		updates = {"status": "Success"}
+		if cf_payment_id:
+			updates["cf_payment_id"] = cf_payment_id
+		donation.db_set(updates, update_modified=True)
+		donation.reload()
+	elif cf_payment_id:
+		donation.db_set({"cf_payment_id": cf_payment_id}, update_modified=True)
+		donation.reload()
 
 	try:
 		create_payment_entry_for_donation(donation.name)
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), f"Payment Entry failed for {donation.name}")
 
-	_send_donor_acknowledgement(donation.name)
+	try:
+		donation.reload()
+		create_income_journal_entry_for_donation(donation.name)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), f"Income JE failed for {donation.name}")
+
+	if not was_success:
+		_send_donor_acknowledgement(donation.name)
 
 
 def _sync_donation_from_order(donation):

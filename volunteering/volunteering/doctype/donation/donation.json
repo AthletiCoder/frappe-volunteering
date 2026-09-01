@@ -30,6 +30,7 @@
   "payment_session_id",
   "column_break_payment",
   "payment_entry",
+  "journal_entry",
   "customer",
   "status_token",
   "meta_section",
@@ -194,6 +195,13 @@
    "fieldtype": "Link",
    "label": "Payment Entry",
    "options": "Payment Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "journal_entry",
+   "fieldtype": "Link",
+   "label": "Income Journal Entry",
+   "options": "Journal Entry",
    "read_only": 1
   },
   {

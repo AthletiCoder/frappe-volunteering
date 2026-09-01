@@ -75,6 +75,9 @@ def after_migrate():
 	ensure_designation_limits()
 	ensure_employee_advance_accounts()
 	ensure_expense_claim_payable_account()
+	from volunteering.volunteering.donation_accounting_setup import ensure_donation_accounting
+
+	ensure_donation_accounting()
 	ensure_employee_advance_field_visibility()
 	ensure_expense_claim_field_visibility()
 	ensure_manager_advance_field_labels()
