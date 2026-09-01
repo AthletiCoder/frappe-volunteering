@@ -109,7 +109,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "Used when creating Customer receivable mapping / remarks context",
+   "description": "Credited when Auto Create Payment Entry is enabled (Dr Debtors / Cr this account)",
    "fieldname": "income_account",
    "fieldtype": "Link",
    "label": "Donation Income Account",

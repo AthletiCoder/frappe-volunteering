@@ -11,6 +11,7 @@ from volunteering.volunteering.workspace_setup import (
 	VOLUNTEERING_EVENT_DYNAMIC_FILTER,
 	WORKSPACE_NAME,
 	boot_session,
+	ensure_spa_sidebar_links,
 	ensure_spa_workspace_shortcuts,
 	get_latest_ngo_event,
 	sync_volunteering_dashboard_filters,
@@ -113,3 +114,15 @@ class IntegrationTestWorkspaceSetup(IntegrationTestCase):
 		self.assertEqual(by_label["Advance Portal"].url, "/volunteering/advances")
 		self.assertEqual(by_label["Budget Health"].url, "/volunteering/budget-health")
 		self.assertIn("Event Report", by_label)
+
+	def test_volunteering_sidebar_does_not_duplicate_spa_links(self):
+		if not frappe.db.exists("Workspace Sidebar", WORKSPACE_NAME):
+			self.skipTest("Volunteering workspace sidebar is not installed")
+
+		ensure_spa_sidebar_links()
+		sidebar = frappe.get_doc("Workspace Sidebar", WORKSPACE_NAME)
+		link_labels = [item.label for item in sidebar.items if item.type == "Link"]
+		self.assertNotIn("Home", link_labels)
+		self.assertNotIn("To-do", link_labels)
+		section_labels = [item.label for item in sidebar.items if item.type == "Section Break"]
+		self.assertNotIn("Staff apps", section_labels)

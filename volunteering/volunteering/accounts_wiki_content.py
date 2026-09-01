@@ -149,7 +149,7 @@ Every vendor bill must link to an **approved, submitted** order. Staff or Accoun
 
 ## Donations (Cashfree)
 
-Donations first land in a **Cashfree Clearing** account. When the money reaches your real bank, make a Journal Entry: money into Bank, out of Clearing (handle fees as your CA advises).
+Donations first land in a **Cashfree Clearing** account via an auto **Payment Entry (Receive)**. An income **Journal Entry** (Debtors → Donation Income) is posted at the same time when Auto Create Payment Entry is enabled. When the money reaches your real bank, make a separate Journal Entry: money into Bank, out of Clearing (handle fees as your CA advises).
 
 ## What Accounts does not do
 

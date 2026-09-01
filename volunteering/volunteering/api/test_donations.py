@@ -228,9 +228,10 @@ class IntegrationTestDonationApis(IntegrationTestCase):
 		self.assertEqual(status["status"], "Pending")
 		self.assertEqual(status["donation_id"], donation.name)
 
+	@patch("volunteering.volunteering.api.donations.create_income_journal_entry_for_donation")
 	@patch("volunteering.volunteering.api.donations.create_payment_entry_for_donation")
 	@patch("volunteering.volunteering.api.donations._send_donor_acknowledgement")
-	def test_webhook_success_marks_donation(self, mock_mail, mock_pe):
+	def test_webhook_success_marks_donation(self, mock_mail, mock_pe, mock_je):
 		donation, _token = self._create_pending_donation()
 		payload = {
 			"type": "PAYMENT_SUCCESS_WEBHOOK",
@@ -244,6 +245,7 @@ class IntegrationTestDonationApis(IntegrationTestCase):
 		self.assertEqual(donation.status, "Success")
 		self.assertEqual(donation.cf_payment_id, "pay_123")
 		mock_pe.assert_called()
+		mock_je.assert_called()
 		mock_mail.assert_called_with(donation.name)
 
 	@patch("volunteering.volunteering.api.donations.create_payment_entry_for_donation")
@@ -262,11 +264,13 @@ class IntegrationTestDonationApis(IntegrationTestCase):
 		self.assertEqual(donation.status, "Failed")
 		mock_pe.assert_not_called()
 
+	@patch("volunteering.volunteering.api.donations.create_income_journal_entry_for_donation")
 	@patch("volunteering.volunteering.api.donations.create_payment_entry_for_donation")
 	@patch("volunteering.volunteering.api.donations._send_donor_acknowledgement")
-	def test_webhook_success_is_idempotent(self, mock_mail, mock_pe):
+	def test_webhook_success_is_idempotent(self, mock_mail, mock_pe, mock_je):
 		donation, _token = self._create_pending_donation()
 		donation.db_set("payment_entry", "PE-ALREADY", update_modified=False)
+		donation.db_set("journal_entry", "JE-ALREADY", update_modified=False)
 		donation.db_set("status", "Success", update_modified=False)
 		donation.reload()
 
@@ -281,13 +285,15 @@ class IntegrationTestDonationApis(IntegrationTestCase):
 		donations_api._process_webhook_payload(payload)
 		donation.reload()
 		self.assertEqual(donation.status, "Success")
-		# Early return when already Success + payment_entry — PE not created again
+		# Early return when already Success + payment_entry + journal_entry
 		mock_pe.assert_not_called()
+		mock_je.assert_not_called()
 
+	@patch("volunteering.volunteering.api.donations.create_income_journal_entry_for_donation")
 	@patch("volunteering.volunteering.api.donations.cashfree_client.get_order")
 	@patch("volunteering.volunteering.api.donations.create_payment_entry_for_donation")
 	@patch("volunteering.volunteering.api.donations._send_donor_acknowledgement")
-	def test_reconcile_marks_paid_from_get_order(self, mock_mail, mock_pe, mock_get):
+	def test_reconcile_marks_paid_from_get_order(self, mock_mail, mock_pe, mock_get, mock_je):
 		donation, _token = self._create_pending_donation(status="Pending")
 		mock_get.return_value = {"order_status": "PAID", "order_id": donation.cashfree_order_id}
 		status = donations_api.mark_donation_from_order_status(donation.name)

@@ -11,7 +11,10 @@ Complete these steps in ERPNext **before** switching Cashfree Settings to produc
 
 ## 3. Ledger: Donation Income
 - Create **Donation Income** (Income / as advised by your CA for Sec 8).
-- Store the account name in **Cashfree Settings → Donation Income Account** (reference; PE posts to party receivable + clearing).
+- Store the account name in **Cashfree Settings → Donation Income Account**.
+- On each successful donation (when Auto Create Payment Entry is on), the app posts:
+  - **Payment Entry (Receive):** Debit Cashfree Clearing / Credit Debtors
+  - **Journal Entry:** Debit Debtors / Credit Donation Income
 
 ## 4. Mode of Payment
 - Accounts → Mode of Payment → **Cashfree**.
@@ -48,9 +51,11 @@ bench --site YOUR_SITE migrate
 bench --site YOUR_SITE clear-cache
 ```
 
+Migrate seeds **Cashfree Clearing**, **Donation Income**, **Cashfree** mode of payment, and fills empty Cashfree Settings accounting fields (it does not override an existing Paid To / Income Account / Auto Create flag).
+
 ## 10. Smoke test (sandbox)
 1. Donate ₹100 from React with 80G off.
-2. Confirm Donation → Pending → Success, Payment Entry created.
+2. Confirm Donation → Pending → Success, Payment Entry and income Journal Entry created.
 3. Donate with 80G on + valid PAN + address.
-4. Force-fail a payment; status Failed; no PE.
+4. Force-fail a payment; status Failed; no PE or JE.
 5. Confirm daily digest job is scheduled (`bench doctor` / scheduler).
