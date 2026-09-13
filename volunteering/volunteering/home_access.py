@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from urllib.parse import urlencode
+
 from volunteering.volunteering.accounting_dashboard.constants import ACCOUNTS_ROLES
 from volunteering.volunteering.accounting_setup import BUDGET_HEALTH_ROLES
 from volunteering.volunteering.authority import BOARD_OF_DIRECTORS
@@ -26,6 +28,27 @@ STAFF_HOME_ROLES = frozenset(
 		"Expense Approver",
 	}
 )
+HOME_URL = "/volunteering/home"
+LOGIN_URL = "/login"
+
+
+def guest_login_redirect_url(path=None):
+	"""Login URL that returns guests to the page they asked for."""
+	target = path or HOME_URL
+	if not target or target in ("/login", "login"):
+		target = HOME_URL
+	return f"{LOGIN_URL}?{urlencode({'redirect-to': target})}"
+
+
+def require_logged_in_or_redirect():
+	"""Guests go to login. Logged-in users without staff roles still get Not Permitted."""
+	import frappe
+
+	if frappe.session.user != "Guest":
+		return
+	request = getattr(frappe.local, "request", None)
+	path = request.path if request is not None else HOME_URL
+	frappe.redirect(guest_login_redirect_url(path))
 
 
 def classify_home_access(roles, has_employee, grade=None):

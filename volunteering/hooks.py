@@ -31,7 +31,7 @@ website_redirects = [
 
 # include js, css files in header of desk.html
 app_include_js = [
-	"/assets/volunteering/js/form_shell_v9.js",
+	"/assets/volunteering/js/form_shell_v10.js",
 	"/assets/volunteering/js/home_redirect.js",
 ]
 

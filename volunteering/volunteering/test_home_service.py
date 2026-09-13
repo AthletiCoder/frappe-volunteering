@@ -5,7 +5,11 @@ from unittest.mock import patch
 
 from frappe.tests import UnitTestCase
 
-from volunteering.volunteering.home_access import classify_home_access
+from volunteering.volunteering.home_access import (
+	classify_home_access,
+	guest_login_redirect_url,
+	require_logged_in_or_redirect,
+)
 from volunteering.volunteering.home_service import _compose_todos, _time_actions, get_home_payload
 
 
@@ -77,6 +81,42 @@ class UnitTestHomeAccess(UnitTestCase):
 		self.assertTrue(flags["show_admin"])
 		self.assertTrue(flags["show_budget_health"])
 		self.assertIn(flags["persona"], ("admin", "accounts"))
+
+	def test_guest_login_redirect_url_keeps_requested_path(self):
+		self.assertEqual(
+			guest_login_redirect_url("/volunteering/home"),
+			"/login?redirect-to=%2Fvolunteering%2Fhome",
+		)
+		self.assertEqual(
+			guest_login_redirect_url("/login"),
+			"/login?redirect-to=%2Fvolunteering%2Fhome",
+		)
+
+	def test_require_logged_in_or_redirect_sends_guest_to_login(self):
+		import frappe
+
+		prev = frappe.session.user
+		prev_location = frappe.flags.redirect_location
+		try:
+			frappe.session.user = "Guest"
+			with self.assertRaises(frappe.Redirect):
+				require_logged_in_or_redirect()
+			location = frappe.flags.redirect_location
+			self.assertTrue(location.startswith("/login?"))
+			self.assertIn("redirect-to", location)
+		finally:
+			frappe.session.user = prev
+			frappe.flags.redirect_location = prev_location
+
+	def test_require_logged_in_or_redirect_allows_logged_in_user(self):
+		import frappe
+
+		prev = frappe.session.user
+		try:
+			frappe.session.user = "e2e.employee@sevamrita.local"
+			require_logged_in_or_redirect()
+		finally:
+			frappe.session.user = prev
 
 
 class UnitTestHomePayload(UnitTestCase):

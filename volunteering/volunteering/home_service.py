@@ -312,7 +312,7 @@ def _money_actions(pending=None):
 			{
 				"id": "vendor",
 				"label": _("Pay a vendor"),
-				"hint": _("Preferred — organisation pays"),
+				"hint": _("Organisation pays the vendor directly"),
 				"route": "/desk/purchase-order/new",
 			},
 			"/desk/purchase-order",
@@ -324,7 +324,7 @@ def _money_actions(pending=None):
 			{
 				"id": "advance",
 				"label": _("Request an advance"),
-				"hint": _("Float before you buy"),
+				"hint": _("Get money from the organisation before you spend."),
 				"route": "/desk/employee-advance/new",
 			},
 			"/desk/employee-advance",
@@ -335,8 +335,8 @@ def _money_actions(pending=None):
 		_with_history(
 			{
 				"id": "claim",
-				"label": _("Claim money back"),
-				"hint": _("Only if vendor/advance was not possible"),
+				"label": _("Submit an Expense"),
+				"hint": _("Record what you spent and settle your advance or get reimbursed."),
 				"route": "/desk/expense-claim/new",
 			},
 			"/desk/expense-claim",

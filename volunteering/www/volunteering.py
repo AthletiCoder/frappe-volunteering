@@ -5,8 +5,13 @@ import os
 
 import frappe
 
+from volunteering.volunteering.home_access import require_logged_in_or_redirect
+
+no_cache = 1
+
 
 def get_context(context):
+	require_logged_in_or_redirect()
 	frappe.only_for(
 		(
 			"Employee",

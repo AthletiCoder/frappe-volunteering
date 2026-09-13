@@ -4,44 +4,9 @@ const WORKFLOW_ACTIONS = ["Approve", "Reject"];
 const IDLE_WORKFLOW_STATES = ["Draft", "Rejected", "Approved"];
 
 volunteering.accounting_workflow.refresh_form_tabs = function (frm) {
-	// Prefer the shared Desk shell helper (never calls refresh_tabs — that re-hides panes).
+	// Shared helper only repairs blank panes; preserves the active tab.
 	if (volunteering.form_hints && volunteering.form_hints.ensure_form_body_visible) {
 		volunteering.form_hints.ensure_form_body_visible(frm);
-		return;
-	}
-	const layout = frm && frm.layout;
-	if (!layout || !layout.tabs || !layout.tabs.length) {
-		return;
-	}
-	const first =
-		layout.tabs.find(
-			(tab) =>
-				tab.wrapper &&
-				tab.wrapper.find(".form-section:not(.empty-section), .form-dashboard-section").length
-		) || layout.tabs[0];
-	if (!first || !first.wrapper) {
-		return;
-	}
-	layout.tabs.forEach((tab) => {
-		if (!tab.wrapper || !tab.wrapper.length) {
-			return;
-		}
-		if (tab === first) {
-			tab.hidden = false;
-			tab.wrapper.removeClass("hide").addClass("show active");
-			if (tab.tab_link) {
-				tab.tab_link.removeClass("hide").addClass("show");
-				tab.tab_link.find(".nav-link").addClass("active");
-			}
-		} else {
-			tab.wrapper.removeClass("show active").addClass("hide");
-			if (tab.tab_link) {
-				tab.tab_link.find(".nav-link").removeClass("active");
-			}
-		}
-	});
-	if (first.set_active) {
-		first.set_active();
 	}
 };
 
@@ -63,11 +28,7 @@ volunteering.accounting_workflow.setup_form = function (doctype) {
 				volunteering.accounting_workflow.hide_expense_claim_account_fields(frm);
 				volunteering.accounting_workflow.show_manager_float_hint(frm);
 			}
-			volunteering.accounting_workflow.refresh_form_tabs(frm);
-			// depends_on / async hints settle after the first refresh pass
-			[0, 100, 300].forEach((ms) => {
-				setTimeout(() => volunteering.accounting_workflow.refresh_form_tabs(frm), ms);
-			});
+			// Tab restore lives in form_shell_v9 (hash / active tab). Do not re-force tabs here.
 		},
 		is_emergency(frm) {
 			volunteering.accounting_workflow.toggle_exception_fields(frm);

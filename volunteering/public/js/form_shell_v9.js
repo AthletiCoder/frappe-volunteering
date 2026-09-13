@@ -1,7 +1,15 @@
 /**
- * Form hint helpers + Desk blank-tab recovery.
+ * Form hint helpers + minimal Desk tab hash fix.
  *
- * Frappe's frm.set_intro / dashboard.set_headline_alert APPEND without clearing.
+ * Frappe Form.set_active_tab writes
+ *   fieldname.replace("__details", "")
+ * into the URL hash. For Expense Claim that turns
+ *   accounting_details_tab → accounting_tab
+ * so the next layout.refresh_tabs cannot resolve the tab and falls back to tab 1
+ * (blank Accounting / jump to Expenses).
+ *
+ * Do NOT monkey-patch refresh_tabs or force-activate tabs — that remounted new
+ * docs (docname changed in the URL).
  */
 frappe.provide("volunteering.form_hints");
 
@@ -46,112 +54,77 @@ volunteering.form_hints.is_current = function (frm, key, token) {
 	return token === frm[`_hint_token_${key}`];
 };
 
-volunteering.form_hints.TAB_FIX_DOCTYPES = {
-	"Expense Claim": true,
-	"Employee Advance": true,
-	"Purchase Order": true,
+volunteering.form_hints._resolve_tab_from_hash = function (layout, hash) {
+	if (!layout || !hash || !layout.tabs) {
+		return null;
+	}
+	return (
+		layout.tabs.find((tab) => tab.df && tab.df.fieldname === hash) ||
+		layout.tabs.find((tab) => tab.df && (tab.df.fieldname || "").replace("__details", "") === hash) ||
+		null
+	);
 };
 
-volunteering.form_hints.ensure_form_body_visible = function (frm) {
-	frm = frm || cur_frm;
-	const layout = frm && frm.layout;
-	if (!layout || !layout.tabs || !layout.tabs.length) {
-		return false;
-	}
-	if (!volunteering.form_hints.TAB_FIX_DOCTYPES[frm.doctype]) {
-		return false;
-	}
-
-	const first =
-		layout.tabs.find(
-			(tab) =>
-				tab.wrapper &&
-				tab.wrapper.find(".form-section:not(.empty-section), .form-dashboard-section").length
-		) || layout.tabs[0];
-	if (!first || !first.wrapper || !first.wrapper.length) {
-		return false;
-	}
-
-	const height = first.wrapper[0].offsetHeight || 0;
-	const already =
-		first.wrapper.hasClass("active") && !first.wrapper.hasClass("hide") && height > 40;
-	if (already) {
-		return true;
-	}
-
-	layout.tabs.forEach((tab) => {
-		if (!tab.wrapper || !tab.wrapper.length) {
-			return;
-		}
-		if (tab === first) {
-			tab.hidden = false;
-			tab.wrapper.removeClass("hide").addClass("show active");
-			if (tab.tab_link && tab.tab_link.length) {
-				tab.tab_link.removeClass("hide").addClass("show");
-				tab.tab_link.find(".nav-link").addClass("active");
-			}
-		} else {
-			tab.wrapper.removeClass("show active").addClass("hide");
-			if (tab.tab_link && tab.tab_link.length) {
-				tab.tab_link.find(".nav-link").removeClass("active");
-			}
-		}
-	});
-
-	if (first.set_active) {
-		first.set_active();
-	}
-	return (first.wrapper[0].offsetHeight || 0) > 40;
-};
-
-volunteering.form_hints.patch_frm_layout = function (frm) {
-	frm = frm || cur_frm;
-	if (!frm || !frm.layout || !frm.layout.refresh_tabs || frm.layout._vol_tabs_patched) {
+volunteering.form_hints.patch_tab_hash_bug = function () {
+	if (volunteering.form_hints._tab_hash_patched) {
 		return;
 	}
-	const layout = frm.layout;
-	const original = layout.refresh_tabs.bind(layout);
-	layout.refresh_tabs = function (...args) {
-		const result = original(...args);
-		volunteering.form_hints.ensure_form_body_visible(frm);
-		return result;
-	};
-	layout._vol_tabs_patched = true;
-};
-
-volunteering.form_hints.fix_blank_tabs = function () {
-	const frm = cur_frm;
-	if (!frm || !volunteering.form_hints.TAB_FIX_DOCTYPES[frm.doctype]) {
+	if (!frappe.ui || !frappe.ui.form || !frappe.ui.form.Form || !frappe.ui.form.Layout) {
 		return;
 	}
-	volunteering.form_hints.patch_frm_layout(frm);
-	volunteering.form_hints.ensure_form_body_visible(frm);
+
+	const Form = frappe.ui.form.Form;
+	if (Form.prototype.set_active_tab && !Form.prototype._vol_set_active_tab_patched) {
+		const original = Form.prototype.set_active_tab;
+		Form.prototype.set_active_tab = function (tab) {
+			const previous_tab_name = this.active_tab_map?.[this.docname]?.df?.fieldname || "";
+			const next_tab_name = tab?.df?.fieldname || "";
+			const has_changed = previous_tab_name !== next_tab_name;
+
+			// Run original (updates map / on_tab_change / broken hash).
+			original.apply(this, arguments);
+
+			// Restore a resolvable hash — never the mangled "__details" strip.
+			if (has_changed && next_tab_name && window.history && window.history.replaceState) {
+				const url = new URL(window.location.href);
+				if (url.hash.replace("#", "") !== next_tab_name) {
+					url.hash = next_tab_name;
+					history.replaceState(null, null, url);
+				}
+			}
+		};
+		Form.prototype._vol_set_active_tab_patched = true;
+	}
+
+	const Layout = frappe.ui.form.Layout;
+	if (Layout.prototype.set_tab_as_active && !Layout.prototype._vol_set_tab_as_active_patched) {
+		const original = Layout.prototype.set_tab_as_active;
+		Layout.prototype.set_tab_as_active = function (...args) {
+			const hash = (window.location.hash || "").replace("#", "");
+			const tab = volunteering.form_hints._resolve_tab_from_hash(this, hash);
+			if (tab && hash && tab.df.fieldname !== hash && window.history && window.history.replaceState) {
+				const url = new URL(window.location.href);
+				url.hash = tab.df.fieldname;
+				history.replaceState(null, null, url);
+			}
+			return original.apply(this, args);
+		};
+		Layout.prototype._vol_set_tab_as_active_patched = true;
+	}
+
+	volunteering.form_hints._tab_hash_patched = true;
 };
 
+// Back-compat no-ops for older callers.
+volunteering.form_hints.TAB_FIX_DOCTYPES = {};
+volunteering.form_hints.ensure_form_body_visible = function () {
+	return false;
+};
+volunteering.form_hints.patch_frm_layout = function () {};
+volunteering.form_hints.fix_blank_tabs = function () {};
 volunteering.form_hints.start_blank_tab_guard = function () {
-	if (volunteering.form_hints._guard_started) {
-		return;
-	}
-	volunteering.form_hints._guard_started = true;
-
-	$(document).on("form-refresh form-load", function (_event, frm) {
-		volunteering.form_hints.patch_frm_layout(frm);
-		volunteering.form_hints.ensure_form_body_visible(frm);
-		setTimeout(volunteering.form_hints.fix_blank_tabs, 0);
-		setTimeout(volunteering.form_hints.fix_blank_tabs, 200);
-		setTimeout(volunteering.form_hints.fix_blank_tabs, 600);
-		setTimeout(volunteering.form_hints.fix_blank_tabs, 1200);
-	});
-
-	// Route changes (Desk soft nav) often skip a usable form-refresh timing.
-	if (frappe.router && frappe.router.on) {
-		frappe.router.on("change", function () {
-			setTimeout(volunteering.form_hints.fix_blank_tabs, 0);
-			setTimeout(volunteering.form_hints.fix_blank_tabs, 300);
-			setTimeout(volunteering.form_hints.fix_blank_tabs, 800);
-		});
-	}
+	volunteering.form_hints.patch_tab_hash_bug();
 };
 
-volunteering.form_hints.start_blank_tab_guard();
-$(document).on("app_ready", volunteering.form_hints.start_blank_tab_guard);
+volunteering.form_hints.patch_tab_hash_bug();
+$(document).on("app_ready", volunteering.form_hints.patch_tab_hash_bug);
