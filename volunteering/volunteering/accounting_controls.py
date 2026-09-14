@@ -39,23 +39,39 @@ def assign_department_from_employee(doc, method=None):
 
 
 def ensure_expense_claim_accounts(doc, method=None):
-	"""Set GL accounts server-side so employees never need Account DocPerm."""
+	"""Set hidden GL accounts server-side so employees never need Account DocPerm.
+
+	The values are deliberately replaced from trusted Company and Expense Claim
+	Type configuration instead of accepting hidden fields from a client payload.
+	"""
 	if doc.doctype != "Expense Claim" or not doc.get("company"):
 		return
 
-	if not doc.get("payable_account"):
-		doc.payable_account = _company_payable_account(doc.company)
+	payable_account = _company_payable_account(doc.company)
+	if not payable_account:
+		frappe.throw(
+			_("No payable account is configured for Company {0}. Contact an Accounts administrator.").format(
+				doc.company
+			)
+		)
+	doc.payable_account = payable_account
 
 	for row in doc.get("expenses") or []:
-		if row.get("default_account") or not row.get("expense_type"):
+		if not row.get("expense_type"):
 			continue
 		account = frappe.db.get_value(
 			"Expense Claim Account",
 			{"parent": row.expense_type, "company": doc.company},
 			"default_account",
 		)
-		if account:
-			row.default_account = account
+		if not account:
+			frappe.throw(
+				_(
+					"Expense Claim Type {0} has no default account for Company {1}. "
+					"Contact an Accounts administrator."
+				).format(row.expense_type, doc.company)
+			)
+		row.default_account = account
 
 
 def _company_payable_account(company: str) -> str | None:

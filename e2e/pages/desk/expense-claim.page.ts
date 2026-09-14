@@ -249,31 +249,6 @@ export class ExpenseClaimFormPage extends DeskForm {
 			if (!frm.doc?.exchange_rate) {
 				await frm.set_value('exchange_rate', 1);
 			}
-			if (!frm.doc?.payable_account && frm.doc?.company) {
-				const payableRes = await win.frappe.db.get_value(
-					'Company',
-					frm.doc.company,
-					'default_expense_claim_payable_account',
-				);
-				let payable =
-					typeof payableRes?.message === 'string'
-						? payableRes.message
-						: payableRes?.message?.default_expense_claim_payable_account;
-				if (!payable) {
-					const fallback = await win.frappe.db.get_value(
-						'Company',
-						frm.doc.company,
-						'default_payable_account',
-					);
-					payable =
-						typeof fallback?.message === 'string'
-							? fallback.message
-							: fallback?.message?.default_payable_account;
-				}
-				if (payable) {
-					await frm.set_value('payable_account', payable);
-				}
-			}
 			if (!frm.doc?.posting_date) {
 				await frm.set_value('posting_date', win.frappe.datetime.get_today());
 			}
@@ -288,7 +263,6 @@ export class ExpenseClaimFormPage extends DeskForm {
 							employee?: string;
 							company?: string;
 							exchange_rate?: number;
-							payable_account?: string;
 						};
 					};
 				}).cur_frm?.doc;
@@ -297,8 +271,7 @@ export class ExpenseClaimFormPage extends DeskForm {
 						doc?.currency &&
 						doc?.expense_approver &&
 						doc?.company &&
-						doc?.exchange_rate &&
-						doc?.payable_account,
+						doc?.exchange_rate,
 				);
 			},
 			undefined,
@@ -526,7 +499,6 @@ export class ExpenseClaimFormPage extends DeskForm {
 						company?: string;
 						currency?: string;
 						exchange_rate?: number;
-						payable_account?: string;
 						posting_date?: string;
 					};
 					set_value: (f: string, v: string | number) => Promise<unknown>;
@@ -560,31 +532,6 @@ export class ExpenseClaimFormPage extends DeskForm {
 			}
 			if (frm.doc?.exchange_rate == null || frm.doc.exchange_rate === 0) {
 				await frm.set_value('exchange_rate', 1);
-			}
-			if (!frm.doc?.payable_account && frm.doc?.company) {
-				const payableRes = await win.frappe.db.get_value(
-					'Company',
-					frm.doc.company,
-					'default_expense_claim_payable_account',
-				);
-				let payable =
-					typeof payableRes?.message === 'string'
-						? payableRes.message
-						: payableRes?.message?.default_expense_claim_payable_account;
-				if (!payable) {
-					const fallback = await win.frappe.db.get_value(
-						'Company',
-						frm.doc.company,
-						'default_payable_account',
-					);
-					payable =
-						typeof fallback?.message === 'string'
-							? fallback.message
-							: fallback?.message?.default_payable_account;
-				}
-				if (payable) {
-					await frm.set_value('payable_account', payable);
-				}
 			}
 			if (!frm.doc?.posting_date) {
 				await frm.set_value('posting_date', win.frappe.datetime.get_today());

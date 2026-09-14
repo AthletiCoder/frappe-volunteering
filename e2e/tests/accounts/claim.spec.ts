@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { e2eCall, cleanupExpenseClaimsForProject, getCast } from '../../helpers/e2e-api';
 import { expectFormError } from '../../helpers/dialogs';
+import { formUrl } from '../../helpers/desk';
 import { withPersona } from '../../helpers/persona-context';
 import { personaStorage } from '../../helpers/personas';
 import { getE2eMasters, getE2eProject } from '../../helpers/ui-fixtures';
@@ -9,6 +10,55 @@ import { ExpenseClaimFormPage } from '../../pages/desk/expense-claim.page';
 test.describe('Expense Claim @accounts @ui', () => {
 	test.describe('as employee', () => {
 		test.use({ storageState: personaStorage('employee') });
+
+		test('AC-CLM-006 @regression @critical: New claim does not request Account permission', async ({
+			page,
+		}) => {
+			const accountLinkValidations: string[] = [];
+			page.on('request', (request) => {
+				if (!request.url().includes('frappe.client.validate_link_and_fetch')) return;
+
+				const url = new URL(request.url());
+				if (url.searchParams.get('doctype') === 'Account') {
+					accountLinkValidations.push(request.url());
+				}
+			});
+
+			await page.goto(formUrl('Expense Claim'), { waitUntil: 'domcontentloaded' });
+			await page.waitForFunction(
+				() => {
+					const frm = (window as unknown as {
+						cur_frm?: { doctype?: string; doc?: { employee?: string; company?: string } };
+					}).cur_frm;
+					return frm?.doctype === 'Expense Claim' && Boolean(frm.doc?.employee && frm.doc?.company);
+				},
+				undefined,
+				{ timeout: 45000 },
+			);
+			await page.waitForTimeout(1000);
+			const payableField = await page.evaluate(() => {
+				const field = (window as unknown as {
+					cur_frm?: {
+						fields_dict?: {
+							payable_account?: {
+								df?: { reqd?: number; fetch_from?: string; mandatory_depends_on?: string };
+							};
+						};
+					};
+				}).cur_frm?.fields_dict?.payable_account?.df;
+				return {
+					reqd: Number(field?.reqd || 0),
+					fetch_from: field?.fetch_from || '',
+					mandatory_depends_on: field?.mandatory_depends_on || '',
+				};
+			});
+
+			await expect(
+				page.locator('.modal.show').filter({ hasText: /Insufficient Permission for Account/i }),
+			).toHaveCount(0);
+			expect(payableField).toEqual({ reqd: 0, fetch_from: '', mandatory_depends_on: '' });
+			expect(accountLinkValidations).toEqual([]);
+		});
 
 		test('AC-CLM-001 @regression @critical: Reimbursement happy path to Approved', async ({
 			page,

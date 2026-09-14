@@ -327,7 +327,7 @@ def ensure_employee_advance_field_visibility():
 
 
 def ensure_expense_claim_field_visibility():
-	"""Hide GL accounts from staff; ignore User Permissions on Link fields.
+	"""Hide GL accounts from staff and keep their values server-managed.
 
 	Employees get a User Permission on their own Employee (and Company). Any other
 	Employee/User/Project/… Link on the claim then blocks *read* of their own
@@ -364,6 +364,34 @@ def ensure_expense_claim_field_visibility():
 		_ensure_property_setter(doctype, fieldname, "ignore_user_permissions", "1", "Check")
 
 	_ensure_property_setter("Expense Claim Detail", "default_account", "hidden", "1", "Check")
+	# HRMS fetches this Account in the browser when Company is set. Link validation
+	# still requires Account DocPerm even with ignore_user_permissions enabled, so
+	# employees see an Account permission error while opening a blank claim. The
+	# before_validate hook fills the hidden payable account on the server instead.
+	_ensure_property_setter(
+		"Expense Claim",
+		"payable_account",
+		"fetch_from",
+		"",
+		"Small Text",
+	)
+	# The browser cannot satisfy a mandatory hidden field once fetch_from is
+	# disabled. HRMS also marks this field mandatory through mandatory_depends_on,
+	# so disable both client-side paths; the server hook sets and validates it.
+	_ensure_property_setter(
+		"Expense Claim",
+		"payable_account",
+		"reqd",
+		"0",
+		"Check",
+	)
+	_ensure_property_setter(
+		"Expense Claim",
+		"payable_account",
+		"mandatory_depends_on",
+		"",
+		"Data",
+	)
 	_ensure_property_setter(
 		"Expense Claim",
 		"payable_account",
@@ -378,6 +406,10 @@ def ensure_expense_claim_field_visibility():
 		"1",
 		"Check",
 	)
+	# Existing Property Setters are updated with db.set_value, which does not run
+	# document hooks. Explicitly invalidate metadata so every change is effective.
+	frappe.clear_cache(doctype="Expense Claim")
+	frappe.clear_cache(doctype="Expense Claim Detail")
 
 
 def _ensure_property_setter(doctype, fieldname, property_name, value, property_type):

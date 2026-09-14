@@ -195,9 +195,11 @@ doc_events = {
 		"before_submit": "volunteering.volunteering.accounting_controls.validate_purchase_invoice_po_chain",
 	},
 	"Expense Claim": {
+		"before_validate": [
+			"volunteering.volunteering.accounting_controls.ensure_expense_claim_accounts",
+		],
 		"before_save": [
 			"volunteering.volunteering.expense_claim_permissions.validate_expense_claim_employee_self_only",
-			"volunteering.volunteering.accounting_controls.ensure_expense_claim_accounts",
 			"volunteering.volunteering.accounting_controls.validate_project_required",
 			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
 			"volunteering.volunteering.accounting_controls.validate_project_has_cost_center",

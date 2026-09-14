@@ -6,7 +6,67 @@ from unittest.mock import patch
 import frappe
 from frappe.tests import UnitTestCase
 
-from volunteering.volunteering.accounting_controls import validate_payment_entry
+from volunteering.volunteering.accounting_controls import (
+	ensure_expense_claim_accounts,
+	validate_payment_entry,
+)
+
+
+class TestExpenseClaimAccountControls(UnitTestCase):
+	@patch("volunteering.volunteering.accounting_controls.frappe.db.get_value")
+	@patch("volunteering.volunteering.accounting_controls._company_payable_account")
+	def test_hidden_accounts_are_replaced_from_trusted_configuration(
+		self, mock_payable_account, mock_get_value
+	):
+		mock_payable_account.return_value = "Configured Payable - SF"
+		mock_get_value.return_value = "Configured Expense - SF"
+		doc = frappe._dict(
+			doctype="Expense Claim",
+			company="Sevamrita Foundation",
+			payable_account="Client Supplied Payable - SF",
+			expenses=[
+				frappe._dict(
+					expense_type="Travel",
+					default_account="Client Supplied Expense - SF",
+				)
+			],
+		)
+
+		ensure_expense_claim_accounts(doc)
+
+		self.assertEqual(doc.payable_account, "Configured Payable - SF")
+		self.assertEqual(doc.expenses[0].default_account, "Configured Expense - SF")
+		mock_get_value.assert_called_once_with(
+			"Expense Claim Account",
+			{"parent": "Travel", "company": "Sevamrita Foundation"},
+			"default_account",
+		)
+
+	@patch("volunteering.volunteering.accounting_controls._company_payable_account")
+	def test_missing_company_payable_account_is_rejected(self, mock_payable_account):
+		mock_payable_account.return_value = None
+		doc = frappe._dict(
+			doctype="Expense Claim",
+			company="Sevamrita Foundation",
+			expenses=[],
+		)
+
+		with self.assertRaisesRegex(frappe.ValidationError, "No payable account is configured"):
+			ensure_expense_claim_accounts(doc)
+
+	@patch("volunteering.volunteering.accounting_controls.frappe.db.get_value")
+	@patch("volunteering.volunteering.accounting_controls._company_payable_account")
+	def test_missing_expense_type_account_is_rejected(self, mock_payable_account, mock_get_value):
+		mock_payable_account.return_value = "Configured Payable - SF"
+		mock_get_value.return_value = None
+		doc = frappe._dict(
+			doctype="Expense Claim",
+			company="Sevamrita Foundation",
+			expenses=[frappe._dict(expense_type="Travel")],
+		)
+
+		with self.assertRaisesRegex(frappe.ValidationError, "has no default account"):
+			ensure_expense_claim_accounts(doc)
 
 
 class TestPaymentEntryControls(UnitTestCase):
