@@ -26,7 +26,9 @@ from volunteering.volunteering.accounting_test_utils import (
 	make_purchase_order,
 	make_supplier_payment_entry,
 	mute_accounting_test_emails,
-	set_project_department_budget,
+)
+from volunteering.volunteering.accounting_test_utils import (
+	set_project_budget as configure_project_budget,
 )
 from volunteering.volunteering.attendance_service import process_daily_attendance
 from volunteering.volunteering.e2e_seed import PERSONAS, list_e2e_personas, seed_e2e_personas
@@ -402,7 +404,7 @@ def cleanup_expense_claims(employee):
 
 @frappe.whitelist()
 def cleanup_expense_claims_for_project(project):
-	"""Remove all expense claims on a project so department budget E2E starts clean."""
+	"""Remove all expense claims on a project so Project budget E2E starts clean."""
 	_guard_e2e()
 	names = frappe.get_all("Expense Claim", filters={"project": project}, pluck="name")
 	for name in names:
@@ -1440,8 +1442,22 @@ def preview_work_log_digest():
 
 
 @frappe.whitelist()
-def set_project_budget(project, department, allocated_amount):
+def set_project_budget(
+	project,
+	allocated_amount,
+	department=None,
+	project_control="Warn Only",
+	account_control="No Control",
+	account_budgets=None,
+):
 	_guard_e2e()
-	set_project_department_budget(project, department, flt(allocated_amount))
+	account_budgets = frappe.parse_json(account_budgets) if account_budgets else None
+	configure_project_budget(
+		project,
+		flt(allocated_amount),
+		project_control=project_control,
+		account_control=account_control,
+		account_budgets=account_budgets,
+	)
 	frappe.db.commit()
 	return True

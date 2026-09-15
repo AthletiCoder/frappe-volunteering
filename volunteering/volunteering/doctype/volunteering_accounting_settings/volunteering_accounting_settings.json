@@ -134,12 +134,13 @@
   {
    "fieldname": "budget_section",
    "fieldtype": "Section Break",
-   "label": "Budget Controls"
+   "label": "Strict Budget Overrides"
   },
   {
    "default": "1",
    "fieldname": "enable_budget_warnings",
    "fieldtype": "Check",
+   "hidden": 1,
    "label": "Enable Soft Budget Warnings"
   },
   {
@@ -147,11 +148,12 @@
    "description": "Block approval when proposed spend exceeds allocated budget by more than this percent. Board of Directors grade always overrides.",
    "fieldname": "budget_hard_block_pct",
    "fieldtype": "Percent",
+   "hidden": 1,
    "label": "Budget Hard-Block Overspend %",
    "reqd": 1
   },
   {
-   "description": "Optional extra override on top of the Board of Directors grade. Leave blank — grade decides.",
+   "description": "Optional role allowed to authorise a Strict Project or Expense Account budget override. Board of Directors grade is always authorised.",
    "fieldname": "budget_override_role",
    "fieldtype": "Link",
    "label": "Budget Override Role (optional)",

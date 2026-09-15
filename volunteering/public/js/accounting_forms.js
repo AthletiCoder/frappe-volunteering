@@ -348,7 +348,6 @@ volunteering.accounting_workflow.show_spend_hints = function (frm) {
 		return frappe
 			.xcall("volunteering.volunteering.budget_service.get_budget_snapshot", {
 				project: frm.doc.project,
-				department: frm.doc.department,
 			})
 			.then((snap) => {
 				if (!snap) {
@@ -356,19 +355,20 @@ volunteering.accounting_workflow.show_spend_hints = function (frm) {
 					return;
 				}
 				let budget = "";
-				if (snap.department && snap.department_allocated) {
+				if (snap.allocated) {
 					budget = __(
-						"This department: spent {0} of {1} approved ({2} available).",
+						"Project ({0}): committed {1} of {2} approved ({3} available).",
 						[
-							format_currency(snap.department_consumed),
-							format_currency(snap.department_allocated),
-							format_currency(snap.department_remaining),
+							snap.project_control,
+							format_currency(snap.consumed),
+							format_currency(snap.allocated),
+							format_currency(snap.remaining),
 						]
 					);
-				} else if (snap.allocated) {
+				} else {
 					budget = __(
-						"Project: spent {0} of {1} approved.",
-						[format_currency(snap.consumed), format_currency(snap.allocated)]
+						"Project budget control: {0}. Expense Account budget control: {1}.",
+						[snap.project_control, snap.account_control]
 					);
 				}
 				const html = [spend, budget].filter(Boolean).join("<br>");
@@ -413,6 +413,11 @@ volunteering.accounting_workflow.render_review_buttons = function (frm, flags, t
 	if (flags.can_approve && by_name.Approve) {
 		frm.page.set_primary_action(__("Approve"), () =>
 			volunteering.accounting_workflow.apply_action(frm, "Approve")
+		);
+	} else if (flags.strict_budget_blocked) {
+		frm.dashboard.set_headline_alert(
+			__("Strict budget exceeded. Escalate to an authorised budget approver or Reject."),
+			"orange"
 		);
 	} else if (flags.manager_float_blocked && flags.manager_float_message) {
 		frm.dashboard.set_headline_alert(flags.manager_float_message, "orange");

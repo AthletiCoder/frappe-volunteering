@@ -18,7 +18,7 @@ Use Desk search (`Ctrl` / `Cmd` + `K`) or the hubs above. In-app help is the liv
 | Check project budget | [Budget Health](/volunteering/budget-health) |
 | HR details (work log, leave, WFH) | [docs/hr_hrms_guide.md](docs/hr_hrms_guide.md) |
 
-**Advances vs projects:** do not tag an **Employee Advance** to a project — it is cash in your hands. When you settle, the **Expense Claim must have a Project** so department budget and approvals apply. Purchase Orders also require a Project. Purchase Invoices follow the approved PO (they do not double-count budget).
+**Advances vs projects:** do not tag an **Employee Advance** to a project — it is cash in your hands. When you settle, the **Expense Claim must have a Project** so its Project and Expense Account budget controls apply. Purchase Orders also require a Project. Purchase Invoices follow the approved PO (they do not double-count budget).
 
 Approvals follow **Reports To** and **Employee Grade** limits. Accounts pays after approval; they do not replace your manager on day-to-day spend.
 
@@ -28,7 +28,7 @@ Approvals follow **Reports To** and **Employee Grade** limits. Accounts pays aft
 
 1. Set each employee’s **Reports To** and **Grade** (and Designation as the job title).
 2. Open **Approval & Advance Limits** and confirm amounts (or Reset to Defaults).
-3. On each **Project**, set **Department Budgets** and a **Cost Center**.
+3. On each **Project**, set a **Cost Center** and choose independent whole-Project and Expense Account budget controls.
 4. Optional: [Daily Work Log Settings](docs/hr_hrms_guide.md) for the summary email.
 5. After install or upgrade: `bench migrate`, then build the SPA once:
 

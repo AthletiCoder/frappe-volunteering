@@ -64,7 +64,7 @@ A claim means: *"I already paid with my own money. Please pay me back."*
 
 1. You pay the vendor or expense yourself (or settle an advance).
 2. Make an [Expense Claim](/app/expense-claim/new), **set the Project**, and attach the receipts.
-3. Your manager or Accounts approves it (live department budget on that project is checked on Approve).
+3. Your manager or Accounts approves it (the Project and Expense Account budget controls are checked on Approve).
 4. Accounts pays you. The claim is then marked **Paid**.
 
 There is no separate "already paid" checkbox. Making the claim *is* how you say you already paid.
@@ -229,15 +229,16 @@ All of these are on [Accounting Settings](/app/volunteering-accounting-settings)
 
 ## 4. Budget controls
 
-Also on [Accounting Settings](/app/volunteering-accounting-settings) → **Budget Controls**.
+On each [Project](/app/project), configure two controls independently:
 
-Project **department budgets** are checked on **Expense Claims** and **Purchase Orders** (not on Employee Advances). Purchase Invoices do not double-count a PO.
+| Project field | What it controls |
+|---------------|------------------|
+| Overall Project Budget Control | All committed spending against Total Approved Budget |
+| Expense Account Budget Control | Each configured Chart of Accounts expense allocation |
 
-| Setting | What it does | Default |
-|---------|--------------|---------|
-| Enable Soft Budget Warnings | Show a warning when spending is near the budget. | On |
-| Budget Hard-Block % | Block approval when spending goes over the budget by more than this. | 25% |
-| Budget Hard-Block override | Who may approve past the hard limit. | Board of Directors grade |
+Both controls offer **No Control**, **Warn Only**, and **Strict**. Strict overruns require a Budget Exceedance Reason and an authorised override. Board of Directors grade is always authorised; an optional extra role can be selected in [Accounting Settings](/app/volunteering-accounting-settings).
+
+Expense Claims and Purchase Orders commit budget. Employee Advances do not; Purchase Invoices do not double-count an approved PO. A Project's Cost Centre is applied automatically to its transaction lines.
 
 See project budget status any time on [Budget Health](/volunteering/budget-health).
 

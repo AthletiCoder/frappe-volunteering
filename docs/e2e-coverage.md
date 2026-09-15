@@ -102,9 +102,9 @@ Source: `sevamrit-erp-testing.xlsx` (108 spreadsheet cases). All 108 IDs are aut
 | AC-BKS-003 | Home loads for employee spend actions | smoke | `e2e/tests/accounts/smoke.spec.ts` | automated |
 | AC-BKS-004 | General Ledger report runs | regression | `e2e/tests/accounts/books.spec.ts` | automated |
 | AC-BKS-005 | Bank Reconciliation Tool opens | regression | `e2e/tests/accounts/books.spec.ts` | automated |
-| AC-BUD-001 | Soft budget warning near budget | regression | `e2e/tests/accounts/budget.spec.ts` | automated |
-| AC-BUD-002 | Hard block when overspend exceeds Budget Hard-Block % | critical | `e2e/tests/accounts/budget.spec.ts` | automated |
-| AC-BUD-003 | Budget Override Role can exceed hard block | critical | `e2e/tests/accounts/budget.spec.ts` | automated |
+| AC-BUD-001 | Warn Only permits a Project budget overrun with a warning | regression | `e2e/tests/accounts/budget.spec.ts` | automated |
+| AC-BUD-002 | Strict Project budget blocks an unauthorised overrun | critical | `e2e/tests/accounts/budget.spec.ts` | automated |
+| AC-BUD-003 | Authorised approver can record a Strict override | critical | `e2e/tests/accounts/budget.spec.ts` | automated |
 | AC-BUD-004 | Budget Health page loads | smoke | `e2e/tests/accounts/smoke.spec.ts` | automated |
 | AC-CLM-001 | Reimbursement happy path to Approved | critical | `e2e/tests/accounts/claim.spec.ts` | automated |
 | AC-CLM-002 | Monthly Reimbursement Cap blocks excess | critical | `e2e/tests/accounts/claim.spec.ts` | automated |
@@ -171,4 +171,3 @@ Infrastructure and persona checks without spreadsheet IDs (not counted in the 10
 | Ops / Volunteering smoke | 15 | 12 | 2 | 0 |
 | Volunteering gaps (VO-*) | 6 | 1 | 5 | 0 |
 | **Spreadsheet total** | **113** | **4** | **39** | **70** |
-

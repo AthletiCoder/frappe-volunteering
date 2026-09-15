@@ -281,7 +281,7 @@ doc_events = {
 		"validate": "volunteering.volunteering.leave_pending.sync_leave_approver_from_reports_to",
 	},
 	"Project": {
-		"validate": "volunteering.volunteering.budget_service.validate_project_department_budgets",
+		"validate": "volunteering.volunteering.budget_service.validate_project_budgets",
 	},
 }
 

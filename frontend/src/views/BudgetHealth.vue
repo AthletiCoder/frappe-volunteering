@@ -1,6 +1,10 @@
 <template>
 	<div>
-		<PageHeader eyebrow="Accounts" title="Budget Health" subtitle="Spent vs approved budget by project and department.">
+		<PageHeader
+			eyebrow="Accounts"
+			title="Budget Health"
+			subtitle="Whole-Project and Expense Account budget controls."
+		>
 			<template #actions>
 				<button class="btn-primary text-sm" type="button" :disabled="loading" @click="load">
 					{{ loading ? "Loading…" : "Refresh" }}
@@ -36,85 +40,76 @@
 			<select v-model="riskFilter" class="border border-line rounded-xl px-3 py-2 text-sm bg-surface">
 				<option value="">All health</option>
 				<option value="risk">At risk (≥80%)</option>
-				<option value="over">Overspent</option>
+				<option value="over">At or over budget</option>
 			</select>
 		</div>
 
-		<div class="md:hidden space-y-3">
+		<div class="space-y-3">
 			<article
 				v-for="row in visibleRows"
-				:key="row.project + row.department"
-				class="rounded-2xl border border-line bg-surface p-4 shadow-soft"
+				:key="row.project"
+				class="rounded-2xl border border-line bg-surface shadow-soft overflow-hidden"
 			>
-				<a class="font-semibold text-accent" :href="row.route">{{ row.project }}</a>
-				<div class="text-sm text-muted mt-1">{{ row.department }} · {{ statusLabel(row.budget_status) }}</div>
-				<div class="flex justify-between text-sm mt-2">
-					<span class="text-muted">Spent</span>
-					<a class="text-accent" :href="spendRoute(row)">{{ formatMoney(row.consumed) }}</a>
+				<div class="p-4 grid gap-3 md:grid-cols-[minmax(180px,1.4fr)_1fr_1fr_1fr_1fr] md:items-center">
+					<div>
+						<a class="font-semibold text-accent hover:underline" :href="row.route">{{ row.project }}</a>
+						<div class="text-xs text-muted mt-1">{{ row.project_type || "No project type" }}</div>
+					</div>
+					<div class="text-sm">
+						<div class="text-xs text-muted">Controls</div>
+						<div>Project: {{ row.project_control }}</div>
+						<div>Accounts: {{ row.account_control }}</div>
+					</div>
+					<div class="text-sm">
+						<div class="text-xs text-muted">Approved</div>
+						<div class="font-semibold">{{ formatMoney(row.allocated) }}</div>
+					</div>
+					<div class="text-sm">
+						<div class="text-xs text-muted">Committed / Available</div>
+						<a class="text-accent" :href="spendRoute(row)">{{ formatMoney(row.consumed) }}</a>
+						<span> / {{ row.has_project_budget ? formatMoney(row.remaining) : "No ceiling" }}</span>
+					</div>
+					<div>
+						<span class="px-2 py-0.5 rounded-full text-xs font-semibold" :class="pillClass(row)">
+							{{ projectHealthLabel(row) }}
+						</span>
+						<div class="mt-2 h-2 rounded-full bg-soft overflow-hidden">
+							<div class="h-full rounded-full" :style="barStyle(row.utilisation_pct)" />
+						</div>
+					</div>
 				</div>
-				<div class="flex justify-between text-sm">
-					<span class="text-muted">Available</span>
-					<span>{{ formatMoney(row.remaining) }}</span>
-				</div>
-				<div class="mt-2 h-2 rounded-full bg-soft overflow-hidden">
-					<div class="h-full rounded-full" :style="barStyle(row.utilisation_pct)" />
-				</div>
-			</article>
-			<p v-if="!visibleRows.length && !loading" class="text-center text-muted py-8">No department budgets match.</p>
-		</div>
 
-		<div class="max-md:hidden rounded-2xl border border-line bg-surface shadow-soft overflow-x-auto">
-			<table class="w-full text-sm min-w-[720px]">
-				<thead class="bg-soft text-left text-muted">
-					<tr>
-						<th class="px-3 py-2">Project</th>
-						<th class="px-3 py-2">Type</th>
-						<th class="px-3 py-2">Status</th>
-						<th class="px-3 py-2">Department</th>
-						<th class="px-3 py-2 text-right">Approved</th>
-						<th class="px-3 py-2 text-right">Spent</th>
-						<th class="px-3 py-2 text-right">Available</th>
-						<th class="px-3 py-2">Health</th>
-					</tr>
-				</thead>
-				<tbody>
-					<tr v-for="row in visibleRows" :key="row.project + row.department" class="border-t border-line hover:bg-accent-soft">
-						<td class="px-3 py-2">
-							<a class="text-accent hover:underline" :href="row.route">{{ row.project }}</a>
-						</td>
-						<td class="px-3 py-2">{{ row.project_type || "—" }}</td>
-						<td class="px-3 py-2">
-							<span class="px-2 py-0.5 rounded-full text-xs font-semibold" :class="pillClass(row)">
-								{{ statusLabel(row.budget_status) }}
-							</span>
-						</td>
-						<td class="px-3 py-2">
-							<a
-								v-if="row.department"
-								class="text-accent hover:underline"
-								:href="`/desk/department/${encodeURIComponent(row.department)}`"
-								>{{ row.department }}</a
-							>
-						</td>
-						<td class="px-3 py-2 text-right">{{ formatMoney(row.allocated) }}</td>
-						<td class="px-3 py-2 text-right">
-							<a class="text-accent hover:underline" :href="spendRoute(row)">{{ formatMoney(row.consumed) }}</a>
-						</td>
-						<td class="px-3 py-2 text-right">{{ formatMoney(row.remaining) }}</td>
-						<td class="px-3 py-2 min-w-[140px]">
-							<span class="px-2 py-0.5 rounded-full text-xs font-semibold" :class="pillClass(row)">
-								{{ Math.round(row.utilisation_pct || 0) }}%
-							</span>
-							<div class="mt-1 h-2 rounded-full bg-soft overflow-hidden">
-								<div class="h-full rounded-full" :style="barStyle(row.utilisation_pct)" />
-							</div>
-						</td>
-					</tr>
-					<tr v-if="!visibleRows.length && !loading">
-						<td colspan="8" class="px-3 py-8 text-center text-muted">No department budgets match these filters.</td>
-					</tr>
-				</tbody>
-			</table>
+				<details v-if="row.accounts && row.accounts.length" class="border-t border-line px-4 py-3">
+					<summary class="cursor-pointer text-sm font-semibold">
+						Expense Account budgets ({{ row.accounts.length }})
+					</summary>
+					<div class="mt-3 overflow-x-auto">
+						<table class="w-full text-sm min-w-[620px]">
+							<thead class="text-left text-muted">
+								<tr>
+									<th class="py-2 pr-3">Expense Account</th>
+									<th class="py-2 px-3 text-right">Approved</th>
+									<th class="py-2 px-3 text-right">Committed</th>
+									<th class="py-2 px-3 text-right">Available</th>
+									<th class="py-2 pl-3">Health</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr v-for="account in row.accounts" :key="account.expense_account" class="border-t border-line">
+									<td class="py-2 pr-3">{{ accountLabel(account) }}</td>
+									<td class="py-2 px-3 text-right">{{ account.is_budgeted ? formatMoney(account.allocated) : "Not allocated" }}</td>
+									<td class="py-2 px-3 text-right">{{ formatMoney(account.consumed) }}</td>
+									<td class="py-2 px-3 text-right">{{ account.is_budgeted ? formatMoney(account.remaining) : "—" }}</td>
+									<td class="py-2 pl-3">{{ account.is_budgeted ? Math.round(account.utilisation_pct || 0) + "%" : "Unbudgeted" }}</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+				</details>
+			</article>
+			<p v-if="!visibleRows.length && !loading" class="text-center text-muted py-8">
+				No Project budgets match these filters.
+			</p>
 		</div>
 	</div>
 </template>
@@ -145,21 +140,26 @@ const visibleRows = computed(() => {
 });
 
 const summaryCards = computed(() => {
-	const alloc = rows.value.reduce((s, r) => s + (r.allocated || 0), 0);
-	const used = rows.value.reduce((s, r) => s + (r.consumed || 0), 0);
-	const warn = rows.value.filter((r) => (r.utilisation_pct || 0) >= 80 && (r.utilisation_pct || 0) < 100).length;
-	const over = rows.value.filter((r) => (r.utilisation_pct || 0) >= 100).length;
+	const alloc = rows.value.reduce((sum, row) => sum + (row.allocated || 0), 0);
+	const used = rows.value.reduce((sum, row) => sum + (row.consumed || 0), 0);
+	const warn = rows.value.filter((row) => (row.utilisation_pct || 0) >= 80 && (row.utilisation_pct || 0) < 100).length;
+	const over = rows.value.filter((row) => (row.utilisation_pct || 0) >= 100).length;
 	return [
 		{ label: "Approved", value: formatMoney(alloc), tone: "text-ink" },
-		{ label: "Spent", value: formatMoney(used), tone: "text-ink" },
+		{ label: "Committed", value: formatMoney(used), tone: "text-ink" },
 		{ label: "At risk (≥80%)", value: String(warn), tone: "text-warn" },
-		{ label: "Overspent", value: String(over), tone: "text-bad" },
+		{ label: "At/over budget", value: String(over), tone: "text-bad" },
 	];
 });
 
 function statusLabel(status) {
 	if (status === "Exhausted") return "Fully used";
 	return status || "Active";
+}
+
+function projectHealthLabel(row) {
+	if (!row.has_project_budget) return `${statusLabel(row.budget_status)} · No ceiling`;
+	return `${statusLabel(row.budget_status)} · ${Math.round(row.utilisation_pct || 0)}%`;
 }
 
 function pillClass(row) {
@@ -172,6 +172,11 @@ function pillClass(row) {
 function barStyle(pct) {
 	const color = (pct || 0) >= 100 ? "var(--bad)" : (pct || 0) >= 80 ? "var(--warn)" : "var(--ok)";
 	return { width: Math.min(pct || 0, 100) + "%", background: color };
+}
+
+function accountLabel(account) {
+	if (account.expense_account === "__unassigned__") return "Unassigned account";
+	return account.expense_account;
 }
 
 function spendRoute(row) {

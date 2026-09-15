@@ -21,9 +21,13 @@ def set_cost_center_from_project(doc, method=None):
 	meta = frappe.get_meta(doc.doctype)
 	if meta.has_field("cost_center"):
 		doc.cost_center = cost_center
-	if doc.doctype == "Expense Claim":
-		for row in doc.get("expenses") or []:
-			if not row.get("cost_center"):
+	for table_field in ("expenses", "items"):
+		for row in doc.get(table_field) or []:
+			# A Project owns its Cost Centre classification. Do not allow a
+			# transaction line to silently book the same Project elsewhere.
+			if row.meta.has_field("project"):
+				row.project = doc.project
+			if row.meta.has_field("cost_center"):
 				row.cost_center = cost_center
 
 
@@ -106,7 +110,7 @@ def validate_project_required(doc, method=None):
 		return
 	frappe.throw(
 		_(
-			"Set a Project on this {0} so spend is checked against the live department budget. "
+			"Set a Project on this {0} so spend is checked against its Project budget controls. "
 			"Employee Advances are not tagged to a project; tag the Expense Claim when you settle."
 		).format(doc.doctype)
 	)

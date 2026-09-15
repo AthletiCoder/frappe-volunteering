@@ -119,16 +119,16 @@ Each department has a **Department Head** (user login on the Department master) 
 
 #### A6. Budgets ✅
 
-Per-project and per-department budget limits with utilisation dashboard. Soft warnings when a department exceeds its allocated budget on Expense Claims, Purchase Orders, or Purchase Invoices.
+Independent whole-Project and Expense Account budget limits with a utilisation dashboard. Each Project selects No Control, Warn Only, or Strict for both levels.
 
 **URL:** [Budget Health](https://erp.sevamrita.org/app/project-budget-health)
 
 **Steps:**
 
-1. Open a **Project** → set **Department Budgets** (department + allocated amount).
-2. When raising EC / PO / PI, **Department** auto-fills from the employee or document owner.
-3. If consumed + this document exceeds allocation, an orange **Budget Exceeded** warning appears (save is not blocked).
-4. Toggle warnings in [Volunteering Accounting Settings](https://erp.sevamrita.org/app/volunteering-accounting-settings/Volunteering%20Accounting%20Settings) → **Enable Budget Warnings**.
+1. Open a **Project** → set **Total Approved Budget** and choose No Control, Warn Only, or Strict.
+2. Optionally allocate approved amounts to individual **Expense Accounts** and choose their independent control mode.
+3. Expense Claims and Purchase Orders commit budget; Purchase Invoices do not double-count an order.
+4. Warn Only permits the overrun with a warning. Strict requires a reason and an authorised override before approval.
 
 ---
 
@@ -322,8 +322,8 @@ Attendance is processed daily from work logs, approved leave, and work-from-home
 
 | Feature | Status | Comments |
 |---------|--------|----------|
-| Project department budget child table | ✅ Done | `Project Department Budget` on Project |
-| Budget warn on exceed (soft) | ✅ Done | `budget_service.py`; toggle via Accounting Settings |
+| Whole-Project budget and mode | ✅ Done | No Control / Warn Only / Strict on Project |
+| Expense Account budget child table and mode | ✅ Done | `Project Account Budget`; independent enforcement |
 | Department field on PO / EC / PI | ✅ Done | Auto from employee (EC) or owner (PO/PI) |
 | Project Budget Health dashboard | ✅ Done | `/app/project-budget-health`; sidebar under **Budgets** |
 | Budget tests | ✅ Done | 3 unit + 4 integration in `test_budget_service.py`, `test_accounting_budget.py` |
@@ -440,15 +440,15 @@ Attendance is processed daily from work logs, approved leave, and work-from-home
 
 #### Sprint 3 — Budgets ✅ **Complete**
 
-**Goal:** Track per-project department budgets and surface utilisation before overspend.
+**Goal:** Track independent whole-Project and Expense Account budgets and surface utilisation before overspend.
 
 **Delivered:**
 
-1. **Project Department Budget** child table on Project (department + allocated amount).
-2. **Department** field on EC, PO, PI — auto-assigned from employee or document owner.
-3. **Soft budget warnings** on save when consumed + document exceeds allocation (`enable_budget_warnings` in Accounting Settings).
-4. **Budget Health** desk page — allocated / consumed / remaining / utilisation % by project and department.
-5. **Tests** — 3 unit + 4 integration tests for budget service and end-to-end EC consumption.
+1. **Total Approved Budget** and its No Control / Warn Only / Strict mode on Project.
+2. **Project Account Budget** child table and an independent control mode for Expense Accounts.
+3. **Project Cost Centre** is forced onto Expense Claim and Purchase Order lines.
+4. **Budget Health** desk page — whole-Project totals plus expandable account allocations.
+5. **Tests** cover independent controls, strict overrides, consumption and Cost Centre assignment.
 
 **Success criteria:** Coordinators and Accounts can see budget health at a glance; users get warned on overspend without blocking saves — **met**.
 
@@ -458,7 +458,7 @@ Attendance is processed daily from work logs, approved leave, and work-from-home
 
 | Sprint | Theme | Key outcome |
 |--------|-------|-------------|
-| 3 | Budgets | ✅ Complete | Project/dept budget limits + Budget Health dashboard |
+| 3 | Budgets | ✅ Complete | Project/account budget limits + Budget Health dashboard |
 | 4 | Post-facto PO | 7-day / 2-per-month guardrails + board minimum approval |
 | 5 | Donations | Donor → Donation → Project + 80G template |
 | 6 | FCRA | `fund_type` on Project; payment warnings by fund |

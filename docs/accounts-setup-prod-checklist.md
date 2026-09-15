@@ -43,11 +43,11 @@ Bank / NEFT / UPI → bank · Cash → cash · Cashfree → clearing (if donatio
 
 ## 4. Settings to review after migrate
 
-**Volunteering Accounting Settings:** vendor threshold ₹5k, cash limit ₹2k, budget hard-block 25%, max unsettled advances 1.
+**Volunteering Accounting Settings:** vendor threshold ₹5k, cash limit ₹2k, optional strict-budget override role, max unsettled advances 1.
 
 **Approval and Advance Limits:** per-grade approve / self-advance caps.
 
-**Projects:** Type, Cost Center, department budgets, Budget Status = Active.
+**Projects:** Type, Cost Center, Total Approved Budget and its control mode, Expense Account allocations and their control mode, Budget Status = Active.
 
 **Employees:** Grade, Reports To, Department.
 

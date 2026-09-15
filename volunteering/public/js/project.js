@@ -1,4 +1,14 @@
 frappe.ui.form.on("Project", {
+	setup(frm) {
+		frm.set_query("expense_account", "account_budgets", () => ({
+			filters: {
+				company: frm.doc.company,
+				root_type: "Expense",
+				is_group: 0,
+				disabled: 0,
+			},
+		}));
+	},
 	refresh(frm) {
 		if (!frm.doc.name || frm.is_new()) {
 			return;
@@ -9,11 +19,15 @@ frappe.ui.form.on("Project", {
 					project: frm.doc.name,
 				})
 				.then((snap) => {
-					if (!snap || !snap.allocated) {
+					if (!snap) {
+						return;
+					}
+					if (!snap.allocated) {
 						volunteering.form_hints.set_headline(
 							frm,
 							__(
-								"Set Department Budgets below (approved amount per department). Spend is checked on Expense Claims and Purchase Orders, not advances."
+								"Project budget: {0}. Expense Account budgets: {1}. Spend is committed by Expense Claims and Purchase Orders, not advances.",
+								[snap.project_control, snap.account_control]
 							)
 						);
 						return;
@@ -23,7 +37,12 @@ frappe.ui.form.on("Project", {
 					const available = format_currency(snap.remaining);
 					volunteering.form_hints.set_headline(
 						frm,
-						__("Approved {0} · Spent {1} · Available {2}", [allocated, spent, available])
+						__("Project budget ({0}): Approved {1} · Committed {2} · Available {3}", [
+							snap.project_control,
+							allocated,
+							spent,
+							available,
+						])
 					);
 				})
 		);

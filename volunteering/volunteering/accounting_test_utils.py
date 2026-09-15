@@ -455,8 +455,29 @@ def make_supplier_payment_entry(reference_doctype, reference_name):
 	return pe
 
 
-def set_project_department_budget(project, department, allocated_amount):
+def set_project_budget(
+	project,
+	allocated_amount,
+	project_control="Warn Only",
+	account_control="No Control",
+	account_budgets=None,
+):
 	project_doc = frappe.get_doc("Project", project)
+	project_doc.project_budget_control = project_control
+	project_doc.total_approved_budget = allocated_amount
+	project_doc.account_budget_control = account_control
+	project_doc.account_budgets = []
+	for account, amount in account_budgets or []:
+		project_doc.append(
+			"account_budgets", {"expense_account": account, "approved_amount": amount}
+		)
+	project_doc.save(ignore_permissions=True)
+	return project_doc
+
+
+def set_project_department_budget(project, department, allocated_amount):
+	"""Compatibility helper: department is retained but no longer enforced."""
+	project_doc = set_project_budget(project, allocated_amount)
 	project_doc.department_budgets = []
 	project_doc.append(
 		"department_budgets",

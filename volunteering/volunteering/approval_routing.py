@@ -175,7 +175,7 @@ def walk_approval_chain(employee, amount, start_after_employee=None):
 def find_first_approver(employee, amount, start_after_employee=None):
 	"""Return first manager user in chain (prefer one who can approve; else next manager)."""
 	first = None
-	for user, emp, grade, can_approve in walk_approval_chain(
+	for user, _emp, _grade, can_approve in walk_approval_chain(
 		employee, amount, start_after_employee=start_after_employee
 	):
 		if not user:
@@ -593,7 +593,6 @@ def escalate_document(doctype, name, escalation_reason):
 	if not (escalation_reason or "").strip():
 		frappe.throw(_("A reason is required when escalating approval."))
 
-	amount = get_document_amount(doc)
 	flags = get_approver_action_flags(doctype, name)
 	if flags.get("is_pending_approver") and flags.get("can_approve"):
 		frappe.throw(
@@ -657,6 +656,18 @@ def get_approver_action_flags(doctype, name):
 	can_approve = True
 	if use_grade_approval():
 		can_approve = user_can_approve_amount(frappe.session.user, amount)
+	strict_budget_messages = []
+	strict_budget_blocked = False
+	if can_approve and doc.doctype in ("Expense Claim", "Purchase Order"):
+		from volunteering.volunteering.budget_service import (
+			get_strict_budget_violations,
+			user_can_override_budget,
+		)
+
+		strict_budget_messages = get_strict_budget_violations(doc)
+		strict_budget_blocked = bool(strict_budget_messages) and not user_can_override_budget()
+		if strict_budget_blocked:
+			can_approve = False
 
 	flags = {
 		"is_pending_approver": True,
@@ -664,6 +675,8 @@ def get_approver_action_flags(doctype, name):
 		"can_escalate": not can_approve,
 		"can_reject": True,
 		"amount": amount,
+		"strict_budget_blocked": strict_budget_blocked,
+		"strict_budget_messages": strict_budget_messages,
 	}
 	if doc.doctype == "Expense Claim":
 		from volunteering.volunteering.manager_float_service import enrich_approver_action_flags

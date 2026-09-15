@@ -11,28 +11,19 @@ import { getE2eMasters, getE2eProject } from '../../helpers/ui-fixtures';
 import { ExpenseClaimFormPage } from '../../pages/desk/expense-claim.page';
 
 test.describe('Budget controls @accounts @ui', () => {
-	test('AC-BUD-001 @regression: Soft budget warning near budget', async ({ browser, request }) => {
+	test('AC-BUD-001 @regression: Warn Only permits an over-budget claim', async ({ browser, request }) => {
 		const fixtures = await getFixtures(request, 'admin');
 		const project = await getE2eProject(request);
 		const masters = await getE2eMasters(request);
-
-		await e2eCall(
-			request,
-			'set_single_setting',
-			{
-				doctype: 'Volunteering Accounting Settings',
-				field: 'enable_budget_warnings',
-				value: 1,
-			},
-			'admin',
-		);
+		await cleanupExpenseClaimsForProject(request, project);
 		await e2eCall(
 			request,
 			'set_project_budget',
 			{
 				project: fixtures.project,
 				department: fixtures.department,
-				allocated_amount: 10000,
+				allocated_amount: 8000,
+				project_control: 'Warn Only',
 			},
 			'admin',
 		);
@@ -59,7 +50,7 @@ test.describe('Budget controls @accounts @ui', () => {
 		expect(workflowState).toBe('Pending Approval');
 	});
 
-	test('AC-BUD-002 @regression @critical: Hard block when overspend exceeds Budget Hard-Block %', async ({
+	test('AC-BUD-002 @regression @critical: Strict Project budget blocks an unauthorised overrun', async ({
 		browser,
 		request,
 	}) => {
@@ -76,6 +67,7 @@ test.describe('Budget controls @accounts @ui', () => {
 				project: fixtures.project,
 				department: fixtures.department,
 				allocated_amount: 10000,
+				project_control: 'Strict',
 			},
 			'admin',
 		);
@@ -108,7 +100,7 @@ test.describe('Budget controls @accounts @ui', () => {
 		});
 	});
 
-	test('AC-BUD-003 @regression @critical: Budget Override Role can exceed hard block', async ({
+	test('AC-BUD-003 @regression @critical: Authorised approver can record a Strict override', async ({
 		browser,
 		request,
 	}) => {
@@ -123,6 +115,7 @@ test.describe('Budget controls @accounts @ui', () => {
 				project: fixtures.project,
 				department: fixtures.department,
 				allocated_amount: 10000,
+				project_control: 'Strict',
 			},
 			'admin',
 		);
@@ -136,7 +129,7 @@ test.describe('Budget controls @accounts @ui', () => {
 				amount: 30000,
 				expenseType: masters.expense_type,
 				vendorOverrideReason: 'Urgent reimbursement; PO not feasible.',
-				budgetOverrideReason: 'Seasonal campaign overspend approved by dept.',
+				budgetOverrideReason: 'Seasonal campaign overspend authorised by the Board.',
 			});
 			claimName = await claim.saveAndSubmit(request);
 		});

@@ -16,14 +16,20 @@ from volunteering.volunteering.accounting_setup import (
 from volunteering.volunteering.accounting_test_utils import (
 	get_or_create_department,
 	get_or_create_employee,
+	get_or_create_expense_claim_type,
 	get_or_create_project_with_cost_center,
 	get_or_create_user,
 	make_expense_claim,
 	mute_accounting_test_emails,
 	set_employee_grade,
-	set_project_department_budget,
+	set_project_budget,
 )
-from volunteering.volunteering.budget_service import get_budget_health, get_consumed_amount
+from volunteering.volunteering.approval_routing import get_approver_action_flags
+from volunteering.volunteering.budget_service import (
+	get_account_consumed_amount,
+	get_budget_health,
+	get_consumed_amount,
+)
 from volunteering.volunteering.receipt_review import CHECKLIST_ITEMS, review_receipts
 
 
@@ -60,7 +66,18 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 		# Director grade approves up to 25000, enough for the 12000 over-budget claims.
 		set_employee_grade(cls.manager, "Director")
 		set_employee_grade(cls.employee, "Associate", reports_to=cls.manager)
-		set_project_department_budget(cls.project, cls.department, 10000)
+		expense_type = get_or_create_expense_claim_type()
+		company = frappe.db.get_value("Employee", cls.employee, "company")
+		cls.expense_account = frappe.db.get_value(
+			"Expense Claim Account",
+			{"parent": expense_type, "company": company},
+			"default_account",
+		)
+
+	def setUp(self):
+		super().setUp()
+		frappe.set_user("Administrator")
+		set_project_budget(self.project, 10000, project_control="Strict")
 
 	@classmethod
 	def tearDownClass(cls):
@@ -90,21 +107,32 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 		claim = make_expense_claim(self.employee, self.project, amount=1500)
 		self.assertEqual(claim.department, self.department)
 
+	def test_project_cost_center_is_forced_onto_expense_lines(self):
+		frappe.set_user(self.employee_email)
+		claim = make_expense_claim(self.employee, self.project, amount=500)
+		claim.expenses[0].cost_center = None
+		claim.save(ignore_permissions=True)
+		self.assertEqual(
+			claim.expenses[0].cost_center,
+			frappe.db.get_value("Project", self.project, "cost_center"),
+		)
+
 	def test_submitted_claim_counts_toward_consumed_budget(self):
 		frappe.set_user(self.employee_email)
 		claim = make_expense_claim(self.employee, self.project, amount=2000, owner=self.employee_email)
 		claim = frappe.get_doc("Expense Claim", claim.name)
 		claim.save(ignore_permissions=True)
 		apply_workflow(claim, "Submit")
-		consumed = get_consumed_amount(self.project, self.department)
+		consumed = get_consumed_amount(self.project)
 		self.assertGreaterEqual(consumed, 2000)
 
-	def test_budget_health_returns_project_department_row(self):
+	def test_budget_health_returns_one_project_row(self):
 		frappe.set_user("Administrator")
 		rows = get_budget_health(self.project)
-		match = [row for row in rows if row["department"] == self.department]
-		self.assertEqual(len(match), 1)
-		self.assertEqual(match[0]["allocated"], 10000)
+		self.assertEqual(len(rows), 1)
+		self.assertNotIn("department", rows[0])
+		self.assertEqual(rows[0]["allocated"], 10000)
+		self.assertEqual(rows[0]["project_control"], "Strict")
 
 	def test_over_budget_claim_still_saves_with_soft_warning(self):
 		frappe.set_user(self.employee_email)
@@ -131,11 +159,14 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 
 		frappe.set_user(self.manager_email)
 		claim = frappe.get_doc("Expense Claim", claim.name)
+		flags = get_approver_action_flags("Expense Claim", claim.name)
+		self.assertFalse(flags["can_approve"])
+		self.assertTrue(flags["can_escalate"])
+		self.assertTrue(flags["strict_budget_blocked"])
 		with self.assertRaises(frappe.ValidationError):
 			apply_workflow(claim, "Approve")
 
-	def test_approve_over_budget_with_reason_under_hard_limit(self):
-		# 20% over 10000 = 12000 → under 25% hard block
+	def test_strict_over_budget_requires_authorised_override_even_with_reason(self):
 		frappe.set_user(self.employee_email)
 		claim = make_expense_claim(self.employee, self.project, amount=12000, owner=self.employee_email)
 		claim = frappe.get_doc("Expense Claim", claim.name)
@@ -147,11 +178,71 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 
 		frappe.set_user(self.manager_email)
 		claim = frappe.get_doc("Expense Claim", claim.name)
-		claim.budget_override_reason = "Seasonal campaign overspend approved by dept."
+		claim.budget_override_reason = "Seasonal campaign overspend is justified."
 		claim.save(ignore_permissions=True)
-		apply_workflow(claim, "Approve")
+		with self.assertRaises(frappe.ValidationError):
+			apply_workflow(claim, "Approve")
+
+	def test_authorised_strict_override_records_approval(self):
+		frappe.set_user(self.employee_email)
+		claim = make_expense_claim(self.employee, self.project, amount=12000, owner=self.employee_email)
+		claim = frappe.get_doc("Expense Claim", claim.name)
+		claim.vendor_override_reason = "Urgent reimbursement; PO not feasible."
+		claim.save(ignore_permissions=True)
+		apply_workflow(claim, "Submit")
+		claim = self._review_claim(claim)
+
+		frappe.set_user(self.manager_email)
+		claim = frappe.get_doc("Expense Claim", claim.name)
+		claim.budget_override_reason = "Board-authorised exceptional expense."
+		claim.save(ignore_permissions=True)
+		with patch(
+			"volunteering.volunteering.budget_service._can_override_budget", return_value=True
+		):
+			apply_workflow(claim, "Approve")
 		claim.reload()
 		self.assertEqual(claim.workflow_state, "Approved")
+
+	def test_warn_only_allows_approval_without_override(self):
+		frappe.set_user("Administrator")
+		set_project_budget(self.project, 10000, project_control="Warn Only")
+		frappe.set_user(self.employee_email)
+		claim = make_expense_claim(self.employee, self.project, amount=12000, owner=self.employee_email)
+		claim = frappe.get_doc("Expense Claim", claim.name)
+		claim.vendor_override_reason = "Urgent reimbursement; PO not feasible."
+		claim.save(ignore_permissions=True)
+		apply_workflow(claim, "Submit")
+		claim = self._review_claim(claim)
+
+		frappe.set_user(self.manager_email)
+		apply_workflow(frappe.get_doc("Expense Claim", claim.name), "Approve")
+		self.assertEqual(
+			frappe.db.get_value("Expense Claim", claim.name, "workflow_state"), "Approved"
+		)
+
+	def test_expense_account_budget_is_independent_of_project_ceiling(self):
+		frappe.set_user("Administrator")
+		set_project_budget(
+			self.project,
+			10000,
+			project_control="No Control",
+			account_control="Strict",
+			account_budgets=[(self.expense_account, 400)],
+		)
+		before = get_account_consumed_amount(self.project, self.expense_account)
+		frappe.set_user(self.employee_email)
+		claim = make_expense_claim(self.employee, self.project, amount=500, owner=self.employee_email)
+		claim = frappe.get_doc("Expense Claim", claim.name)
+		claim.save(ignore_permissions=True)
+		apply_workflow(claim, "Submit")
+		claim = self._review_claim(claim)
+
+		frappe.set_user(self.manager_email)
+		with self.assertRaises(frappe.ValidationError):
+			apply_workflow(frappe.get_doc("Expense Claim", claim.name), "Approve")
+		self.assertEqual(
+			get_account_consumed_amount(self.project, self.expense_account), before + 500
+		)
 
 	def test_form_has_approval_tab_and_budget_exceedance_label(self):
 		meta = frappe.get_meta("Expense Claim")
@@ -163,9 +254,13 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 		project_meta = frappe.get_meta("Project")
 		self.assertFalse(bool(project_meta.get_field("fund_project_type")))
 		self.assertTrue(project_meta.has_field("parent_campaign"))
+		self.assertTrue(project_meta.has_field("project_budget_control"))
+		self.assertTrue(project_meta.has_field("account_budget_control"))
+		self.assertTrue(project_meta.has_field("account_budgets"))
+		self.assertTrue(bool(project_meta.get_field("department_budgets").hidden))
 
 	def test_employee_advance_does_not_consume_project_budget(self):
-		before = get_consumed_amount(self.project, self.department)
+		before = get_consumed_amount(self.project)
 		frappe.set_user(self.employee_email)
 		company = frappe.db.get_value("Employee", self.employee, "company")
 		advance = frappe.get_doc(
@@ -181,7 +276,7 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 		advance.insert(ignore_permissions=True)
 		apply_workflow(advance, "Submit")
 		self.assertFalse(advance.project)
-		self.assertEqual(get_consumed_amount(self.project, self.department), before)
+		self.assertEqual(get_consumed_amount(self.project), before)
 
 	def test_expense_claim_requires_project(self):
 		frappe.set_user(self.employee_email)

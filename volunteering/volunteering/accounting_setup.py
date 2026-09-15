@@ -64,6 +64,8 @@ def reload_accounting_workflows():
 
 def after_migrate():
 	setup_accounting_custom_fields()
+	backfill_project_budget_controls()
+	ensure_project_budget_field_visibility()
 	backfill_receipt_review_states()
 	remove_obsolete_accounting_custom_fields()
 	ensure_project_types()
@@ -156,10 +158,10 @@ def ensure_manager_advance_field_labels():
 
 
 def ensure_budget_health_permissions():
-	"""Let roles allowed on Budget Health read its linked master records."""
+	"""Let budget operators read Projects and select configured Expense Accounts."""
 	from frappe.permissions import add_permission, update_permission_property
 
-	for doctype in ("Project", "Department"):
+	for doctype in ("Project", "Account"):
 		if not frappe.db.exists("DocType", doctype):
 			continue
 		for role in BUDGET_HEALTH_ROLES:
@@ -519,6 +521,66 @@ def sync_workflow_submit_permissions():
 
 def setup_accounting_custom_fields():
 	create_custom_fields(ACCOUNTING_CUSTOM_FIELDS, ignore_validate=True)
+
+
+def backfill_project_budget_controls():
+	"""Adopt legacy department totals without continuing department enforcement."""
+	if not frappe.db.has_column("Project", "total_approved_budget"):
+		return
+
+	frappe.db.sql(
+		"""
+		UPDATE `tabProject`
+		SET project_budget_control = COALESCE(NULLIF(project_budget_control, ''), 'No Control'),
+			account_budget_control = COALESCE(NULLIF(account_budget_control, ''), 'No Control')
+		"""
+	)
+	if not frappe.db.exists("DocType", "Project Department Budget"):
+		return
+
+	legacy_totals = frappe.db.sql(
+		"""
+		SELECT parent, SUM(allocated_amount) AS total
+		FROM `tabProject Department Budget`
+		WHERE parenttype = 'Project'
+		GROUP BY parent
+		""",
+		as_dict=True,
+	)
+	for row in legacy_totals:
+		if flt(row.total) <= 0 or flt(
+			frappe.db.get_value("Project", row.parent, "total_approved_budget")
+		):
+			continue
+		frappe.db.set_value(
+			"Project",
+			row.parent,
+			{
+				"total_approved_budget": flt(row.total),
+				"project_budget_control": "Warn Only",
+			},
+			update_modified=False,
+		)
+
+
+def ensure_project_budget_field_visibility():
+	"""Keep legacy department data but remove it from the Project form."""
+	visibility = {
+		"project_budget_controls_section": 0,
+		"project_budget_control": 0,
+		"total_approved_budget": 0,
+		"account_budget_control": 0,
+		"account_budgets": 0,
+		"department_budgets_section": 1,
+		"department_budgets": 1,
+	}
+	for fieldname, hidden in visibility.items():
+		name = frappe.db.get_value(
+			"Custom Field", {"dt": "Project", "fieldname": fieldname}, "name"
+		)
+		if name is not None:
+			frappe.db.set_value("Custom Field", name, "hidden", hidden, update_modified=False)
+	frappe.clear_cache(doctype="Project")
 
 
 def backfill_receipt_review_states():

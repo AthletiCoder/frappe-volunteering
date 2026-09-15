@@ -128,7 +128,10 @@ def _approval_routing_fields(
 				"label": "Budget Exceedance Reason",
 				"fieldtype": "Small Text",
 				"insert_after": "budget_section",
-				"description": "Required when approving a spend that exceeds the department budget.",
+				"description": (
+					"Required when an authorised override approves spending above a strict "
+					"Project or Expense Account budget."
+				),
 				"depends_on": _BUDGET_REASON_DEPENDS,
 			},
 		]
@@ -359,12 +362,59 @@ ACCOUNTING_CUSTOM_FIELDS = {
 			"in_standard_filter": 1,
 		},
 		{
-			"fieldname": "department_budgets_section",
+			"fieldname": "project_budget_controls_section",
 			"fieldtype": "Section Break",
-			"label": "Department Budgets",
+			"label": "Project Budget Controls",
 			"insert_after": "cost_center",
 			"collapsible": 1,
 			"collapsed": 0,
+		},
+		{
+			"fieldname": "project_budget_control",
+			"label": "Overall Project Budget Control",
+			"fieldtype": "Select",
+			"options": "No Control\nWarn Only\nStrict",
+			"default": "No Control",
+			"reqd": 1,
+			"insert_after": "project_budget_controls_section",
+			"description": (
+				"No Control tracks only; Warn Only allows overruns with a warning; "
+				"Strict requires an authorised override."
+			),
+		},
+		{
+			"fieldname": "total_approved_budget",
+			"label": "Total Approved Budget",
+			"fieldtype": "Currency",
+			"non_negative": 1,
+			"insert_after": "project_budget_control",
+			"description": "Independent ceiling for all committed spending on this Project.",
+		},
+		{
+			"fieldname": "account_budget_control",
+			"label": "Expense Account Budget Control",
+			"fieldtype": "Select",
+			"options": "No Control\nWarn Only\nStrict",
+			"default": "No Control",
+			"reqd": 1,
+			"insert_after": "total_approved_budget",
+			"description": "Controls each Expense Account allocation independently.",
+		},
+		{
+			"fieldname": "account_budgets",
+			"label": "Expense Account Budgets",
+			"fieldtype": "Table",
+			"options": "Project Account Budget",
+			"insert_after": "account_budget_control",
+		},
+		{
+			"fieldname": "department_budgets_section",
+			"fieldtype": "Section Break",
+			"label": "Department Budgets",
+			"insert_after": "account_budgets",
+			"collapsible": 1,
+			"collapsed": 0,
+			"hidden": 1,
 		},
 		{
 			"fieldname": "department_budgets",
@@ -372,6 +422,7 @@ ACCOUNTING_CUSTOM_FIELDS = {
 			"fieldtype": "Table",
 			"options": "Project Department Budget",
 			"insert_after": "department_budgets_section",
+			"hidden": 1,
 		},
 	],
 	"Payment Entry": [

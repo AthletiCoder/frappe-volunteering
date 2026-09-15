@@ -15,7 +15,7 @@ bench --site YOUR_SITE clear-cache
    - Designation Approval Limits (seeded defaults)
    - Vendor Payment Threshold (₹5,000)
    - Cash Payment Limit (₹2,000)
-   - Budget Hard-Block Overspend % (25)
+   - Budget Override Role (optional; Board of Directors grade is always authorised)
    - Max Blocking Unsettled Advances (1)
    - Advance Replenish Residual % (10)
    - Payout Provider = `manual` (Cashfree later)
@@ -25,8 +25,11 @@ bench --site YOUR_SITE clear-cache
 1. Default **Employee Advance Account** on Company (HR settings).
 2. **Expense Claim Type** → Accounts: default expense account per company (Travel, Food, etc.).
 3. Mode of Payment: Bank / UPI / NEFT; Cash for small amounts only.
-4. Projects: set **Project Type** (Campaign / Event / Admin), Cost Center, Department Budgets, Budget Status = Active.
-4. Budget exceedance: on Approve, the pending manager must enter **Budget Exceedance Reason** if over budget. Above the hard-block %, escalate to the Budget Override Role (default NGO Board Chairperson).
+4. Projects: set **Project Type** (Campaign / Event / Admin), Cost Center and Budget Status = Active.
+5. On each Project, choose **No Control**, **Warn Only**, or **Strict** independently for:
+   - the **Total Approved Budget**; and
+   - each configured **Expense Account Budget**.
+6. Strict exceedance: an authorised approver must enter **Budget Exceedance Reason**. Board of Directors grade is always authorised; an optional extra role can be configured.
 
 ## 3. Workflows
 
@@ -65,3 +68,4 @@ Edit in Desk → **Wiki Document**. If pages already existed, paste updated cont
 5. Supplier Payment Entry against Approved PO → allowed; against Draft PO → blocked.
 6. Cash Payment Entry above limit → blocked.
 7. Accounts creates Payment Entry only after Approved (PI or PO as applicable).
+8. Confirm a Project's Cost Centre replaces conflicting values on claim/order lines.

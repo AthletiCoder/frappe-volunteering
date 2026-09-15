@@ -1,101 +1,177 @@
 # Copyright (c) 2026, Vadiraj Tirtha Das and contributors
 # For license information, please see license.txt
 
+from collections import defaultdict
+
 import frappe
 from frappe import _
 from frappe.utils import flt
 
-from volunteering.volunteering.approval_routing import get_amount_field, get_document_amount
+from volunteering.volunteering.approval_routing import get_document_amount as get_document_amount
 from volunteering.volunteering.authority import BOARD_OF_DIRECTORS, user_has_board_of_directors
 from volunteering.volunteering.doctype.volunteering_accounting_settings.volunteering_accounting_settings import (
 	get_accounting_settings,
 )
 
-# PO commits budget; PI settles PO — do not double-count Purchase Invoice.
-# Employee Advance is staff float (receivable), not program spend — budget hits
-# when the Expense Claim (or PO) is tagged to a Project.
+# A Purchase Order commits budget. Its Purchase Invoice settles that commitment,
+# so counting both would double-count the same spend. Employee Advances are staff
+# float; the budget is committed by the eventual Expense Claim.
 BUDGET_TRACKED_DOCTYPES = ("Expense Claim", "Purchase Order")
-CLOSED_PROJECT_CHECK_DOCTYPES = BUDGET_TRACKED_DOCTYPES + ("Purchase Invoice",)
+CLOSED_PROJECT_CHECK_DOCTYPES = (*BUDGET_TRACKED_DOCTYPES, "Purchase Invoice")
 EXCLUDED_WORKFLOW_STATES = ("Draft", "Rejected", "")
+CONTROL_MODES = ("No Control", "Warn Only", "Strict")
+UNASSIGNED_ACCOUNT = "__unassigned__"
 
 
-def get_allocated_budget(project, department):
-	if not project or not department:
-		return 0
+def _project_budget_fields(project):
+	if not project:
+		return frappe._dict()
+	return frappe.db.get_value(
+		"Project",
+		project,
+		[
+			"company",
+			"budget_status",
+			"project_budget_control",
+			"total_approved_budget",
+			"account_budget_control",
+		],
+		as_dict=True,
+	) or frappe._dict()
 
-	for row in frappe.get_all(
-		"Project Department Budget",
-		filters={"parent": project, "parenttype": "Project", "department": department},
-		fields=["allocated_amount"],
-	):
-		return flt(row.allocated_amount)
-	return 0
+
+def get_allocated_budget(project, department=None):
+	"""Compatibility alias: department is intentionally ignored."""
+	return get_project_total_allocated(project)
 
 
 def get_project_total_allocated(project):
+	if not project or not frappe.db.has_column("Project", "total_approved_budget"):
+		return 0
+	return flt(frappe.db.get_value("Project", project, "total_approved_budget"))
+
+
+def _get_account_budget_rows(project):
+	if not project or not frappe.db.exists("DocType", "Project Account Budget"):
+		return []
+	return frappe.get_all(
+		"Project Account Budget",
+		filters={"parent": project, "parenttype": "Project"},
+		fields=["expense_account", "approved_amount"],
+		order_by="idx asc",
+	)
+
+
+def get_account_allocated_budget(project, account):
+	if not project or not account:
+		return 0
+	for row in _get_account_budget_rows(project):
+		if row.expense_account == account:
+			return flt(row.approved_amount)
+	return 0
+
+
+def _active_budget_documents(doctype, project):
+	if not project or not frappe.db.has_column(doctype, "project"):
+		return []
+	filters = {"project": project, "docstatus": ["!=", 2]}
+	if frappe.db.has_column(doctype, "workflow_state"):
+		filters["workflow_state"] = ["not in", list(EXCLUDED_WORKFLOW_STATES)]
+	return frappe.get_all(doctype, filters=filters, fields=["name", "workflow_state"])
+
+
+def _expense_claim_row_amount(row, approved=False):
+	if approved:
+		if row.get("base_sanctioned_amount") is not None:
+			return flt(row.get("base_sanctioned_amount"))
+		if row.get("sanctioned_amount") is not None:
+			return flt(row.get("sanctioned_amount"))
+	return flt(row.get("base_amount") or row.get("amount"))
+
+
+def _purchase_order_row_amount(row):
+	return flt(row.get("base_amount") or row.get("amount"))
+
+
+def get_document_account_amounts(doc):
+	"""Return base-currency committed amount by trusted Expense Account."""
+	amounts = defaultdict(float)
+	if doc.doctype == "Expense Claim":
+		approved = doc.get("workflow_state") == "Approved"
+		for row in doc.get("expenses") or []:
+			account = row.get("default_account") or UNASSIGNED_ACCOUNT
+			amounts[account] += _expense_claim_row_amount(row, approved=approved)
+	elif doc.doctype == "Purchase Order":
+		for row in doc.get("items") or []:
+			account = row.get("expense_account") or UNASSIGNED_ACCOUNT
+			amounts[account] += _purchase_order_row_amount(row)
+	return dict(amounts)
+
+
+def _get_budget_document_amount(doc):
+	account_amounts = get_document_account_amounts(doc)
+	if account_amounts:
+		return sum(account_amounts.values())
+	if doc.doctype == "Expense Claim":
+		return flt(doc.get("base_total_claimed_amount") or doc.get("total_claimed_amount"))
+	if doc.doctype == "Purchase Order":
+		return flt(doc.get("base_grand_total") or doc.get("grand_total"))
+	return 0
+
+
+def get_consumed_amount(project, department=None, exclude=None):
+	"""Committed amount for the whole Project; department is ignored for compatibility."""
 	if not project:
 		return 0
 	total = 0
-	for row in frappe.get_all(
-		"Project Department Budget",
-		filters={"parent": project, "parenttype": "Project"},
-		fields=["allocated_amount"],
-	):
-		total += flt(row.allocated_amount)
+	for doctype in BUDGET_TRACKED_DOCTYPES:
+		for row in _active_budget_documents(doctype, project):
+			if exclude and exclude == (doctype, row.name):
+				continue
+			total += _get_budget_document_amount(frappe.get_doc(doctype, row.name))
 	return total
 
 
-def get_consumed_amount(project, department, exclude=None):
-	if not project or not department:
+def get_account_consumed_amount(project, account, exclude=None):
+	if not project or not account:
 		return 0
-
 	total = 0
 	for doctype in BUDGET_TRACKED_DOCTYPES:
-		total += _sum_doctype_amount(doctype, project, department, exclude)
+		for row in _active_budget_documents(doctype, project):
+			if exclude and exclude == (doctype, row.name):
+				continue
+			amounts = get_document_account_amounts(frappe.get_doc(doctype, row.name))
+			total += flt(amounts.get(account))
 	return total
 
 
-def _sum_doctype_amount(doctype, project, department, exclude):
-	amount_field = get_amount_field(doctype)
-	if not frappe.db.has_column(doctype, amount_field):
-		return 0
-	if not frappe.db.has_column(doctype, "project"):
-		return 0
-
-	filters = {
-		"project": project,
-		"docstatus": ["!=", 2],
-	}
-	if frappe.db.has_column(doctype, "department"):
-		filters["department"] = department
-	if frappe.db.has_column(doctype, "workflow_state"):
-		filters["workflow_state"] = ["not in", list(EXCLUDED_WORKFLOW_STATES)]
-
-	rows = frappe.get_all(doctype, filters=filters, fields=["name", amount_field])
-	total = 0
-	for row in rows:
-		if exclude and exclude == (doctype, row.name):
-			continue
-		total += flt(row.get(amount_field))
-	return total
+def get_project_account_consumption(project, exclude=None):
+	amounts = defaultdict(float)
+	if not project:
+		return {}
+	for doctype in BUDGET_TRACKED_DOCTYPES:
+		for row in _active_budget_documents(doctype, project):
+			if exclude and exclude == (doctype, row.name):
+				continue
+			for account, amount in get_document_account_amounts(
+				frappe.get_doc(doctype, row.name)
+			).items():
+				amounts[account] += flt(amount)
+	return dict(amounts)
 
 
 def _overspend_pct(allocated, proposed):
-	if allocated <= 0:
-		return 0
-	if proposed <= allocated:
+	if allocated <= 0 or proposed <= allocated:
 		return 0
 	return ((proposed - allocated) / allocated) * 100
 
 
 def _is_approving(doc):
 	"""True when this save is transitioning into Approved."""
-	if doc.workflow_state != "Approved":
+	if doc.get("workflow_state") != "Approved":
 		return False
 	previous = doc.get_doc_before_save()
-	if not previous:
-		return True
-	return previous.workflow_state != "Approved"
+	return not previous or previous.get("workflow_state") != "Approved"
 
 
 def _can_override_budget(settings=None):
@@ -107,204 +183,280 @@ def _can_override_budget(settings=None):
 	return bool(override_role) and override_role in frappe.get_roles(frappe.session.user)
 
 
+def user_can_override_budget():
+	return _can_override_budget(get_accounting_settings())
+
+
 # Legacy alias for callers/tests still on the role-only name.
 _has_budget_override_role = _can_override_budget
 
 
-def validate_budget_on_save(doc, method=None):
-	if doc.doctype not in CLOSED_PROJECT_CHECK_DOCTYPES:
-		return
-
-	if not doc.get("project"):
-		return
-
-	budget_status = frappe.db.get_value("Project", doc.project, "budget_status")
-	if budget_status == "Closed":
-		frappe.throw(_("Project {0} budget is Closed. Choose an Active project.").format(doc.project))
-
-	if doc.doctype not in BUDGET_TRACKED_DOCTYPES:
-		return
-
-	if not doc.get("department"):
-		return
-
-	settings = get_accounting_settings()
-	allocated = get_allocated_budget(doc.project, doc.department)
-	if not allocated:
-		return
-
-	exclude = None if doc.is_new() else (doc.doctype, doc.name)
-	consumed = get_consumed_amount(doc.project, doc.department, exclude=exclude)
-	proposed = consumed + get_document_amount(doc)
-	over_pct = _overspend_pct(allocated, proposed)
-
-	if proposed <= allocated:
-		refresh_project_budget_status(doc.project)
-		return
-
+def _format_overrun(label, allocated, proposed):
 	over_by = proposed - allocated
-	warning = _(
-		"Department budget warning: {0} / {1} allocated for {2} on project {3}. "
-		"This document would exceed the budget by {4} ({5}%)."
-	).format(
+	over_pct = _overspend_pct(allocated, proposed)
+	return _("{0}: committed {1} against {2}; over by {3} ({4}%).").format(
+		label,
 		frappe.format_value(proposed, "Currency"),
 		frappe.format_value(allocated, "Currency"),
-		doc.department,
-		doc.project,
 		frappe.format_value(over_by, "Currency"),
 		frappe.utils.rounded(over_pct, 1),
 	)
 
-	hard_pct = flt(settings.get("budget_hard_block_pct") or 25)
-	reason = (doc.get("budget_override_reason") or "").strip()
-	override_authority = settings.get("budget_override_role") or BOARD_OF_DIRECTORS
 
-	if _is_approving(doc):
-		if not reason:
-			frappe.throw(
-				_(
-					"{0} Enter a Budget Exceedance Reason explaining why this department "
-					"is going over the approved budget, then Approve again."
-				).format(warning),
-				title=_("Budget Exceedance Reason Required"),
+def _budget_violations(doc, project_values, exclude):
+	violations = []
+	total_control = project_values.get("project_budget_control") or "No Control"
+	total_allocated = flt(project_values.get("total_approved_budget"))
+	if total_control != "No Control" and total_allocated:
+		proposed = get_consumed_amount(doc.project, exclude=exclude) + _get_budget_document_amount(doc)
+		if proposed > total_allocated:
+			violations.append(
+				frappe._dict(
+					mode=total_control,
+					message=_format_overrun(_("Overall Project budget"), total_allocated, proposed),
+				)
 			)
 
-		if over_pct > hard_pct and not _can_override_budget(settings):
-			frappe.throw(
-				_(
-					"{0} Overspend is {1}% (hard limit {2}%). "
-					"Escalate to {3} to Approve with a Budget Exceedance Reason."
-				).format(
-					warning,
-					frappe.utils.rounded(over_pct, 1),
-					hard_pct,
-					override_authority,
-				),
-				title=_("Budget Hard Block"),
-			)
+	account_control = project_values.get("account_budget_control") or "No Control"
+	if account_control == "No Control":
+		return violations
 
-		frappe.msgprint(
-			_("Budget exceedance recorded: {0}").format(reason),
-			indicator="orange",
-			title=_("Budget Exceedance Applied"),
-		)
+	allocations = {
+		row.expense_account: flt(row.approved_amount) for row in _get_account_budget_rows(doc.project)
+	}
+	existing_consumption = get_project_account_consumption(doc.project, exclude=exclude)
+	for account, document_amount in get_document_account_amounts(doc).items():
+		if not document_amount:
+			continue
+		if account == UNASSIGNED_ACCOUNT:
+			message = _(
+				"Expense Account budget: an expense line has no Expense Account. "
+				"Configure the Expense Claim Type or Purchase Order item account."
+			)
+		elif account not in allocations:
+			message = _(
+				"Expense Account budget: {0} has no allocation on Project {1}."
+			).format(account, doc.project)
+		else:
+			allocated = allocations[account]
+			proposed = flt(existing_consumption.get(account)) + document_amount
+			if proposed <= allocated:
+				continue
+			message = _format_overrun(_("Expense Account {0}").format(account), allocated, proposed)
+		violations.append(frappe._dict(mode=account_control, message=message))
+	return violations
+
+
+def get_strict_budget_violations(doc):
+	"""Current strict overruns, including this saved pending document."""
+	if doc.doctype not in BUDGET_TRACKED_DOCTYPES or not doc.get("project"):
+		return []
+	exclude = None if doc.is_new() else (doc.doctype, doc.name)
+	return [
+		row.message
+		for row in _budget_violations(doc, _project_budget_fields(doc.project), exclude)
+		if row.mode == "Strict"
+	]
+
+
+def validate_budget_on_save(doc, method=None):
+	if doc.doctype not in CLOSED_PROJECT_CHECK_DOCTYPES or not doc.get("project"):
+		return
+
+	project_values = _project_budget_fields(doc.project)
+	if project_values.get("budget_status") == "Closed":
+		frappe.throw(_("Project {0} budget is Closed. Choose an Active project.").format(doc.project))
+
+	if doc.doctype not in BUDGET_TRACKED_DOCTYPES:
+		return
+	if doc.get("workflow_state") in EXCLUDED_WORKFLOW_STATES:
 		refresh_project_budget_status(doc.project)
 		return
 
-	if settings.get("enable_budget_warnings"):
-		frappe.msgprint(warning, indicator="orange", title=_("Budget Exceeded"))
+	exclude = None if doc.is_new() else (doc.doctype, doc.name)
+	violations = _budget_violations(doc, project_values, exclude)
+	if not violations:
+		refresh_project_budget_status(doc.project)
+		return
+
+	warnings = [row.message for row in violations if row.mode == "Warn Only"]
+	strict = [row.message for row in violations if row.mode == "Strict"]
+	if warnings:
+		frappe.msgprint("<br>".join(warnings), indicator="orange", title=_("Budget Warning"))
+
+	if strict and _is_approving(doc):
+		reason = (doc.get("budget_override_reason") or "").strip()
+		message = "<br>".join(strict)
+		if not reason:
+			frappe.throw(
+				_("{0}<br>Enter a Budget Exceedance Reason, then Approve again.").format(message),
+				title=_("Strict Budget Override Reason Required"),
+			)
+		settings = get_accounting_settings()
+		if not _can_override_budget(settings):
+			override_authority = settings.get("budget_override_role") or BOARD_OF_DIRECTORS
+			frappe.throw(
+				_("{0}<br>Escalate this claim to {1} for an authorised override.").format(
+					message, override_authority
+				),
+				title=_("Strict Budget Block"),
+			)
+		frappe.msgprint(
+			_("Strict budget override recorded: {0}").format(reason),
+			indicator="orange",
+			title=_("Budget Override Applied"),
+		)
+	elif strict:
+		frappe.msgprint(
+			"<br>".join(strict),
+			indicator="orange",
+			title=_("Strict Budget Will Require Authorised Override"),
+		)
 
 	refresh_project_budget_status(doc.project)
 
 
 def refresh_project_budget_status(project):
-	"""Mark Exhausted when any department is fully consumed; else Active (unless Closed)."""
+	"""Exhausted reflects only the independent whole-Project ceiling."""
 	if not project or not frappe.db.has_column("Project", "budget_status"):
 		return
-	current = frappe.db.get_value("Project", project, "budget_status")
-	if current == "Closed":
+	values = _project_budget_fields(project)
+	if values.get("budget_status") == "Closed":
 		return
-
-	exhausted = False
-	for row in frappe.get_all(
-		"Project Department Budget",
-		filters={"parent": project, "parenttype": "Project"},
-		fields=["department", "allocated_amount"],
-	):
-		allocated = flt(row.allocated_amount)
-		if allocated and get_consumed_amount(project, row.department) >= allocated:
-			exhausted = True
-			break
-
-	new_status = "Exhausted" if exhausted else "Active"
-	if current != new_status:
+	allocated = flt(values.get("total_approved_budget"))
+	new_status = "Exhausted" if allocated and get_consumed_amount(project) >= allocated else "Active"
+	if values.get("budget_status") != new_status:
 		frappe.db.set_value("Project", project, "budget_status", new_status, update_modified=False)
 
 
 @frappe.whitelist()
 def get_budget_snapshot(project, department=None):
-	"""Approved / spent / available for a project, optionally one department."""
+	"""Whole-Project and Expense Account utilisation; department is ignored."""
 	if not project:
 		return {}
 	frappe.has_permission("Project", "read", throw=True)
-	status = frappe.db.get_value("Project", project, "budget_status")
-	total_allocated = get_project_total_allocated(project)
-	total_consumed = 0
-	for row in frappe.get_all(
-		"Project Department Budget",
-		filters={"parent": project, "parenttype": "Project"},
-		fields=["department"],
-	):
-		total_consumed += get_consumed_amount(project, row.department)
-	out = {
-		"project": project,
-		"budget_status": status or "Active",
-		"allocated": total_allocated,
-		"consumed": total_consumed,
-		"remaining": total_allocated - total_consumed,
+	values = _project_budget_fields(project)
+	allocated = flt(values.get("total_approved_budget"))
+	consumed = get_consumed_amount(project)
+	account_allocations = {
+		row.expense_account: flt(row.approved_amount) for row in _get_account_budget_rows(project)
 	}
-	if department:
-		allocated = get_allocated_budget(project, department)
-		consumed = get_consumed_amount(project, department)
-		out["department"] = department
-		out["department_allocated"] = allocated
-		out["department_consumed"] = consumed
-		out["department_remaining"] = allocated - consumed
-		out["utilisation_pct"] = (consumed / allocated * 100) if allocated else 0
-	return out
+	account_consumption = get_project_account_consumption(project)
+	accounts = []
+	for account in sorted(set(account_allocations) | set(account_consumption)):
+		account_allocated = flt(account_allocations.get(account))
+		account_consumed = flt(account_consumption.get(account))
+		accounts.append(
+			{
+				"expense_account": account,
+				"is_budgeted": account in account_allocations,
+				"allocated": account_allocated,
+				"consumed": account_consumed,
+				"remaining": account_allocated - account_consumed,
+				"utilisation_pct": (
+					account_consumed / account_allocated * 100 if account_allocated else 0
+				),
+			}
+		)
+	return {
+		"project": project,
+		"budget_status": values.get("budget_status") or "Active",
+		"project_control": values.get("project_budget_control") or "No Control",
+		"account_control": values.get("account_budget_control") or "No Control",
+		"has_project_budget": bool(allocated),
+		"allocated": allocated,
+		"consumed": consumed,
+		"remaining": allocated - consumed,
+		"utilisation_pct": (consumed / allocated * 100) if allocated else 0,
+		"accounts": accounts,
+	}
 
 
-def validate_project_department_budgets(doc, method=None):
-	"""Reject duplicate department rows on Project."""
+def validate_project_budgets(doc, method=None):
+	project_control = doc.get("project_budget_control") or "No Control"
+	account_control = doc.get("account_budget_control") or "No Control"
+	if project_control not in CONTROL_MODES or account_control not in CONTROL_MODES:
+		frappe.throw(_("Budget Control must be No Control, Warn Only, or Strict."))
+	if project_control != "No Control" and flt(doc.get("total_approved_budget")) <= 0:
+		frappe.throw(
+			_("Enter a Total Approved Budget when Overall Project Budget Control is enabled.")
+		)
+
 	seen = set()
-	for row in doc.get("department_budgets") or []:
-		department = row.get("department")
-		if not department:
+	for row in doc.get("account_budgets") or []:
+		account = row.get("expense_account")
+		if not account:
 			continue
-		if department in seen:
+		if account in seen:
 			frappe.throw(
-				_("Department {0} appears more than once in Department Budgets.").format(department),
-				title=_("Duplicate Department Budget"),
+				_("Expense Account {0} appears more than once in Expense Account Budgets.").format(
+					account
+				),
+				title=_("Duplicate Expense Account Budget"),
 			)
-		seen.add(department)
+		seen.add(account)
+		if flt(row.get("approved_amount")) <= 0:
+			frappe.throw(_("Enter an approved amount greater than zero for {0}.").format(account))
+		account_values = frappe.db.get_value(
+			"Account", account, ["company", "root_type", "is_group", "disabled"], as_dict=True
+		)
+		if not account_values:
+			frappe.throw(_("Expense Account {0} does not exist.").format(account))
+		if doc.get("company") and account_values.company != doc.company:
+			frappe.throw(_("Expense Account {0} belongs to a different Company.").format(account))
+		if account_values.root_type != "Expense" or account_values.is_group or account_values.disabled:
+			frappe.throw(_("{0} must be an enabled, non-group Expense Account.").format(account))
+
+	if account_control != "No Control" and not seen:
+		frappe.throw(
+			_("Add at least one Expense Account Budget when Expense Account Budget Control is enabled.")
+		)
+
+	if doc.get("budget_status") != "Closed" and not doc.is_new():
+		allocated = flt(doc.get("total_approved_budget"))
+		doc.budget_status = (
+			"Exhausted" if allocated and get_consumed_amount(doc.name) >= allocated else "Active"
+		)
+
+
+# Compatibility name for integrations that imported the former validator.
+validate_project_department_budgets = validate_project_budgets
 
 
 @frappe.whitelist()
 def get_budget_health(project=None):
-	"""Return department budget utilisation rows for a project or all projects."""
+	"""Return one whole-Project row with nested Expense Account allocations."""
 	frappe.has_permission("Project", "read", throw=True)
-
-	filters = {}
-	if project:
-		filters["name"] = project
+	filters = {"name": project} if project else {}
 	projects = frappe.get_all(
-		"Project", filters=filters, fields=["name", "project_type", "budget_status"]
+		"Project",
+		filters=filters,
+		fields=[
+			"name",
+			"project_type",
+			"budget_status",
+			"project_budget_control",
+			"total_approved_budget",
+			"account_budget_control",
+		],
 	)
 	rows = []
-
 	for project_row in projects:
-		project_name = project_row.name
-		budget_rows = frappe.get_all(
-			"Project Department Budget",
-			filters={"parent": project_name, "parenttype": "Project"},
-			fields=["department", "allocated_amount"],
+		snapshot = get_budget_snapshot(project_row.name)
+		rows.append(
+			{
+				"project": project_row.name,
+				"project_type": project_row.get("project_type"),
+				"budget_status": snapshot.get("budget_status"),
+				"project_control": snapshot.get("project_control"),
+				"account_control": snapshot.get("account_control"),
+				"has_project_budget": snapshot.get("has_project_budget"),
+				"allocated": snapshot.get("allocated"),
+				"consumed": snapshot.get("consumed"),
+				"remaining": snapshot.get("remaining"),
+				"utilisation_pct": snapshot.get("utilisation_pct"),
+				"accounts": snapshot.get("accounts"),
+				"route": f"/desk/project/{project_row.name}",
+			}
 		)
-		for budget in budget_rows:
-			allocated = flt(budget.allocated_amount)
-			consumed = get_consumed_amount(project_name, budget.department)
-			remaining = allocated - consumed
-			rows.append(
-				{
-					"project": project_name,
-					"project_type": project_row.get("project_type"),
-					"budget_status": project_row.get("budget_status"),
-					"department": budget.department,
-					"allocated": allocated,
-					"consumed": consumed,
-					"remaining": remaining,
-					"utilisation_pct": (consumed / allocated * 100) if allocated else 0,
-					"route": f"/desk/project/{project_name}",
-				}
-			)
-
 	return rows
