@@ -79,5 +79,23 @@
   "name": "Pending Approval",
   "style": "Warning",
   "workflow_state_name": "Pending Approval"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "search",
+  "modified": "2026-09-15 12:00:00",
+  "name": "Pending Receipt Review",
+  "style": "Warning",
+  "workflow_state_name": "Pending Receipt Review"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "edit",
+  "modified": "2026-09-15 12:00:00",
+  "name": "Receipt Correction Required",
+  "style": "Danger",
+  "workflow_state_name": "Receipt Correction Required"
  }
 ]

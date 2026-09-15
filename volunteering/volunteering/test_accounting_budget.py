@@ -1,12 +1,15 @@
 # Copyright (c) 2026, Vadiraj Tirtha Das and contributors
 # For license information, please see license.txt
 
+from unittest.mock import patch
+
 import frappe
 from frappe.model.workflow import apply_workflow
 from frappe.tests import IntegrationTestCase
-from unittest.mock import patch
 
 from volunteering.volunteering.accounting_setup import (
+	ensure_accounting_roles,
+	ensure_receipt_reviewer_permissions,
 	reload_accounting_workflows,
 	setup_accounting_custom_fields,
 )
@@ -21,6 +24,7 @@ from volunteering.volunteering.accounting_test_utils import (
 	set_project_department_budget,
 )
 from volunteering.volunteering.budget_service import get_budget_health, get_consumed_amount
+from volunteering.volunteering.receipt_review import CHECKLIST_ITEMS, review_receipts
 
 
 class IntegrationTestAccountingBudget(IntegrationTestCase):
@@ -33,6 +37,8 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 		cls._gs_queue_patcher = patch("frappe.utils.global_search.sync_value_in_queue")
 		cls._gs_queue_patcher.start()
 		setup_accounting_custom_fields()
+		ensure_accounting_roles()
+		ensure_receipt_reviewer_permissions()
 		reload_accounting_workflows()
 		frappe.db.set_single_value("Volunteering Accounting Settings", "enable_budget_warnings", 1)
 
@@ -42,6 +48,11 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 		)
 		cls.manager_email = get_or_create_user(
 			"budget-mgr-acct@example.com", ["Employee"], "Budget Mgr"
+		)
+		cls.reviewer_email = get_or_create_user(
+			"budget-receipt-reviewer@example.com",
+			["Expense Receipt Reviewer"],
+			"Budget Receipt Reviewer",
 		)
 		cls.department = get_or_create_department("Operations")
 		cls.manager = get_or_create_employee(cls.manager_email, cls.department, "Budget Manager")
@@ -63,6 +74,16 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 		frappe.db.delete("Expense Claim", {"employee": self.employee})
 		frappe.db.delete("Employee Advance", {"employee": self.employee})
 		super().tearDown()
+
+	def _review_claim(self, claim):
+		frappe.set_user(self.reviewer_email)
+		review_receipts(
+			claim.name,
+			"verify",
+			"Receipts meet the test audit checklist.",
+			{key: True for key, _label in CHECKLIST_ITEMS},
+		)
+		return frappe.get_doc("Expense Claim", claim.name)
 
 	def test_expense_claim_gets_department_from_employee(self):
 		frappe.set_user(self.employee_email)
@@ -93,7 +114,10 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 		claim.save(ignore_permissions=True)
 		apply_workflow(claim, "Submit")
 		self.assertTrue(frappe.db.exists("Expense Claim", claim.name))
-		self.assertEqual(frappe.db.get_value("Expense Claim", claim.name, "workflow_state"), "Pending Approval")
+		self.assertEqual(
+			frappe.db.get_value("Expense Claim", claim.name, "workflow_state"),
+			"Pending Receipt Review",
+		)
 
 	def test_approve_over_budget_requires_exceedance_reason(self):
 		frappe.set_user(self.employee_email)
@@ -102,7 +126,7 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 		claim.vendor_override_reason = "Urgent reimbursement; PO not feasible."
 		claim.save(ignore_permissions=True)
 		apply_workflow(claim, "Submit")
-		claim.reload()
+		claim = self._review_claim(claim)
 		self.assertEqual(claim.pending_approver, self.manager_email)
 
 		frappe.set_user(self.manager_email)
@@ -118,7 +142,7 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 		claim.vendor_override_reason = "Urgent reimbursement; PO not feasible."
 		claim.save(ignore_permissions=True)
 		apply_workflow(claim, "Submit")
-		claim.reload()
+		claim = self._review_claim(claim)
 		self.assertEqual(claim.pending_approver, self.manager_email)
 
 		frappe.set_user(self.manager_email)

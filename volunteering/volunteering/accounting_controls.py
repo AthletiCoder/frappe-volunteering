@@ -191,6 +191,9 @@ def validate_payment_entry(doc, method=None):
 					frappe.throw(
 						_("Payment not allowed. Expense Claim {0} is not approved.").format(ec.name)
 					)
+				from volunteering.volunteering.receipt_review import validate_verified_receipts
+
+				validate_verified_receipts(ec)
 			elif ref.reference_doctype == "Employee Advance":
 				ea = frappe.get_doc("Employee Advance", ref.reference_name)
 				if ea.get("workflow_state") and ea.get("workflow_state") != "Approved":

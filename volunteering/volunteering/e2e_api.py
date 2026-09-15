@@ -757,6 +757,27 @@ def get_approver_flags(doctype, name):
 
 
 @frappe.whitelist()
+def seed_receipt_review(name, decision="verify", notes="E2E receipt review"):
+	"""Exercise the real receipt-review service as the dedicated E2E reviewer."""
+	_guard_e2e()
+	from volunteering.volunteering.receipt_review import CHECKLIST_ITEMS, review_receipts
+
+	previous_user = frappe.session.user
+	try:
+		frappe.set_user(PERSONAS["receipt_reviewer"]["email"])
+		result = review_receipts(
+			name,
+			decision,
+			notes,
+			{key: True for key, _label in CHECKLIST_ITEMS},
+		)
+	finally:
+		frappe.set_user(previous_user)
+	frappe.db.commit()
+	return result
+
+
+@frappe.whitelist()
 def create_employee_advance(employee=None, amount=2000, submit=0):
 	_reject_user_action("create_employee_advance")
 	_guard_e2e()

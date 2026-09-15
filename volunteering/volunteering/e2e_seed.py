@@ -126,6 +126,14 @@ PERSONAS = {
 		"designation": "Accounts Manager",
 		"employee_name": "E2E Accounts",
 	},
+	"receipt_reviewer": {
+		"email": "e2e.receipts@sevamrita.local",
+		"first_name": "E2E Receipt Reviewer",
+		"roles": ["Expense Receipt Reviewer", "Employee"],
+		"grade": "Associate",
+		"designation": "Receipt Reviewer",
+		"employee_name": "E2E Receipt Reviewer",
+	},
 	"unpaid": {
 		"email": "e2e.unpaid@sevamrita.local",
 		"first_name": "E2E Unpaid",
@@ -162,6 +170,7 @@ def _ensure_designations():
 		"Chairperson",
 		"HR Manager",
 		"Accounts Manager",
+		"Receipt Reviewer",
 		"Volunteer Staff",
 		"NGO Coordinator",
 	):
@@ -312,8 +321,13 @@ def seed_e2e_personas(password: str | None = None) -> dict:
 		"NGO Admin",
 		"Leave Approver",
 		"Expense Approver",
+		"Expense Receipt Reviewer",
 	):
 		_ensure_role(role, desk_access=0 if role == "NGO Member" else 1)
+
+	from volunteering.volunteering.accounting_setup import ensure_receipt_reviewer_permissions
+
+	ensure_receipt_reviewer_permissions()
 
 	if PERSONAS["unpaid"].get("employment_type"):
 		try:
@@ -383,7 +397,7 @@ def seed_e2e_personas(password: str | None = None) -> dict:
 		chair_emp,
 		{"reports_to": None, "leave_approver": PERSONAS["chair"]["email"]},
 	)
-	for key in ("hr", "accounts", "coordinator"):
+	for key in ("hr", "accounts", "coordinator", "receipt_reviewer"):
 		frappe.db.set_value(
 			"Employee",
 			employees[key],

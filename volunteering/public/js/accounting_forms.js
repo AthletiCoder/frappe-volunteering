@@ -437,6 +437,16 @@ volunteering.accounting_workflow.render_review_buttons = function (frm, flags, t
 };
 
 volunteering.accounting_workflow.render_actions = function (frm) {
+	const needs_receipt_review =
+		frm.doctype === "Expense Claim" &&
+		(frm.doc.workflow_state === "Pending Receipt Review" ||
+			(frm.doc.docstatus === 1 &&
+				frm.doc.workflow_state === "Approved" &&
+				frm.doc.receipt_review_status !== "Verified"));
+	if (needs_receipt_review) {
+		volunteering.accounting_workflow.render_receipt_review_actions(frm);
+		return;
+	}
 	if (frm.doc.docstatus !== 0 || !frm.doc.workflow_state) {
 		return;
 	}
@@ -463,6 +473,90 @@ volunteering.accounting_workflow.render_actions = function (frm) {
 					volunteering.accounting_workflow.render_review_buttons(frm, flags, [])
 				);
 		});
+};
+
+volunteering.accounting_workflow.render_receipt_review_actions = function (frm) {
+	frappe
+		.xcall("volunteering.volunteering.receipt_review.get_receipt_review_action_flags", {
+			name: frm.doc.name,
+		})
+		.then((flags) => {
+			if (!flags || !flags.can_review) {
+				return;
+			}
+			frm.page.set_primary_action(__("Verify Receipts"), () => {
+				const fields = (flags.checklist || []).map((item) => ({
+					fieldname: item.fieldname,
+					label: __(item.label),
+					fieldtype: "Check",
+					reqd: 1,
+				}));
+				fields.push({
+					fieldname: "notes",
+					label: __("Review Notes"),
+					fieldtype: "Small Text",
+				});
+				frappe.prompt(
+					fields,
+					(values) => {
+						const checklist = {};
+						(flags.checklist || []).forEach((item) => {
+							checklist[item.fieldname] = Boolean(values[item.fieldname]);
+						});
+						volunteering.accounting_workflow.submit_receipt_review(
+							frm,
+							"verify",
+							values.notes || "",
+							checklist
+						);
+					},
+					__("Receipt audit checklist"),
+					__("Verify Receipts")
+				);
+			});
+			if (flags.can_request_correction)
+				frm.add_custom_button(
+					__("Request Correction"),
+					() => {
+						frappe.prompt(
+							{
+								fieldname: "notes",
+								label: __("Correction Required"),
+								fieldtype: "Small Text",
+								reqd: 1,
+							},
+							(values) =>
+								volunteering.accounting_workflow.submit_receipt_review(
+									frm,
+									"request_correction",
+									values.notes,
+									{}
+								),
+							__("Request receipt correction"),
+							__("Send Back")
+						);
+					},
+					__("Receipt Review")
+				);
+		});
+};
+
+volunteering.accounting_workflow.submit_receipt_review = function (
+	frm,
+	decision,
+	notes,
+	checklist
+) {
+	frappe.dom.freeze();
+	frappe
+		.xcall("volunteering.volunteering.receipt_review.review_receipts", {
+			name: frm.doc.name,
+			decision,
+			notes,
+			checklist,
+		})
+		.then(() => frm.reload_doc())
+		.finally(() => frappe.dom.unfreeze());
 };
 
 volunteering.accounting_workflow.escalate = function (frm) {

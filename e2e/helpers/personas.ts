@@ -38,6 +38,7 @@ export type PersonaKey =
 	| 'chair'
 	| 'hr'
 	| 'accounts'
+	| 'receipt_reviewer'
 	| 'unpaid'
 	| 'coordinator'
 	| 'volunteer';
@@ -86,6 +87,11 @@ export const PERSONAS: Record<PersonaKey, PersonaCreds> = {
 	chair: cred('chair', 'E2E_CHAIR_USER', 'e2e.chair@sevamrita.local'),
 	hr: cred('hr', 'E2E_HR_USER', 'e2e.hr@sevamrita.local'),
 	accounts: cred('accounts', 'E2E_ACCOUNTS_USER', 'e2e.accounts@sevamrita.local'),
+	receipt_reviewer: cred(
+		'receipt_reviewer',
+		'E2E_RECEIPT_REVIEWER_USER',
+		'e2e.receipts@sevamrita.local',
+	),
 	unpaid: cred('unpaid', 'E2E_UNPAID_USER', 'e2e.unpaid@sevamrita.local'),
 	coordinator: cred(
 		'coordinator',

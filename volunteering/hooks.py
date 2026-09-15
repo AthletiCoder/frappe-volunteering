@@ -204,7 +204,9 @@ doc_events = {
 			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
 			"volunteering.volunteering.accounting_controls.validate_project_has_cost_center",
 			"volunteering.volunteering.accounting_controls.assign_department_from_employee",
+			"volunteering.volunteering.receipt_review.prepare_receipt_review_on_save",
 			"volunteering.volunteering.approval_routing.before_accounting_document_save",
+			"volunteering.volunteering.receipt_review.validate_verified_receipts",
 			"volunteering.volunteering.budget_service.validate_budget_on_save",
 			"volunteering.volunteering.spend_controls.validate_spend_controls",
 			"volunteering.volunteering.reimbursement_controls.validate_reimbursement_cap",
@@ -214,12 +216,21 @@ doc_events = {
 		"before_submit": [
 			"volunteering.volunteering.accounting_controls.validate_project_required",
 			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
+			"volunteering.volunteering.receipt_review.validate_verified_receipts",
 			"volunteering.volunteering.approval_routing.sync_expense_claim_approval_status_before_submit",
 			"volunteering.volunteering.approval_routing.before_accounting_document_submit",
 			"volunteering.volunteering.budget_service.validate_budget_on_save",
 		],
 		"on_submit": "volunteering.volunteering.manager_float_service.settle_manager_float_expense_claim_on_submit",
 		"on_update": "volunteering.volunteering.approval_routing.on_accounting_workflow_state_change",
+	},
+	"File": {
+		"before_insert": "volunteering.volunteering.receipt_review.validate_receipt_file_change",
+		"after_insert": "volunteering.volunteering.receipt_review.reset_review_after_file_change",
+		"on_trash": [
+			"volunteering.volunteering.receipt_review.validate_receipt_file_change",
+			"volunteering.volunteering.receipt_review.reset_review_after_file_change",
+		],
 	},
 	"Purchase Order": {
 		"before_save": [

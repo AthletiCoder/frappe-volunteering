@@ -77,6 +77,22 @@ class TestPaymentEntryControls(UnitTestCase):
 		)
 
 	@patch("volunteering.volunteering.accounting_controls.frappe.get_doc")
+	def test_employee_pe_against_unverified_claim_is_blocked(self, mock_get_doc):
+		mock_get_doc.return_value = frappe._dict(
+			doctype="Expense Claim",
+			name="EXP-1",
+			workflow_state="Approved",
+			docstatus=1,
+			receipt_review_status="Pending Review",
+		)
+		doc = self._pe(
+			"Employee",
+			[{"reference_doctype": "Expense Claim", "reference_name": "EXP-1"}],
+		)
+		with self.assertRaisesRegex(frappe.ValidationError, "Receipt review must be Verified"):
+			validate_payment_entry(doc)
+
+	@patch("volunteering.volunteering.accounting_controls.frappe.get_doc")
 	def test_supplier_pe_against_approved_po_allowed(self, mock_get_doc):
 		po = frappe._dict(name="PO-1", workflow_state="Approved", docstatus=1)
 		mock_get_doc.return_value = po

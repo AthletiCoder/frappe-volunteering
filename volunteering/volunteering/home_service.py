@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import frappe
 from frappe import _
-from frappe.utils import flt, formatdate, format_datetime
+from frappe.utils import flt, format_datetime, formatdate
 
 from volunteering.volunteering.authority import get_employee_for_user, get_grade_for_user
 from volunteering.volunteering.desk_routes import desk_route
@@ -375,6 +375,8 @@ def _status_rows(pending):
 
 def _approver_inbox(user, employee):
 	items = []
+	if "Expense Receipt Reviewer" in frappe.get_roles(user):
+		items.extend(_receipt_review_inbox(employee))
 	items.extend(_leave_inbox(user, employee))
 	items.extend(_wfh_inbox(employee))
 	items.extend(_pending_approver_inbox("Expense Claim", _("Claim"), user))
@@ -382,6 +384,37 @@ def _approver_inbox(user, employee):
 	items.extend(_pending_approver_inbox("Purchase Order", _("Purchase order"), user))
 	items.sort(key=lambda row: row.get("modified") or "", reverse=True)
 	return items[:INBOX_CAP]
+
+
+def _receipt_review_inbox(reviewer_employee):
+	filters = {"workflow_state": "Pending Receipt Review", "docstatus": 0}
+	if reviewer_employee:
+		filters["employee"] = ["!=", reviewer_employee]
+	rows = frappe.get_all(
+		"Expense Claim",
+		filters=filters,
+		fields=["name", "employee_name", "total_claimed_amount", "creation", "modified"],
+		order_by="modified desc",
+		limit=INBOX_CAP,
+	)
+	return [
+		{
+			"id": f"Expense Claim::{row.name}",
+			"kind": _("Receipt review"),
+			"title": row.employee_name or row.name,
+			"subtitle": " · ".join(
+				[
+					format_datetime(row.creation, "dd MMM yyyy, HH:mm"),
+					row.name,
+					frappe.format_value(flt(row.total_claimed_amount), "Currency"),
+				]
+			),
+			"route": desk_route("Expense Claim", row.name),
+			"modified": str(row.modified or ""),
+			"raised_at": str(row.creation or ""),
+		}
+		for row in rows
+	]
 
 
 def _leave_inbox(user, employee):
@@ -460,9 +493,12 @@ def _pending_approver_inbox(doctype, kind, user):
 		fields.append("grand_total")
 	if frappe.db.has_column(doctype, "advance_amount"):
 		fields.append("advance_amount")
+	filters = {"pending_approver": user, "docstatus": 0}
+	if doctype == "Expense Claim":
+		filters["workflow_state"] = "Pending Approval"
 	rows = frappe.get_all(
 		doctype,
-		filters={"pending_approver": user, "docstatus": 0},
+		filters=filters,
 		fields=fields,
 		order_by="modified desc",
 		limit=INBOX_CAP,

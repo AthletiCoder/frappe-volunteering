@@ -1,4 +1,5 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { e2eCall } from '../../helpers/e2e-api';
 import { modal, resolvePostActionModal, readVisibleModal } from '../../helpers/dialogs';
 import { DeskForm, formUrl } from '../../helpers/desk';
 import { attachClaimReceipt } from '../../helpers/ui-fixtures';
@@ -592,14 +593,57 @@ export class ExpenseClaimFormPage extends DeskForm {
 
 	async saveAndSubmit(
 		request: APIRequestContext,
-		options?: { expectBudgetWarning?: boolean; attachReceipt?: boolean },
+		options?: {
+			expectBudgetWarning?: boolean;
+			attachReceipt?: boolean;
+			reviewReceipts?: boolean;
+		},
 	): Promise<string> {
 		const name = await this.saveDraft();
 		if (options?.attachReceipt !== false) {
 			await attachClaimReceipt(request, name);
 		}
 		await this.submitSavedClaimInSession(name, options);
+		if (options?.reviewReceipts !== false) {
+			await e2eCall(request, 'seed_receipt_review', { name }, 'admin');
+		}
 		return name;
+	}
+
+	async verifyReceipts(notes = 'E2E receipts comply with the audit checklist.'): Promise<void> {
+		await this.dismissBlockingModals();
+		const action = this.page
+			.locator('.page-head .primary-action, .page-actions .primary-action')
+			.filter({ hasText: /^Verify Receipts$/ })
+			.first();
+		await expect(action).toBeVisible({ timeout: 45000 });
+		await action.click();
+
+		const dialog = modal(this.page);
+		await expect(dialog).toBeVisible({ timeout: 15000 });
+		for (let index = 0; index < 6; index += 1) {
+			await dialog
+				.locator('input[type="checkbox"]:not(:disabled):not(:checked)')
+				.first()
+				.check();
+		}
+		const noteField = dialog.locator('textarea').first();
+		if (await noteField.isVisible().catch(() => false)) {
+			await noteField.fill(notes);
+		}
+		const response = this.page.waitForResponse(
+			(resp) => resp.url().includes('receipt_review.review_receipts') && resp.ok(),
+			{ timeout: 45000 },
+		);
+		await dialog.getByRole('button', { name: /^Verify Receipts$/ }).click();
+		await response;
+		await this.page.waitForFunction(
+			() =>
+				(window as unknown as { cur_frm?: { doc?: { workflow_state?: string } } }).cur_frm
+					?.doc?.workflow_state === 'Pending Approval',
+			undefined,
+			{ timeout: 45000 },
+		);
 	}
 
 	/** Approve via Desk workflow and expect server validation to surface in a modal. */

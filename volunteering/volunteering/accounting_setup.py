@@ -17,8 +17,9 @@ DEPARTMENT_NAMES = [
 	"Donor Relations",
 ]
 
-# Authority is Employee Grade + Department.department_head; no board roles to seed.
-ACCOUNTING_ROLES: list[str] = []
+# Approval authority is still Employee Grade + Department.department_head. This
+# operational role can review receipts but carries no accounting authority.
+ACCOUNTING_ROLES: list[str] = ["Expense Receipt Reviewer"]
 
 BUDGET_HEALTH_ROLES = (
 	"Accounts User",
@@ -63,9 +64,11 @@ def reload_accounting_workflows():
 
 def after_migrate():
 	setup_accounting_custom_fields()
+	backfill_receipt_review_states()
 	remove_obsolete_accounting_custom_fields()
 	ensure_project_types()
 	ensure_accounting_roles()
+	ensure_receipt_reviewer_permissions()
 	ensure_workflow_actions()
 	ensure_workflow_states()
 	ensure_departments()
@@ -474,6 +477,8 @@ def ensure_workflow_states():
 	"""Create Workflow State rows used by accounting workflow fixtures."""
 	defaults = (
 		("Draft", "Primary", "file"),
+		("Pending Receipt Review", "Warning", "search"),
+		("Receipt Correction Required", "Danger", "edit"),
 		("Pending Approval", "Warning", "question-sign"),
 		("Approved", "Success", "ok-sign"),
 		("Rejected", "Danger", "remove"),
@@ -516,14 +521,79 @@ def setup_accounting_custom_fields():
 	create_custom_fields(ACCOUNTING_CUSTOM_FIELDS, ignore_validate=True)
 
 
+def backfill_receipt_review_states():
+	"""Adopt in-flight claims without silently certifying historical receipts.
+
+	Pending manager claims are routed back through receipt review. Submitted
+	legacy claims remain approved, but must receive a retrospective receipt
+	review before a new Payment Entry can settle them.
+	"""
+	if not frappe.db.has_column("Expense Claim", "receipt_review_status"):
+		return
+
+	frappe.db.sql(
+		"""
+		UPDATE `tabExpense Claim`
+		SET workflow_state = 'Pending Receipt Review',
+			receipt_review_status = 'Pending Review',
+			pending_approver = NULL,
+			expense_approver = NULL,
+			receipt_reviewed_by = NULL,
+			receipt_reviewed_on = NULL,
+			receipt_review_notes = NULL,
+			receipt_review_checklist = NULL,
+			reviewed_attachments = NULL
+		WHERE docstatus = 0
+			AND workflow_state = 'Pending Approval'
+			AND IFNULL(receipt_review_status, '') != 'Verified'
+		"""
+	)
+	frappe.db.sql(
+		"""
+		UPDATE `tabExpense Claim`
+		SET receipt_review_status = 'Not Submitted'
+		WHERE IFNULL(receipt_review_status, '') = ''
+		"""
+	)
+
+
 def ensure_accounting_roles():
-	"""No accounting-specific roles remain; authority is Grade + department_head."""
+	"""Create operational roles; authority remains Grade + department_head."""
 	for role_name in ACCOUNTING_ROLES:
 		if frappe.db.exists("Role", role_name):
 			continue
 		frappe.get_doc({"doctype": "Role", "role_name": role_name, "desk_access": 1}).insert(
 			ignore_permissions=True
 		)
+
+
+def ensure_receipt_reviewer_permissions():
+	"""Receipt reviewers can read claims but cannot edit or submit them."""
+	from frappe.permissions import add_permission, update_permission_property
+
+	role = "Expense Receipt Reviewer"
+	if not frappe.db.exists("Role", role) or not frappe.db.exists("DocType", "Expense Claim"):
+		return
+	if not frappe.db.exists(
+		"Custom DocPerm",
+		{
+			"parent": "Expense Claim",
+			"parenttype": "DocType",
+			"role": role,
+			"permlevel": 0,
+			"if_owner": 0,
+		},
+	):
+		add_permission("Expense Claim", role, permlevel=0, ptype="read")
+	for permission_type in ("read", "select", "report", "print", "email"):
+		update_permission_property(
+			"Expense Claim", role, 0, permission_type, 1, validate=False
+		)
+	for permission_type in ("write", "create", "delete", "submit", "cancel", "amend"):
+		update_permission_property(
+			"Expense Claim", role, 0, permission_type, 0, validate=False
+		)
+	frappe.clear_cache(doctype="Expense Claim")
 
 
 def ensure_designations():

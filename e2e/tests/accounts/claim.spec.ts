@@ -78,7 +78,21 @@ test.describe('Expense Claim @accounts @ui', () => {
 				amount: 1500,
 				expenseType: masters.expense_type,
 			});
-			claimName = await claim.saveAndSubmit(request);
+			claimName = await claim.saveAndSubmit(request, { reviewReceipts: false });
+
+			const reviewState = await e2eCall<string>(
+				request,
+				'get_doc_field',
+				{ doctype: 'Expense Claim', name: claimName, field: 'workflow_state' },
+				'admin',
+			);
+			expect(reviewState).toBe('Pending Receipt Review');
+
+			await withPersona(browser, 'receipt_reviewer', async (reviewerPage) => {
+				const reviewerClaim = new ExpenseClaimFormPage(reviewerPage);
+				await reviewerClaim.open(claimName);
+				await reviewerClaim.verifyReceipts();
+			});
 
 			const workflowState = await e2eCall<string>(
 				request,

@@ -13,7 +13,9 @@ from volunteering.volunteering.authority import BOARD_OF_DIRECTORS
 from volunteering.volunteering.volunteering_access import VOLUNTEERING_OPS_ROLES
 
 HR_ROLES = frozenset({"HR Manager", "HR User"})
-APPROVER_ROLES = frozenset({"Leave Approver", "Expense Approver"})
+APPROVER_ROLES = frozenset(
+	{"Leave Approver", "Expense Approver", "Expense Receipt Reviewer"}
+)
 STAFF_HOME_ROLES = frozenset(
 	{
 		"Employee",
@@ -26,6 +28,7 @@ STAFF_HOME_ROLES = frozenset(
 		"NGO Admin",
 		"Leave Approver",
 		"Expense Approver",
+		"Expense Receipt Reviewer",
 	}
 )
 HOME_URL = "/volunteering/home"

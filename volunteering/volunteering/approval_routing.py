@@ -14,16 +14,14 @@ from volunteering.volunteering.authority import (
 	LEGACY_ROLE_EXEC_CHAIR,
 	get_employee_for_user,
 	get_grade_for_employee,
+	user_has_board_of_directors,
+	user_has_executive_board,
 )
 from volunteering.volunteering.authority import (
 	get_fallback_board_approver as _authority_fallback_board_approver,
 )
 from volunteering.volunteering.authority import (
 	is_department_head_user as _authority_is_department_head_user,
-)
-from volunteering.volunteering.authority import (
-	user_has_board_of_directors,
-	user_has_executive_board,
 )
 from volunteering.volunteering.doctype.volunteering_accounting_settings.volunteering_accounting_settings import (
 	get_accounting_settings,
@@ -48,6 +46,7 @@ PENDING_TIER_3 = "Pending Board Chair"
 
 PENDING_STATES = {
 	PENDING_APPROVAL,
+	"Pending Receipt Review",
 	PENDING_EXPENSE_TIER_1,
 	PENDING_PO_TIER_1,
 	PENDING_TIER_2,
@@ -429,6 +428,14 @@ def before_accounting_document_save(doc, method=None):
 
 	# Always block Board of Directors create (grade and legacy tier modes)
 	get_requester_minimum_level(doc)
+	if doc.doctype == "Expense Claim" and doc.workflow_state == "Pending Receipt Review":
+		# Receipt review deliberately precedes manager routing. Keeping these
+		# fields empty also prevents HRMS from sharing the claim with a manager
+		# before an independent reviewer has verified its evidence.
+		doc.pending_approver = None
+		doc.expense_approver = None
+		validate_expense_claim_receipts(doc)
+		return
 
 	if use_grade_approval():
 		doc.approval_level = 1
@@ -479,6 +486,13 @@ def before_accounting_document_submit(doc, method=None):
 def on_accounting_workflow_state_change(doc, method=None):
 	"""Send email alert when routed to a pending approval state."""
 	if doc.doctype not in ACCOUNTING_WORKFLOW_DOCTYPES:
+		return
+	if doc.doctype == "Expense Claim" and doc.workflow_state == "Pending Receipt Review":
+		previous = doc.get_doc_before_save()
+		if not previous or previous.workflow_state != doc.workflow_state:
+			from volunteering.volunteering.receipt_review import notify_receipt_reviewers
+
+			notify_receipt_reviewers(doc)
 		return
 
 	if doc.workflow_state not in PENDING_STATES - {PENDING_ROUTER_STATE}:

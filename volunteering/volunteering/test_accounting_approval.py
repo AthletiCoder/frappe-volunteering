@@ -1,11 +1,15 @@
 # Copyright (c) 2026, Vadiraj Tirtha Das and contributors
 # For license information, please see license.txt
 
+import base64
+
 import frappe
 from frappe.model.workflow import apply_workflow
 from frappe.tests import IntegrationTestCase
 
 from volunteering.volunteering.accounting_setup import (
+	ensure_accounting_roles,
+	ensure_receipt_reviewer_permissions,
 	ensure_workflow_actions,
 	reload_accounting_workflows,
 	setup_accounting_custom_fields,
@@ -20,6 +24,14 @@ from volunteering.volunteering.accounting_test_utils import (
 	set_employee_grade,
 )
 from volunteering.volunteering.approval_routing import PENDING_APPROVAL, escalate_document
+from volunteering.volunteering.receipt_review import (
+	CHECKLIST_ITEMS,
+	PENDING_RECEIPT_REVIEW,
+	RECEIPT_CORRECTION_REQUIRED,
+	REVIEW_STATUS_PENDING,
+	REVIEW_STATUS_VERIFIED,
+	review_receipts,
+)
 
 
 class IntegrationTestAccountingApproval(IntegrationTestCase):
@@ -27,8 +39,8 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 
 	Chain: employee (Associate, approve 0) -> manager (Manager, approve 2000)
 	-> director (Director, approve 25000), where the band is Employee.grade.
-	The workflow fixture routes Draft -> Pending Approval, gated by
-	`pending_approver`.
+	The workflow routes Draft -> receipt review -> Pending Approval, gated by
+	the independent reviewer and then `pending_approver`.
 	"""
 
 	@classmethod
@@ -44,6 +56,8 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 		frappe.clear_cache(doctype="Volunteering Accounting Settings")
 		setup_accounting_custom_fields()
 		frappe.clear_cache(doctype="Expense Claim")
+		ensure_accounting_roles()
+		ensure_receipt_reviewer_permissions()
 		reload_accounting_workflows()
 		ensure_workflow_actions()
 
@@ -56,6 +70,11 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 		)
 		cls.director_email = get_or_create_user(
 			"director-acct@example.com", ["Employee"], "Director User"
+		)
+		cls.reviewer_email = get_or_create_user(
+			"receipt-reviewer-acct@example.com",
+			["Expense Receipt Reviewer"],
+			"Receipt Reviewer",
 		)
 		# Authority comes from the grade below, not from a board role.
 		cls.board_chair_email = get_or_create_user(
@@ -74,11 +93,15 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 		cls.board_chair_employee = get_or_create_employee(
 			cls.board_chair_email, cls.department, "Board Chair Employee"
 		)
+		cls.reviewer_employee = get_or_create_employee(
+			cls.reviewer_email, cls.department, "Receipt Reviewer Employee"
+		)
 
 		set_employee_grade(cls.employee, "Associate", reports_to=cls.manager_employee)
 		set_employee_grade(cls.manager_employee, "Manager", reports_to=cls.director_employee)
 		set_employee_grade(cls.director_employee, "Director", reports_to=None)
 		set_employee_grade(cls.board_chair_employee, "Board of Directors")
+		set_employee_grade(cls.reviewer_employee, "Associate", reports_to=cls.director_employee)
 
 	@classmethod
 	def tearDownClass(cls):
@@ -99,13 +122,30 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 			{
 				"employee": [
 					"in",
-					[self.employee, self.manager_employee, self.director_employee],
+					[
+						self.employee,
+						self.manager_employee,
+						self.director_employee,
+						self.reviewer_employee,
+					],
 				]
 			},
 		)
 		super().tearDown()
 
-	def _submit_claim_as(self, user, amount=1500, employee=None, vendor_reason=None):
+	def _review_claim(self, claim):
+		frappe.set_user(self.reviewer_email)
+		review_receipts(
+			claim.name,
+			"verify",
+			"Receipts meet the test audit checklist.",
+			{key: True for key, _label in CHECKLIST_ITEMS},
+		)
+		return frappe.get_doc("Expense Claim", claim.name)
+
+	def _submit_claim_as(
+		self, user, amount=1500, employee=None, vendor_reason=None, review=True
+	):
 		employee = employee or self.employee
 		frappe.set_user(user)
 		claim = make_expense_claim(employee, self.project, amount=amount, owner=user)
@@ -114,10 +154,20 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 			claim.vendor_override_reason = vendor_reason
 		claim.save(ignore_permissions=True)
 		apply_workflow(claim, "Submit")
-		return frappe.get_doc("Expense Claim", claim.name)
+		claim = frappe.get_doc("Expense Claim", claim.name)
+		return self._review_claim(claim) if review else claim
 
 	def test_low_value_claim_routes_to_manager(self):
-		claim = self._submit_claim_as(self.employee_email, amount=1500)
+		claim = self._submit_claim_as(self.employee_email, amount=1500, review=False)
+		self.assertEqual(claim.workflow_state, PENDING_RECEIPT_REVIEW)
+		self.assertFalse(claim.pending_approver)
+		self.assertFalse(claim.expense_approver)
+
+		frappe.set_user(self.manager_email)
+		with self.assertRaises(frappe.ValidationError):
+			apply_workflow(frappe.get_doc("Expense Claim", claim.name), "Approve")
+
+		claim = self._review_claim(claim)
 		self.assertEqual(claim.workflow_state, PENDING_APPROVAL)
 		self.assertEqual(claim.pending_approver, self.manager_email)
 
@@ -129,6 +179,82 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 		approved.reload()
 		self.assertEqual(approved.workflow_state, "Approved")
 		self.assertEqual(approved.docstatus, 1)
+
+	def test_reviewer_cannot_edit_claim_and_incomplete_checklist_is_rejected(self):
+		claim = self._submit_claim_as(self.employee_email, amount=1500, review=False)
+		frappe.set_user(self.reviewer_email)
+		self.assertFalse(frappe.get_doc("Expense Claim", claim.name).has_permission("write"))
+		with self.assertRaises(frappe.ValidationError):
+			review_receipts(
+				claim.name,
+				"verify",
+				"One check omitted.",
+				{key: key != CHECKLIST_ITEMS[0][0] for key, _label in CHECKLIST_ITEMS},
+			)
+
+	def test_reviewer_role_has_no_accounts_or_payment_access(self):
+		self.assertFalse(frappe.has_permission("Account", "read", user=self.reviewer_email))
+		self.assertFalse(
+			frappe.has_permission("Payment Entry", "create", user=self.reviewer_email)
+		)
+
+	def test_receipt_correction_and_resubmission_clear_prior_review(self):
+		claim = self._submit_claim_as(self.employee_email, amount=1500, review=False)
+		frappe.set_user(self.reviewer_email)
+		review_receipts(claim.name, "request_correction", "Upload a legible full receipt.", {})
+		claim.reload()
+		self.assertEqual(claim.workflow_state, RECEIPT_CORRECTION_REQUIRED)
+		self.assertEqual(claim.receipt_review_status, "Correction Required")
+		self.assertEqual(claim.receipt_reviewed_by, self.reviewer_email)
+
+		frappe.set_user(self.employee_email)
+		apply_workflow(claim, "Re-submit")
+		claim.reload()
+		self.assertEqual(claim.workflow_state, PENDING_RECEIPT_REVIEW)
+		self.assertEqual(claim.receipt_review_status, REVIEW_STATUS_PENDING)
+		self.assertFalse(claim.receipt_reviewed_by)
+		self.assertFalse(claim.reviewed_attachments)
+
+	def test_attachment_change_resets_verified_review(self):
+		claim = self._submit_claim_as(self.employee_email, amount=1500)
+		self.assertEqual(claim.receipt_review_status, REVIEW_STATUS_VERIFIED)
+		self.assertTrue(claim.reviewed_attachments)
+
+		frappe.set_user("Administrator")
+		frappe.get_doc(
+			{
+				"doctype": "File",
+				"file_name": f"replacement-{claim.name}.png",
+				"attached_to_doctype": "Expense Claim",
+				"attached_to_name": claim.name,
+				"content": base64.b64decode(
+					"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMA"
+					"ASsJTYQAAAAASUVORK5CYII="
+				),
+				"is_private": 1,
+			}
+		).insert(ignore_permissions=True)
+		claim.reload()
+		self.assertEqual(claim.workflow_state, PENDING_RECEIPT_REVIEW)
+		self.assertEqual(claim.receipt_review_status, REVIEW_STATUS_PENDING)
+		self.assertFalse(claim.pending_approver)
+		self.assertFalse(claim.reviewed_attachments)
+
+	def test_reviewer_cannot_verify_own_claim(self):
+		claim = self._submit_claim_as(
+			self.reviewer_email,
+			amount=500,
+			employee=self.reviewer_employee,
+			review=False,
+		)
+		frappe.set_user(self.reviewer_email)
+		with self.assertRaises(frappe.ValidationError):
+			review_receipts(
+				claim.name,
+				"verify",
+				"Self review attempt.",
+				{key: True for key, _label in CHECKLIST_ITEMS},
+			)
 
 	def test_mid_value_claim_routes_past_manager_to_director(self):
 		# 5000 exceeds Manager's 2000 approval authority; Director (25000) can.
@@ -194,6 +320,8 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 		resubmit = frappe.get_doc("Expense Claim", rejected.name)
 		apply_workflow(resubmit, "Re-submit")
 		resubmit.reload()
+		self.assertEqual(resubmit.workflow_state, PENDING_RECEIPT_REVIEW)
+		resubmit = self._review_claim(resubmit)
 		self.assertEqual(resubmit.workflow_state, PENDING_APPROVAL)
 
 	def test_claim_without_receipt_cannot_submit(self):

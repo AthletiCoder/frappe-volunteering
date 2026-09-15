@@ -241,7 +241,7 @@ def attach_test_receipt(doc):
 	frappe.get_doc(
 		{
 			"doctype": "File",
-			"file_name": f"receipt-{doc.name}.txt",
+			"file_name": f"receipt-{doc.name}.pdf",
 			"attached_to_doctype": doc.doctype,
 			"attached_to_name": doc.name,
 			"content": "test receipt",

@@ -4,7 +4,15 @@ from frappe.query_builder import Order
 from frappe.utils import flt, formatdate, get_datetime, now_datetime, time_diff_in_hours
 
 from volunteering.volunteering.accounting_dashboard.constants import ACCOUNTING_APPROVAL_DOCTYPES
-from volunteering.volunteering.approval_routing import PENDING_STATES, get_amount_field
+from volunteering.volunteering.approval_routing import (
+	PENDING_STATES,
+	get_amount_field,
+	get_requester_user,
+)
+from volunteering.volunteering.receipt_review import (
+	PENDING_RECEIPT_REVIEW,
+	RECEIPT_REVIEWER_ROLE,
+)
 
 
 @frappe.whitelist()
@@ -92,6 +100,13 @@ def _can_user_act(row, user, roles):
 	try:
 		frappe.set_user(user)
 		doc = frappe.get_doc(row.reference_doctype, row.reference_name)
+		if (
+			doc.doctype == "Expense Claim"
+			and doc.workflow_state == PENDING_RECEIPT_REVIEW
+			and RECEIPT_REVIEWER_ROLE in roles
+			and get_requester_user(doc) != user
+		):
+			return True
 		if doc.get("pending_approver") == user and doc.workflow_state == "Pending Approval":
 			return True
 		for transition in frappe.model.workflow.get_transitions(doc):
@@ -117,6 +132,13 @@ def _available_actions(doctype, name, user, roles):
 	try:
 		frappe.set_user(user)
 		doc = frappe.get_doc(doctype, name)
+		if (
+			doc.doctype == "Expense Claim"
+			and doc.workflow_state == PENDING_RECEIPT_REVIEW
+			and RECEIPT_REVIEWER_ROLE in roles
+			and get_requester_user(doc) != user
+		):
+			return ["Verify Receipts", "Request Correction"]
 		actions = []
 		for transition in frappe.model.workflow.get_transitions(doc):
 			transition = frappe._dict(transition)

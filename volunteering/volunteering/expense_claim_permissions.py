@@ -23,6 +23,10 @@ from volunteering.volunteering.authority import (
 	get_employee_for_user,
 	user_is_board_level,
 )
+from volunteering.volunteering.receipt_review import (
+	PENDING_RECEIPT_REVIEW,
+	RECEIPT_REVIEWER_ROLE,
+)
 
 
 def _has_full_access(user, roles):
@@ -75,6 +79,20 @@ def get_permission_query_conditions(user):
 		return ""
 
 	conditions = []
+	if RECEIPT_REVIEWER_ROLE in roles:
+		reviewer_conditions = [
+			f"`tabExpense Claim`.workflow_state = {frappe.db.escape(PENDING_RECEIPT_REVIEW)}"
+		]
+		if frappe.db.has_column("Expense Claim", "receipt_reviewed_by"):
+			reviewer_conditions.append(
+				f"`tabExpense Claim`.receipt_reviewed_by = {frappe.db.escape(user)}"
+			)
+			reviewer_conditions.append(
+				"(`tabExpense Claim`.docstatus = 1 "
+				"AND `tabExpense Claim`.workflow_state = 'Approved' "
+				"AND IFNULL(`tabExpense Claim`.receipt_review_status, '') != 'Verified')"
+			)
+		conditions.append("(" + " OR ".join(reviewer_conditions) + ")")
 	own_employee = get_employee_for_user(user)
 	if own_employee:
 		conditions.append(f"`tabExpense Claim`.employee = {frappe.db.escape(own_employee)}")
@@ -113,6 +131,15 @@ def has_permission(doc, ptype, user):
 	roles = set(frappe.get_roles(user))
 	if _has_full_access(user, roles):
 		return True
+	if RECEIPT_REVIEWER_ROLE in roles and ptype in ("read", "select", "print", "email"):
+		if doc.get("workflow_state") == PENDING_RECEIPT_REVIEW or doc.get(
+			"receipt_reviewed_by"
+		) == user or (
+			doc.docstatus == 1
+			and doc.get("workflow_state") == "Approved"
+			and doc.get("receipt_review_status") != "Verified"
+		):
+			return True
 
 	own_employee = get_employee_for_user(user)
 	if own_employee and doc.get("employee") == own_employee:

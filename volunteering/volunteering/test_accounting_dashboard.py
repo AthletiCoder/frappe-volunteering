@@ -1,10 +1,11 @@
 # Copyright (c) 2026, Vadiraj Tirtha Das and contributors
 # For license information, please see license.txt
 
+from unittest.mock import patch
+
 import frappe
 from frappe.model.workflow import apply_workflow
 from frappe.tests import IntegrationTestCase
-from unittest.mock import patch
 
 from volunteering.volunteering.accounting_dashboard.pending_approvals import get_pending_approvals
 from volunteering.volunteering.accounting_dashboard.pending_payments import (
@@ -16,6 +17,8 @@ from volunteering.volunteering.accounting_dashboard.setup import (
 	send_weekly_pending_approval_reminder,
 )
 from volunteering.volunteering.accounting_setup import (
+	ensure_accounting_roles,
+	ensure_receipt_reviewer_permissions,
 	ensure_workflow_actions,
 	reload_accounting_workflows,
 	setup_accounting_custom_fields,
@@ -33,6 +36,7 @@ from volunteering.volunteering.expense_claim_permissions import (
 	get_permission_query_conditions,
 	has_permission,
 )
+from volunteering.volunteering.receipt_review import CHECKLIST_ITEMS, review_receipts
 
 
 class IntegrationTestAccountingDashboard(IntegrationTestCase):
@@ -48,6 +52,8 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 		frappe.clear_cache(doctype="Volunteering Accounting Settings")
 		setup_accounting_custom_fields()
 		frappe.clear_cache(doctype="Expense Claim")
+		ensure_accounting_roles()
+		ensure_receipt_reviewer_permissions()
 		reload_accounting_workflows()
 		ensure_workflow_actions()
 		ensure_accounting_pages()
@@ -64,6 +70,11 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 		)
 		cls.accounts_email = get_or_create_user(
 			"accounts-acct@example.com", ["Employee", "Accounts User"], "Accounts User"
+		)
+		cls.reviewer_email = get_or_create_user(
+			"dashboard-receipt-reviewer@example.com",
+			["Expense Receipt Reviewer"],
+			"Dashboard Receipt Reviewer",
 		)
 		cls.other_employee_email = get_or_create_user(
 			"other-employee-acct@example.com", ["Employee"], "Other Employee"
@@ -104,6 +115,13 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 		claim = frappe.get_doc("Expense Claim", claim.name)
 		claim.save(ignore_permissions=True)
 		apply_workflow(claim, "Submit")
+		frappe.set_user(self.reviewer_email)
+		review_receipts(
+			claim.name,
+			"verify",
+			"Receipts meet the test audit checklist.",
+			{key: True for key, _label in CHECKLIST_ITEMS},
+		)
 		return frappe.get_doc("Expense Claim", claim.name)
 
 	def _approve_claim(self, claim):
