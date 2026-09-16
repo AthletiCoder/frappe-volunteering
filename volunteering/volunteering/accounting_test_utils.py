@@ -55,7 +55,10 @@ def get_or_create_department(name, department_head=None):
 
 	existing = frappe.db.get_value("Department", filters, "name")
 	if existing:
-		if department_head and frappe.db.get_value("Department", existing, "department_head") != department_head:
+		if (
+			department_head
+			and frappe.db.get_value("Department", existing, "department_head") != department_head
+		):
 			frappe.db.set_value("Department", existing, "department_head", department_head)
 		return existing
 
@@ -74,27 +77,29 @@ def get_or_create_employee(user_email, department, first_name="Test Employee"):
 		return employee
 
 	company = frappe.db.get_value("Company", {}, "name")
-	return frappe.get_doc(
-		{
-			"doctype": "Employee",
-			"first_name": first_name,
-			"company": company,
-			"user_id": user_email,
-			"company_email": user_email,
-			"department": department,
-			"status": "Active",
-			"date_of_birth": add_days(nowdate(), -10000),
-			"date_of_joining": add_days(nowdate(), -90),
-			"gender": "Male",
-		}
-	).insert(ignore_permissions=True).name
+	return (
+		frappe.get_doc(
+			{
+				"doctype": "Employee",
+				"first_name": first_name,
+				"company": company,
+				"user_id": user_email,
+				"company_email": user_email,
+				"department": department,
+				"status": "Active",
+				"date_of_birth": add_days(nowdate(), -10000),
+				"date_of_joining": add_days(nowdate(), -90),
+				"gender": "Male",
+			}
+		)
+		.insert(ignore_permissions=True)
+		.name
+	)
 
 
 def ensure_employee_grade(grade):
 	if not frappe.db.exists("Employee Grade", grade):
-		frappe.get_doc({"doctype": "Employee Grade", "__newname": grade}).insert(
-			ignore_permissions=True
-		)
+		frappe.get_doc({"doctype": "Employee Grade", "__newname": grade}).insert(ignore_permissions=True)
 	return grade
 
 
@@ -119,14 +124,18 @@ def get_or_create_project_with_cost_center():
 
 	company = frappe.db.get_value("Company", {}, "name")
 	cost_center = get_or_create_cost_center()
-	return frappe.get_doc(
-		{
-			"doctype": "Project",
-			"project_name": project_name,
-			"company": company,
-			"cost_center": cost_center,
-		}
-	).insert(ignore_permissions=True).name
+	return (
+		frappe.get_doc(
+			{
+				"doctype": "Project",
+				"project_name": project_name,
+				"company": company,
+				"cost_center": cost_center,
+			}
+		)
+		.insert(ignore_permissions=True)
+		.name
+	)
 
 
 def _get_parent_cost_center(company):
@@ -153,9 +162,7 @@ def get_or_create_cost_center():
 	if frappe.db.exists("Cost Center", name):
 		return name
 
-	existing_leaf = frappe.db.get_value(
-		"Cost Center", {"company": company, "is_group": 0}, "name"
-	)
+	existing_leaf = frappe.db.get_value("Cost Center", {"company": company, "is_group": 0}, "name")
 	if existing_leaf:
 		return existing_leaf
 
@@ -163,14 +170,18 @@ def get_or_create_cost_center():
 	if not parent_cost_center:
 		frappe.throw(f"No parent Cost Center found for company {company}")
 
-	return frappe.get_doc(
-		{
-			"doctype": "Cost Center",
-			"cost_center_name": "_Test Accounting",
-			"company": company,
-			"parent_cost_center": parent_cost_center,
-		}
-	).insert(ignore_permissions=True).name
+	return (
+		frappe.get_doc(
+			{
+				"doctype": "Cost Center",
+				"cost_center_name": "_Test Accounting",
+				"company": company,
+				"parent_cost_center": parent_cost_center,
+			}
+		)
+		.insert(ignore_permissions=True)
+		.name
+	)
 
 
 def get_or_create_payable_account(company=None):
@@ -221,9 +232,7 @@ def get_or_create_expense_claim_type():
 	if frappe.db.exists("Expense Claim Type", name):
 		claim_type = frappe.get_doc("Expense Claim Type", name)
 		if not any(row.company == company and row.default_account for row in claim_type.accounts):
-			claim_type.append(
-				"accounts", {"company": company, "default_account": expense_account}
-			)
+			claim_type.append("accounts", {"company": company, "default_account": expense_account})
 			claim_type.save(ignore_permissions=True)
 		return name
 
@@ -257,9 +266,27 @@ def make_expense_claim(
 	owner=None,
 	vendor_override_reason=None,
 	budget_override_reason=None,
+	ensure_project_account=True,
 ):
 	expense_type = get_or_create_expense_claim_type()
 	company = frappe.db.get_value("Employee", employee, "company")
+	expense_account = None
+	if project:
+		expense_account = frappe.db.get_value(
+			"Project Account Budget",
+			{
+				"parent": project,
+				"parenttype": "Project",
+				"parentfield": "account_budgets",
+				"is_active": 1,
+			},
+			"expense_account",
+			order_by="idx asc",
+		)
+	if not expense_account:
+		expense_account = get_or_create_expense_account(company)
+		if project and ensure_project_account:
+			allow_project_expense_account(project, expense_account)
 	payable_account = get_or_create_payable_account(company)
 	cost_center = frappe.db.get_value("Project", project, "cost_center") if project else None
 	department = frappe.db.get_value("Employee", employee, "department")
@@ -276,6 +303,7 @@ def make_expense_claim(
 			"expenses": [
 				{
 					"expense_type": expense_type,
+					"project_expense_account": expense_account,
 					"description": "Test expense",
 					"amount": amount,
 					"sanctioned_amount": amount,
@@ -296,6 +324,30 @@ def make_expense_claim(
 	return claim
 
 
+def allow_project_expense_account(project, account, label=None, approved_amount=0, active=1):
+	"""Ensure a test Project exposes one account through the employee-safe selector."""
+	if not project or not account:
+		return
+	project_doc = frappe.get_doc("Project", project)
+	for row in project_doc.get("account_budgets") or []:
+		if row.expense_account == account:
+			if label:
+				row.employee_label = label
+			row.is_active = active
+			project_doc.save(ignore_permissions=True)
+			return
+	project_doc.append(
+		"account_budgets",
+		{
+			"employee_label": label or frappe.db.get_value("Account", account, "account_name") or account,
+			"expense_account": account,
+			"approved_amount": approved_amount,
+			"is_active": active,
+		},
+	)
+	project_doc.save(ignore_permissions=True)
+
+
 def get_or_create_supplier():
 	supplier_name = "_Test Accounting Supplier"
 	existing = frappe.db.get_value("Supplier", {"supplier_name": supplier_name}, "name")
@@ -303,14 +355,18 @@ def get_or_create_supplier():
 		return existing
 
 	supplier_group = frappe.db.get_value("Supplier Group", {}, "name") or "All Supplier Groups"
-	return frappe.get_doc(
-		{
-			"doctype": "Supplier",
-			"supplier_name": supplier_name,
-			"supplier_group": supplier_group,
-			"supplier_type": "Company",
-		}
-	).insert(ignore_permissions=True).name
+	return (
+		frappe.get_doc(
+			{
+				"doctype": "Supplier",
+				"supplier_name": supplier_name,
+				"supplier_group": supplier_group,
+				"supplier_type": "Company",
+			}
+		)
+		.insert(ignore_permissions=True)
+		.name
+	)
 
 
 def get_or_create_purchase_item():
@@ -406,9 +462,7 @@ def make_purchase_invoice(project, amount=1500, purchase_order=None):
 	}
 	if purchase_order:
 		item_row["purchase_order"] = purchase_order
-		po_item = frappe.db.get_value(
-			"Purchase Order Item", {"parent": purchase_order}, "name"
-		)
+		po_item = frappe.db.get_value("Purchase Order Item", {"parent": purchase_order}, "name")
 		if po_item:
 			item_row["po_detail"] = po_item
 	pi = frappe.get_doc(
@@ -469,7 +523,13 @@ def set_project_budget(
 	project_doc.account_budgets = []
 	for account, amount in account_budgets or []:
 		project_doc.append(
-			"account_budgets", {"expense_account": account, "approved_amount": amount}
+			"account_budgets",
+			{
+				"employee_label": frappe.db.get_value("Account", account, "account_name") or account,
+				"expense_account": account,
+				"approved_amount": amount,
+				"is_active": 1,
+			},
 		)
 	project_doc.save(ignore_permissions=True)
 	return project_doc

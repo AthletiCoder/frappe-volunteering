@@ -26,6 +26,7 @@ volunteering.accounting_workflow.setup_form = function (doctype) {
 				volunteering.accounting_workflow.lock_claim_employee(frm);
 				volunteering.accounting_workflow.show_advance_link_hints(frm);
 				volunteering.accounting_workflow.hide_expense_claim_account_fields(frm);
+				volunteering.accounting_workflow.setup_project_expense_account_selector(frm);
 				volunteering.accounting_workflow.show_manager_float_hint(frm);
 			}
 			// Tab restore lives in form_shell_v9 (hash / active tab). Do not re-force tabs here.
@@ -41,6 +42,9 @@ volunteering.accounting_workflow.setup_form = function (doctype) {
 		},
 		project(frm) {
 			volunteering.accounting_workflow.show_spend_hints(frm);
+			if (doctype === "Expense Claim") {
+				volunteering.accounting_workflow.on_expense_claim_project_change(frm);
+			}
 		},
 		department(frm) {
 			volunteering.accounting_workflow.show_spend_hints(frm);
@@ -147,6 +151,95 @@ volunteering.accounting_workflow.hide_expense_claim_account_fields = function (f
 	}
 };
 
+volunteering.accounting_workflow.can_edit_project_expense_accounts = function (frm) {
+	const accounts = frappe.user.has_role(["Accounts Manager", "Accounts User", "System Manager"]);
+	return (
+		frm.doc.docstatus === 0 &&
+		(accounts ||
+			["Draft", "Receipt Correction Required", "Rejected"].includes(frm.doc.workflow_state))
+	);
+};
+
+volunteering.accounting_workflow.apply_project_expense_account_options = function (frm, options) {
+	const grid = frm.fields_dict.expenses && frm.fields_dict.expenses.grid;
+	if (!grid) {
+		return;
+	}
+	grid.update_docfield_property("project_expense_account", "options", options || []);
+	grid.update_docfield_property(
+		"project_expense_account",
+		"read_only",
+		volunteering.accounting_workflow.can_edit_project_expense_accounts(frm) ? 0 : 1,
+	);
+	grid.grid_rows.forEach((grid_row) => {
+		const control = grid_row.columns.project_expense_account?.field;
+		if (control && control.set_data) {
+			control.set_data(options || []);
+		}
+	});
+	frm.refresh_field("expenses");
+};
+
+volunteering.accounting_workflow.setup_project_expense_account_selector = function (frm) {
+	if (frm.doctype !== "Expense Claim") {
+		return;
+	}
+	frm._project_expense_account_project = frm.doc.project || null;
+	const project = frm.doc.project;
+	const company = frm.doc.company;
+	if (!project) {
+		volunteering.accounting_workflow.apply_project_expense_account_options(frm, []);
+		return;
+	}
+	const token = `${project}:${company || ""}`;
+	frm._project_expense_account_token = token;
+	frappe
+		.xcall(
+			"volunteering.volunteering.project_expense_accounts.get_project_expense_account_options",
+			{
+				project,
+				company,
+			},
+		)
+		.then((options) => {
+			if (
+				frm._project_expense_account_token !== token ||
+				frm.doc.project !== project ||
+				frm.doc.company !== company
+			) {
+				return;
+			}
+			volunteering.accounting_workflow.apply_project_expense_account_options(
+				frm,
+				options || [],
+			);
+			if (frm.doc.docstatus === 0) {
+				frm.set_df_property(
+					"expenses",
+					"description",
+					(options || []).length
+						? __("Choose an Expense Account made available by the selected Project.")
+						: __(
+								"This Project has no Expense Accounts available to employees. Ask Accounts to configure the Project.",
+							),
+				);
+			}
+		});
+};
+
+volunteering.accounting_workflow.on_expense_claim_project_change = function (frm) {
+	const previous = frm._project_expense_account_project;
+	const current = frm.doc.project || null;
+	if (previous && previous !== current) {
+		(frm.doc.expenses || []).forEach((row) => {
+			frappe.model.set_value(row.doctype, row.name, "project_expense_account", "");
+			frappe.model.set_value(row.doctype, row.name, "default_account", "");
+		});
+	}
+	frm._project_expense_account_project = current;
+	volunteering.accounting_workflow.setup_project_expense_account_selector(frm);
+};
+
 volunteering.accounting_workflow.setup_employee_advance_form = function (frm) {
 	frm.set_query("employee", function () {
 		const staff_access = frappe.user.has_role([
@@ -191,9 +284,12 @@ volunteering.accounting_workflow.prefill_expense_claim_routing = function (frm) 
 	}
 	if (!frm.doc.expense_approver) {
 		frappe
-			.xcall("volunteering.volunteering.approval_routing.get_expense_approver_for_employee", {
-				employee: frm.doc.employee,
-			})
+			.xcall(
+				"volunteering.volunteering.approval_routing.get_expense_approver_for_employee",
+				{
+					employee: frm.doc.employee,
+				},
+			)
 			.then((approver) => {
 				if (approver) {
 					frm.set_value("expense_approver", approver);
@@ -258,9 +354,12 @@ volunteering.accounting_workflow.update_advance_limit_hint = function (frm) {
 	const employee = frm.doc.employee;
 	volunteering.form_hints.run_once(frm, "advance_limit", (token) =>
 		frappe
-			.xcall("volunteering.volunteering.employee_advance_controls.get_grade_advance_limit_for_employee", {
-				employee,
-			})
+			.xcall(
+				"volunteering.volunteering.employee_advance_controls.get_grade_advance_limit_for_employee",
+				{
+					employee,
+				},
+			)
 			.then((data) => {
 				if (
 					!volunteering.form_hints.is_current(frm, "advance_limit", token) ||
@@ -271,7 +370,7 @@ volunteering.accounting_workflow.update_advance_limit_hint = function (frm) {
 				const label = (data && data.label) || "";
 				frm.set_df_property("advance_amount", "description", label);
 			})
-			.catch(() => {})
+			.catch(() => {}),
 	);
 };
 
@@ -281,12 +380,14 @@ volunteering.accounting_workflow.show_advance_disbursement_status = function (fr
 	}
 	const paid = flt(frm.doc.paid_amount) > 0;
 	const approved =
-		frm.doc.workflow_state === "Approved" || frm.doc.status === "Paid" || frm.doc.status === "Unpaid";
+		frm.doc.workflow_state === "Approved" ||
+		frm.doc.status === "Paid" ||
+		frm.doc.status === "Unpaid";
 	if (paid) {
 		frm.dashboard.add_indicator(__("Paid to employee"), "green");
 	} else if (approved) {
 		frm.dashboard.set_headline(
-			__("Approved — waiting for Accounts to pay this advance (Payment Entry).")
+			__("Approved — waiting for Accounts to pay this advance (Payment Entry)."),
 		);
 	} else if (frm.doc.workflow_state === "Pending Approval") {
 		frm.dashboard.add_indicator(__("Awaiting approval"), "orange");
@@ -308,9 +409,12 @@ volunteering.accounting_workflow.show_advance_link_hints = function (frm) {
 	const employee = frm.doc.employee;
 	volunteering.form_hints.run_once(frm, "advance_link", (token) =>
 		frappe
-			.xcall("volunteering.volunteering.employee_advance_controls.get_linkable_advances_hint", {
-				employee,
-			})
+			.xcall(
+				"volunteering.volunteering.employee_advance_controls.get_linkable_advances_hint",
+				{
+					employee,
+				},
+			)
 			.then((msg) => {
 				if (
 					!volunteering.form_hints.is_current(frm, "advance_link", token) ||
@@ -324,19 +428,21 @@ volunteering.accounting_workflow.show_advance_link_hints = function (frm) {
 				}
 				volunteering.form_hints.set_headline(frm, msg, "blue");
 			})
-			.catch(() => {})
+			.catch(() => {}),
 	);
 };
 
 volunteering.accounting_workflow.spend_guide_html = function () {
 	return __(
-		'Prefer vendor payments for larger spends. See <a href="/help/accounts/how-to-spend" target="_blank">How to spend</a>.'
+		'Prefer vendor payments for larger spends. See <a href="/help/accounts/how-to-spend" target="_blank">How to spend</a>.',
 	);
 };
 
 volunteering.accounting_workflow.show_spend_hints = function (frm) {
 	const show_spend =
-		frm.doc.docstatus === 0 && frm.doc.workflow_state === "Draft" && frm.doctype !== "Purchase Invoice";
+		frm.doc.docstatus === 0 &&
+		frm.doc.workflow_state === "Draft" &&
+		frm.doctype !== "Purchase Invoice";
 	volunteering.form_hints.run_once(frm, "spend_budget", () => {
 		const spend = show_spend ? volunteering.accounting_workflow.spend_guide_html() : "";
 		if (frm.doctype === "Employee Advance" || !frm.doc.project) {
@@ -356,19 +462,16 @@ volunteering.accounting_workflow.show_spend_hints = function (frm) {
 				}
 				let budget = "";
 				if (snap.allocated) {
-					budget = __(
-						"Project ({0}): committed {1} of {2} approved ({3} available).",
-						[
-							snap.project_control,
-							format_currency(snap.consumed),
-							format_currency(snap.allocated),
-							format_currency(snap.remaining),
-						]
-					);
+					budget = __("Project ({0}): committed {1} of {2} approved ({3} available).", [
+						snap.project_control,
+						format_currency(snap.consumed),
+						format_currency(snap.allocated),
+						format_currency(snap.remaining),
+					]);
 				} else {
 					budget = __(
 						"Project budget control: {0}. Expense Account budget control: {1}.",
-						[snap.project_control, snap.account_control]
+						[snap.project_control, snap.account_control],
 					);
 				}
 				const html = [spend, budget].filter(Boolean).join("<br>");
@@ -403,7 +506,7 @@ volunteering.accounting_workflow.toggle_exception_fields = function (frm) {
 
 volunteering.accounting_workflow.render_review_buttons = function (frm, flags, transitions) {
 	const actions = (transitions || []).filter((transition) =>
-		WORKFLOW_ACTIONS.includes(transition.action)
+		WORKFLOW_ACTIONS.includes(transition.action),
 	);
 	const by_name = {};
 	actions.forEach((t) => {
@@ -412,12 +515,12 @@ volunteering.accounting_workflow.render_review_buttons = function (frm, flags, t
 
 	if (flags.can_approve && by_name.Approve) {
 		frm.page.set_primary_action(__("Approve"), () =>
-			volunteering.accounting_workflow.apply_action(frm, "Approve")
+			volunteering.accounting_workflow.apply_action(frm, "Approve"),
 		);
 	} else if (flags.strict_budget_blocked) {
 		frm.dashboard.set_headline_alert(
 			__("Strict budget exceeded. Escalate to an authorised budget approver or Reject."),
-			"orange"
+			"orange",
 		);
 	} else if (flags.manager_float_blocked && flags.manager_float_message) {
 		frm.dashboard.set_headline_alert(flags.manager_float_message, "orange");
@@ -427,7 +530,7 @@ volunteering.accounting_workflow.render_review_buttons = function (frm, flags, t
 		frm.add_custom_button(
 			__("Reject"),
 			() => volunteering.accounting_workflow.apply_action(frm, "Reject"),
-			__("Review")
+			__("Review"),
 		);
 	}
 
@@ -436,7 +539,7 @@ volunteering.accounting_workflow.render_review_buttons = function (frm, flags, t
 		frm.add_custom_button(
 			__("Escalate"),
 			() => volunteering.accounting_workflow.escalate(frm),
-			__("Review")
+			__("Review"),
 		);
 	}
 };
@@ -472,10 +575,14 @@ volunteering.accounting_workflow.render_actions = function (frm) {
 			frappe.workflow
 				.get_transitions(frm.doc)
 				.then((transitions) =>
-					volunteering.accounting_workflow.render_review_buttons(frm, flags, transitions)
+					volunteering.accounting_workflow.render_review_buttons(
+						frm,
+						flags,
+						transitions,
+					),
 				)
 				.catch(() =>
-					volunteering.accounting_workflow.render_review_buttons(frm, flags, [])
+					volunteering.accounting_workflow.render_review_buttons(frm, flags, []),
 				);
 		});
 };
@@ -512,11 +619,11 @@ volunteering.accounting_workflow.render_receipt_review_actions = function (frm) 
 							frm,
 							"verify",
 							values.notes || "",
-							checklist
+							checklist,
 						);
 					},
 					__("Receipt audit checklist"),
-					__("Verify Receipts")
+					__("Verify Receipts"),
 				);
 			});
 			if (flags.can_request_correction)
@@ -535,13 +642,13 @@ volunteering.accounting_workflow.render_receipt_review_actions = function (frm) 
 									frm,
 									"request_correction",
 									values.notes,
-									{}
+									{},
 								),
 							__("Request receipt correction"),
-							__("Send Back")
+							__("Send Back"),
 						);
 					},
-					__("Receipt Review")
+					__("Receipt Review"),
 				);
 		});
 };
@@ -550,7 +657,7 @@ volunteering.accounting_workflow.submit_receipt_review = function (
 	frm,
 	decision,
 	notes,
-	checklist
+	checklist,
 ) {
 	frappe.dom.freeze();
 	frappe
@@ -583,7 +690,7 @@ volunteering.accounting_workflow.escalate = function (frm) {
 				.then(() => frm.reload_doc())
 				.finally(() => frappe.dom.unfreeze());
 		},
-		__("Escalate for higher approval")
+		__("Escalate for higher approval"),
 	);
 };
 
@@ -651,20 +758,30 @@ volunteering.accounting_workflow.show_manager_float_hint = function (frm) {
 							ctx.manager_name || ctx.manager_employee,
 							format_currency(ctx.total_residual, frm.doc.currency),
 							(ctx.fundable_advances || []).length,
-						]
-				  )
+						],
+					)
 				: __(
 						"Manager {0} has no paid advance with residual. Your manager must Escalate or get an advance paid before approving.",
-						[ctx.manager_name || ctx.manager_employee || __("your manager")]
-				  );
-			frm.set_df_property(
-				"reimbursement_section",
-				"description",
-				msg
-			);
+						[ctx.manager_name || ctx.manager_employee || __("your manager")],
+					);
+			frm.set_df_property("reimbursement_section", "description", msg);
 		});
 };
 
 volunteering.accounting_workflow.setup_form("Expense Claim");
 volunteering.accounting_workflow.setup_form("Purchase Order");
 volunteering.accounting_workflow.setup_form("Employee Advance");
+
+frappe.ui.form.on("Expense Claim Detail", {
+	project_expense_account(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		// The trusted hidden Link is always recomputed by the server on save.
+		frappe.model.set_value(cdt, cdn, "default_account", "");
+		if (frm.doc.project && row.project !== frm.doc.project) {
+			frappe.model.set_value(cdt, cdn, "project", frm.doc.project);
+		}
+	},
+	form_render(frm) {
+		volunteering.accounting_workflow.setup_project_expense_account_selector(frm);
+	},
+});

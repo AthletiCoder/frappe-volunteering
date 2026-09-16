@@ -43,10 +43,9 @@ def assign_department_from_employee(doc, method=None):
 
 
 def ensure_expense_claim_accounts(doc, method=None):
-	"""Set hidden GL accounts server-side so employees never need Account DocPerm.
+	"""Set the company payable account without exposing it to employees.
 
-	The values are deliberately replaced from trusted Company and Expense Claim
-	Type configuration instead of accepting hidden fields from a client payload.
+	Expense row accounts are resolved separately from the Project-scoped selector.
 	"""
 	if doc.doctype != "Expense Claim" or not doc.get("company"):
 		return
@@ -59,23 +58,6 @@ def ensure_expense_claim_accounts(doc, method=None):
 			)
 		)
 	doc.payable_account = payable_account
-
-	for row in doc.get("expenses") or []:
-		if not row.get("expense_type"):
-			continue
-		account = frappe.db.get_value(
-			"Expense Claim Account",
-			{"parent": row.expense_type, "company": doc.company},
-			"default_account",
-		)
-		if not account:
-			frappe.throw(
-				_(
-					"Expense Claim Type {0} has no default account for Company {1}. "
-					"Contact an Accounts administrator."
-				).format(row.expense_type, doc.company)
-			)
-		row.default_account = account
 
 
 def _company_payable_account(company: str) -> str | None:
@@ -126,9 +108,9 @@ def validate_project_has_cost_center(doc, method=None):
 	cost_center = frappe.db.get_value("Project", doc.project, "cost_center")
 	if not cost_center:
 		frappe.throw(
-			_(
-				"Project {0} has no Cost Center. Set Cost Center on the Project before saving {1}."
-			).format(doc.project, doc.doctype)
+			_("Project {0} has no Cost Center. Set Cost Center on the Project before saving {1}.").format(
+				doc.project, doc.doctype
+			)
 		)
 
 
@@ -138,9 +120,7 @@ def validate_purchase_invoice_po_chain(doc, method=None):
 
 	for row in doc.items:
 		if not row.get("purchase_order"):
-			frappe.throw(
-				_("Row {0}: Every line must be linked to a Purchase Order.").format(row.idx)
-			)
+			frappe.throw(_("Row {0}: Every line must be linked to a Purchase Order.").format(row.idx))
 
 		po = frappe.get_doc("Purchase Order", row.purchase_order)
 
@@ -168,33 +148,23 @@ def validate_payment_entry(doc, method=None):
 		if ref.reference_doctype == "Purchase Invoice":
 			pi = frappe.get_doc("Purchase Invoice", ref.reference_name)
 			if pi.get("workflow_state") and pi.get("workflow_state") != "Approved":
-				frappe.throw(
-					_("Payment not allowed. Invoice {0} is not approved.").format(pi.name)
-				)
+				frappe.throw(_("Payment not allowed. Invoice {0} is not approved.").format(pi.name))
 		elif ref.reference_doctype == "Purchase Order":
 			po = frappe.get_doc("Purchase Order", ref.reference_name)
 			if po.get("workflow_state") and po.get("workflow_state") != "Approved":
-				frappe.throw(
-					_("Payment not allowed. Purchase Order {0} is not approved.").format(po.name)
-				)
+				frappe.throw(_("Payment not allowed. Purchase Order {0} is not approved.").format(po.name))
 			if po.docstatus != 1:
-				frappe.throw(
-					_("Payment not allowed. Purchase Order {0} must be submitted.").format(po.name)
-				)
+				frappe.throw(_("Payment not allowed. Purchase Order {0} must be submitted.").format(po.name))
 
 	if doc.party_type == "Employee":
 		if not refs:
-			frappe.throw(
-				_("Employee payments must be linked to an Expense Claim or Employee Advance.")
-			)
+			frappe.throw(_("Employee payments must be linked to an Expense Claim or Employee Advance."))
 
 		for ref in refs:
 			if ref.reference_doctype == "Expense Claim":
 				ec = frappe.get_doc("Expense Claim", ref.reference_name)
 				if ec.get("workflow_state") and ec.get("workflow_state") != "Approved":
-					frappe.throw(
-						_("Payment not allowed. Expense Claim {0} is not approved.").format(ec.name)
-					)
+					frappe.throw(_("Payment not allowed. Expense Claim {0} is not approved.").format(ec.name))
 				from volunteering.volunteering.receipt_review import validate_verified_receipts
 
 				validate_verified_receipts(ec)
@@ -202,9 +172,7 @@ def validate_payment_entry(doc, method=None):
 				ea = frappe.get_doc("Employee Advance", ref.reference_name)
 				if ea.get("workflow_state") and ea.get("workflow_state") != "Approved":
 					frappe.throw(
-						_("Payment not allowed. Employee Advance {0} is not approved.").format(
-							ea.name
-						)
+						_("Payment not allowed. Employee Advance {0} is not approved.").format(ea.name)
 					)
 				_validate_advance_payment_account(doc, ea)
 				_warn_prior_advance_residuals(ea)
@@ -218,9 +186,7 @@ def validate_payment_entry(doc, method=None):
 
 	if doc.party_type == "Supplier":
 		if not refs:
-			frappe.throw(
-				_("Supplier payments must be linked to a Purchase Invoice or Purchase Order.")
-			)
+			frappe.throw(_("Supplier payments must be linked to a Purchase Invoice or Purchase Order."))
 
 		for ref in refs:
 			if ref.reference_doctype not in ("Purchase Invoice", "Purchase Order"):
@@ -274,16 +240,13 @@ def _warn_prior_advance_residuals(employee_advance):
 		return
 
 	residuals = [
-		r
-		for r in residual_advances_for_employee(employee)
-		if r.get("name") != employee_advance.get("name")
+		r for r in residual_advances_for_employee(employee) if r.get("name") != employee_advance.get("name")
 	]
 	if not residuals:
 		return
 
 	parts = [
-		_("{0}: {1}").format(r["name"], frappe.format_value(r["residual"], "Currency"))
-		for r in residuals
+		_("{0}: {1}").format(r["name"], frappe.format_value(r["residual"], "Currency")) for r in residuals
 	]
 	frappe.msgprint(
 		_(

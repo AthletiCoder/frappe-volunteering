@@ -5,9 +5,10 @@ let cachedProject: string | null = null;
 let cachedMasters: {
 	project: string;
 	project_name: string;
+	supplier: string;
 	supplier_name: string;
 	item_code: string;
-	expense_type: string;
+	expense_account: string;
 } | null = null;
 
 /** E2E project id for link fields in Desk forms. */
@@ -32,9 +33,6 @@ export async function getE2eMasters(request: APIRequestContext) {
 }
 
 /** Attach a test receipt to a draft claim (setup-only; not a user-facing action). */
-export async function attachClaimReceipt(
-	request: APIRequestContext,
-	claimName: string,
-): Promise<void> {
+export async function attachClaimReceipt(request: APIRequestContext, claimName: string): Promise<void> {
 	await e2eCall(request, 'attach_claim_receipt', { name: claimName }, 'admin');
 }

@@ -5,10 +5,19 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "employee_label",
   "expense_account",
-  "approved_amount"
+  "approved_amount",
+  "is_active"
  ],
  "fields": [
+  {
+   "description": "Plain-language option shown to employees. Defaults to the account name when left blank.",
+   "fieldname": "employee_label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Employee-facing Label"
+  },
   {
    "fieldname": "expense_account",
    "fieldtype": "Link",
@@ -22,8 +31,15 @@
    "fieldtype": "Currency",
    "in_list_view": 1,
    "label": "Approved Budget",
-   "non_negative": 1,
-   "reqd": 1
+   "non_negative": 1
+  },
+  {
+   "default": "1",
+   "description": "Only active rows are offered to employees on new Expense Claims.",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Available to Employees"
   }
  ],
  "index_web_pages_for_search": 0,

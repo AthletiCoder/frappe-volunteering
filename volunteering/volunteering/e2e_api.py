@@ -14,9 +14,10 @@ from frappe.model.workflow import apply_workflow
 from frappe.utils import add_days, cint, flt, getdate, nowdate
 
 from volunteering.volunteering.accounting_test_utils import (
+	allow_project_expense_account,
 	attach_test_receipt,
 	get_or_create_department,
-	get_or_create_expense_claim_type,
+	get_or_create_expense_account,
 	get_or_create_payable_account,
 	get_or_create_project_with_cost_center,
 	get_or_create_supplier,
@@ -73,8 +74,7 @@ def _reject_user_action(method_name: str):
 	if method_name in _USER_ACTION_METHODS and not frappe.local.form_dict.get("_e2e_allow_api_action"):
 		frappe.throw(
 			_(
-				"E2E user action '{0}' must be performed via browser UI. "
-				"Use Desk forms in Playwright specs."
+				"E2E user action '{0}' must be performed via browser UI. Use Desk forms in Playwright specs."
 			).format(method_name),
 			frappe.ValidationError,
 		)
@@ -222,13 +222,20 @@ def get_masters():
 	from volunteering.volunteering.accounting_test_utils import get_or_create_purchase_item
 
 	project = get_or_create_project_with_cost_center()
+	company = frappe.db.get_value("Project", project, "company")
+	expense_account = get_or_create_expense_account(company)
+	allow_project_expense_account(
+		project,
+		expense_account,
+		label="General project expense",
+	)
 	return {
 		"project": project,
 		"project_name": frappe.db.get_value("Project", project, "project_name") or project,
 		"supplier": get_or_create_supplier(),
 		"supplier_name": "_Test Accounting Supplier",
 		"item_code": get_or_create_purchase_item(),
-		"expense_type": get_or_create_expense_claim_type(),
+		"expense_account": expense_account,
 	}
 
 
@@ -268,6 +275,12 @@ def ensure_fixtures():
 		project = get_or_create_project_with_cost_center()
 		if not frappe.db.exists("Project", {"project_name": E2E_PROJECT_NAME}):
 			frappe.db.set_value("Project", project, "project_name", E2E_PROJECT_NAME)
+	company = frappe.db.get_value("Project", project, "company")
+	allow_project_expense_account(
+		project,
+		get_or_create_expense_account(company),
+		label="General project expense",
+	)
 	dept = get_or_create_department("E2E Operations")
 	for alias in ("employee", "employee_b", "associate", "manager", "director", "chair"):
 		emp = _cast_employee(alias)
@@ -291,9 +304,7 @@ def ensure_fixtures():
 		except Exception:
 			pass
 	unpaid = _cast_employee("unpaid")
-	for name in frappe.get_all(
-		"Leave Policy Assignment", filters={"employee": unpaid}, pluck="name"
-	):
+	for name in frappe.get_all("Leave Policy Assignment", filters={"employee": unpaid}, pluck="name"):
 		try:
 			doc = frappe.get_doc("Leave Policy Assignment", name)
 			if doc.docstatus == 1:

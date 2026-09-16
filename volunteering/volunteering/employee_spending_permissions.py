@@ -7,14 +7,24 @@ EMPLOYEE_SELF_SERVICE_DOCTYPES = (
 	"Project",
 	"Currency",
 	"Cost Center",
-	"Expense Claim Type",
 )
+
+OBSOLETE_EMPLOYEE_SELF_SERVICE_DOCTYPES = ("Expense Claim Type",)
 
 
 def ensure_employee_self_service_permissions():
 	"""Employee role: read/select masters needed for EC, EA, and project tagging."""
 	if not frappe.db.exists("Role", "Employee"):
 		return
+
+	# Expense Claim Type was part of the former type-to-account design. The
+	# employee form now uses the Project's safe account selector instead.
+	for doctype in OBSOLETE_EMPLOYEE_SELF_SERVICE_DOCTYPES:
+		frappe.db.delete(
+			"Custom DocPerm",
+			{"parent": doctype, "role": "Employee", "permlevel": 0, "if_owner": 0},
+		)
+		frappe.clear_cache(doctype=doctype)
 
 	for doctype in EMPLOYEE_SELF_SERVICE_DOCTYPES:
 		if not frappe.db.exists("DocType", doctype):

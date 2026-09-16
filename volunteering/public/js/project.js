@@ -1,3 +1,5 @@
+frappe.provide("volunteering.project_budget");
+
 frappe.ui.form.on("Project", {
 	setup(frm) {
 		frm.set_query("expense_account", "account_budgets", () => ({
@@ -10,6 +12,7 @@ frappe.ui.form.on("Project", {
 		}));
 	},
 	refresh(frm) {
+		volunteering.project_budget.toggle_account_budget_amounts(frm);
 		if (!frm.doc.name || frm.is_new()) {
 			return;
 		}
@@ -27,8 +30,8 @@ frappe.ui.form.on("Project", {
 							frm,
 							__(
 								"Project budget: {0}. Expense Account budgets: {1}. Spend is committed by Expense Claims and Purchase Orders, not advances.",
-								[snap.project_control, snap.account_control]
-							)
+								[snap.project_control, snap.account_control],
+							),
 						);
 						return;
 					}
@@ -42,9 +45,29 @@ frappe.ui.form.on("Project", {
 							allocated,
 							spent,
 							available,
-						])
+						]),
 					);
-				})
+				}),
 		);
 	},
+	account_budget_control(frm) {
+		volunteering.project_budget.toggle_account_budget_amounts(frm);
+	},
 });
+
+volunteering.project_budget.toggle_account_budget_amounts = function (frm) {
+	const grid = frm.fields_dict.account_budgets && frm.fields_dict.account_budgets.grid;
+	if (!grid) {
+		return;
+	}
+	const controlled = (frm.doc.account_budget_control || "No Control") !== "No Control";
+	grid.update_docfield_property("approved_amount", "reqd", controlled ? 1 : 0);
+	grid.update_docfield_property(
+		"approved_amount",
+		"description",
+		controlled
+			? __("Required because Expense Account budget control is enabled.")
+			: __("Optional; this row still controls whether employees may select the account."),
+	);
+	frm.refresh_field("account_budgets");
+};

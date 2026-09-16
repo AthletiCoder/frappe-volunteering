@@ -24,12 +24,19 @@ test.describe('Expense Claim @accounts @ui', () => {
 				}
 			});
 
-			await page.goto(formUrl('Expense Claim'), { waitUntil: 'domcontentloaded' });
+			await page.goto(formUrl('Expense Claim'), {
+				waitUntil: 'domcontentloaded',
+			});
 			await page.waitForFunction(
 				() => {
-					const frm = (window as unknown as {
-						cur_frm?: { doctype?: string; doc?: { employee?: string; company?: string } };
-					}).cur_frm;
+					const frm = (
+						window as unknown as {
+							cur_frm?: {
+								doctype?: string;
+								doc?: { employee?: string; company?: string };
+							};
+						}
+					).cur_frm;
 					return frm?.doctype === 'Expense Claim' && Boolean(frm.doc?.employee && frm.doc?.company);
 				},
 				undefined,
@@ -37,15 +44,21 @@ test.describe('Expense Claim @accounts @ui', () => {
 			);
 			await page.waitForTimeout(1000);
 			const payableField = await page.evaluate(() => {
-				const field = (window as unknown as {
-					cur_frm?: {
-						fields_dict?: {
-							payable_account?: {
-								df?: { reqd?: number; fetch_from?: string; mandatory_depends_on?: string };
+				const field = (
+					window as unknown as {
+						cur_frm?: {
+							fields_dict?: {
+								payable_account?: {
+									df?: {
+										reqd?: number;
+										fetch_from?: string;
+										mandatory_depends_on?: string;
+									};
+								};
 							};
 						};
-					};
-				}).cur_frm?.fields_dict?.payable_account?.df;
+					}
+				).cur_frm?.fields_dict?.payable_account?.df;
 				return {
 					reqd: Number(field?.reqd || 0),
 					fetch_from: field?.fetch_from || '',
@@ -56,7 +69,11 @@ test.describe('Expense Claim @accounts @ui', () => {
 			await expect(
 				page.locator('.modal.show').filter({ hasText: /Insufficient Permission for Account/i }),
 			).toHaveCount(0);
-			expect(payableField).toEqual({ reqd: 0, fetch_from: '', mandatory_depends_on: '' });
+			expect(payableField).toEqual({
+				reqd: 0,
+				fetch_from: '',
+				mandatory_depends_on: '',
+			});
 			expect(accountLinkValidations).toEqual([]);
 		});
 
@@ -76,7 +93,7 @@ test.describe('Expense Claim @accounts @ui', () => {
 			await claim.fillClaim({
 				project,
 				amount: 1500,
-				expenseType: masters.expense_type,
+				expenseAccount: masters.expense_account,
 			});
 			claimName = await claim.saveAndSubmit(request, { reviewReceipts: false });
 
@@ -153,7 +170,7 @@ test.describe('Expense Claim @accounts @ui', () => {
 					await first.fillClaim({
 						project,
 						amount: 2500,
-						expenseType: masters.expense_type,
+						expenseAccount: masters.expense_account,
 					});
 					await first.saveAndSubmit(request);
 
@@ -162,7 +179,7 @@ test.describe('Expense Claim @accounts @ui', () => {
 					await second.fillClaim({
 						project,
 						amount: 1000,
-						expenseType: masters.expense_type,
+						expenseAccount: masters.expense_account,
 					});
 					await second.save({ expectError: /cap|exceed/i });
 				});
@@ -180,10 +197,7 @@ test.describe('Expense Claim @accounts @ui', () => {
 			}
 		});
 
-		test('AC-CLM-003 @regression: Monthly Reimbursement Cap 0 = unlimited', async ({
-			request,
-			browser,
-		}) => {
+		test('AC-CLM-003 @regression: Monthly Reimbursement Cap 0 = unlimited', async ({ request, browser }) => {
 			test.setTimeout(300_000);
 			const project = await getE2eProject(request);
 			const masters = await getE2eMasters(request);
@@ -205,7 +219,7 @@ test.describe('Expense Claim @accounts @ui', () => {
 				await first.fillClaim({
 					project,
 					amount: 1500,
-					expenseType: masters.expense_type,
+					expenseAccount: masters.expense_account,
 				});
 				await first.saveAndSubmit(request);
 
@@ -214,7 +228,7 @@ test.describe('Expense Claim @accounts @ui', () => {
 				await second.fillClaim({
 					project,
 					amount: 1500,
-					expenseType: masters.expense_type,
+					expenseAccount: masters.expense_account,
 				});
 				secondName = await second.saveAndSubmit(request);
 			});
@@ -228,10 +242,7 @@ test.describe('Expense Claim @accounts @ui', () => {
 			expect(workflowState).toBe('Pending Approval');
 		});
 
-		test('AC-CLM-005 @regression: Claim requires receipts before submit', async ({
-			page,
-			request,
-		}) => {
+		test('AC-CLM-005 @regression: Claim requires receipts before submit', async ({ page, request }) => {
 			const project = await getE2eProject(request);
 			const masters = await getE2eMasters(request);
 
@@ -240,7 +251,7 @@ test.describe('Expense Claim @accounts @ui', () => {
 			await claim.fillClaim({
 				project,
 				amount: 1200,
-				expenseType: masters.expense_type,
+				expenseAccount: masters.expense_account,
 			});
 			const draftName = await claim.saveDraft();
 			await claim.submitExpectValidationError(draftName);
@@ -261,7 +272,7 @@ test.describe('Expense Claim @accounts @ui', () => {
 			await claim.fillClaim({
 				project,
 				amount: 1200,
-				expenseType: masters.expense_type,
+				expenseAccount: masters.expense_account,
 			});
 			claimName = await claim.saveAndSubmit(request);
 		});

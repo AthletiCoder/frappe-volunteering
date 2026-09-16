@@ -13,13 +13,9 @@ from volunteering.volunteering.accounting_controls import (
 
 
 class TestExpenseClaimAccountControls(UnitTestCase):
-	@patch("volunteering.volunteering.accounting_controls.frappe.db.get_value")
 	@patch("volunteering.volunteering.accounting_controls._company_payable_account")
-	def test_hidden_accounts_are_replaced_from_trusted_configuration(
-		self, mock_payable_account, mock_get_value
-	):
+	def test_hidden_payable_account_is_replaced_from_trusted_configuration(self, mock_payable_account):
 		mock_payable_account.return_value = "Configured Payable - SF"
-		mock_get_value.return_value = "Configured Expense - SF"
 		doc = frappe._dict(
 			doctype="Expense Claim",
 			company="Sevamrita Foundation",
@@ -35,12 +31,8 @@ class TestExpenseClaimAccountControls(UnitTestCase):
 		ensure_expense_claim_accounts(doc)
 
 		self.assertEqual(doc.payable_account, "Configured Payable - SF")
-		self.assertEqual(doc.expenses[0].default_account, "Configured Expense - SF")
-		mock_get_value.assert_called_once_with(
-			"Expense Claim Account",
-			{"parent": "Travel", "company": "Sevamrita Foundation"},
-			"default_account",
-		)
+		# Line accounts are owned by the Project-scoped selector, not this hook.
+		self.assertEqual(doc.expenses[0].default_account, "Client Supplied Expense - SF")
 
 	@patch("volunteering.volunteering.accounting_controls._company_payable_account")
 	def test_missing_company_payable_account_is_rejected(self, mock_payable_account):
@@ -52,20 +44,6 @@ class TestExpenseClaimAccountControls(UnitTestCase):
 		)
 
 		with self.assertRaisesRegex(frappe.ValidationError, "No payable account is configured"):
-			ensure_expense_claim_accounts(doc)
-
-	@patch("volunteering.volunteering.accounting_controls.frappe.db.get_value")
-	@patch("volunteering.volunteering.accounting_controls._company_payable_account")
-	def test_missing_expense_type_account_is_rejected(self, mock_payable_account, mock_get_value):
-		mock_payable_account.return_value = "Configured Payable - SF"
-		mock_get_value.return_value = None
-		doc = frappe._dict(
-			doctype="Expense Claim",
-			company="Sevamrita Foundation",
-			expenses=[frappe._dict(expense_type="Travel")],
-		)
-
-		with self.assertRaisesRegex(frappe.ValidationError, "has no default account"):
 			ensure_expense_claim_accounts(doc)
 
 
@@ -119,18 +97,14 @@ class TestPaymentEntryControls(UnitTestCase):
 	def test_supplier_pe_against_approved_pi_allowed(self, mock_get_doc):
 		pi = frappe._dict(name="PINV-1", workflow_state="Approved", docstatus=1)
 		mock_get_doc.return_value = pi
-		doc = self._pe(
-			"Supplier", [{"reference_doctype": "Purchase Invoice", "reference_name": "PINV-1"}]
-		)
+		doc = self._pe("Supplier", [{"reference_doctype": "Purchase Invoice", "reference_name": "PINV-1"}])
 		validate_payment_entry(doc)
 
 	@patch("volunteering.volunteering.accounting_controls.frappe.get_doc")
 	def test_supplier_pe_against_unapproved_pi_blocked(self, mock_get_doc):
 		pi = frappe._dict(name="PINV-1", workflow_state="Draft", docstatus=0)
 		mock_get_doc.return_value = pi
-		doc = self._pe(
-			"Supplier", [{"reference_doctype": "Purchase Invoice", "reference_name": "PINV-1"}]
-		)
+		doc = self._pe("Supplier", [{"reference_doctype": "Purchase Invoice", "reference_name": "PINV-1"}])
 		with self.assertRaises(frappe.ValidationError):
 			validate_payment_entry(doc)
 

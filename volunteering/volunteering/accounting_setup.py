@@ -65,6 +65,7 @@ def reload_accounting_workflows():
 def after_migrate():
 	setup_accounting_custom_fields()
 	backfill_project_budget_controls()
+	backfill_project_expense_accounts()
 	ensure_project_budget_field_visibility()
 	backfill_receipt_review_states()
 	remove_obsolete_accounting_custom_fields()
@@ -219,9 +220,7 @@ def _ensure_employee_advance_account(company: str) -> str | None:
 	if frappe.db.has_column("Company", "default_employee_advance_account"):
 		default = frappe.db.get_value("Company", company, "default_employee_advance_account")
 		if default and frappe.db.exists("Account", default):
-			acc = frappe.db.get_value(
-				"Account", default, ["account_name", "account_type"], as_dict=True
-			)
+			acc = frappe.db.get_value("Account", default, ["account_name", "account_type"], as_dict=True)
 			if acc and acc.account_type == "Receivable" and "debtor" not in (acc.account_name or "").lower():
 				return default
 
@@ -362,13 +361,18 @@ def ensure_expense_claim_field_visibility():
 	):
 		if not frappe.db.exists("DocType", doctype):
 			continue
-		if not frappe.db.exists("DocField", {"parent": doctype, "fieldname": fieldname}) and not frappe.db.exists(
-			"Custom Field", {"dt": doctype, "fieldname": fieldname}
-		):
+		if not frappe.db.exists(
+			"DocField", {"parent": doctype, "fieldname": fieldname}
+		) and not frappe.db.exists("Custom Field", {"dt": doctype, "fieldname": fieldname}):
 			continue
 		_ensure_property_setter(doctype, fieldname, "ignore_user_permissions", "1", "Check")
 
 	_ensure_property_setter("Expense Claim Detail", "default_account", "hidden", "1", "Check")
+	# Expense Claim Type is no longer the accounting source. Employees use the
+	# safe Project-scoped Autocomplete field instead.
+	_ensure_property_setter("Expense Claim Detail", "expense_type", "hidden", "1", "Check")
+	_ensure_property_setter("Expense Claim Detail", "expense_type", "reqd", "0", "Check")
+	_ensure_property_setter("Expense Claim Detail", "expense_type", "in_list_view", "0", "Check")
 	# HRMS fetches this Account in the browser when Company is set. Link validation
 	# still requires Account DocPerm even with ignore_user_permissions enabled, so
 	# employees see an Account permission error while opening a blank claim. The
@@ -445,9 +449,7 @@ def ensure_project_types():
 	for name in PROJECT_TYPES:
 		if frappe.db.exists("Project Type", name):
 			continue
-		frappe.get_doc({"doctype": "Project Type", "project_type": name}).insert(
-			ignore_permissions=True
-		)
+		frappe.get_doc({"doctype": "Project Type", "project_type": name}).insert(ignore_permissions=True)
 
 
 def remove_obsolete_accounting_custom_fields():
@@ -456,6 +458,10 @@ def remove_obsolete_accounting_custom_fields():
 		"Project-fund_project_type",
 		"Expense Claim-department",
 		"Employee Advance-is_emergency",
+		"Expense Claim-account_classification_section",
+		"Expense Claim-account_classified_by",
+		"Expense Claim-account_classified_on",
+		"Expense Claim Detail-expense_category",
 	):
 		if frappe.db.exists("Custom Field", fieldname):
 			frappe.delete_doc("Custom Field", fieldname, ignore_permissions=True, force=True)
@@ -470,9 +476,9 @@ def ensure_workflow_actions():
 	for action_name in ("Submit", "Re-submit", "Approve", "Reject", "Escalate"):
 		if frappe.db.exists("Workflow Action Master", action_name):
 			continue
-		frappe.get_doc(
-			{"doctype": "Workflow Action Master", "workflow_action_name": action_name}
-		).insert(ignore_permissions=True)
+		frappe.get_doc({"doctype": "Workflow Action Master", "workflow_action_name": action_name}).insert(
+			ignore_permissions=True
+		)
 
 
 def ensure_workflow_states():
@@ -548,9 +554,7 @@ def backfill_project_budget_controls():
 		as_dict=True,
 	)
 	for row in legacy_totals:
-		if flt(row.total) <= 0 or flt(
-			frappe.db.get_value("Project", row.parent, "total_approved_budget")
-		):
+		if flt(row.total) <= 0 or flt(frappe.db.get_value("Project", row.parent, "total_approved_budget")):
 			continue
 		frappe.db.set_value(
 			"Project",
@@ -561,6 +565,84 @@ def backfill_project_budget_controls():
 			},
 			update_modified=False,
 		)
+
+
+def backfill_project_expense_accounts(*, seed_empty_projects=False):
+	"""Convert the former global account choices into Project allow-lists.
+
+	The one-time migration patch passes ``seed_empty_projects=True`` so older
+	Projects inherit accounts previously mapped through Expense Claim Types.
+	Normal after-migrate runs only normalize/backfill existing rows and claims;
+	they must not undo an administrator's later decision to leave a Project empty.
+	"""
+	if not (
+		frappe.db.exists("DocType", "Project Account Budget")
+		and frappe.db.has_column("Project Account Budget", "employee_label")
+		and frappe.db.has_column("Expense Claim Detail", "project_expense_account")
+	):
+		return
+
+	def account_label(account):
+		return frappe.db.get_value("Account", account, "account_name") or account
+
+	legacy_by_company = {}
+	for row in frappe.get_all(
+		"Expense Claim Account", fields=["company", "default_account"], order_by="idx asc"
+	):
+		if not row.company or not row.default_account:
+			continue
+		legacy_by_company.setdefault(row.company, [])
+		if row.default_account not in legacy_by_company[row.company]:
+			legacy_by_company[row.company].append(row.default_account)
+
+	for project in frappe.get_all("Project", fields=["name", "company"]):
+		rows = frappe.get_all(
+			"Project Account Budget",
+			filters={
+				"parent": project.name,
+				"parenttype": "Project",
+				"parentfield": "account_budgets",
+			},
+			fields=["name", "expense_account", "employee_label", "is_active"],
+			order_by="idx asc",
+		)
+		for row in rows:
+			updates = {}
+			if not row.employee_label:
+				updates["employee_label"] = account_label(row.expense_account)
+			if row.is_active is None:
+				updates["is_active"] = 1
+			if updates:
+				frappe.db.set_value("Project Account Budget", row.name, updates, update_modified=False)
+		if rows or not seed_empty_projects:
+			continue
+
+		accounts = legacy_by_company.get(project.company) or []
+		if not accounts:
+			continue
+		project_doc = frappe.get_doc("Project", project.name)
+		for account in accounts:
+			project_doc.append(
+				"account_budgets",
+				{
+					"employee_label": account_label(account),
+					"expense_account": account,
+					"approved_amount": 0,
+					"is_active": 1,
+				},
+			)
+		project_doc.save(ignore_permissions=True)
+
+	# Preserve the visible choice on historical rows. Any future save still
+	# validates it against the Project's current active allow-list.
+	frappe.db.sql(
+		"""
+		UPDATE `tabExpense Claim Detail`
+		SET project_expense_account = default_account
+		WHERE IFNULL(project_expense_account, '') = ''
+			AND IFNULL(default_account, '') != ''
+		"""
+	)
 
 
 def ensure_project_budget_field_visibility():
@@ -575,9 +657,7 @@ def ensure_project_budget_field_visibility():
 		"department_budgets": 1,
 	}
 	for fieldname, hidden in visibility.items():
-		name = frappe.db.get_value(
-			"Custom Field", {"dt": "Project", "fieldname": fieldname}, "name"
-		)
+		name = frappe.db.get_value("Custom Field", {"dt": "Project", "fieldname": fieldname}, "name")
 		if name is not None:
 			frappe.db.set_value("Custom Field", name, "hidden", hidden, update_modified=False)
 	frappe.clear_cache(doctype="Project")
@@ -648,13 +728,9 @@ def ensure_receipt_reviewer_permissions():
 	):
 		add_permission("Expense Claim", role, permlevel=0, ptype="read")
 	for permission_type in ("read", "select", "report", "print", "email"):
-		update_permission_property(
-			"Expense Claim", role, 0, permission_type, 1, validate=False
-		)
+		update_permission_property("Expense Claim", role, 0, permission_type, 1, validate=False)
 	for permission_type in ("write", "create", "delete", "submit", "cancel", "amend"):
-		update_permission_property(
-			"Expense Claim", role, 0, permission_type, 0, validate=False
-		)
+		update_permission_property("Expense Claim", role, 0, permission_type, 0, validate=False)
 	frappe.clear_cache(doctype="Expense Claim")
 
 
@@ -662,9 +738,7 @@ def ensure_designations():
 	for name in DEFAULT_DESIGNATIONS:
 		if frappe.db.exists("Designation", name):
 			continue
-		frappe.get_doc({"doctype": "Designation", "designation_name": name}).insert(
-			ignore_permissions=True
-		)
+		frappe.get_doc({"doctype": "Designation", "designation_name": name}).insert(ignore_permissions=True)
 
 
 def ensure_employee_grades():
@@ -675,9 +749,7 @@ def ensure_employee_grades():
 		if frappe.db.exists("Employee Grade", name):
 			continue
 		try:
-			frappe.get_doc({"doctype": "Employee Grade", "__newname": name}).insert(
-				ignore_permissions=True
-			)
+			frappe.get_doc({"doctype": "Employee Grade", "__newname": name}).insert(ignore_permissions=True)
 		except frappe.DuplicateEntryError:
 			continue
 
@@ -763,10 +835,7 @@ def ensure_expense_claim_payable_account():
 			continue
 
 		replacement = company.default_payable_account
-		if not (
-			replacement
-			and frappe.db.get_value("Account", replacement, "account_type") == "Payable"
-		):
+		if not (replacement and frappe.db.get_value("Account", replacement, "account_type") == "Payable"):
 			replacement = frappe.db.get_value(
 				"Account",
 				{

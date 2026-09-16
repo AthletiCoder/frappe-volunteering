@@ -43,7 +43,11 @@ test.describe('Cross-module shared employee master @hr @accounts @ui', () => {
 		await withPersona(browser, 'employee', async (page) => {
 			const leave = new LeaveApplicationFormPage(page);
 			await leave.openNew();
-			await leave.fillLeave({ fromDate: leaveDate, toDate: leaveDate, category: 'Normal' });
+			await leave.fillLeave({
+				fromDate: leaveDate,
+				toDate: leaveDate,
+				category: 'Normal',
+			});
 			leaveName = await leave.saveDraft();
 		});
 
@@ -66,7 +70,7 @@ test.describe('Cross-module shared employee master @hr @accounts @ui', () => {
 			await claim.fillClaim({
 				project,
 				amount: 1500,
-				expenseType: masters.expense_type,
+				expenseAccount: masters.expense_account,
 			});
 			claimName = await claim.saveAndSubmit(request);
 		});
@@ -222,12 +226,7 @@ test.describe('Cross-module shared employee master @hr @accounts @ui', () => {
 				const date = addDays(todayLocal(), -1);
 				await cleanupDay(request, emp, date, 'admin');
 
-				await e2eCall(
-					request,
-					'trigger_attendance_job',
-					{ attendance_date: date },
-					'admin',
-				);
+				await e2eCall(request, 'trigger_attendance_job', { attendance_date: date }, 'admin');
 
 				const att = await e2eCall<{ status: string } | null>(
 					request,

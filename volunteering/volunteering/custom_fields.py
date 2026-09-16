@@ -45,10 +45,7 @@ _PENDING_STATES_DEPENDS = (
 	"'Pending Board Member', 'Pending Board Chair'].includes(doc.workflow_state)"
 )
 
-_BUDGET_REASON_DEPENDS = (
-	"eval:doc.budget_override_reason || "
-	"doc.workflow_state=='Pending Approval'"
-)
+_BUDGET_REASON_DEPENDS = "eval:doc.budget_override_reason || doc.workflow_state=='Pending Approval'"
 
 _VENDOR_REASON_DEPENDS = "eval:doc.vendor_override_reason || doc.is_emergency"
 
@@ -158,8 +155,7 @@ ACCOUNTING_CUSTOM_FIELDS = {
 			"insert_after": "is_emergency",
 			"depends_on": _VENDOR_REASON_DEPENDS,
 			"description": (
-				"Required when reimbursing above the vendor payment threshold "
-				"without using a Purchase Order."
+				"Required when reimbursing above the vendor payment threshold without using a Purchase Order."
 			),
 		},
 		{
@@ -279,6 +275,22 @@ ACCOUNTING_CUSTOM_FIELDS = {
 			"read_only": 1,
 			"hidden": 1,
 			"description": "Immutable names and hashes of the files covered by the review.",
+		},
+	],
+	"Expense Claim Detail": [
+		{
+			"fieldname": "project_expense_account",
+			"label": "Project Expense Account",
+			"fieldtype": "Autocomplete",
+			"insert_after": "column_break_2",
+			"reqd": 1,
+			"in_list_view": 1,
+			"print_width": "180px",
+			"width": "200px",
+			"description": (
+				"Choose an Expense Account permitted for the selected Project. "
+				"This does not provide Chart of Accounts or balance access."
+			),
 		},
 	],
 	"Purchase Order": [
@@ -402,10 +414,14 @@ ACCOUNTING_CUSTOM_FIELDS = {
 		},
 		{
 			"fieldname": "account_budgets",
-			"label": "Expense Account Budgets",
+			"label": "Allowed Expense Accounts & Budgets",
 			"fieldtype": "Table",
 			"options": "Project Account Budget",
 			"insert_after": "account_budget_control",
+			"description": (
+				"These are the only Expense Accounts employees can select for this Project. "
+				"Approved Budget is optional when Expense Account Budget Control is No Control."
+			),
 		},
 		{
 			"fieldname": "department_budgets_section",

@@ -78,7 +78,9 @@ test.describe('Vendor payment @accounts @ui', () => {
 		await withPersona(browser, 'accounts', async (page) => {
 			const pi = new PurchaseInvoiceFormPage(page);
 			await pi.openNew();
-			await pi.save({ expectError: /purchase order|supplier|required|mandatory|item/i });
+			await pi.save({
+				expectError: /purchase order|supplier|required|mandatory|item/i,
+			});
 		});
 
 		let pendingPoName = '';
@@ -163,7 +165,7 @@ test.describe('Vendor payment @accounts @ui', () => {
 			await claim.fillClaim({
 				project,
 				amount: 6000,
-				expenseType: masters.expense_type,
+				expenseAccount: masters.expense_account,
 			});
 			await claim.saveExpectVendorWarning();
 		});
@@ -172,9 +174,7 @@ test.describe('Vendor payment @accounts @ui', () => {
 	test.describe('as accounts', () => {
 		test.use({ storageState: personaStorage('accounts') });
 
-		test('AC-VEN-004 @regression @critical: Accounts can open Payment Entry form', async ({
-			page,
-		}) => {
+		test('AC-VEN-004 @regression @critical: Accounts can open Payment Entry form', async ({ page }) => {
 			const pe = new PaymentEntryFormPage(page);
 			await pe.expectFormReachable();
 		});
@@ -276,7 +276,11 @@ test.describe('Vendor payment @accounts @ui', () => {
 			const outstanding = await e2eCall<number>(
 				request,
 				'get_doc_field',
-				{ doctype: 'Purchase Invoice', name: piName, field: 'outstanding_amount' },
+				{
+					doctype: 'Purchase Invoice',
+					name: piName,
+					field: 'outstanding_amount',
+				},
 				'accounts',
 			);
 			expect(Number(outstanding)).toBe(0);
@@ -307,7 +311,7 @@ test.describe('Vendor payment @accounts @ui', () => {
 			await claim.fillClaim({
 				project,
 				amount: 6000,
-				expenseType: masters.expense_type,
+				expenseAccount: masters.expense_account,
 				vendorOverrideReason: 'Vendor does not accept POs',
 			});
 			claimName = await claim.saveAndSubmit(request);

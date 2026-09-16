@@ -1,10 +1,5 @@
 import { expect, test } from '@playwright/test';
-import {
-	cleanupEmployeeAdvances,
-	e2eCall,
-	getCast,
-	repairE2eReportsToChain,
-} from '../../helpers/e2e-api';
+import { cleanupEmployeeAdvances, e2eCall, getCast, repairE2eReportsToChain } from '../../helpers/e2e-api';
 import { withPersona } from '../../helpers/persona-context';
 import { personaStorage } from '../../helpers/personas';
 import { EmployeeAdvanceFormPage } from '../../pages/desk/employee-advance.page';
@@ -45,7 +40,11 @@ test.describe('Employee Advance @accounts @ui', () => {
 			const workflowState = await e2eCall<string>(
 				request,
 				'get_doc_field',
-				{ doctype: 'Employee Advance', name: advanceName, field: 'workflow_state' },
+				{
+					doctype: 'Employee Advance',
+					name: advanceName,
+					field: 'workflow_state',
+				},
 				'admin',
 			);
 			expect(workflowState).toBe('Pending Approval');
@@ -59,7 +58,11 @@ test.describe('Employee Advance @accounts @ui', () => {
 			const approvedState = await e2eCall<string>(
 				request,
 				'get_doc_field',
-				{ doctype: 'Employee Advance', name: advanceName, field: 'workflow_state' },
+				{
+					doctype: 'Employee Advance',
+					name: advanceName,
+					field: 'workflow_state',
+				},
 				'admin',
 			);
 			expect(approvedState).toBe('Approved');
@@ -101,10 +104,7 @@ test.describe('Employee Advance @accounts @ui', () => {
 			await advance.saveDraft();
 		});
 
-		test('AC-ADV-005 @regression @critical: Large leftover blocks new advance', async ({
-			page,
-			request,
-		}) => {
+		test('AC-ADV-005 @regression @critical: Large leftover blocks new advance', async ({ page, request }) => {
 			const cast = await getCast(request, 'employee');
 			const emp = cast.employee.employee!;
 			await cleanupEmployeeAdvances(request, emp);
@@ -212,7 +212,7 @@ test.describe('Employee Advance @accounts @ui', () => {
 			await claim.fillClaim({
 				project,
 				amount: 1500,
-				expenseType: masters.expense_type,
+				expenseAccount: masters.expense_account,
 			});
 		});
 
@@ -239,10 +239,7 @@ test.describe('Employee Advance @accounts @ui', () => {
 		});
 	});
 
-	test('AC-ADV-004 @regression: Accounts can create advance for another', async ({
-		browser,
-		request,
-	}) => {
+	test('AC-ADV-004 @regression: Accounts can create advance for another', async ({ browser, request }) => {
 		const cast = await getCast(request, 'accounts');
 		const emp = cast.employee.employee!;
 		await cleanupEmployeeAdvances(request, emp);
@@ -263,7 +260,11 @@ test.describe('Employee Advance @accounts @ui', () => {
 		const workflowState = await e2eCall<string>(
 			request,
 			'get_doc_field',
-			{ doctype: 'Employee Advance', name: advanceName, field: 'workflow_state' },
+			{
+				doctype: 'Employee Advance',
+				name: advanceName,
+				field: 'workflow_state',
+			},
 			'admin',
 		);
 		expect(workflowState).toBe('Pending Approval');
@@ -284,7 +285,9 @@ test.describe('Employee Advance @accounts @ui', () => {
 			const desk = new DeskForm(page);
 			await desk.gotoReport('Employee Advances with Residual');
 			await expect(page.locator('.report-wrapper')).toBeVisible();
-			await expect(page.locator('.report-wrapper .dt-scrollable, .report-wrapper .datatable').first()).toBeVisible({
+			await expect(
+				page.locator('.report-wrapper .dt-scrollable, .report-wrapper .datatable').first(),
+			).toBeVisible({
 				timeout: 30000,
 			});
 		});

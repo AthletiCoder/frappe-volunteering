@@ -26,8 +26,7 @@ export class ExpenseClaimFormPage extends DeskForm {
 		const docLoaded = await this.page
 			.waitForFunction(
 				(expected) =>
-					(window as unknown as { cur_frm?: { doc?: { name?: string } } }).cur_frm?.doc?.name ===
-					expected,
+					(window as unknown as { cur_frm?: { doc?: { name?: string } } }).cur_frm?.doc?.name === expected,
 				name,
 				{ timeout: 15000 },
 			)
@@ -44,7 +43,9 @@ export class ExpenseClaimFormPage extends DeskForm {
 				([doctype, docname]) => {
 					(
 						window as unknown as {
-							frappe: { set_route: (type: string, doctype: string, name: string) => void };
+							frappe: {
+								set_route: (type: string, doctype: string, name: string) => void;
+							};
 						}
 					).frappe.set_route('Form', doctype, docname);
 				},
@@ -53,15 +54,12 @@ export class ExpenseClaimFormPage extends DeskForm {
 		}
 		await this.page.waitForFunction(
 			(expected) =>
-				(window as unknown as { cur_frm?: { doc?: { name?: string } } }).cur_frm?.doc?.name ===
-				expected,
+				(window as unknown as { cur_frm?: { doc?: { name?: string } } }).cur_frm?.doc?.name === expected,
 			name,
 			{ timeout: 45000 },
 		);
 		await this.page.waitForFunction(
-			() =>
-				document.querySelectorAll('.form-layout .frappe-control, .form-page .frappe-control')
-					.length > 0,
+			() => document.querySelectorAll('.form-layout .frappe-control, .form-page .frappe-control').length > 0,
 			undefined,
 			{ timeout: 45000 },
 		);
@@ -69,7 +67,9 @@ export class ExpenseClaimFormPage extends DeskForm {
 		await this.page.evaluate(() => {
 			const win = window as unknown as {
 				cur_frm?: unknown;
-				volunteering?: { accounting_workflow?: { render_actions?: (frm: unknown) => void } };
+				volunteering?: {
+					accounting_workflow?: { render_actions?: (frm: unknown) => void };
+				};
 			};
 			if (win.cur_frm && win.volunteering?.accounting_workflow?.render_actions) {
 				win.volunteering.accounting_workflow.render_actions(win.cur_frm);
@@ -78,16 +78,16 @@ export class ExpenseClaimFormPage extends DeskForm {
 		await this.page
 			.waitForResponse(
 				(resp) =>
-					resp.url().includes('get_approver_action_flags') &&
-					resp.request().method() === 'POST' &&
-					resp.ok(),
+					resp.url().includes('get_approver_action_flags') && resp.request().method() === 'POST' && resp.ok(),
 				{ timeout: 30000 },
 			)
 			.catch(() => {});
 		await this.page.evaluate(() => {
 			const win = window as unknown as {
 				cur_frm?: unknown;
-				volunteering?: { accounting_workflow?: { render_actions?: (frm: unknown) => void } };
+				volunteering?: {
+					accounting_workflow?: { render_actions?: (frm: unknown) => void };
+				};
 			};
 			if (win.cur_frm && win.volunteering?.accounting_workflow?.render_actions) {
 				win.volunteering.accounting_workflow.render_actions(win.cur_frm);
@@ -102,9 +102,11 @@ export class ExpenseClaimFormPage extends DeskForm {
 		can_reject?: boolean;
 	}> {
 		return this.page.evaluate(async () => {
-			const frm = (window as unknown as {
-				cur_frm?: { doctype: string; doc: { name: string } };
-			}).cur_frm;
+			const frm = (
+				window as unknown as {
+					cur_frm?: { doctype: string; doc: { name: string } };
+				}
+			).cur_frm;
 			if (!frm) {
 				throw new Error('Expense Claim form is not loaded');
 			}
@@ -152,9 +154,7 @@ export class ExpenseClaimFormPage extends DeskForm {
 		await this.page
 			.waitForResponse(
 				(resp) =>
-					resp.url().includes('get_approver_action_flags') &&
-					resp.request().method() === 'POST' &&
-					resp.ok(),
+					resp.url().includes('get_approver_action_flags') && resp.request().method() === 'POST' && resp.ok(),
 				{ timeout: 45000 },
 			)
 			.catch(() => {});
@@ -184,18 +184,29 @@ export class ExpenseClaimFormPage extends DeskForm {
 		await this.page.evaluate(async () => {
 			const win = window as unknown as {
 				cur_frm?: {
-					doc?: { employee?: string; expense_approver?: string; currency?: string };
-					set_value: (f: string, v: string) => Promise<unknown>;
+					doc?: {
+						employee?: string;
+						expense_approver?: string;
+						currency?: string;
+						company?: string;
+						department?: string;
+						exchange_rate?: number;
+						posting_date?: string;
+					};
+					set_value: (f: string, v: string | number) => Promise<unknown>;
 					trigger?: (e: string) => void;
 				};
 				frappe?: {
 					session: { user: string };
+					datetime: { get_today: () => string };
 					db: {
 						get_value: (
 							dt: string,
 							f: Record<string, string> | string,
 							field: string | string[],
-						) => Promise<{ message?: Record<string, string> & { name?: string } }>;
+						) => Promise<{
+							message?: Record<string, string> & { name?: string };
+						}>;
 					};
 					xcall: (method: string, args: Record<string, string>) => Promise<string | null>;
 				};
@@ -214,10 +225,7 @@ export class ExpenseClaimFormPage extends DeskForm {
 			}
 			frm.trigger?.('employee');
 			if (frm.doc?.employee) {
-				const empRes = await win.frappe.db.get_value('Employee', frm.doc.employee, [
-					'company',
-					'department',
-				]);
+				const empRes = await win.frappe.db.get_value('Employee', frm.doc.employee, ['company', 'department']);
 				const employeeMeta = empRes?.message || {};
 				if (!frm.doc?.company && employeeMeta.company) {
 					await frm.set_value('company', employeeMeta.company);
@@ -236,11 +244,7 @@ export class ExpenseClaimFormPage extends DeskForm {
 				}
 			}
 			if (!frm.doc?.currency && frm.doc?.company) {
-				const currencyRes = await win.frappe.db.get_value(
-					'Company',
-					frm.doc.company,
-					'default_currency',
-				);
+				const currencyRes = await win.frappe.db.get_value('Company', frm.doc.company, 'default_currency');
 				const currency =
 					typeof currencyRes?.message === 'string'
 						? currencyRes.message
@@ -256,23 +260,21 @@ export class ExpenseClaimFormPage extends DeskForm {
 		});
 		await this.page.waitForFunction(
 			() => {
-				const doc = (window as unknown as {
-					cur_frm?: {
-						doc?: {
-							currency?: string;
-							expense_approver?: string;
-							employee?: string;
-							company?: string;
-							exchange_rate?: number;
+				const doc = (
+					window as unknown as {
+						cur_frm?: {
+							doc?: {
+								currency?: string;
+								expense_approver?: string;
+								employee?: string;
+								company?: string;
+								exchange_rate?: number;
+							};
 						};
-					};
-				}).cur_frm?.doc;
+					}
+				).cur_frm?.doc;
 				return Boolean(
-					doc?.employee &&
-						doc?.currency &&
-						doc?.expense_approver &&
-						doc?.company &&
-						doc?.exchange_rate,
+					doc?.employee && doc?.currency && doc?.expense_approver && doc?.company && doc?.exchange_rate,
 				);
 			},
 			undefined,
@@ -280,9 +282,9 @@ export class ExpenseClaimFormPage extends DeskForm {
 		);
 	}
 
-	private async setExpenseRow(expenseType: string, amount: number): Promise<void> {
+	private async setExpenseRow(expenseAccount: string, amount: number): Promise<void> {
 		await this.page.evaluate(
-			async ({ expenseType: type, amount: amt }) => {
+			async ({ expenseAccount: account, amount: amt }) => {
 				const win = window as unknown as {
 					cur_frm?: {
 						clear_table: (table: string) => void;
@@ -291,12 +293,7 @@ export class ExpenseClaimFormPage extends DeskForm {
 					};
 					frappe?: {
 						model: {
-							set_value: (
-								dt: string,
-								name: string,
-								field: string,
-								val: string | number,
-							) => Promise<void>;
+							set_value: (dt: string, name: string, field: string, val: string | number) => Promise<void>;
 						};
 					};
 				};
@@ -306,24 +303,66 @@ export class ExpenseClaimFormPage extends DeskForm {
 				}
 				frm.clear_table('expenses');
 				const row = frm.add_child('expenses');
-				await win.frappe.model.set_value(row.doctype, row.name, 'expense_type', type);
+				await win.frappe.model.set_value(row.doctype, row.name, 'project_expense_account', account);
 				await win.frappe.model.set_value(row.doctype, row.name, 'description', 'E2E test expense');
 				await win.frappe.model.set_value(row.doctype, row.name, 'amount', amt);
 				await win.frappe.model.set_value(row.doctype, row.name, 'sanctioned_amount', amt);
 				frm.refresh_field('expenses');
 			},
-			{ expenseType, amount },
+			{ expenseAccount, amount },
 		);
 		await this.page.waitForFunction(
-			({ type, amt }) => {
+			({ account, amt }) => {
 				const expenses =
-					(window as unknown as { cur_frm?: { doc?: { expenses?: Array<{ expense_type?: string; amount?: number }> } } })
-						.cur_frm?.doc?.expenses || [];
-				return expenses.some((row) => row.expense_type === type && Number(row.amount) === amt);
+					(
+						window as unknown as {
+							cur_frm?: {
+								doc?: {
+									expenses?: Array<{
+										project_expense_account?: string;
+										amount?: number;
+									}>;
+								};
+							};
+						}
+					).cur_frm?.doc?.expenses || [];
+				return expenses.some((row) => row.project_expense_account === account && Number(row.amount) === amt);
 			},
-			{ type: expenseType, amt: amount },
+			{ account: expenseAccount, amt: amount },
 			{ timeout: 10000 },
 		);
+	}
+
+	private async resolveProjectExpenseAccount(project: string, preferred?: string): Promise<string> {
+		const account = await this.page.evaluate(
+			async ({ project: selectedProject, preferred: preferredAccount }) => {
+				const win = window as unknown as {
+					cur_frm?: { doc?: { company?: string } };
+					frappe?: {
+						xcall: (
+							method: string,
+							args: Record<string, string | undefined>,
+						) => Promise<Array<{ value: string }>>;
+					};
+				};
+				const options = await win.frappe?.xcall(
+					'volunteering.volunteering.project_expense_accounts.get_project_expense_account_options',
+					{
+						project: selectedProject,
+						company: win.cur_frm?.doc?.company,
+					},
+				);
+				if (preferredAccount && options?.some((row) => row.value === preferredAccount)) {
+					return preferredAccount;
+				}
+				return options?.[0]?.value || '';
+			},
+			{ project, preferred },
+		);
+		if (!account) {
+			throw new Error(`Project ${project} has no employee-selectable Expense Account`);
+		}
+		return account;
 	}
 
 	private async setProject(project: string): Promise<void> {
@@ -334,7 +373,13 @@ export class ExpenseClaimFormPage extends DeskForm {
 					set_value: (f: string, v: string) => Promise<unknown>;
 				};
 				frappe?: {
-					db: { get_value: (dt: string, name: string, field: string) => Promise<{ message?: { cost_center?: string } }> };
+					db: {
+						get_value: (
+							dt: string,
+							name: string,
+							field: string,
+						) => Promise<{ message?: { cost_center?: string } }>;
+					};
 					model: {
 						set_value: (dt: string, name: string, field: string, val: string) => Promise<void>;
 					};
@@ -346,8 +391,7 @@ export class ExpenseClaimFormPage extends DeskForm {
 			}
 			await frm.set_value('project', proj);
 			const ccRes = await win.frappe?.db.get_value('Project', proj, 'cost_center');
-			const costCenter =
-				typeof ccRes?.message === 'string' ? ccRes.message : ccRes?.message?.cost_center;
+			const costCenter = typeof ccRes?.message === 'string' ? ccRes.message : ccRes?.message?.cost_center;
 			if (costCenter) {
 				await frm.set_value('cost_center', costCenter);
 				for (const row of frm.doc?.expenses || []) {
@@ -357,8 +401,7 @@ export class ExpenseClaimFormPage extends DeskForm {
 		}, project);
 		await this.page.waitForFunction(
 			(proj) =>
-				(window as unknown as { cur_frm?: { doc?: { project?: string } } }).cur_frm?.doc?.project ===
-				proj,
+				(window as unknown as { cur_frm?: { doc?: { project?: string } } }).cur_frm?.doc?.project === proj,
 			project,
 			{ timeout: 10000 },
 		);
@@ -367,78 +410,76 @@ export class ExpenseClaimFormPage extends DeskForm {
 	async setReimbursementSource(source: 'Out of Pocket' | 'Manager Advance'): Promise<void> {
 		await this.clickTab('Approval & Routing');
 		await this.page.evaluate(async (value) => {
-			const frm = (window as unknown as {
-				cur_frm?: { set_value: (field: string, val: string) => Promise<unknown> };
-			}).cur_frm;
+			const frm = (
+				window as unknown as {
+					cur_frm?: {
+						set_value: (field: string, val: string) => Promise<unknown>;
+					};
+				}
+			).cur_frm;
 			if (frm) {
 				await frm.set_value('reimbursement_source', value);
 			}
 		}, source);
 		await this.page.waitForFunction(
 			(expected) =>
-				(window as unknown as { cur_frm?: { doc?: { reimbursement_source?: string } } }).cur_frm?.doc
-					?.reimbursement_source === expected,
+				(
+					window as unknown as {
+						cur_frm?: { doc?: { reimbursement_source?: string } };
+					}
+				).cur_frm?.doc?.reimbursement_source === expected,
 			source,
 			{ timeout: 10000 },
 		);
 	}
 
 	async fillExpenseRowWithoutProject(options: {
-		expenseType: string;
+		expenseAccount: string;
 		description: string;
 		amount: number;
 	}): Promise<void> {
 		await this.ensureSelfEmployee();
 		await this.clickTab('Expenses & Advances');
-		await this.page.evaluate(
-			async ({ expenseType, description, amount }) => {
-				const win = window as unknown as {
-					cur_frm?: {
-						clear_table: (table: string) => void;
-						add_child: (table: string) => { doctype: string; name: string };
-						refresh_field: (table: string) => void;
-					};
-					frappe?: {
-						model: {
-							set_value: (
-								dt: string,
-								name: string,
-								field: string,
-								val: string | number,
-							) => Promise<void>;
-						};
+		await this.page.evaluate(async ({ expenseAccount, description, amount }) => {
+			const win = window as unknown as {
+				cur_frm?: {
+					clear_table: (table: string) => void;
+					add_child: (table: string) => { doctype: string; name: string };
+					refresh_field: (table: string) => void;
+				};
+				frappe?: {
+					model: {
+						set_value: (dt: string, name: string, field: string, val: string | number) => Promise<void>;
 					};
 				};
-				const frm = win.cur_frm;
-				if (!frm || !win.frappe?.model) {
-					throw new Error('Expense Claim form is not loaded');
-				}
-				frm.clear_table('expenses');
-				const row = frm.add_child('expenses');
-				await win.frappe.model.set_value(row.doctype, row.name, 'expense_type', expenseType);
-				await win.frappe.model.set_value(row.doctype, row.name, 'description', description);
-				await win.frappe.model.set_value(row.doctype, row.name, 'amount', amount);
-				await win.frappe.model.set_value(row.doctype, row.name, 'sanctioned_amount', amount);
-				frm.refresh_field('expenses');
-			},
-			options,
-		);
+			};
+			const frm = win.cur_frm;
+			if (!frm || !win.frappe?.model) {
+				throw new Error('Expense Claim form is not loaded');
+			}
+			frm.clear_table('expenses');
+			const row = frm.add_child('expenses');
+			await win.frappe.model.set_value(row.doctype, row.name, 'project_expense_account', expenseAccount);
+			await win.frappe.model.set_value(row.doctype, row.name, 'description', description);
+			await win.frappe.model.set_value(row.doctype, row.name, 'amount', amount);
+			await win.frappe.model.set_value(row.doctype, row.name, 'sanctioned_amount', amount);
+			frm.refresh_field('expenses');
+		}, options);
 	}
 
 	async fillClaim(options: {
 		project: string;
 		amount: number;
-		expenseType?: string;
+		expenseAccount?: string;
 		vendorOverrideReason?: string;
 		budgetOverrideReason?: string;
 		reimbursementSource?: 'Out of Pocket' | 'Manager Advance';
 	}): Promise<void> {
 		await this.ensureSelfEmployee();
 		await this.clickTab('Expenses & Advances');
-		const expenseType = options.expenseType || '_Test Accounting Expense';
-		await this.setExpenseRow(expenseType, options.amount);
-
 		await this.setProject(options.project);
+		const expenseAccount = await this.resolveProjectExpenseAccount(options.project, options.expenseAccount);
+		await this.setExpenseRow(expenseAccount, options.amount);
 		await this.dismissFormOverlays();
 		await this.clickTab('Expenses & Advances');
 		if (options.vendorOverrideReason || options.budgetOverrideReason || options.reimbursementSource) {
@@ -461,12 +502,14 @@ export class ExpenseClaimFormPage extends DeskForm {
 	async setVendorOverrideReason(reason: string): Promise<void> {
 		await this.clickTab('Approval & Routing');
 		await this.page.evaluate(async (value) => {
-			const frm = (window as unknown as {
-				cur_frm?: {
-					set_df_property: (f: string, p: string, v: number) => void;
-					set_value: (f: string, v: string) => Promise<unknown>;
-				};
-			}).cur_frm;
+			const frm = (
+				window as unknown as {
+					cur_frm?: {
+						set_df_property: (f: string, p: string, v: number) => void;
+						set_value: (f: string, v: string) => Promise<unknown>;
+					};
+				}
+			).cur_frm;
 			if (!frm) {
 				return;
 			}
@@ -478,12 +521,14 @@ export class ExpenseClaimFormPage extends DeskForm {
 	async setBudgetOverrideReason(reason: string): Promise<void> {
 		await this.clickTab('Approval & Routing');
 		await this.page.evaluate(async (value) => {
-			const frm = (window as unknown as {
-				cur_frm?: {
-					set_df_property: (f: string, p: string, v: number) => void;
-					set_value: (f: string, v: string) => Promise<unknown>;
-				};
-			}).cur_frm;
+			const frm = (
+				window as unknown as {
+					cur_frm?: {
+						set_df_property: (f: string, p: string, v: number) => void;
+						set_value: (f: string, v: string) => Promise<unknown>;
+					};
+				}
+			).cur_frm;
 			if (!frm) {
 				return;
 			}
@@ -511,7 +556,9 @@ export class ExpenseClaimFormPage extends DeskForm {
 							dt: string,
 							name: string,
 							field: string | string[],
-						) => Promise<{ message?: Record<string, string> & { default_currency?: string } }>;
+						) => Promise<{
+							message?: Record<string, string> & { default_currency?: string };
+						}>;
 					};
 				};
 			};
@@ -520,11 +567,7 @@ export class ExpenseClaimFormPage extends DeskForm {
 				return;
 			}
 			if (!frm.doc?.currency && frm.doc?.company) {
-				const currencyRes = await win.frappe.db.get_value(
-					'Company',
-					frm.doc.company,
-					'default_currency',
-				);
+				const currencyRes = await win.frappe.db.get_value('Company', frm.doc.company, 'default_currency');
 				const currency =
 					typeof currencyRes?.message === 'string'
 						? currencyRes.message
@@ -581,9 +624,14 @@ export class ExpenseClaimFormPage extends DeskForm {
 			).frappe.db.get_doc('Expense Claim', docname);
 			await (
 				window as unknown as {
-					frappe: { xcall: (method: string, args: Record<string, unknown>) => Promise<unknown> };
+					frappe: {
+						xcall: (method: string, args: Record<string, unknown>) => Promise<unknown>;
+					};
 				}
-			).frappe.xcall('frappe.model.workflow.apply_workflow', { doc, action: 'Submit' });
+			).frappe.xcall('frappe.model.workflow.apply_workflow', {
+				doc,
+				action: 'Submit',
+			});
 		}, name);
 	}
 
@@ -622,10 +670,7 @@ export class ExpenseClaimFormPage extends DeskForm {
 		const dialog = modal(this.page);
 		await expect(dialog).toBeVisible({ timeout: 15000 });
 		for (let index = 0; index < 6; index += 1) {
-			await dialog
-				.locator('input[type="checkbox"]:not(:disabled):not(:checked)')
-				.first()
-				.check();
+			await dialog.locator('input[type="checkbox"]:not(:disabled):not(:checked)').first().check();
 		}
 		const noteField = dialog.locator('textarea').first();
 		if (await noteField.isVisible().catch(() => false)) {
@@ -639,8 +684,11 @@ export class ExpenseClaimFormPage extends DeskForm {
 		await response;
 		await this.page.waitForFunction(
 			() =>
-				(window as unknown as { cur_frm?: { doc?: { workflow_state?: string } } }).cur_frm
-					?.doc?.workflow_state === 'Pending Approval',
+				(
+					window as unknown as {
+						cur_frm?: { doc?: { workflow_state?: string } };
+					}
+				).cur_frm?.doc?.workflow_state === 'Pending Approval',
 			undefined,
 			{ timeout: 45000 },
 		);
@@ -652,7 +700,9 @@ export class ExpenseClaimFormPage extends DeskForm {
 		await this.page.evaluate(() => {
 			const win = window as unknown as {
 				cur_frm?: unknown;
-				volunteering?: { accounting_workflow?: { render_actions?: (frm: unknown) => void } };
+				volunteering?: {
+					accounting_workflow?: { render_actions?: (frm: unknown) => void };
+				};
 			};
 			if (win.cur_frm && win.volunteering?.accounting_workflow?.render_actions) {
 				win.volunteering.accounting_workflow.render_actions(win.cur_frm);
@@ -666,7 +716,11 @@ export class ExpenseClaimFormPage extends DeskForm {
 			await this.clickWorkflowAction('Approve', { expectError: errorPattern });
 			return;
 		}
-		if (await this.reviewMenuButton().isVisible().catch(() => false)) {
+		if (
+			await this.reviewMenuButton()
+				.isVisible()
+				.catch(() => false)
+		) {
 			await this.openReviewMenu();
 			const approveItem = this.page
 				.locator('.dropdown-menu.show .dropdown-item, .dropdown-menu a, a.grey-link')
@@ -722,9 +776,7 @@ export class ExpenseClaimFormPage extends DeskForm {
 		const claimName =
 			options?.name ||
 			(await this.page.evaluate(
-				() =>
-					(window as unknown as { cur_frm?: { doc?: { name?: string } } }).cur_frm?.doc?.name ||
-					null,
+				() => (window as unknown as { cur_frm?: { doc?: { name?: string } } }).cur_frm?.doc?.name || null,
 			));
 		if (!claimName) {
 			throw new Error('Expense Claim name is not available for approval');
@@ -736,12 +788,7 @@ export class ExpenseClaimFormPage extends DeskForm {
 						window as unknown as {
 							frappe: {
 								db: {
-									set_value: (
-										dt: string,
-										name: string,
-										field: string,
-										value: string,
-									) => Promise<void>;
+									set_value: (dt: string, name: string, field: string, value: string) => Promise<void>;
 								};
 							};
 						}
@@ -766,17 +813,9 @@ export class ExpenseClaimFormPage extends DeskForm {
 							frappe: {
 								db: {
 									get_doc: (dt: string, name: string) => Promise<unknown>;
-									set_value: (
-										dt: string,
-										name: string,
-										field: string,
-										value: string,
-									) => Promise<void>;
+									set_value: (dt: string, name: string, field: string, value: string) => Promise<void>;
 								};
-								call: (opts: {
-									method: string;
-									args: Record<string, unknown>;
-								}) => Promise<unknown>;
+								call: (opts: { method: string; args: Record<string, unknown> }) => Promise<unknown>;
 							};
 						}
 					).frappe;
@@ -795,9 +834,11 @@ export class ExpenseClaimFormPage extends DeskForm {
 		await this.page
 			.waitForFunction(
 				() => {
-					const doc = (window as unknown as {
-						cur_frm?: { doc?: { workflow_state?: string } };
-					}).cur_frm?.doc;
+					const doc = (
+						window as unknown as {
+							cur_frm?: { doc?: { workflow_state?: string } };
+						}
+					).cur_frm?.doc;
 					if (doc?.workflow_state === 'Approved') {
 						return true;
 					}
@@ -824,9 +865,11 @@ export class ExpenseClaimFormPage extends DeskForm {
 		await this.page
 			.waitForFunction(
 				() => {
-					const doc = (window as unknown as {
-						cur_frm?: { doc?: { workflow_state?: string } };
-					}).cur_frm?.doc;
+					const doc = (
+						window as unknown as {
+							cur_frm?: { doc?: { workflow_state?: string } };
+						}
+					).cur_frm?.doc;
 					if (doc?.workflow_state === 'Rejected') {
 						return true;
 					}
@@ -886,7 +929,9 @@ export class ExpenseClaimFormPage extends DeskForm {
 		await this.page.evaluate(() => {
 			const win = window as unknown as {
 				cur_frm?: unknown;
-				volunteering?: { accounting_workflow?: { render_actions?: (frm: unknown) => void } };
+				volunteering?: {
+					accounting_workflow?: { render_actions?: (frm: unknown) => void };
+				};
 			};
 			if (win.cur_frm && win.volunteering?.accounting_workflow?.render_actions) {
 				win.volunteering.accounting_workflow.render_actions(win.cur_frm);
@@ -915,8 +960,14 @@ export class ExpenseClaimFormPage extends DeskForm {
 	async escalateViaFormApi(reason: string): Promise<void> {
 		await this.page.evaluate(async (escalationReason) => {
 			const win = window as unknown as {
-				cur_frm?: { doctype: string; doc: { name: string }; reload_doc?: () => Promise<void> };
-				frappe?: { xcall: (method: string, args: Record<string, string>) => Promise<unknown> };
+				cur_frm?: {
+					doctype: string;
+					doc: { name: string };
+					reload_doc?: () => Promise<void>;
+				};
+				frappe?: {
+					xcall: (method: string, args: Record<string, string>) => Promise<unknown>;
+				};
 			};
 			const frm = win.cur_frm;
 			if (!frm || !win.frappe) {
@@ -937,7 +988,9 @@ export class ExpenseClaimFormPage extends DeskForm {
 			const win = window as unknown as {
 				cur_frm?: unknown;
 				volunteering?: {
-					accounting_workflow?: { show_advance_link_hints?: (frm: unknown) => void };
+					accounting_workflow?: {
+						show_advance_link_hints?: (frm: unknown) => void;
+					};
 				};
 			};
 			if (win.cur_frm && win.volunteering?.accounting_workflow?.show_advance_link_hints) {
@@ -951,20 +1004,21 @@ export class ExpenseClaimFormPage extends DeskForm {
 	async getAdvanceLinkHint(): Promise<string> {
 		await this.ensureSelfEmployee();
 		return this.page.evaluate(async () => {
-			const employee = (window as unknown as { cur_frm?: { doc?: { employee?: string } } }).cur_frm
-				?.doc?.employee;
+			const employee = (window as unknown as { cur_frm?: { doc?: { employee?: string } } }).cur_frm?.doc
+				?.employee;
 			if (!employee) {
 				return '';
 			}
 			return (
-				(window as unknown as {
-					frappe: {
-						xcall: (method: string, args: Record<string, string>) => Promise<string>;
-					};
-				}).frappe.xcall(
-					'volunteering.volunteering.employee_advance_controls.get_linkable_advances_hint',
-					{ employee },
-				) || ''
+				(
+					window as unknown as {
+						frappe: {
+							xcall: (method: string, args: Record<string, string>) => Promise<string>;
+						};
+					}
+				).frappe.xcall('volunteering.volunteering.employee_advance_controls.get_linkable_advances_hint', {
+					employee,
+				}) || ''
 			);
 		});
 	}

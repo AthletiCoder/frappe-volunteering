@@ -32,7 +32,7 @@ test.describe('Approval routing @accounts @ui', () => {
 			await claim.fillClaim({
 				project,
 				amount: 1500,
-				expenseType: masters.expense_type,
+				expenseAccount: masters.expense_account,
 			});
 			claimName = await claim.saveAndSubmit(request);
 		});
@@ -72,12 +72,7 @@ test.describe('Approval routing @accounts @ui', () => {
 		await cleanupExpenseClaimsForProject(request, project);
 		const masters = await getE2eMasters(request);
 
-		await e2eCall(
-			request,
-			'set_employee_reports_to',
-			{ employee: directorEmp, reports_to: '' },
-			'admin',
-		);
+		await e2eCall(request, 'set_employee_reports_to', { employee: directorEmp, reports_to: '' }, 'admin');
 		try {
 			let claimName = '';
 			await withPersona(browser, 'employee', async (page) => {
@@ -86,7 +81,7 @@ test.describe('Approval routing @accounts @ui', () => {
 				await claim.fillClaim({
 					project,
 					amount: 30000,
-					expenseType: masters.expense_type,
+					expenseAccount: masters.expense_account,
 					vendorOverrideReason: 'Vendor does not accept POs',
 				});
 				claimName = await claim.saveAndSubmit(request);
@@ -122,7 +117,7 @@ test.describe('Approval routing @accounts @ui', () => {
 			await claim.fillClaim({
 				project,
 				amount: 500,
-				expenseType: masters.expense_type,
+				expenseAccount: masters.expense_account,
 			});
 			claimName = await claim.saveAndSubmit(request);
 		});
@@ -154,7 +149,7 @@ test.describe('Approval routing @accounts @ui', () => {
 			await claim.fillClaim({
 				project,
 				amount: 30000,
-				expenseType: masters.expense_type,
+				expenseAccount: masters.expense_account,
 				vendorOverrideReason: 'Vendor does not accept POs',
 			});
 			claimName = await claim.saveAndSubmit(request);
@@ -201,7 +196,7 @@ test.describe('Approval routing @accounts @ui', () => {
 			await claim.fillClaim({
 				project,
 				amount: 500,
-				expenseType: masters.expense_type,
+				expenseAccount: masters.expense_account,
 			});
 			claimName = await claim.saveAndSubmit(request);
 		});
@@ -235,12 +230,7 @@ test.describe('Approval routing @accounts @ui', () => {
 		await cleanupExpenseClaimsForProject(request, project);
 		const masters = await getE2eMasters(request);
 
-		await e2eCall(
-			request,
-			'set_employee_reports_to',
-			{ employee: directorEmp, reports_to: '' },
-			'admin',
-		);
+		await e2eCall(request, 'set_employee_reports_to', { employee: directorEmp, reports_to: '' }, 'admin');
 		try {
 			let claimName = '';
 			await withPersona(browser, 'employee', async (page) => {
@@ -249,7 +239,7 @@ test.describe('Approval routing @accounts @ui', () => {
 				await claim.fillClaim({
 					project,
 					amount: 30000,
-					expenseType: masters.expense_type,
+					expenseAccount: masters.expense_account,
 					vendorOverrideReason: 'Vendor does not accept POs',
 				});
 				claimName = await claim.saveAndSubmit(request);
@@ -325,7 +315,7 @@ test.describe('Approval routing @accounts @ui', () => {
 				await claim.fillClaim({
 					project,
 					amount: 1500,
-					expenseType: masters.expense_type,
+					expenseAccount: masters.expense_account,
 				});
 				claimName = await claim.saveAndSubmit(request);
 			});

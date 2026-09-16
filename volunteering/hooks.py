@@ -58,19 +58,25 @@ website_route_rules = [
 # include js in doctype views
 # doctype_js = {"doctype" : "public/js/doctype.js"}
 doctype_list_js = {
-    "Participation": [
-        "volunteering/doctype/participation/participation_list.js",
-    ],
+	"Participation": [
+		"volunteering/doctype/participation/participation_list.js",
+	],
 }
 doctype_js = {
-    "Employee": "volunteering/doctype/daily_work_log/employee_daily_work_log.js",
-    "Leave Application": "public/js/leave_application.js",
-    "Attendance Request": "public/js/attendance_request.js",
+	"Employee": "volunteering/doctype/daily_work_log/employee_daily_work_log.js",
+	"Leave Application": "public/js/leave_application.js",
+	"Attendance Request": "public/js/attendance_request.js",
 	"Expense Claim": "public/js/accounting_forms.js",
 	"Purchase Order": "public/js/accounting_forms.js",
 	"Employee Advance": "public/js/accounting_forms.js",
-    "Purchase Invoice": "public/js/purchase_invoice.js",
-    "Project": "public/js/project.js",
+	"Purchase Invoice": "public/js/purchase_invoice.js",
+	"Project": "public/js/project.js",
+}
+
+# Keep the standard HRMS Expense Claim controller while replacing its automatic
+# Expense Claim Type → Account mapping with a Project-scoped account selector.
+override_doctype_class = {
+	"Expense Claim": "volunteering.volunteering.overrides.expense_claim.VolunteeringExpenseClaim",
 }
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -150,26 +156,26 @@ doctype_js = {
 # Permission Query Conditions
 # This restricts which records appear in List View/Search
 permission_query_conditions = {
-    "Volunteer": "volunteering.volunteering.volunteer_permissions.get_permission_query_conditions",
-    "Participation": "volunteering.volunteering.participation_permissions.get_permission_query_conditions",
-    "Reciprocation": "volunteering.volunteering.reciprocation_permissions.get_permission_query_conditions",
-    "Daily Work Log": "volunteering.volunteering.daily_work_log_permissions.get_permission_query_conditions",
-    "Expense Claim": "volunteering.volunteering.expense_claim_permissions.get_permission_query_conditions",
-    "Employee Advance": "volunteering.volunteering.employee_advance_permissions.get_permission_query_conditions",
-    "Manager Note": "volunteering.volunteering.manager_note_permissions.get_permission_query_conditions",
-    "Attendance Request": "volunteering.volunteering.attendance_request_permissions.get_permission_query_conditions",
-    "Attendance": "volunteering.volunteering.attendance_permissions.get_permission_query_conditions",
+	"Volunteer": "volunteering.volunteering.volunteer_permissions.get_permission_query_conditions",
+	"Participation": "volunteering.volunteering.participation_permissions.get_permission_query_conditions",
+	"Reciprocation": "volunteering.volunteering.reciprocation_permissions.get_permission_query_conditions",
+	"Daily Work Log": "volunteering.volunteering.daily_work_log_permissions.get_permission_query_conditions",
+	"Expense Claim": "volunteering.volunteering.expense_claim_permissions.get_permission_query_conditions",
+	"Employee Advance": "volunteering.volunteering.employee_advance_permissions.get_permission_query_conditions",
+	"Manager Note": "volunteering.volunteering.manager_note_permissions.get_permission_query_conditions",
+	"Attendance Request": "volunteering.volunteering.attendance_request_permissions.get_permission_query_conditions",
+	"Attendance": "volunteering.volunteering.attendance_permissions.get_permission_query_conditions",
 }
 
 # Override "Has Permission" logic for specific row-level updates
 has_permission = {
-    "Volunteer": "volunteering.volunteering.volunteer_permissions.has_permission",
-    "Daily Work Log": "volunteering.volunteering.daily_work_log_permissions.has_permission",
-    "Expense Claim": "volunteering.volunteering.expense_claim_permissions.has_permission",
-    "Employee Advance": "volunteering.volunteering.employee_advance_permissions.has_permission",
-    "Manager Note": "volunteering.volunteering.manager_note_permissions.has_permission",
-    "Attendance Request": "volunteering.volunteering.attendance_request_permissions.has_permission",
-    "Attendance": "volunteering.volunteering.attendance_permissions.has_permission",
+	"Volunteer": "volunteering.volunteering.volunteer_permissions.has_permission",
+	"Daily Work Log": "volunteering.volunteering.daily_work_log_permissions.has_permission",
+	"Expense Claim": "volunteering.volunteering.expense_claim_permissions.has_permission",
+	"Employee Advance": "volunteering.volunteering.employee_advance_permissions.has_permission",
+	"Manager Note": "volunteering.volunteering.manager_note_permissions.has_permission",
+	"Attendance Request": "volunteering.volunteering.attendance_request_permissions.has_permission",
+	"Attendance": "volunteering.volunteering.attendance_permissions.has_permission",
 }
 
 # permission_query_conditions = {
@@ -222,7 +228,10 @@ doc_events = {
 			"volunteering.volunteering.budget_service.validate_budget_on_save",
 		],
 		"on_submit": "volunteering.volunteering.manager_float_service.settle_manager_float_expense_claim_on_submit",
-		"on_update": "volunteering.volunteering.approval_routing.on_accounting_workflow_state_change",
+		"on_update": [
+			"volunteering.volunteering.approval_routing.on_accounting_workflow_state_change",
+			"volunteering.volunteering.project_expense_accounts.add_account_change_audit_comment",
+		],
 	},
 	"File": {
 		"before_insert": "volunteering.volunteering.receipt_review.validate_receipt_file_change",
@@ -417,25 +426,42 @@ override_doctype_dashboards = {
 # ignore_translatable_strings_from = []
 
 fixtures = [
-    {
-        "dt": "Role",
-        "filters": [
-            [
-                "name",
-                "in",
-                [
-                    "NGO Admin",
-                    "NGO Coordinator",
-                    "NGO Member",
-                ],
-            ]
-        ],
-    },
-    {"dt": "Web Form", "filters": [["module", "=", "Volunteering"]]},
-    {"doctype": "Custom Field", "filters": [["dt", "in", ["Purchase Order", "Purchase Invoice", "Expense Claim", "Payment Entry"]]]},
-    {"doctype": "Property Setter", "filters": [["doc_type", "in", ["Purchase Order", "Purchase Invoice", "Expense Claim", "Payment Entry"]]]},
-    {"doctype": "Workflow", "filters": [["document_type", "in", ["Purchase Order", "Purchase Invoice", "Expense Claim", "Payment Entry", "Employee Advance"]]]},
-    "Workflow State",
-    "Workflow Action",
-    {"doctype": "Custom Field", "filters": [["dt", "=", "Project"], ["fieldname", "=", "hours_per_kit"]]},
+	{
+		"dt": "Role",
+		"filters": [
+			[
+				"name",
+				"in",
+				[
+					"NGO Admin",
+					"NGO Coordinator",
+					"NGO Member",
+				],
+			]
+		],
+	},
+	{"dt": "Web Form", "filters": [["module", "=", "Volunteering"]]},
+	{
+		"doctype": "Custom Field",
+		"filters": [["dt", "in", ["Purchase Order", "Purchase Invoice", "Expense Claim", "Payment Entry"]]],
+	},
+	{
+		"doctype": "Property Setter",
+		"filters": [
+			["doc_type", "in", ["Purchase Order", "Purchase Invoice", "Expense Claim", "Payment Entry"]]
+		],
+	},
+	{
+		"doctype": "Workflow",
+		"filters": [
+			[
+				"document_type",
+				"in",
+				["Purchase Order", "Purchase Invoice", "Expense Claim", "Payment Entry", "Employee Advance"],
+			]
+		],
+	},
+	"Workflow State",
+	"Workflow Action",
+	{"doctype": "Custom Field", "filters": [["dt", "=", "Project"], ["fieldname", "=", "hours_per_kit"]]},
 ]

@@ -5,8 +5,9 @@ from collections import defaultdict
 
 import frappe
 from frappe import _
-from frappe.utils import flt
+from frappe.utils import cint, flt
 
+from volunteering.volunteering.accounting_dashboard.constants import ACCOUNTS_ROLES
 from volunteering.volunteering.approval_routing import get_document_amount as get_document_amount
 from volunteering.volunteering.authority import BOARD_OF_DIRECTORS, user_has_board_of_directors
 from volunteering.volunteering.doctype.volunteering_accounting_settings.volunteering_accounting_settings import (
@@ -26,18 +27,21 @@ UNASSIGNED_ACCOUNT = "__unassigned__"
 def _project_budget_fields(project):
 	if not project:
 		return frappe._dict()
-	return frappe.db.get_value(
-		"Project",
-		project,
-		[
-			"company",
-			"budget_status",
-			"project_budget_control",
-			"total_approved_budget",
-			"account_budget_control",
-		],
-		as_dict=True,
-	) or frappe._dict()
+	return (
+		frappe.db.get_value(
+			"Project",
+			project,
+			[
+				"company",
+				"budget_status",
+				"project_budget_control",
+				"total_approved_budget",
+				"account_budget_control",
+			],
+			as_dict=True,
+		)
+		or frappe._dict()
+	)
 
 
 def get_allocated_budget(project, department=None):
@@ -153,9 +157,7 @@ def get_project_account_consumption(project, exclude=None):
 		for row in _active_budget_documents(doctype, project):
 			if exclude and exclude == (doctype, row.name):
 				continue
-			for account, amount in get_document_account_amounts(
-				frappe.get_doc(doctype, row.name)
-			).items():
+			for account, amount in get_document_account_amounts(frappe.get_doc(doctype, row.name)).items():
 				amounts[account] += flt(amount)
 	return dict(amounts)
 
@@ -231,12 +233,12 @@ def _budget_violations(doc, project_values, exclude):
 		if account == UNASSIGNED_ACCOUNT:
 			message = _(
 				"Expense Account budget: an expense line has no Expense Account. "
-				"Configure the Expense Claim Type or Purchase Order item account."
+				"Choose an account linked to the Project or set the Purchase Order item account."
 			)
 		elif account not in allocations:
-			message = _(
-				"Expense Account budget: {0} has no allocation on Project {1}."
-			).format(account, doc.project)
+			message = _("Expense Account budget: {0} has no allocation on Project {1}.").format(
+				account, doc.project
+			)
 		else:
 			allocated = allocations[account]
 			proposed = flt(existing_consumption.get(account)) + document_amount
@@ -353,11 +355,15 @@ def get_budget_snapshot(project, department=None):
 				"allocated": account_allocated,
 				"consumed": account_consumed,
 				"remaining": account_allocated - account_consumed,
-				"utilisation_pct": (
-					account_consumed / account_allocated * 100 if account_allocated else 0
-				),
+				"utilisation_pct": (account_consumed / account_allocated * 100 if account_allocated else 0),
 			}
 		)
+	# Whole-Project utilisation is useful to staff. Per-account allocations and
+	# consumption remain finance-only; the employee selector has a separate API
+	# that returns names without any figures.
+	can_view_account_details = bool(
+		ACCOUNTS_ROLES.union({"NGO Coordinator"}).intersection(frappe.get_roles())
+	)
 	return {
 		"project": project,
 		"budget_status": values.get("budget_status") or "Active",
@@ -368,7 +374,7 @@ def get_budget_snapshot(project, department=None):
 		"consumed": consumed,
 		"remaining": allocated - consumed,
 		"utilisation_pct": (consumed / allocated * 100) if allocated else 0,
-		"accounts": accounts,
+		"accounts": accounts if can_view_account_details else [],
 	}
 
 
@@ -378,24 +384,25 @@ def validate_project_budgets(doc, method=None):
 	if project_control not in CONTROL_MODES or account_control not in CONTROL_MODES:
 		frappe.throw(_("Budget Control must be No Control, Warn Only, or Strict."))
 	if project_control != "No Control" and flt(doc.get("total_approved_budget")) <= 0:
-		frappe.throw(
-			_("Enter a Total Approved Budget when Overall Project Budget Control is enabled.")
-		)
+		frappe.throw(_("Enter a Total Approved Budget when Overall Project Budget Control is enabled."))
 
 	seen = set()
+	active_seen = set()
 	for row in doc.get("account_budgets") or []:
 		account = row.get("expense_account")
 		if not account:
 			continue
 		if account in seen:
 			frappe.throw(
-				_("Expense Account {0} appears more than once in Expense Account Budgets.").format(
-					account
-				),
+				_("Expense Account {0} appears more than once in Expense Account Budgets.").format(account),
 				title=_("Duplicate Expense Account Budget"),
 			)
 		seen.add(account)
-		if flt(row.get("approved_amount")) <= 0:
+		if not row.get("employee_label"):
+			row.employee_label = frappe.db.get_value("Account", account, "account_name") or account
+		if cint(row.get("is_active")):
+			active_seen.add(account)
+		if account_control != "No Control" and flt(row.get("approved_amount")) <= 0:
 			frappe.throw(_("Enter an approved amount greater than zero for {0}.").format(account))
 		account_values = frappe.db.get_value(
 			"Account", account, ["company", "root_type", "is_group", "disabled"], as_dict=True
@@ -407,9 +414,9 @@ def validate_project_budgets(doc, method=None):
 		if account_values.root_type != "Expense" or account_values.is_group or account_values.disabled:
 			frappe.throw(_("{0} must be an enabled, non-group Expense Account.").format(account))
 
-	if account_control != "No Control" and not seen:
+	if account_control != "No Control" and not active_seen:
 		frappe.throw(
-			_("Add at least one Expense Account Budget when Expense Account Budget Control is enabled.")
+			_("Make at least one Expense Account available when Expense Account Budget Control is enabled.")
 		)
 
 	if doc.get("budget_status") != "Closed" and not doc.is_new():

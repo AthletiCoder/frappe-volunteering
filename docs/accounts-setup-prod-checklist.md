@@ -12,7 +12,8 @@ Related: [fund_disbursement_ops_checklist.md](fund_disbursement_ops_checklist.md
 |------------|----------------|
 | **Employee Advances** account + Company default + Employee backfill | Advance GL; not Debtors |
 | **EC payable repair** if pointing at Cash | EC submit / approval crashes |
-| **Employee role read/select:** Project, Currency, Cost Center, Expense Claim Type | EC project tag; EA currency; no manual Role Permission Manager |
+| **Employee role read/select:** Project, Currency, Cost Center | EC project tag; EA currency; no manual Role Permission Manager |
+| **Project-scoped Expense Account selector** | Employees receive only the accounts enabled on the selected Project; no Account DocPerm or balances |
 | **Hide GL fields** + `ignore_user_permissions` on EC payable / advance link fields | Stops “Insufficient Permission for Account” for staff |
 | **EA approval tab** after amount fields (not after employee) | Purpose & amount stay on Details |
 | Workflows, grades, limits, departments | Approvals |
@@ -30,7 +31,7 @@ Related: [fund_disbursement_ops_checklist.md](fund_disbursement_ops_checklist.md
 | **Operating bank** | `default_bank_account` |
 | **Cash** | `default_cash_account` (≤ ₹2k cash PE limit) |
 | **Debtors** | `default_receivable_account` (donations) |
-| **Expense heads** | Map on each **Expense Claim Type** → Accounts → default account **per company** |
+| **Expense heads** | Add the permitted leaf Expense Accounts to each **Project → Allowed Expense Accounts & Budgets** table |
 | **Cashfree Clearing** + **Donation Income** | Donations only — see Cashfree checklist |
 
 ---
@@ -47,7 +48,7 @@ Bank / NEFT / UPI → bank · Cash → cash · Cashfree → clearing (if donatio
 
 **Approval and Advance Limits:** per-grade approve / self-advance caps.
 
-**Projects:** Type, Cost Center, Total Approved Budget and its control mode, Expense Account allocations and their control mode, Budget Status = Active.
+**Projects:** Type, Cost Center, Total Approved Budget and its control mode, allowed Expense Accounts (with employee-friendly labels), optional per-account allocations and their control mode, Budget Status = Active.
 
 **Employees:** Grade, Reports To, Department.
 
@@ -78,9 +79,9 @@ Bank / NEFT / UPI → bank · Cash → cash · Cashfree → clearing (if donatio
 | Project permission on EC | §1 migrate (Employee→Project) |
 | Currency permission on EA | §1 migrate (Employee→Currency) |
 | Purpose/amount on wrong tab | §1 migrate (tab placement) |
-| EC from advance fails | §1 + Expense Claim Type default account |
+| EC has no account choices | Configure **Allowed Expense Accounts & Budgets** on the selected Project |
 | Todo link 404 `employee_advance` | App fix (hyphen routes) — redeploy SPA + migrate |
-| “Set default account for Expense Claim Type” | §2 Expense Claim Type accounts table |
+| Typed/unlisted account is rejected | Add or enable that account on the Project; employees cannot browse the full Chart of Accounts |
 
 ---
 

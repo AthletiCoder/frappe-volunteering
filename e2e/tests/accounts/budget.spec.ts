@@ -35,10 +35,12 @@ test.describe('Budget controls @accounts @ui', () => {
 			await claim.fillClaim({
 				project,
 				amount: 9000,
-				expenseType: masters.expense_type,
+				expenseAccount: masters.expense_account,
 				vendorOverrideReason: 'Urgent reimbursement; PO not feasible.',
 			});
-			claimName = await claim.saveAndSubmit(request, { expectBudgetWarning: true });
+			claimName = await claim.saveAndSubmit(request, {
+				expectBudgetWarning: true,
+			});
 		});
 
 		const workflowState = await e2eCall<string>(
@@ -79,7 +81,7 @@ test.describe('Budget controls @accounts @ui', () => {
 			await claim.fillClaim({
 				project,
 				amount: 13000,
-				expenseType: masters.expense_type,
+				expenseAccount: masters.expense_account,
 				vendorOverrideReason: 'Urgent reimbursement; PO not feasible.',
 			});
 			claimName = await claim.saveAndSubmit(request);
@@ -127,7 +129,7 @@ test.describe('Budget controls @accounts @ui', () => {
 			await claim.fillClaim({
 				project,
 				amount: 30000,
-				expenseType: masters.expense_type,
+				expenseAccount: masters.expense_account,
 				vendorOverrideReason: 'Urgent reimbursement; PO not feasible.',
 				budgetOverrideReason: 'Seasonal campaign overspend authorised by the Board.',
 			});
@@ -156,7 +158,7 @@ test.describe('Budget controls @accounts @ui', () => {
 			const claim = new ExpenseClaimFormPage(page);
 			await claim.openNew();
 			await claim.fillExpenseRowWithoutProject({
-				expenseType: masters.expense_type,
+				expenseAccount: masters.expense_account,
 				description: 'Missing project on purpose',
 				amount: 500,
 			});

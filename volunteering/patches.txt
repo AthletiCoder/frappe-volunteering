@@ -15,3 +15,4 @@ volunteering.patches.setup_attendance_holiday_status
 volunteering.patches.fix_wednesday_absent_attendance
 volunteering.patches.fix_duplicate_privilege_leave_allocations
 volunteering.patches.migrate_fund_project_type_to_project_type
+volunteering.patches.migrate_project_expense_accounts

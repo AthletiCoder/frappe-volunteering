@@ -23,19 +23,19 @@ bench --site YOUR_SITE clear-cache
 ## 2. Company / Accounts
 
 1. Default **Employee Advance Account** on Company (HR settings).
-2. **Expense Claim Type** → Accounts: default expense account per company (Travel, Food, etc.).
+2. On each Project, configure **Allowed Expense Accounts & Budgets**. Give each linked leaf Expense Account a clear employee-facing label; employees never need Chart of Accounts permission.
 3. Mode of Payment: Bank / UPI / NEFT; Cash for small amounts only.
 4. Projects: set **Project Type** (Campaign / Event / Admin), Cost Center and Budget Status = Active.
 5. On each Project, choose **No Control**, **Warn Only**, or **Strict** independently for:
    - the **Total Approved Budget**; and
-   - each configured **Expense Account Budget**.
+   - each configured **Expense Account Budget**. An account may remain selectable with a zero/blank allocation when account control is **No Control**.
 6. Strict exceedance: an authorised approver must enter **Budget Exceedance Reason**. Board of Directors grade is always authorised; an optional extra role can be configured.
 
 ## 3. Workflows
 
 Migrate reloads fixtures. Confirm:
 
-- Expense Claim Approval → Pending Approval
+- Expense Claim Approval → Pending Receipt Review → Pending Approval
 - Purchase Order Approval → Pending Approval (no Accounts review)
 - Employee Advance Approval
 - Purchase Invoice → Submit goes straight to Approved (PO chain still enforced)
@@ -61,7 +61,7 @@ Edit in Desk → **Wiki Document**. If pages already existed, paste updated cont
 
 ## 6. Smoke test
 
-1. Small Expense Claim → Pending Approver = reports_to manager → Approve (primary).
+1. Small Expense Claim → employee selects Project and one of its allowed Expense Accounts → receipt reviewer verifies → reports-to manager approves.
 2. Amount above manager limit → Escalate or Reject only (no Approve).
 3. EC above vendor threshold without override reason → blocked on submit path.
 4. Second Employee Advance while first residual >10% → blocked; residual ≤10% → allowed with warning.
@@ -69,3 +69,4 @@ Edit in Desk → **Wiki Document**. If pages already existed, paste updated cont
 6. Cash Payment Entry above limit → blocked.
 7. Accounts creates Payment Entry only after Approved (PI or PO as applicable).
 8. Confirm a Project's Cost Centre replaces conflicting values on claim/order lines.
+9. Confirm the employee cannot open Account records or see balances, and a typed account not linked to the Project is rejected on save.
