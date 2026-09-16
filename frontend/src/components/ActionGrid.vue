@@ -52,6 +52,7 @@ function iconFor(id) {
 		vendor: "vendor",
 		advance: "advance",
 		claim: "claim",
+		invoice_generator: "invoice",
 		how_to_spend: "book",
 	};
 	return map[id] || "spark";

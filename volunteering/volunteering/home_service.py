@@ -345,6 +345,12 @@ def _money_actions(pending=None):
 			pending,
 		),
 		{
+			"id": "invoice_generator",
+			"label": _("Prepare an invoice"),
+			"hint": _("Create a GST or non-GST invoice for supplier signature"),
+			"route": "/volunteering/invoice-generator",
+		},
+		{
 			"id": "how_to_spend",
 			"label": _("How to spend"),
 			"hint": _("Pick one path"),

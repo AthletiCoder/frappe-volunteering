@@ -10,7 +10,12 @@ from volunteering.volunteering.home_access import (
 	guest_login_redirect_url,
 	require_logged_in_or_redirect,
 )
-from volunteering.volunteering.home_service import _compose_todos, _time_actions, get_home_payload
+from volunteering.volunteering.home_service import (
+	_compose_todos,
+	_money_actions,
+	_time_actions,
+	get_home_payload,
+)
 
 
 class UnitTestHomeAccess(UnitTestCase):
@@ -181,3 +186,8 @@ class UnitTestHomePayload(UnitTestCase):
 		self.assertEqual(leave["list_route"], "/desk/leave-application")
 		self.assertEqual(leave["list_label"], "Previous leave")
 		self.assertEqual(leave["pending"], 2)
+
+	def test_money_actions_include_employee_invoice_generator(self):
+		action = next(row for row in _money_actions() if row["id"] == "invoice_generator")
+		self.assertEqual(action["route"], "/volunteering/invoice-generator")
+		self.assertIn("GST", action["hint"])

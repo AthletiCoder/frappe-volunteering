@@ -7,6 +7,7 @@ import Home from "./views/Home.vue";
 import Todos from "./views/Todos.vue";
 import BudgetHealth from "./views/BudgetHealth.vue";
 import Advances from "./views/Advances.vue";
+import InvoiceGenerator from "./views/InvoiceGenerator.vue";
 
 initTheme();
 
@@ -19,6 +20,7 @@ const router = createRouter({
 		{ path: "/budget-health", component: BudgetHealth, name: "BudgetHealth" },
 		{ path: "/advances", component: Advances, name: "Advances" },
 		{ path: "/advances/:name", component: Advances, name: "AdvanceDetail" },
+		{ path: "/invoice-generator", component: InvoiceGenerator, name: "InvoiceGenerator" },
 	],
 });
 

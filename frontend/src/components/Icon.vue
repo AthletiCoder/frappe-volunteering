@@ -25,6 +25,7 @@
 		<path v-else-if="name === 'vendor'" d="M4 10h16l-1 9H5l-1-9zM8 10V7a4 4 0 0 1 8 0v3" />
 		<path v-else-if="name === 'advance'" d="M12 4v16M8 8h6a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h7" />
 		<path v-else-if="name === 'claim'" d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5" />
+		<path v-else-if="name === 'invoice'" d="M7 3h10a2 2 0 0 1 2 2v16l-3-2-4 2-4-2-3 2V5a2 2 0 0 1 2-2zM8 8h8M8 12h8M8 16h5" />
 		<path v-else-if="name === 'book'" d="M5 5h11a2 2 0 0 1 2 2v12H7a2 2 0 0 0-2 2z" />
 		<path v-else-if="name === 'people'" d="M16 19v-1a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v1M10 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM20 19v-1a3 3 0 0 0-2-2.8M16 6.2a3 3 0 0 1 0 5.6" />
 		<path v-else-if="name === 'spark'" d="M12 3v4M12 17v4M5 12H3M21 12h-2M7 7 5.5 5.5M18.5 18.5 17 17M17 7l1.5-1.5M7 17l-1.5 1.5" />
