@@ -336,7 +336,12 @@ def get_budget_snapshot(project, department=None):
 	"""Whole-Project and Expense Account utilisation; department is ignored."""
 	if not project:
 		return {}
-	frappe.has_permission("Project", "read", throw=True)
+	project_doc = frappe.get_doc("Project", project)
+	project_doc.check_permission("read")
+	from volunteering.volunteering.project_workspace import can_view_finance
+
+	if not can_view_finance(project_doc):
+		return {}
 	values = _project_budget_fields(project)
 	allocated = flt(values.get("total_approved_budget"))
 	consumed = get_consumed_amount(project)
@@ -361,9 +366,7 @@ def get_budget_snapshot(project, department=None):
 	# Whole-Project utilisation is useful to staff. Per-account allocations and
 	# consumption remain finance-only; the employee selector has a separate API
 	# that returns names without any figures.
-	can_view_account_details = bool(
-		ACCOUNTS_ROLES.union({"NGO Coordinator"}).intersection(frappe.get_roles())
-	)
+	can_view_account_details = True
 	return {
 		"project": project,
 		"budget_status": values.get("budget_status") or "Active",
@@ -435,21 +438,20 @@ def get_budget_health(project=None):
 	"""Return one whole-Project row with nested Expense Account allocations."""
 	frappe.has_permission("Project", "read", throw=True)
 	filters = {"name": project} if project else {}
-	projects = frappe.get_all(
+	projects = frappe.get_list(
 		"Project",
 		filters=filters,
+		limit_page_length=0,
 		fields=[
 			"name",
 			"project_type",
-			"budget_status",
-			"project_budget_control",
-			"total_approved_budget",
-			"account_budget_control",
 		],
 	)
 	rows = []
 	for project_row in projects:
 		snapshot = get_budget_snapshot(project_row.name)
+		if not snapshot:
+			continue
 		rows.append(
 			{
 				"project": project_row.name,

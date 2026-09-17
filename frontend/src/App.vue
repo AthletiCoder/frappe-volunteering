@@ -50,6 +50,7 @@ import NotifyMenu from "./components/NotifyMenu.vue";
 const dark = ref(false);
 
 const nav = computed(() => ({
+	projects: homePayload.value?.nav?.projects ?? false,
 	advances: homePayload.value?.nav?.advances ?? true,
 	volunteering: homePayload.value?.nav?.volunteering ?? false,
 	budget_health: homePayload.value?.nav?.budget_health ?? false,
@@ -61,6 +62,9 @@ const todoCount = computed(
 
 const navItems = computed(() => {
 	const items = [{ to: "/home", label: "Home", icon: "home", badge: todoCount.value }];
+	if (nav.value.projects) {
+		items.push({ to: "/projects", label: "Projects", icon: "book" });
+	}
 	if (nav.value.advances) {
 		items.push({ to: "/advances", label: "Advances", icon: "wallet" });
 	}

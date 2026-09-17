@@ -76,6 +76,8 @@ doctype_js = {
 # Keep the standard HRMS Expense Claim controller while replacing its automatic
 # Expense Claim Type → Account mapping with a Project-scoped account selector.
 override_doctype_class = {
+	"Project": "volunteering.volunteering.overrides.project.VolunteeringProject",
+	"File": "volunteering.volunteering.project_documents.ProjectAwareFile",
 	"Expense Claim": "volunteering.volunteering.overrides.expense_claim.VolunteeringExpenseClaim",
 }
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
@@ -156,6 +158,11 @@ override_doctype_class = {
 # Permission Query Conditions
 # This restricts which records appear in List View/Search
 permission_query_conditions = {
+	"Employee Bank Account Request": "volunteering.volunteering.employee_bank_accounts.get_permission_query_conditions",
+	"Project Proposal": "volunteering.volunteering.project_proposals.get_permission_query_conditions",
+	"Project Budget Revision": "volunteering.volunteering.overrides.project.revision_query",
+	"File": "volunteering.volunteering.project_documents.file_query",
+	"Project": "volunteering.volunteering.project_workspace.get_permission_query_conditions",
 	"Volunteer": "volunteering.volunteering.volunteer_permissions.get_permission_query_conditions",
 	"Participation": "volunteering.volunteering.participation_permissions.get_permission_query_conditions",
 	"Reciprocation": "volunteering.volunteering.reciprocation_permissions.get_permission_query_conditions",
@@ -169,6 +176,11 @@ permission_query_conditions = {
 
 # Override "Has Permission" logic for specific row-level updates
 has_permission = {
+	"Employee Bank Account Request": "volunteering.volunteering.employee_bank_accounts.has_permission",
+	"Project Proposal": "volunteering.volunteering.project_proposals.has_permission",
+	"Project Budget Revision": "volunteering.volunteering.overrides.project.revision_permission",
+	"File": "volunteering.volunteering.project_documents.has_permission",
+	"Project": "volunteering.volunteering.project_workspace.has_permission",
 	"Volunteer": "volunteering.volunteering.volunteer_permissions.has_permission",
 	"Daily Work Log": "volunteering.volunteering.daily_work_log_permissions.has_permission",
 	"Expense Claim": "volunteering.volunteering.expense_claim_permissions.has_permission",
@@ -191,6 +203,21 @@ has_permission = {
 # Hook on document methods and events
 
 doc_events = {
+	"Address": {
+		"before_insert": "volunteering.volunteering.office_addresses.validate_office_address_mutation",
+		"before_save": "volunteering.volunteering.office_addresses.validate_office_address_mutation",
+		"on_trash": "volunteering.volunteering.office_addresses.validate_office_address_mutation",
+	},
+	"Bank Account": {
+		"before_save": "volunteering.volunteering.employee_bank_accounts.validate_employee_bank_account_change",
+		"on_trash": "volunteering.volunteering.employee_bank_accounts.validate_employee_bank_account_change",
+	},
+	"DocShare": {
+		"validate": [
+			"volunteering.volunteering.project_workspace.validate_project_share",
+			"volunteering.volunteering.employee_bank_accounts.validate_bank_share",
+		],
+	},
 	"Purchase Invoice": {
 		"before_save": [
 			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
@@ -205,6 +232,7 @@ doc_events = {
 			"volunteering.volunteering.accounting_controls.ensure_expense_claim_accounts",
 		],
 		"before_save": [
+			"volunteering.volunteering.project_workspace.validate_project_claim_access",
 			"volunteering.volunteering.expense_claim_permissions.validate_expense_claim_employee_self_only",
 			"volunteering.volunteering.accounting_controls.validate_project_required",
 			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
@@ -220,6 +248,7 @@ doc_events = {
 		],
 		# Approve sets docstatus=1 and calls submit() (skips before_save) — re-check budget here.
 		"before_submit": [
+			"volunteering.volunteering.project_workspace.validate_project_claim_access",
 			"volunteering.volunteering.accounting_controls.validate_project_required",
 			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
 			"volunteering.volunteering.receipt_review.validate_verified_receipts",
@@ -234,15 +263,22 @@ doc_events = {
 		],
 	},
 	"File": {
-		"before_insert": "volunteering.volunteering.receipt_review.validate_receipt_file_change",
+		"validate": [
+			"volunteering.volunteering.project_documents.validate_change",
+			"volunteering.volunteering.employee_bank_accounts.validate_bank_proof_change",
+		],
+		"before_insert": ["volunteering.volunteering.receipt_review.validate_receipt_file_change", "volunteering.volunteering.project_documents.validate_change"],
 		"after_insert": "volunteering.volunteering.receipt_review.reset_review_after_file_change",
 		"on_trash": [
+			"volunteering.volunteering.employee_bank_accounts.validate_bank_proof_change",
+			"volunteering.volunteering.project_documents.validate_change",
 			"volunteering.volunteering.receipt_review.validate_receipt_file_change",
 			"volunteering.volunteering.receipt_review.reset_review_after_file_change",
 		],
 	},
 	"Purchase Order": {
 		"before_save": [
+			"volunteering.volunteering.project_workspace.validate_project_claim_access",
 			"volunteering.volunteering.accounting_controls.validate_project_required",
 			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",
 			"volunteering.volunteering.accounting_controls.validate_project_has_cost_center",
@@ -252,6 +288,7 @@ doc_events = {
 			"volunteering.volunteering.spend_controls.validate_spend_controls",
 		],
 		"before_submit": [
+			"volunteering.volunteering.project_workspace.validate_project_claim_access",
 			"volunteering.volunteering.accounting_controls.validate_project_required",
 			"volunteering.volunteering.approval_routing.before_accounting_document_submit",
 			"volunteering.volunteering.budget_service.validate_budget_on_save",
@@ -269,7 +306,9 @@ doc_events = {
 		"on_update": "volunteering.volunteering.approval_routing.on_accounting_workflow_state_change",
 	},
 	"Payment Entry": {
+		"before_validate": "volunteering.volunteering.employee_bank_accounts.validate_employee_payment_bank",
 		"before_submit": [
+			"volunteering.volunteering.employee_bank_accounts.validate_employee_payment_bank",
 			"volunteering.volunteering.accounting_controls.validate_payment_entry",
 			"volunteering.volunteering.spend_controls.validate_spend_controls",
 		],
@@ -290,7 +329,12 @@ doc_events = {
 		"validate": "volunteering.volunteering.leave_pending.sync_leave_approver_from_reports_to",
 	},
 	"Project": {
-		"validate": "volunteering.volunteering.budget_service.validate_project_budgets",
+		"validate": [
+			"volunteering.volunteering.budget_service.validate_project_budgets",
+			"volunteering.volunteering.project_workspace.validate_project_structure",
+		],
+		"on_update": "volunteering.volunteering.project_workspace.record_budget_revision",
+		"on_trash": "volunteering.volunteering.project_workspace.validate_project_deletion",
 	},
 }
 
@@ -302,6 +346,7 @@ after_migrate = [
 	"volunteering.volunteering.quick_links_setup.ensure_quick_links",
 	"volunteering.volunteering.desk_icons_setup.ensure_desk_icons",
 	"volunteering.volunteering.accounting_setup.after_migrate",
+	"volunteering.volunteering.project_workspace.setup_project_workspace",
 ]
 
 boot_session = "volunteering.volunteering.workspace_setup.boot_session"

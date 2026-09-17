@@ -27,7 +27,9 @@
 					class="mt-2 self-start inline-flex items-center gap-2 rounded-full bg-soft px-2.5 py-1 text-xs text-muted hover:shadow-soft hover:-translate-y-px transition-all duration-150"
 				>
 					<span>{{ action.list_label }}</span>
-					<span class="tabular-nums font-semibold text-ink">{{ action.pending || 0 }}</span>
+					<span class="tabular-nums font-semibold text-ink">{{
+						action.pending || 0
+					}}</span>
 				</a>
 			</article>
 		</div>
@@ -45,6 +47,8 @@ defineProps({
 
 function iconFor(id) {
 	const map = {
+		projects: "book",
+		create_project: "book",
 		log_work: "clock",
 		wfh: "sun",
 		leave: "leave",
@@ -53,6 +57,8 @@ function iconFor(id) {
 		advance: "advance",
 		claim: "claim",
 		invoice_generator: "invoice",
+		bank_account: "wallet",
+		office_addresses: "desk",
 		how_to_spend: "book",
 	};
 	return map[id] || "spark";

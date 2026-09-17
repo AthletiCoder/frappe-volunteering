@@ -18,6 +18,7 @@ from volunteering.volunteering.accounting_test_utils import (
 	get_or_create_user,
 	make_expense_claim,
 	mute_accounting_test_emails,
+	save_test_project,
 	set_project_budget,
 )
 from volunteering.volunteering.project_expense_accounts import (
@@ -58,6 +59,14 @@ class IntegrationTestProjectExpenseAccounts(IntegrationTestCase):
 			account_budgets=[(self.allowed_account, 0)],
 		)
 		allow_project_expense_account(self.project, self.allowed_account, label="Employee-friendly expense")
+		project = frappe.get_doc("Project", self.project)
+		project.project_setup_version = 1
+		project.project_purpose = project.project_purpose or "Expense-account fixture"
+		project.project_owner = project.project_owner or self.employee_email
+		project.operational_status = project.operational_status or "Active"
+		if self.employee_email not in [row.user for row in project.project_participants]:
+			project.append("project_participants", {"user": self.employee_email, "access_level": "Basic"})
+		save_test_project(project)
 
 	def tearDown(self):
 		frappe.set_user("Administrator")
@@ -106,7 +115,7 @@ class IntegrationTestProjectExpenseAccounts(IntegrationTestCase):
 		project = frappe.get_doc("Project", self.project)
 		row = next(row for row in project.account_budgets if row.expense_account == self.allowed_account)
 		row.is_active = 0
-		project.save(ignore_permissions=True)
+		save_test_project(project)
 
 		frappe.set_user(self.employee_email)
 		self.assertEqual(get_project_expense_account_options(self.project, self.company), [])
@@ -121,7 +130,7 @@ class IntegrationTestProjectExpenseAccounts(IntegrationTestCase):
 	def test_normal_migrate_does_not_repopulate_intentionally_empty_project(self):
 		project = frappe.get_doc("Project", self.project)
 		project.account_budgets = []
-		project.save(ignore_permissions=True)
+		save_test_project(project)
 
 		backfill_project_expense_accounts()
 

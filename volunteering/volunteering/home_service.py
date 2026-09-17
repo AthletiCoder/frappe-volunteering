@@ -46,6 +46,11 @@ def get_home_payload():
 	employee = get_employee_for_user(user)
 	grade = get_grade_for_user(user)
 	flags = classify_home_access(roles, bool(employee), grade)
+	flags["show_projects"] = flags["allowed"] and bool(frappe.has_permission("Project", "read"))
+	from volunteering.volunteering.project_workspace import can_propose_project, is_project_manager
+
+	flags["can_create_projects"] = flags["allowed"] and can_propose_project()
+	flags["can_review_projects"] = flags["allowed"] and is_project_manager()
 	full_name = frappe.db.get_value("User", user, "full_name") or user
 
 	if not flags["allowed"]:
@@ -63,7 +68,7 @@ def get_home_payload():
 			"todos": [],
 			"todo_count": 0,
 			"accounts_queues": [],
-			"actions": {"time": [], "money": []},
+			"actions": {"time": [], "money": [], "projects": [], "accounts": [], "organisation": []},
 			"status": [],
 			"programs": None,
 			"people": [],
@@ -91,6 +96,7 @@ def get_home_payload():
 			"advances": flags["show_advances"],
 			"volunteering": flags["show_programs"],
 			"budget_health": flags["show_budget_health"],
+			"projects": flags["show_projects"],
 		},
 		"inbox": inbox,
 		"waiting": waiting,
@@ -102,6 +108,9 @@ def get_home_payload():
 		"actions": {
 			"time": _time_actions(pending) if flags["show_time"] else [],
 			"money": _money_actions(pending) if flags["show_money"] else [],
+			"projects": _project_actions(flags),
+			"accounts": _bank_review_actions(user),
+			"organisation": _organisation_actions(),
 		},
 		"status": status,
 		"programs": _programs_block() if flags["show_programs"] else None,
@@ -110,6 +119,61 @@ def get_home_payload():
 		"flags": flags,
 	}
 	return payload
+
+
+def _organisation_actions():
+	return [
+		{
+			"id": "office_addresses",
+			"label": _("Office addresses"),
+			"hint": _("View Sevamrita's current office, billing and correspondence addresses."),
+			"route": "/volunteering/office-addresses",
+		}
+	]
+
+
+def _bank_review_actions(user):
+	if "Accounts Manager" not in frappe.get_roles(user):
+		return []
+	return [{
+		"id": "bank_account",
+		"label": _("Review reimbursement bank accounts"),
+		"hint": _("Approve, return or reject employee bank details and private bank proof."),
+		"route": "/volunteering/bank-account?queue=1",
+	}]
+
+
+def _project_actions(flags):
+	if not flags.get("show_projects"):
+		return []
+	links = [
+		{
+			"id": "projects",
+			"label": _("Projects and proposals"),
+			"hint": _("Purpose, participants, permitted accounts and project status."),
+			"route": "/volunteering/projects",
+		}
+	]
+	if flags.get("can_create_projects"):
+		links.insert(
+			0,
+			{
+				"id": "create_project",
+				"label": _("Propose a project"),
+				"hint": _("Prepare scope, membership and budgets for one Projects Manager to approve."),
+				"route": "/volunteering/projects?new=1",
+			},
+		)
+	if flags.get("can_review_projects"):
+		links.append(
+			{
+				"id": "project_approvals",
+				"label": _("Project approvals"),
+				"hint": _("Review new proposals and later project changes."),
+				"route": "/volunteering/projects?queue=1",
+			}
+		)
+	return links
 
 
 def _compose_waiting(inbox, accounts_queues):
@@ -337,7 +401,7 @@ def _money_actions(pending=None):
 				"id": "claim",
 				"label": _("Submit an Expense"),
 				"hint": _("Record what you spent and settle your advance or get reimbursed."),
-				"route": "/desk/expense-claim/new",
+				"route": "/volunteering/expense-claim",
 			},
 			"/desk/expense-claim",
 			_("Previous claims"),
@@ -347,8 +411,14 @@ def _money_actions(pending=None):
 		{
 			"id": "invoice_generator",
 			"label": _("Prepare an invoice"),
-			"hint": _("Create a GST or non-GST invoice for supplier signature"),
+			"hint": _("Prepare a GST or non-GST document for supplier or volunteer signature"),
 			"route": "/volunteering/invoice-generator",
+		},
+		{
+			"id": "bank_account",
+			"label": _("My reimbursement bank account"),
+			"hint": _("Submit or replace bank details for Accounts Manager approval"),
+			"route": "/volunteering/bank-account",
 		},
 		{
 			"id": "how_to_spend",
@@ -532,6 +602,19 @@ def _pending_approver_inbox(doctype, kind, user):
 
 def _accounts_queues():
 	queues = []
+	if "Accounts Manager" in frappe.get_roles():
+		bank_requests = _safe_count(
+			"Employee Bank Account Request", {"request_status": "Pending Approval"}
+		)
+		if bank_requests:
+			queues.append(
+				{
+					"id": "bank_accounts",
+					"label": _("Bank details to approve"),
+					"count": bank_requests,
+					"route": "/volunteering/bank-account?queue=1",
+				}
+			)
 	reimburse = _safe_count(
 		"Expense Claim",
 		{"docstatus": 1, "approval_status": "Approved", "status": "Unpaid"},

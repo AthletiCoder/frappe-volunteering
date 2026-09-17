@@ -1,0 +1,193 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-09-16 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "Document",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "employee",
+  "employee_name",
+  "submitted_by",
+  "request_status",
+  "account_holder_name",
+  "bank_name",
+  "branch",
+  "account_type",
+  "account_number",
+  "account_number_last4",
+  "ifsc",
+  "swift",
+  "ownership_confirmed",
+  "proof_file",
+  "review_section",
+  "review_comments",
+  "reviewed_by",
+  "reviewed_on",
+  "bank_account"
+ ],
+ "fields": [
+  {
+   "default": "EBANK-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "EBANK-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "ignore_user_permissions": 1,
+   "in_list_view": 1,
+   "label": "Employee",
+   "options": "Employee",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fetch_from": "employee.employee_name",
+   "fieldname": "employee_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Employee Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "submitted_by",
+   "fieldtype": "Link",
+   "label": "Submitted By",
+   "options": "User",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "request_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Pending Approval\nApproved\nReturned\nRejected\nSuperseded",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "account_holder_name",
+   "fieldtype": "Data",
+   "label": "Account Holder Name",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "bank_name",
+   "fieldtype": "Data",
+   "label": "Bank Name",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "branch",
+   "fieldtype": "Data",
+   "label": "Branch",
+   "read_only": 1
+  },
+  {
+   "fieldname": "account_type",
+   "fieldtype": "Select",
+   "label": "Account Type",
+   "options": "Savings\nCurrent\nSalary\nOther",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "account_number",
+   "fieldtype": "Password",
+   "label": "Account Number",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "account_number_last4",
+   "fieldtype": "Data",
+   "label": "Account Number Last Four",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "ifsc",
+   "fieldtype": "Data",
+   "label": "IFSC",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "swift",
+   "fieldtype": "Data",
+   "label": "SWIFT",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ownership_confirmed",
+   "fieldtype": "Check",
+   "label": "Employee Confirmed Account Ownership",
+   "read_only": 1
+  },
+  {
+   "fieldname": "proof_file",
+   "fieldtype": "Attach",
+   "label": "Private Bank Proof",
+   "read_only": 1
+  },
+  {
+   "fieldname": "review_section",
+   "fieldtype": "Section Break",
+   "label": "Review"
+  },
+  {
+   "fieldname": "review_comments",
+   "fieldtype": "Small Text",
+   "label": "Review Comments",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reviewed_by",
+   "fieldtype": "Link",
+   "label": "Reviewed By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reviewed_on",
+   "fieldtype": "Datetime",
+   "label": "Reviewed On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "bank_account",
+   "fieldtype": "Link",
+   "label": "Approved ERPNext Bank Account",
+   "options": "Bank Account",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-09-16 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Volunteering",
+ "name": "Employee Bank Account Request",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

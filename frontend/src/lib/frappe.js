@@ -10,7 +10,9 @@ export async function call(method, args = {}) {
 		body: JSON.stringify(args),
 	});
 	const data = await res.json();
-	if (data.exc || data._server_messages) {
+	// Frappe also sends advisory msgprint warnings in _server_messages after
+	// successful requests.  Only failed responses/exceptions are errors.
+	if (!res.ok || data.exc || data.exception) {
 		let msg = data.exception || data.exc || "Request failed";
 		try {
 			const server = JSON.parse(data._server_messages || "[]");

@@ -13,9 +13,7 @@ from volunteering.volunteering.authority import BOARD_OF_DIRECTORS
 from volunteering.volunteering.volunteering_access import VOLUNTEERING_OPS_ROLES
 
 HR_ROLES = frozenset({"HR Manager", "HR User"})
-APPROVER_ROLES = frozenset(
-	{"Leave Approver", "Expense Approver", "Expense Receipt Reviewer"}
-)
+APPROVER_ROLES = frozenset({"Leave Approver", "Expense Approver", "Expense Receipt Reviewer"})
 STAFF_HOME_ROLES = frozenset(
 	{
 		"Employee",
@@ -29,6 +27,11 @@ STAFF_HOME_ROLES = frozenset(
 		"Leave Approver",
 		"Expense Approver",
 		"Expense Receipt Reviewer",
+		"Projects User",
+		"Projects Manager",
+		"Project Proposer",
+		"Project Viewer",
+		"Auditor",
 	}
 )
 HOME_URL = "/volunteering/home"
@@ -72,9 +75,7 @@ def classify_home_access(roles, has_employee, grade=None):
 
 	show_time = allowed and (has_employee or is_admin_user)
 	show_money = show_time
-	show_approver_inbox = allowed and (
-		bool(role_set & APPROVER_ROLES) or is_admin_user or is_board
-	)
+	show_approver_inbox = allowed and (bool(role_set & APPROVER_ROLES) or is_admin_user or is_board)
 	show_accounts = allowed and is_accounts
 	show_programs = allowed and is_ops
 	show_people = allowed and (is_hr or is_admin_user)
@@ -120,9 +121,7 @@ def check_app_permission():
 	if frappe.session.user in ("Administrator",):
 		return True
 	roles = frappe.get_roles()
-	has_employee = bool(
-		frappe.db.exists("Employee", {"user_id": frappe.session.user, "status": "Active"})
-	)
+	has_employee = bool(frappe.db.exists("Employee", {"user_id": frappe.session.user, "status": "Active"}))
 	return bool(classify_home_access(roles, has_employee).get("allowed"))
 
 

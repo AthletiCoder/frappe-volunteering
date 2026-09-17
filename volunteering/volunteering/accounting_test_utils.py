@@ -334,7 +334,7 @@ def allow_project_expense_account(project, account, label=None, approved_amount=
 			if label:
 				row.employee_label = label
 			row.is_active = active
-			project_doc.save(ignore_permissions=True)
+			save_test_project(project_doc)
 			return
 	project_doc.append(
 		"account_budgets",
@@ -345,7 +345,7 @@ def allow_project_expense_account(project, account, label=None, approved_amount=
 			"is_active": active,
 		},
 	)
-	project_doc.save(ignore_permissions=True)
+	save_test_project(project_doc)
 
 
 def get_or_create_supplier():
@@ -531,7 +531,27 @@ def set_project_budget(
 				"is_active": 1,
 			},
 		)
-	project_doc.save(ignore_permissions=True)
+	save_test_project(project_doc)
+	return project_doc
+
+
+def save_test_project(project_doc):
+	"""Persist fixture-only setup through the non-client approval context.
+
+	Production code cannot set this ContextVar; tests use it only to prepare
+	legacy accounting fixtures without manufacturing an approval request.
+	"""
+	from volunteering.volunteering.project_proposals import _application
+
+	previous_user = frappe.session.user
+	frappe.set_user("Administrator")
+	project_doc.project_budget_revision_reason = "Automated test fixture setup"
+	token = _application.set((None if project_doc.is_new() else project_doc.name, "test-fixture"))
+	try:
+		project_doc.save(ignore_permissions=True)
+	finally:
+		_application.reset(token)
+		frappe.set_user(previous_user)
 	return project_doc
 
 
@@ -543,5 +563,5 @@ def set_project_department_budget(project, department, allocated_amount):
 		"department_budgets",
 		{"department": department, "allocated_amount": allocated_amount},
 	)
-	project_doc.save(ignore_permissions=True)
+	save_test_project(project_doc)
 	return project_doc

@@ -1,0 +1,28 @@
+{
+ "doctype": "DocType", "name": "Project Proposal", "module": "Volunteering",
+ "autoname": "hash", "title_field": "title", "track_changes": 1,
+ "field_order": ["title", "request_kind", "project", "proposed_by", "proposal_status", "request_reason", "base_modified", "proposal_data", "events", "decided_by", "decided_on"],
+ "fields": [
+  {"fieldname":"title","label":"Title","fieldtype":"Data","reqd":1,"in_list_view":1},
+  {"fieldname":"request_kind","label":"Request Kind","fieldtype":"Select","options":"New Project\nProject Change","reqd":1,"in_list_view":1},
+  {"fieldname":"project","label":"Project","fieldtype":"Link","options":"Project","read_only":1},
+  {"fieldname":"proposed_by","label":"Proposed By","fieldtype":"Link","options":"User","read_only":1,"reqd":1},
+  {"fieldname":"proposal_status","label":"Status","fieldtype":"Select","options":"Draft\nPending Approval\nCorrection Required\nApproved\nRejected\nWithdrawn","reqd":1,"read_only":1,"in_list_view":1},
+  {"fieldname":"request_reason","label":"Reason / Submission Note","fieldtype":"Small Text"},
+  {"fieldname":"base_modified","label":"Approved Project Baseline","fieldtype":"Data","read_only":1},
+  {"fieldname":"proposal_data","label":"Requested Changes","fieldtype":"Code","options":"JSON","permlevel":2,"read_only":1},
+  {"fieldname":"events","label":"Decision History","fieldtype":"Table","options":"Project Proposal Event","permlevel":2,"read_only":1},
+  {"fieldname":"decided_by","label":"Decided By","fieldtype":"Link","options":"User","read_only":1},
+  {"fieldname":"decided_on","label":"Decided On","fieldtype":"Datetime","read_only":1}
+ ],
+ "permissions": [
+  {"role":"Projects Manager","read":1,"report":1},
+  {"role":"System Manager","read":1,"report":1},
+  {"role":"Project Proposer","read":1},
+  {"role":"Projects User","read":1},
+  {"role":"Employee","read":1},
+  {"role":"Accounts Manager","read":1},
+  {"role":"Projects Manager","permlevel":2,"read":1},
+  {"role":"System Manager","permlevel":2,"read":1}
+ ]
+}

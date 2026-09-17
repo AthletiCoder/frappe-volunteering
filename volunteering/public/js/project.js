@@ -12,6 +12,7 @@ frappe.ui.form.on("Project", {
 		}));
 	},
 	refresh(frm) {
+		volunteering.project_budget.make_single_scroll_page(frm);
 		volunteering.project_budget.toggle_account_budget_amounts(frm);
 		if (!frm.doc.name || frm.is_new()) {
 			return;
@@ -70,4 +71,70 @@ volunteering.project_budget.toggle_account_budget_amounts = function (frm) {
 			: __("Optional; this row still controls whether employees may select the account."),
 	);
 	frm.refresh_field("account_budgets");
+};
+
+volunteering.project_budget.make_single_scroll_page = function (frm) {
+	const layout = frm.layout;
+	if (!layout || !layout.tabs || !layout.tabs.length) {
+		return;
+	}
+
+	volunteering.project_budget.add_single_page_styles();
+	layout.wrapper.addClass("volunteering-project-single-page");
+
+	layout.tabs.forEach((tab) => {
+		if (tab.wrapper.children(".volunteering-project-tab-heading").length) {
+			return;
+		}
+
+		const heading = $("<div>", {
+			class: "volunteering-project-tab-heading",
+			"data-fieldname": tab.df.fieldname,
+		});
+		$("<h4>", { class: "volunteering-project-tab-title" })
+			.text(__(tab.df.label || "Details"))
+			.appendTo(heading);
+		heading.prependTo(tab.wrapper);
+	});
+
+	// The single-page view is intended for reviewing the whole Project form.
+	// Open collapsed sections on refresh; users may still collapse them afterward.
+	(layout.sections || []).forEach((section) => {
+		if (section.df && section.df.collapsible && section.is_collapsed()) {
+			section.collapse(false);
+		}
+	});
+};
+
+volunteering.project_budget.add_single_page_styles = function () {
+	const style_id = "volunteering-project-single-page-styles";
+	if (document.getElementById(style_id)) {
+		return;
+	}
+
+	$("<style>", { id: style_id })
+		.text(
+			`
+			.volunteering-project-single-page .form-tabs-list {
+				display: none;
+			}
+
+			.volunteering-project-single-page .form-tab-content > .tab-pane:not(.hide) {
+				display: block !important;
+				opacity: 1 !important;
+			}
+
+			.volunteering-project-single-page .volunteering-project-tab-heading {
+				border-bottom: 1px solid var(--border-color);
+				padding: var(--padding-lg) var(--padding-md) var(--padding-sm);
+			}
+
+			.volunteering-project-single-page .volunteering-project-tab-title {
+				font-size: var(--text-lg);
+				font-weight: var(--weight-semibold);
+				margin: 0;
+			}
+		`,
+		)
+		.appendTo(document.head);
 };

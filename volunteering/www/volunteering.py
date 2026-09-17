@@ -23,6 +23,12 @@ def get_context(context):
 			"NGO Coordinator",
 			"Leave Approver",
 			"Expense Approver",
+			"Expense Receipt Reviewer",
+			"Projects User",
+			"Projects Manager",
+			"Project Proposer",
+			"Project Viewer",
+			"Auditor",
 		)
 	)
 	context.no_cache = 1

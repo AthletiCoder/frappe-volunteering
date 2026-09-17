@@ -191,3 +191,7 @@ class UnitTestHomePayload(UnitTestCase):
 		action = next(row for row in _money_actions() if row["id"] == "invoice_generator")
 		self.assertEqual(action["route"], "/volunteering/invoice-generator")
 		self.assertIn("GST", action["hint"])
+
+		claim = next(row for row in _money_actions() if row["id"] == "claim")
+		self.assertEqual(claim["route"], "/volunteering/expense-claim")
+		self.assertEqual(claim["list_route"], "/desk/expense-claim")

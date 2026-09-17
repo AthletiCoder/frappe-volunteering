@@ -4,21 +4,24 @@
 """Employee-facing GST and non-GST invoice document generator.
 
 This module deliberately does not create an ERP accounting document. It returns
-an in-memory PDF and DOCX so the employee can obtain the supplier's verification
-and signature before attaching the signed invoice to an Expense Claim.
+an in-memory PDF and DOCX for supplier signature or the employee's own volunteer
+expense confirmation before attaching the signed document to an Expense Claim.
 """
 
 from __future__ import annotations
 
 import base64
+import hashlib
+import json
 import re
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from io import BytesIO
 
 import frappe
 from frappe import _
-from frappe.contacts.doctype.address.address import get_default_address
+from frappe.model.naming import getseries
 from frappe.utils import formatdate, getdate, money_in_words, nowdate
+from frappe.utils.password import decrypt, encrypt
 from markupsafe import escape
 
 from volunteering.volunteering.authority import get_employee_for_user
@@ -28,6 +31,7 @@ MONEY_PLACES = Decimal("0.01")
 MAX_MONEY = Decimal("999999999999.99")
 MAX_QUANTITY = Decimal("999999999")
 ALLOWED_TYPES = {"GST", "NON_GST"}
+ALLOWED_SIGNERS = {"SUPPLIER", "VOLUNTEER"}
 ALLOWED_TAX_MODES = {"CGST_SGST", "IGST"}
 GSTIN_PATTERN = re.compile(r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$")
 PAN_PATTERN = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
@@ -36,44 +40,135 @@ PAN_PATTERN = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
 @frappe.whitelist(methods=["POST"])
 def get_invoice_generator_defaults():
 	employee = _require_employee()
+	from volunteering.volunteering.employee_bank_accounts import get_approved_bank_details
+
 	company = frappe.db.get_value("Employee", employee, "company")
 	company_doc = frappe.get_cached_doc("Company", company)
-	address = _company_address(company)
+	address_choices = _company_address_choices(company, company_doc)
+	default_choice = next(
+		(choice for choice in address_choices if choice["is_primary_address"]),
+		address_choices[0] if address_choices else None,
+	)
+	address = default_choice["party"] if default_choice else _company_party(company_doc, {})
+	approved_bank = get_approved_bank_details(employee, reveal=False)
 	return {
 		"employee": employee,
+		"volunteer": _employee_signer(employee),
 		"company": company,
 		"invoice_date": nowdate(),
-		"consignee": {
-			"name": company_doc.company_name or company,
-			"address": address.get("address", ""),
-			"state": address.get("state", ""),
-			"pin_code": address.get("pincode", ""),
-			"gstin": (company_doc.get("tax_id") or "").strip().upper(),
-		},
+		"remittance_bank": approved_bank,
+		"has_approved_bank": bool(approved_bank),
+		"office_addresses": address_choices,
+		"default_office_address": default_choice["name"] if default_choice else "",
+		"consignee": address,
 	}
 
 
 @frappe.whitelist(methods=["POST"])
-def generate_invoice_documents(payload):
+def generate_invoice_documents(payload, output_format="both", generation_reference=None):
 	"""Validate invoice data and return private, in-memory PDF and DOCX downloads."""
-	_require_employee()
-	data = _normalise_payload(payload)
-	pdf_bytes = _build_pdf(data)
-	docx_bytes = _build_docx(data)
+	# MariaDB snapshot isolation may reject a counter updated by an overlapping
+	# request even after a row lock. Restart the whole generation transaction and
+	# re-check employee/bank approval rather than retrying with a stale snapshot.
+	for attempt in range(3):
+		try:
+			return _generate_invoice_documents(payload, output_format, generation_reference)
+		except frappe.QueryDeadlockError:
+			frappe.db.rollback()
+			if attempt == 2:
+				frappe.throw(
+					_("Invoice generation is busy. Please try again; no invoice number was consumed.")
+				)
+
+
+def _generate_invoice_documents(payload, output_format="both", generation_reference=None):
+	if output_format not in {"pdf", "docx", "both"}:
+		frappe.throw(_("Choose PDF or Word document."))
+	employee = _require_employee()
+	from volunteering.volunteering.employee_bank_accounts import get_approved_bank_details
+
+	approved_bank = get_approved_bank_details(employee, reveal=True)
+	if not approved_bank:
+		frappe.throw(
+			_(
+				"An Accounts Manager must approve your reimbursement bank account before you can generate an invoice."
+			)
+		)
+	# Validate first, without trusting or allocating a browser-supplied number.
+	data = _normalise_payload(
+		_apply_selected_office_addresses(payload, employee),
+		bank_override=approved_bank,
+		invoice_number_override="INV-AUTOMATIC",
+		volunteer_override=_employee_signer(employee),
+	)
+	fingerprint = hashlib.sha256(
+		json.dumps(data, sort_keys=True, default=str, separators=(",", ":")).encode()
+	).hexdigest()
+	data["invoice_number"] = _number_for_generation(employee, fingerprint, generation_reference)
 	stem = _safe_filename(data["invoice_number"])
-	return {
-		"pdf": _download(f"{stem}.pdf", "application/pdf", pdf_bytes),
-		"docx": _download(
-			f"{stem}.docx",
-			"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-			docx_bytes,
-		),
+	result = {
+		"invoice_number": data["invoice_number"],
 		"grand_total": float(data["grand_total"]),
 		"amount_in_words": data["amount_in_words"],
-		"notice": _(
-			"The supplier must verify and sign the generated invoice before it is attached to an Expense Claim."
-		),
+		"signer_type": data["signer_type"],
+		"notice": data["notice"],
 	}
+	if output_format in {"pdf", "both"}:
+		result["pdf"] = _download(f"{stem}.pdf", "application/pdf", _build_pdf(data))
+	if output_format in {"docx", "both"}:
+		result["docx"] = _download(
+			f"{stem}.docx",
+			"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+			_build_docx(data),
+		)
+	# An authenticated, opaque reference permits the other format for exactly
+	# this employee and content, without trusting client-supplied invoice numbers.
+	# Issue it only after the requested document(s) succeed.
+	result["generation_reference"] = encrypt(
+		json.dumps(
+			{
+				"purpose": "invoice-generator-v1",
+				"employee": employee,
+				"fingerprint": fingerprint,
+				"invoice_number": data["invoice_number"],
+			}
+		)
+	)
+	return result
+
+
+def _number_for_generation(employee, fingerprint, reference):
+	if reference:
+		try:
+			identity = json.loads(decrypt(reference))
+		except ValueError, TypeError, frappe.ValidationError:
+			frappe.throw(_("Invalid invoice generation reference. Generate again."))
+		if not isinstance(identity, dict) or identity.get("purpose") != "invoice-generator-v1":
+			frappe.throw(_("Invalid invoice generation reference. Generate again."))
+		if identity.get("employee") != employee:
+			frappe.throw(_("This invoice belongs to another employee."), frappe.PermissionError)
+		if identity.get("fingerprint") == fingerprint:
+			return identity["invoice_number"]
+	return _next_invoice_number()
+
+
+def _next_invoice_number():
+	"""Allocate one shared annual number inside the generation transaction."""
+	year = getdate(nowdate()).year
+	key = f"SEVAMRITA-FORM-INVOICE-{year}-"
+	series = frappe.qb.DocType("Series")
+	if not frappe.qb.from_(series).select(series.name).where(series.name == key).run():
+		# The first generation has no Series row to lock. Serialize its creation
+		# on an existing site Company row, then let getseries re-read with a lock.
+		# Avoid a no-op UPSERT: MariaDB can reject it from a stale snapshot.
+		company = frappe.qb.DocType("Company")
+		frappe.qb.from_(company).select(company.name).orderby(company.name).limit(1).for_update().run()
+	# getseries locks the counter until both documents succeed and the POST
+	# commits. Frappe rolls back allocation if document generation fails.
+	number = f"INV-{year}-{getseries(key, 6)}"
+	if len(number) > 16:
+		frappe.throw(_("The annual invoice numbering sequence is exhausted. Contact your administrator."))
+	return number
 
 
 def _require_employee():
@@ -81,39 +176,89 @@ def _require_employee():
 	if not user or user == "Guest":
 		frappe.throw(_("Log in as an employee to prepare an invoice."), frappe.PermissionError)
 	employee = get_employee_for_user(user)
-	if not employee:
+	if not employee or frappe.db.get_value("Employee", employee, "status") != "Active":
 		frappe.throw(_("Your user must be linked to an active Employee record."), frappe.PermissionError)
 	return employee
 
 
-def _company_address(company):
-	address_name = get_default_address("Company", company)
-	if not address_name:
-		return {}
-	address = frappe.get_cached_doc("Address", address_name)
-	lines = [
-		address.get("address_line1"),
-		address.get("address_line2"),
-		address.get("city"),
-		address.get("county"),
-	]
+def _employee_signer(employee):
+	# A volunteer signs their own statement. Never trust a browser-supplied
+	# employee identity or present the volunteer as a supplier representative.
 	return {
-		"address": ", ".join(str(value).strip() for value in lines if value),
-		"state": address.get("state") or "",
-		"pincode": address.get("pincode") or "",
+		"employee": employee,
+		"name": frappe.db.get_value("Employee", employee, "employee_name") or employee,
 	}
 
 
-def _normalise_payload(payload):
+def _company_address_choices(company, company_doc=None):
+	from volunteering.volunteering.office_addresses import invoice_address_choices
+
+	company_doc = company_doc or frappe.get_cached_doc("Company", company)
+	choices = invoice_address_choices(company)
+	for choice in choices:
+		choice["party"] = _company_party(company_doc, choice["party"])
+	return choices
+
+
+def _company_party(company_doc, address):
+	return {
+		"name": company_doc.company_name or company_doc.name,
+		"address": address.get("address", ""),
+		"state": address.get("state", ""),
+		"pin_code": address.get("pin_code", ""),
+		"gstin": (company_doc.get("tax_id") or "").strip().upper(),
+	}
+
+
+def _apply_selected_office_addresses(payload, employee):
+	raw = frappe.parse_json(payload) if isinstance(payload, str) else payload
+	if not isinstance(raw, dict):
+		return raw
+	consignee_name = str(raw.get("consignee_address_name") or "").strip()
+	buyer_same = bool(raw.get("buyer_same_as_consignee", True))
+	buyer_name = str(raw.get("buyer_address_name") or "").strip()
+	if not consignee_name and (buyer_same or not buyer_name):
+		return raw
+
+	company = frappe.db.get_value("Employee", employee, "company")
+	choices = {choice["name"]: choice for choice in _company_address_choices(company)}
+	values = dict(raw)
+	if consignee_name:
+		if consignee_name not in choices:
+			frappe.throw(_("Choose a current Sevamrita office address for the consignee."))
+		values["consignee"] = choices[consignee_name]["party"]
+	if not buyer_same:
+		if not buyer_name or buyer_name not in choices:
+			frappe.throw(_("Choose a current Sevamrita office address for the buyer."))
+		values["buyer"] = choices[buyer_name]["party"]
+	return values
+
+
+def _normalise_payload(payload, bank_override=None, invoice_number_override=None, volunteer_override=None):
 	raw = frappe.parse_json(payload) if isinstance(payload, str) else payload
 	if not isinstance(raw, dict):
 		frappe.throw(_("Invoice details must be a valid object."))
 
 	invoice_type = _required_choice(raw, "invoice_type", ALLOWED_TYPES, _("Invoice type"))
+	# Keep supplier signing as the default for older clients without a signer selector.
+	signer_type = _required_choice(
+		{"signer_type": raw.get("signer_type", "SUPPLIER")},
+		"signer_type",
+		ALLOWED_SIGNERS,
+		_("signer"),
+	)
 	data = {
 		"invoice_type": invoice_type,
-		"title": "TAX INVOICE" if invoice_type == "GST" else "INVOICE",
-		"invoice_number": _required_text(raw, "invoice_number", _("Invoice number"), 80),
+		"signer_type": signer_type,
+		"copy_label": _("For expense reimbursement")
+		if signer_type == "VOLUNTEER"
+		else _("Original for recipient"),
+		"title": ("EXPENSE STATEMENT WITH GST DETAILS" if invoice_type == "GST" else "EXPENSE STATEMENT")
+		if signer_type == "VOLUNTEER"
+		else ("TAX INVOICE" if invoice_type == "GST" else "INVOICE"),
+		"invoice_number": invoice_number_override
+		if invoice_number_override is not None
+		else _required_text(raw, "invoice_number", _("Invoice number"), 80),
 		"invoice_date": _date(raw.get("invoice_date"), _("Invoice date")),
 		"buyer_order_number": _text(raw.get("buyer_order_number"), 100),
 		"buyer_order_date": _optional_date(raw.get("buyer_order_date")),
@@ -125,13 +270,15 @@ def _normalise_payload(payload):
 		"buyer_same_as_consignee": bool(raw.get("buyer_same_as_consignee", True)),
 		"transportation_charges": _money(raw.get("transportation_charges"), _("Transportation charges")),
 		"other_charges": _money(raw.get("other_charges"), _("Other charges")),
-		"bank": _bank(raw.get("bank")),
-		"authorised_signatory": _text(raw.get("authorised_signatory"), 120),
+		# The public endpoint always supplies an approved server-side override. Keeping
+		# the fallback makes the pure rendering helpers independently testable.
+		"bank": _bank(bank_override if bank_override is not None else raw.get("bank")),
+		"authorised_signatory": _text(raw.get("authorised_signatory"), 120)
+		if signer_type == "SUPPLIER"
+		else "",
 	}
 	data["buyer"] = (
-		data["consignee"]
-		if data["buyer_same_as_consignee"]
-		else _party(raw.get("buyer"), _("Buyer"))
+		data["consignee"] if data["buyer_same_as_consignee"] else _party(raw.get("buyer"), _("Buyer"))
 	)
 
 	if invoice_type == "GST":
@@ -170,17 +317,16 @@ def _normalise_payload(payload):
 		data["items"].append(
 			{
 				"number": index,
-				"description": _required_text(raw_item, "description", _("Description in row {0}").format(index), 300),
-				"hsn_sac": _required_text(raw_item, "hsn_sac", _("HSN/SAC in row {0}").format(index), 30),
+				"description": _required_text(
+					raw_item, "description", _("Description in row {0}").format(index), 300
+				),
+				"hsn_sac": _text(raw_item.get("hsn_sac"), 30),
 				"unit": _required_text(raw_item, "unit", _("Unit in row {0}").format(index), 20),
 				"quantity": quantity,
 				"rate": rate,
 				"amount": _quantise(line_amount),
 			}
 		)
-
-	if not raw.get("supplier_confirmation_required"):
-		frappe.throw(_("Confirm that the supplier will verify and sign the invoice."))
 
 	data["items_total"] = _quantise(sum((item["amount"] for item in data["items"]), Decimal("0")))
 	taxable_total = data["items_total"] + data["transportation_charges"] + data["other_charges"]
@@ -201,10 +347,42 @@ def _normalise_payload(payload):
 		frappe.throw(_("Invoice total is too large."))
 	data["grand_total"] = _quantise(grand_total)
 	data["amount_in_words"] = money_in_words(data["grand_total"], "INR")
-	data["non_gst_declaration"] = _(
-		"I, {0}, proprietor/authorised person of {1}, declare that this business is not registered "
-		"under the Goods and Services Tax (GST) Act and therefore does not have a GSTIN."
-	).format(data["authorised_signatory"] or _("the undersigned"), data["supplier"]["name"])
+	data["declaration_title"] = ""
+	data["declaration"] = ""
+	data["signature_employee"] = ""
+	if signer_type == "VOLUNTEER":
+		volunteer = volunteer_override if volunteer_override is not None else raw.get("volunteer")
+		volunteer = volunteer if isinstance(volunteer, dict) else {}
+		data["signatory_name"] = _required_text(volunteer, "name", _("Volunteer name"), 160)
+		data["signature_employee"] = _required_text(volunteer, "employee", _("Volunteer employee"), 140)
+		data["signature_context"] = _("Volunteer expense confirmation")
+		data["signature_label"] = _("Volunteer signature")
+		data["declaration_title"] = _("Volunteer declaration")
+		data["declaration"] = _(
+			"I, {0}, confirm that the expense described above was incurred on behalf of {1} and "
+			"that the details are accurate to the best of my knowledge. I sign as the volunteer "
+			"claiming the expense, not as a representative of the supplier."
+		).format(data["signatory_name"], data["buyer"]["name"])
+		data["notice"] = _(
+			"Prepared for volunteer expense confirmation. Attach the signed statement and available "
+			"original bills to the Expense Claim. Receipt review and expenditure approval remain required."
+		)
+		if invoice_type == "GST":
+			data["notice"] += " " + _("This statement does not replace a supplier-issued GST tax invoice.")
+	else:
+		data["signatory_name"] = data["authorised_signatory"]
+		data["signature_context"] = _("For {0}").format(data["supplier"]["name"])
+		data["signature_label"] = _("Authorised signatory and supplier signature")
+		if invoice_type == "NON_GST":
+			data["declaration_title"] = _("Non-GST declaration")
+			data["declaration"] = _(
+				"I, {0}, proprietor/authorised person of {1}, declare that this business is not registered "
+				"under the Goods and Services Tax (GST) Act and therefore does not have a GSTIN."
+			).format(data["authorised_signatory"] or _("the undersigned"), data["supplier"]["name"])
+		data["notice"] = _(
+			"Ask the supplier to verify the details and sign this document before attaching it to the "
+			"Expense Claim. Receipt review and expenditure approval remain required."
+		)
 	return data
 
 
@@ -269,7 +447,7 @@ def _optional_date(value):
 def _decimal(value, label):
 	try:
 		amount = Decimal(str(value or 0))
-	except (InvalidOperation, ValueError):
+	except InvalidOperation, ValueError:
 		frappe.throw(_("{0} must be a number.").format(label))
 	if not amount.is_finite():
 		frappe.throw(_("{0} must be a finite number.").format(label))
@@ -314,7 +492,7 @@ def _validate_gstin(value, label, required):
 
 
 def _validate_pan(value):
-	if not value or not PAN_PATTERN.fullmatch(value):
+	if value and not PAN_PATTERN.fullmatch(value):
 		frappe.throw(_("Supplier PAN must be in the format ABCDE1234F."))
 
 
@@ -380,8 +558,8 @@ def _render_pdf_html(data):
 	]
 	bank_html = "<br>".join(f"<b>{h(label)}:</b> {h(value)}" for label, value in bank_lines if value)
 	declaration = (
-		f"<div class='declaration'><b>{h(_('Non-GST declaration'))}:</b> {h(data['non_gst_declaration'])}</div>"
-		if data["invoice_type"] == "NON_GST"
+		f"<div class='declaration'><b>{h(data['declaration_title'])}:</b> {h(data['declaration'])}</div>"
+		if data["declaration"]
 		else ""
 	)
 	buyer = data["buyer"]
@@ -405,15 +583,15 @@ th {{ background: #ececec; text-align: center; }}
 .signature {{ height: 22mm; text-align: right; }}
 .notice {{ margin-top: 3mm; padding-top: 2mm; border-top: 1px solid #777; font-size: 8pt; color: #444; }}
 </style></head><body>
-<h1>{h(data['title'])}</h1><div class="copy">{h(_('Original for recipient'))}</div>
-<table><tr><td class="party"><div class="label">{h(_('Supplier'))}</div><div class="value">{h(data['supplier']['name'])}</div>{h(data['supplier']['address'])}<br>{h(data['supplier']['state'])} {h(data['supplier']['pin_code'])}<br>{h(_('GSTIN')) if data['invoice_type'] == 'GST' else h(_('PAN'))}: {h(data['supplier']['gstin'] if data['invoice_type'] == 'GST' else data['supplier']['pan'])}</td>
-<td><b>{h(_('Invoice number'))}:</b> {h(data['invoice_number'])}<br><b>{h(_('Invoice date'))}:</b> {h(data['invoice_date'])}<br><b>{h(_('Buyer order'))}:</b> {h(data['buyer_order_number'])} {h(data['buyer_order_date'])}<br><b>{h(_('Supplier reference'))}:</b> {h(data['supplier_reference'])}<br><b>{h(_('Dispatch document'))}:</b> {h(data['dispatch_document_number'])}<br><b>{h(_('Delivery note date'))}:</b> {h(data['delivery_note_date'])}{f'<br><b>{h(_("Place of supply"))}:</b> {h(data["place_of_supply"])}<br><b>{h(_("Reverse charge"))}:</b> {h(_("Yes") if data["reverse_charge"] else _("No"))}' if data['invoice_type'] == 'GST' else ''}</td></tr>
-<tr><td><div class="label">{h(_('Consignee'))}</div><div class="value">{h(data['consignee']['name'])}</div>{h(data['consignee']['address'])}<br>{h(data['consignee']['state'])} {h(data['consignee']['pin_code'])}<br>{h(_('GSTIN'))}: {h(data['consignee']['gstin'])}</td>
-<td><div class="label">{h(_('Buyer'))}</div><div class="value">{h(buyer['name'])}</div>{h(buyer['address'])}<br>{h(buyer['state'])} {h(buyer['pin_code'])}<br>{h(_('GSTIN'))}: {h(buyer['gstin'])}</td></tr></table>
-<table class="section"><thead><tr><th>{h(_('Sr.'))}</th><th>{h(_('Description'))}</th><th>{h(_('HSN/SAC'))}</th><th>{h(_('Unit'))}</th><th>{h(_('Qty'))}</th><th>{h(_('Rate (INR)'))}</th><th>{h(_('Amount (INR)'))}</th></tr></thead><tbody>{items}{summary_rows}<tr class="grand"><td colspan="6" class="summary-label">{h(_('Grand total'))}</td><td class="num">{_money_text(data['grand_total'])}</td></tr></tbody></table>
-<div class="declaration"><b>{h(_('Amount in words'))}:</b> {h(data['amount_in_words'])}</div>{declaration}
-<table class="section"><tr><td class="party"><b>{h(_('Remittance details'))}</b><br>{bank_html or h(_('Not provided'))}</td><td class="signature"><b>{h(_('For'))} {h(data['supplier']['name'])}</b><br><br><br>{h(data['authorised_signatory'])}<br>{h(_('Authorised signatory and supplier signature'))}</td></tr></table>
-<div class="notice">{h(_('Prepared using Sevamrita invoice assistance. Valid for reimbursement only after the supplier verifies the details and signs the document.'))}</div>
+<h1>{h(data["title"])}</h1><div class="copy">{h(data["copy_label"])}</div>
+<table><tr><td class="party"><div class="label">{h(_("Supplier"))}</div><div class="value">{h(data["supplier"]["name"])}</div>{h(data["supplier"]["address"])}<br>{h(data["supplier"]["state"])} {h(data["supplier"]["pin_code"])}<br>{h(_("GSTIN")) if data["invoice_type"] == "GST" else h(_("PAN"))}: {h(data["supplier"]["gstin"] if data["invoice_type"] == "GST" else data["supplier"]["pan"])}</td>
+<td><b>{h(_("Invoice number"))}:</b> {h(data["invoice_number"])}<br><b>{h(_("Invoice date"))}:</b> {h(data["invoice_date"])}<br><b>{h(_("Buyer order"))}:</b> {h(data["buyer_order_number"])} {h(data["buyer_order_date"])}<br><b>{h(_("Supplier reference"))}:</b> {h(data["supplier_reference"])}<br><b>{h(_("Dispatch document"))}:</b> {h(data["dispatch_document_number"])}<br><b>{h(_("Delivery note date"))}:</b> {h(data["delivery_note_date"])}{f"<br><b>{h(_('Place of supply'))}:</b> {h(data['place_of_supply'])}<br><b>{h(_('Reverse charge'))}:</b> {h(_('Yes') if data['reverse_charge'] else _('No'))}" if data["invoice_type"] == "GST" else ""}</td></tr>
+<tr><td><div class="label">{h(_("Consignee"))}</div><div class="value">{h(data["consignee"]["name"])}</div>{h(data["consignee"]["address"])}<br>{h(data["consignee"]["state"])} {h(data["consignee"]["pin_code"])}<br>{h(_("GSTIN"))}: {h(data["consignee"]["gstin"])}</td>
+<td><div class="label">{h(_("Buyer"))}</div><div class="value">{h(buyer["name"])}</div>{h(buyer["address"])}<br>{h(buyer["state"])} {h(buyer["pin_code"])}<br>{h(_("GSTIN"))}: {h(buyer["gstin"])}</td></tr></table>
+<table class="section"><thead><tr><th>{h(_("Sr."))}</th><th>{h(_("Description"))}</th><th>{h(_("HSN/SAC"))}</th><th>{h(_("Unit"))}</th><th>{h(_("Qty"))}</th><th>{h(_("Rate (INR)"))}</th><th>{h(_("Amount (INR)"))}</th></tr></thead><tbody>{items}{summary_rows}<tr class="grand"><td colspan="6" class="summary-label">{h(_("Grand total"))}</td><td class="num">{_money_text(data["grand_total"])}</td></tr></tbody></table>
+<div class="declaration"><b>{h(_("Amount in words"))}:</b> {h(data["amount_in_words"])}</div>{declaration}
+<table class="section"><tr><td class="party"><b>{h(_("Employee reimbursement remittance details"))}</b><br>{bank_html or h(_("Not provided"))}<br><small>{h(_("For reimbursement to the employee, not payment to the supplier."))}</small></td><td class="signature"><b>{h(data["signature_context"])}</b><br><br><br>{h(data["signatory_name"])}{f"<br>{h(data['signature_employee'])}" if data["signature_employee"] else ""}<br>{h(data["signature_label"])}</td></tr></table>
+<div class="notice">{h(data["notice"])}</div>
 </body></html>"""
 
 
@@ -440,9 +618,7 @@ def _build_pdf(data):
 		try:
 			from weasyprint import HTML
 		except ImportError:
-			frappe.throw(
-				_("PDF generation is unavailable because no supported PDF renderer is installed.")
-			)
+			frappe.throw(_("PDF generation is unavailable because no supported PDF renderer is installed."))
 		return HTML(string=html).write_pdf()
 
 
@@ -469,7 +645,7 @@ def _build_docx(data):
 	run = title.add_run(data["title"])
 	run.bold = True
 	run.font.size = Pt(16)
-	copy = doc.add_paragraph(_("Original for recipient"))
+	copy = doc.add_paragraph(data["copy_label"])
 	copy.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 	copy.paragraph_format.space_after = Pt(3)
 
@@ -478,12 +654,12 @@ def _build_docx(data):
 	header.style = "Table Grid"
 	_add_party_cell(header.cell(0, 0), _("Supplier"), data["supplier"], data["invoice_type"])
 	header_lines = [
-			(_("Invoice number"), data["invoice_number"]),
-			(_("Invoice date"), data["invoice_date"]),
-			(_("Buyer order"), " ".join(filter(None, [data["buyer_order_number"], data["buyer_order_date"]]))),
-			(_("Supplier reference"), data["supplier_reference"]),
-			(_("Dispatch document"), data["dispatch_document_number"]),
-			(_("Delivery note date"), data["delivery_note_date"]),
+		(_("Invoice number"), data["invoice_number"]),
+		(_("Invoice date"), data["invoice_date"]),
+		(_("Buyer order"), " ".join(filter(None, [data["buyer_order_number"], data["buyer_order_date"]]))),
+		(_("Supplier reference"), data["supplier_reference"]),
+		(_("Dispatch document"), data["dispatch_document_number"]),
+		(_("Delivery note date"), data["delivery_note_date"]),
 	]
 	if data["invoice_type"] == "GST":
 		header_lines.extend(
@@ -559,10 +735,10 @@ def _build_docx(data):
 	p = doc.add_paragraph()
 	p.add_run(f"{_('Amount in words')}: ").bold = True
 	p.add_run(data["amount_in_words"])
-	if data["invoice_type"] == "NON_GST":
+	if data["declaration"]:
 		p = doc.add_paragraph()
-		p.add_run(f"{_('Non-GST declaration')}: ").bold = True
-		p.add_run(data["non_gst_declaration"])
+		p.add_run(f"{data['declaration_title']}: ").bold = True
+		p.add_run(data["declaration"])
 
 	footer = doc.add_table(rows=1, cols=2)
 	footer.style = "Table Grid"
@@ -574,24 +750,24 @@ def _build_docx(data):
 		(_("IFSC"), data["bank"]["ifsc"]),
 		(_("SWIFT"), data["bank"]["swift"]),
 	]
-	footer.cell(0, 0).text = str(_("Remittance details"))
+	footer.cell(0, 0).text = str(_("Employee reimbursement remittance details"))
 	footer.cell(0, 0).paragraphs[0].runs[0].bold = True
 	_add_lines(footer.cell(0, 0), bank_lines)
+	footer.cell(0, 0).add_paragraph(_("For reimbursement to the employee, not payment to the supplier."))
 	sig = footer.cell(0, 1)
 	sig.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-	sig.paragraphs[0].add_run(f"{_('For')} {data['supplier']['name']}").bold = True
+	sig.paragraphs[0].add_run(data["signature_context"]).bold = True
 	for _index in range(3):
 		sig.add_paragraph()
-	p = sig.add_paragraph(data["authorised_signatory"])
+	p = sig.add_paragraph(data["signatory_name"])
 	p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-	p = sig.add_paragraph(_("Authorised signatory and supplier signature"))
+	if data["signature_employee"]:
+		p = sig.add_paragraph(data["signature_employee"])
+		p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+	p = sig.add_paragraph(data["signature_label"])
 	p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
-	notice = doc.add_paragraph(
-		_(
-			"Prepared using Sevamrita invoice assistance. Valid for reimbursement only after the supplier verifies the details and signs the document."
-		)
-	)
+	notice = doc.add_paragraph(data["notice"])
 	notice.paragraph_format.space_before = Pt(5)
 	for run in notice.runs:
 		run.italic = True

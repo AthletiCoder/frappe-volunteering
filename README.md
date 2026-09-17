@@ -48,6 +48,9 @@ More: [Tally → ERPNext](docs/tally_to_erpnext_accounts_guide.md) · [Cashfree 
 | Docs map | [docs/README.md](docs/README.md) |
 | Playwright E2E | [docs/e2e.md](docs/e2e.md) · [coverage](docs/e2e-coverage.md) · [personas](docs/e2e-personas.md) |
 | Frontend (Budget Health, Advance Portal) | [frontend/README.md](frontend/README.md) |
+| Home project workspace, access and revisions | [docs/PROJECT_WORKSPACE.md](docs/PROJECT_WORKSPACE.md) |
+| Employee bank details and Accounts Manager approval | [docs/EMPLOYEE_BANK_ACCOUNTS.md](docs/EMPLOYEE_BANK_ACCOUNTS.md) |
+| Employee Expense Claim form | [docs/EMPLOYEE_EXPENSE_PORTAL.md](docs/EMPLOYEE_EXPENSE_PORTAL.md) |
 | Local log / env | [docs/developer_log_env.md](docs/developer_log_env.md) |
 | Historical sprint notes | [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) |
 

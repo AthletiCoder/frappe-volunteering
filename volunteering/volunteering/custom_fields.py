@@ -147,12 +147,29 @@ ACCOUNTING_CUSTOM_FIELDS = {
 		}
 	],
 	"Expense Claim": [
-		*_approval_routing_fields("expense_approver"),
+		*_approval_routing_fields("expense_approver", emergency_label="Emergency Expense"),
+		{
+			"fieldname": "emergency_date",
+			"label": "Emergency Date",
+			"fieldtype": "Date",
+			"insert_after": "is_emergency",
+			"depends_on": "eval:doc.is_emergency",
+		},
+		{
+			"fieldname": "emergency_reason",
+			"label": "Emergency Reason",
+			"fieldtype": "Small Text",
+			"insert_after": "emergency_date",
+			"depends_on": "eval:doc.is_emergency",
+			"description": (
+				"Explain the emergency and why the normal prior-purchase process could not be followed."
+			),
+		},
 		{
 			"fieldname": "vendor_override_reason",
 			"label": "Vendor Payment Override Reason",
 			"fieldtype": "Small Text",
-			"insert_after": "is_emergency",
+			"insert_after": "emergency_reason",
 			"depends_on": _VENDOR_REASON_DEPENDS,
 			"description": (
 				"Required when reimbursing above the vendor payment threshold without using a Purchase Order."
@@ -291,6 +308,27 @@ ACCOUNTING_CUSTOM_FIELDS = {
 				"Choose an Expense Account permitted for the selected Project. "
 				"This does not provide Chart of Accounts or balance access."
 			),
+		},
+		{
+			"fieldname": "supplier_name",
+			"label": "Supplier / Payee",
+			"fieldtype": "Data",
+			"insert_after": "description",
+			"in_list_view": 1,
+		},
+		{
+			"fieldname": "supplier_invoice_number",
+			"label": "Receipt / Invoice Number",
+			"fieldtype": "Data",
+			"insert_after": "supplier_name",
+		},
+		{
+			"fieldname": "receipt_attachment",
+			"label": "Receipt Evidence",
+			"fieldtype": "Attach",
+			"insert_after": "supplier_invoice_number",
+			"read_only": 1,
+			"description": "Private evidence uploaded for this expense item through the employee portal.",
 		},
 	],
 	"Purchase Order": [
