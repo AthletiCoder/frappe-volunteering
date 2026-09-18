@@ -1,6 +1,7 @@
 # Copyright (c) 2026, Vadiraj Tirtha Das and contributors
 # For license information, please see license.txt
 
+import math
 from collections import defaultdict
 
 import frappe
@@ -61,7 +62,7 @@ def _get_account_budget_rows(project):
 	return frappe.get_all(
 		"Project Account Budget",
 		filters={"parent": project, "parenttype": "Project"},
-		fields=["expense_account", "approved_amount"],
+		fields=["budget_key", "employee_label", "expense_account", "approved_amount", "is_active"],
 		order_by="idx asc",
 	)
 
@@ -69,10 +70,54 @@ def _get_account_budget_rows(project):
 def get_account_allocated_budget(project, account):
 	if not project or not account:
 		return 0
+	return sum(
+		flt(row.approved_amount)
+		for row in _get_account_budget_rows(project)
+		if row.expense_account == account
+	)
+
+
+def get_document_label_amounts(doc):
+	amounts = defaultdict(float)
+	approved = doc.get("workflow_state") == "Approved"
+	for row in doc.get("expenses") or []:
+		amounts[row.get("project_expense_account") or UNASSIGNED_ACCOUNT] += _expense_claim_row_amount(
+			row, approved
+		)
+	return dict(amounts)
+
+
+def get_project_label_consumption(project, exclude=None):
+	amounts = defaultdict(float)
+	for row in _active_budget_documents("Expense Claim", project):
+		if exclude == ("Expense Claim", row.name):
+			continue
+		for key, amount in get_document_label_amounts(frappe.get_doc("Expense Claim", row.name)).items():
+			amounts[key] += amount
+	# PO lines have ledger accounts rather than labels. Attribute them to the
+	# label only when that mapping is unambiguous; shared-account commitments
+	# are still checked by the aggregate account envelope below.
+	by_account = defaultdict(list)
 	for row in _get_account_budget_rows(project):
-		if row.expense_account == account:
-			return flt(row.approved_amount)
-	return 0
+		if row.expense_account:
+			by_account[row.expense_account].append(row.budget_key)
+	for row in _active_budget_documents("Purchase Order", project):
+		if exclude == ("Purchase Order", row.name):
+			continue
+		for account, amount in get_document_account_amounts(
+			frappe.get_doc("Purchase Order", row.name)
+		).items():
+			if len(by_account[account]) == 1:
+				amounts[by_account[account][0]] += amount
+	return dict(amounts)
+
+
+def _account_allocations(project):
+	allocations = defaultdict(float)
+	for row in _get_account_budget_rows(project):
+		if row.expense_account:
+			allocations[row.expense_account] += flt(row.approved_amount)
+	return dict(allocations)
 
 
 def _active_budget_documents(doctype, project):
@@ -223,9 +268,25 @@ def _budget_violations(doc, project_values, exclude):
 	if account_control == "No Control":
 		return violations
 
-	allocations = {
-		row.expense_account: flt(row.approved_amount) for row in _get_account_budget_rows(doc.project)
-	}
+	if doc.doctype == "Expense Claim":
+		labels = {row.budget_key: row for row in _get_account_budget_rows(doc.project)}
+		consumption = get_project_label_consumption(doc.project, exclude=exclude)
+		for key, amount in get_document_label_amounts(doc).items():
+			if not amount:
+				continue
+			row = labels.get(key)
+			if not row:
+				message = _("Expense category budget: select a label approved for this project.")
+			elif flt(consumption.get(key)) + amount > flt(row.approved_amount):
+				message = _format_overrun(
+					_("Expense category {0}").format(row.employee_label),
+					flt(row.approved_amount),
+					flt(consumption.get(key)) + amount,
+				)
+			else:
+				continue
+			violations.append(frappe._dict(mode=account_control, message=message))
+	allocations = _account_allocations(doc.project)
 	existing_consumption = get_project_account_consumption(doc.project, exclude=exclude)
 	for account, document_amount in get_document_account_amounts(doc).items():
 		if not document_amount:
@@ -345,9 +406,7 @@ def get_budget_snapshot(project, department=None):
 	values = _project_budget_fields(project)
 	allocated = flt(values.get("total_approved_budget"))
 	consumed = get_consumed_amount(project)
-	account_allocations = {
-		row.expense_account: flt(row.approved_amount) for row in _get_account_budget_rows(project)
-	}
+	account_allocations = _account_allocations(project)
 	account_consumption = get_project_account_consumption(project)
 	accounts = []
 	for account in sorted(set(account_allocations) | set(account_consumption)):
@@ -390,23 +449,36 @@ def validate_project_budgets(doc, method=None):
 		frappe.throw(_("Enter a Total Approved Budget when Overall Project Budget Control is enabled."))
 
 	seen = set()
+	keys = set()
 	active_seen = set()
 	for row in doc.get("account_budgets") or []:
 		account = row.get("expense_account")
+		label = " ".join((row.get("employee_label") or "").split())
+		if not label and account and not cint(doc.get("project_setup_version")):
+			label = frappe.db.get_value("Account", account, "account_name") or account
+		if not label or len(label) > 140:
+			frappe.throw(_("Enter an employee-facing expense label (at most 140 characters)."))
+		if label.casefold() in seen:
+			frappe.throw(_("Expense label {0} appears more than once.").format(label))
+		seen.add(label.casefold())
+		row.employee_label = label
+		row.budget_key = row.get("budget_key") or frappe.generate_hash(length=20)
+		if row.budget_key in keys or len(row.budget_key) > 140:
+			frappe.throw(_("Invalid or duplicate expense label ID."))
+		keys.add(row.budget_key)
+		amount = flt(row.get("approved_amount"))
+		if not math.isfinite(amount) or amount < 0:
+			frappe.throw(_("Expense label allocations must be finite, non-negative amounts."))
+		if cint(row.get("is_active")):
+			active_seen.add(row.budget_key)
+		if (
+			account_control != "No Control"
+			and cint(row.get("is_active"))
+			and flt(row.get("approved_amount")) <= 0
+		):
+			frappe.throw(_("Enter an approved amount greater than zero for {0}.").format(label))
 		if not account:
 			continue
-		if account in seen:
-			frappe.throw(
-				_("Expense Account {0} appears more than once in Expense Account Budgets.").format(account),
-				title=_("Duplicate Expense Account Budget"),
-			)
-		seen.add(account)
-		if not row.get("employee_label"):
-			row.employee_label = frappe.db.get_value("Account", account, "account_name") or account
-		if cint(row.get("is_active")):
-			active_seen.add(account)
-		if account_control != "No Control" and flt(row.get("approved_amount")) <= 0:
-			frappe.throw(_("Enter an approved amount greater than zero for {0}.").format(account))
 		account_values = frappe.db.get_value(
 			"Account", account, ["company", "root_type", "is_group", "disabled"], as_dict=True
 		)
@@ -419,7 +491,7 @@ def validate_project_budgets(doc, method=None):
 
 	if account_control != "No Control" and not active_seen:
 		frappe.throw(
-			_("Make at least one Expense Account available when Expense Account Budget Control is enabled.")
+			_("Make at least one expense label available when expense category budget control is enabled.")
 		)
 
 	if doc.get("budget_status") != "Closed" and not doc.is_new():

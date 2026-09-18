@@ -71,13 +71,13 @@ test.describe("Employee expense portal @ui @expense-portal", () => {
       .selectOption(project);
     const accounts = await api(page, API + "get_project_accounts", { project });
     const accountInput = page.getByRole("combobox", {
-      name: "Project expense account *",
+      name: "Project expense category *",
       exact: true,
     });
     await expect(accountInput).toBeEnabled();
     await accountInput.fill("");
     const menu = page.getByRole("listbox", {
-      name: "Project expense account *",
+      name: "Project expense category *",
       exact: true,
     });
     await expect(menu.getByRole("option")).toHaveCount(accounts.length);
@@ -125,9 +125,13 @@ test.describe("Employee expense portal @ui @expense-portal", () => {
     ).toBeTruthy();
     await page.getByRole("button", { name: "Toggle colour theme" }).click();
     await expect(page.locator("html")).toHaveClass(/dark/);
-    await expect.poll(() => page.getByRole("button", { name: /^Against manager/ }).evaluate(
-      (button) => getComputedStyle(button).backgroundColor,
-    )).toBe("rgb(18, 17, 16)");
+    await expect
+      .poll(() =>
+        page
+          .getByRole("button", { name: /^Against manager/ })
+          .evaluate((button) => getComputedStyle(button).backgroundColor),
+      )
+      .toBe("rgb(18, 17, 16)");
     await expect(page.locator(".form-grid")).toHaveCount(0);
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({
@@ -148,10 +152,13 @@ test.describe("Employee expense portal @ui @expense-portal", () => {
       .getByRole("combobox", { name: "Project *", exact: true })
       .selectOption(defaults.projects[0].value);
     await page
-      .getByRole("combobox", { name: "Project expense account *", exact: true })
+      .getByRole("combobox", {
+        name: "Project expense category *",
+        exact: true,
+      })
       .click();
     await page
-      .getByRole("listbox", { name: "Project expense account *", exact: true })
+      .getByRole("listbox", { name: "Project expense category *", exact: true })
       .getByRole("option")
       .first()
       .click();

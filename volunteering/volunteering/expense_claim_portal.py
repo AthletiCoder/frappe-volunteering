@@ -3,7 +3,7 @@
 
 """Employee-facing Expense Claim submission service.
 
-The portal deliberately exposes only project-approved expense-account labels and
+The portal deliberately exposes only project-approved expense-category labels and
 the employee's own advances.  Company, employee, cost centre, payable account,
 approval routing, sanctioned amounts and ledger fields remain server-controlled.
 """
@@ -252,33 +252,9 @@ def _validate_claim_project(project: str | None, employee: str):
 
 
 def _account_options(project_doc) -> list[dict]:
-	options = []
-	for row in project_doc.get("account_budgets") or []:
-		if not cint(row.is_active):
-			continue
-		account = frappe.db.get_value(
-			"Account",
-			row.expense_account,
-			["name", "account_name", "company", "root_type", "is_group", "disabled"],
-			as_dict=True,
-		)
-		if (
-			not account
-			or account.company != project_doc.company
-			or account.root_type != "Expense"
-			or cint(account.is_group)
-			or cint(account.disabled)
-		):
-			continue
-		friendly = cstr(row.employee_label).strip() or account.account_name or account.name
-		options.append(
-			{
-				"value": account.name,
-				"label": friendly,
-				"description": account.name if friendly != account.name else "",
-			}
-		)
-	return options
+	from volunteering.volunteering.project_expense_accounts import employee_options
+
+	return employee_options(project_doc)
 
 
 def _own_advances(employee: str, company: str) -> list[dict]:

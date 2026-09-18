@@ -108,7 +108,7 @@
 				<p class="text-sm text-muted">
 					{{
 						caps.can_create
-							? "Create a project to define its purpose, people and permitted expense accounts."
+							? "Create a project to define its purpose, people, expense labels and budgets."
 							: "Only your own projects and projects you are a member of appear here, unless another role grants wider access."
 					}}
 				</p>
@@ -412,12 +412,13 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 			</section>
 
 			<section v-if="showFinance" class="form-card" aria-labelledby="budget-title">
-				<div class="section-eyebrow">03 · Budget and permitted accounts</div>
+				<div class="section-eyebrow">03 · Expense labels and budgets</div>
 				<h2 id="budget-title" class="form-title">Where can spending go?</h2>
 				<p class="form-hint">
-					Project and expense-account controls are independent. These allocations are
-					budgets—not bank balances. Employee claims show only the accounts permitted
-					here.
+					Choose plain-language expense labels and their allocations. Project and
+					category budget controls are independent. After project approval, an Accounts
+					Manager maps each label to a ledger account. Employees see labels, not ledger
+					accounts or balances.
 				</p>
 				<p
 					v-if="saved && !budgetEditable"
@@ -425,6 +426,19 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 				>
 					Financial changes require an approved project change request.
 				</p>
+				<div v-if="saved && !request" class="rounded-xl bg-soft text-sm px-3 py-2 mb-4">
+					{{
+						saved.mapping_ready
+							? "Active expense labels have ledger mappings."
+							: "Awaiting Accounts Manager mapping before new claims can be raised."
+					}}
+					<RouterLink
+						v-if="saved.can_map_accounts"
+						:to="{ path: '/project-account-mapping', query: { project: saved.name } }"
+						class="underline ml-2"
+						>Map expense labels</RouterLink
+					>
+				</div>
 				<fieldset :disabled="!budgetEditable" class="form-grid">
 					<label class="field-label sm:col-span-2"
 						>Default cost centre *<select
@@ -463,7 +477,7 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 							class="field-input"
 					/></label>
 					<label class="field-label sm:col-span-2"
-						>Expense-account budget control *<select
+						>Expense-category budget control *<select
 							v-model="form.account_budget_control"
 							class="field-input"
 						>
@@ -482,7 +496,7 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 					</div>
 				</div>
 				<div class="flex justify-between gap-3 items-center mb-3">
-					<h3 class="text-sm font-semibold">Permitted expense accounts *</h3>
+					<h3 class="text-sm font-semibold">Employee-facing expense labels *</h3>
 					<button
 						v-if="budgetEditable"
 						type="button"
@@ -490,7 +504,7 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 						:disabled="form.account_budgets.length >= 100"
 						@click="addAccount"
 					>
-						Add account
+						Add label
 					</button>
 				</div>
 				<div class="space-y-3">
@@ -501,7 +515,7 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 						class="rounded-xl border border-line bg-bg p-3"
 					>
 						<div class="flex justify-between items-center mb-3">
-							<strong class="text-xs text-muted">Account {{ index + 1 }}</strong
+							<strong class="text-xs text-muted">Label {{ index + 1 }}</strong
 							><button
 								v-if="budgetEditable"
 								type="button"
@@ -512,29 +526,16 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 							</button>
 						</div>
 						<div class="form-grid">
-							<SearchSelect
-								v-model="row.expense_account"
-								label="Expense account *"
-								required
-								:disabled="!budgetEditable"
-								:options="
-									availableAccounts(row).map((account) => ({
-										value: account.name,
-										label: account.account_name,
-										description: account.name,
-									}))
-								"
-								@change="accountChanged(row)"
-							/>
 							<label class="field-label"
-								>Employee-facing label<input
+								>Employee-facing label *<input
 									v-model.trim="row.employee_label"
+									required
 									maxlength="140"
 									class="field-input"
 									placeholder="Plain-language name shown to employees"
 							/></label>
 							<label v-if="row.approved_amount !== undefined" class="field-label"
-								>Account allocation ({{ companyCurrency }})<input
+								>Budget allocation ({{ companyCurrency }})<input
 									v-model.number="row.approved_amount"
 									type="number"
 									min="0"
@@ -542,7 +543,7 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 									:required="form.account_budget_control !== 'No Control'"
 									class="field-input"
 								/><span class="field-help"
-									>Optional when account control is No Control.</span
+									>Optional when category control is No Control.</span
 								></label
 							>
 							<label class="flex items-center gap-2 text-sm sm:pt-6"
@@ -556,7 +557,7 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 					v-if="budgetEditable && form.account_budget_control !== 'No Control'"
 					class="field-help mt-3"
 				>
-					Allocated across accounts: {{ currency(allocatedTotal) }}. Each account ceiling
+					Allocated across labels: {{ currency(allocatedTotal) }}. Each category ceiling
 					is enforced independently of the total project ceiling.
 				</p>
 				<label v-if="false" class="field-label mt-4"
@@ -565,21 +566,24 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 						rows="2"
 						maxlength="2000"
 						class="field-input"
-						placeholder="Explain any changes to limits, allowed accounts, cost centre or financial closure"
+						placeholder="Explain any changes to limits, expense labels, cost centre or financial closure"
 					></textarea>
 				</label>
 			</section>
 			<section v-if="!showFinance" class="form-card">
-				<h2 class="form-title">Accounts available for your bills</h2>
+				<h2 class="form-title">Expense categories for your bills</h2>
 				<p class="form-hint">
-					Only permitted account names are shown, not budgets or ledger balances.
+					Only approved labels are shown, not budgets or ledger balances.
 				</p>
 				<p
 					v-for="row in saved?.permitted_accounts || []"
-					:key="row.expense_account"
+					:key="row.budget_key"
 					class="text-sm mt-2"
 				>
-					{{ row.employee_label || row.expense_account }}
+					{{ row.employee_label
+					}}<span v-if="!row.mapped" class="text-muted">
+						· Awaiting Accounts Manager mapping</span
+					>
 				</p>
 			</section>
 
@@ -696,7 +700,7 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 
 			<details v-if="saved?.revisions.length" class="form-card">
 				<summary class="cursor-pointer font-semibold">
-					Budget and account revision history · {{ saved.revisions.length }}
+					Budget and mapping revision history · {{ saved.revisions.length }}
 				</summary>
 				<div class="space-y-4 mt-4">
 					<article
@@ -1026,30 +1030,14 @@ async function load() {
 	}
 }
 
-function availableAccounts(row) {
-	const accounts = options.value.expense_accounts.filter(
-		(account) => account.company === form.company,
-	);
-	if (row.expense_account && !accounts.some((account) => account.name === row.expense_account))
-		accounts.push({
-			name: row.expense_account,
-			account_name: row.employee_label || row.expense_account,
-		});
-	return accounts;
-}
 function addAccount() {
 	form.account_budgets.push({
 		key: ++rowKey,
-		expense_account: "",
+		budget_key: "",
 		employee_label: "",
 		approved_amount: 0,
 		is_active: true,
 	});
-}
-function accountChanged(row) {
-	row.employee_label =
-		options.value.expense_accounts.find((account) => account.name === row.expense_account)
-			?.account_name || "";
 }
 function create() {
 	router.push({ path: "/projects", query: { new: "1" } });
@@ -1129,7 +1117,7 @@ function valueData(value) {
 	);
 	if (value.account_budgets)
 		data.account_budgets = value.account_budgets.map((row) => ({
-			expense_account: row.expense_account,
+			budget_key: row.budget_key || "",
 			employee_label: row.employee_label || "",
 			approved_amount: Number(row.approved_amount || 0),
 			is_active: Number(row.is_active),
@@ -1147,7 +1135,7 @@ function patchData() {
 			data[key] = key === "financial_closed" ? Boolean(form[key]) : form[key];
 		});
 		data.account_budgets = form.account_budgets.map((row) => ({
-			expense_account: row.expense_account,
+			budget_key: row.budget_key || "",
 			employee_label: row.employee_label || "",
 			approved_amount: Number(row.approved_amount || 0),
 			is_active: Number(row.is_active),
@@ -1281,11 +1269,11 @@ function revisionText(value) {
 	if (!Object.keys(data).length) return "No previous setup";
 	return [
 		`Project: ${data.project_budget_control} · ${currency(data.total_approved_budget)}`,
-		`Accounts: ${data.account_budget_control}`,
+		`Expense categories: ${data.account_budget_control}`,
 		`Cost centre: ${data.cost_center}`,
 		...(data.account_budgets || []).map(
 			(row) =>
-				`${row.employee_label || row.expense_account}: ${currency(row.approved_amount)}${row.is_active ? "" : " (inactive)"}`,
+				`${row.employee_label}: ${currency(row.approved_amount)}${row.is_active ? "" : " (inactive)"}`,
 		),
 		`Financially ${data.financial_closed ? "closed" : "open"}`,
 	].join("\n");

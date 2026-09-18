@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Vadiraj Tirtha Das and contributors
 # For license information, please see license.txt
 
-"""Project-scoped Expense Account selection without Chart of Accounts access."""
+"""Project-scoped expense-label selection without Chart of Accounts access."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ def _account_rows(project: str, *, active_only: bool = False) -> list[frappe._di
 	return frappe.get_all(
 		"Project Account Budget",
 		filters=filters,
-		fields=["expense_account", "employee_label", "is_active"],
+		fields=["budget_key", "expense_account", "employee_label", "is_active"],
 		order_by="idx asc",
 	)
 
@@ -85,36 +85,65 @@ def assign_and_validate_project_expense_accounts(doc) -> None:
 		return
 	project = _project_values(doc.get("project"))
 	if not project:
-		frappe.throw(_("Select a Project before choosing Expense Accounts."))
+		frappe.throw(_("Select a Project before choosing an expense category."))
 	if doc.get("company") and project.company and doc.company != project.company:
 		frappe.throw(_("Project {0} belongs to a different Company.").format(doc.project))
+	# Serialize classification against Accounts Manager remapping, so a claim
+	# cannot slip in with a ledger value that was changed concurrently.
+	frappe.db.sql("SELECT name FROM `tabProject` WHERE name=%s FOR UPDATE", doc.project)
 
-	allowed = {row.expense_account: row for row in _account_rows(doc.project, active_only=True)}
+	all_rows = _account_rows(doc.project)
+	allowed = {row.budget_key: row for row in all_rows if cint(row.is_active)}
 	if not allowed:
 		frappe.throw(
 			_(
-				"Project {0} has no Expense Accounts available to employees. Ask an Accounts administrator to configure the Project."
+				"Project {0} has no expense categories available to employees. Ask a Projects Manager to approve its labels and budgets."
 			).format(doc.project),
-			title=_("Project Expense Accounts Missing"),
+			title=_("Project Expense Categories Missing"),
 		)
 
 	previous = doc.get_doc_before_save()
 	previous_rows = {row.name: row for row in (previous.get("expenses") or [])} if previous else {}
+	if any(not row.expense_account for row in allowed.values()) and (
+		not previous or previous.get("workflow_state") in EMPLOYEE_EDITABLE_STATES
+	):
+		frappe.throw(
+			_("An Accounts Manager must map all active expense labels before new claims can be raised.")
+		)
 	changes = []
 	for row in doc.get("expenses") or []:
+		old_row = previous_rows.get(row.name) if previous and previous.project == doc.project else None
 		selected = _selected_account(row, permit_legacy_fallback=bool(previous and row.name))
+		# Compatibility for pre-upgrade saved claims only; new claims must use an
+		# opaque label ID, never an arbitrary Account identifier.
+		if old_row and selected == old_row.get("default_account"):
+			matches = [item.budget_key for item in all_rows if item.expense_account == selected]
+			if len(matches) == 1:
+				selected = matches[0]
 		if not selected:
-			frappe.throw(_("Row {0}: Select a Project Expense Account.").format(row.idx))
+			frappe.throw(_("Row {0}: Select a Project Expense Category.").format(row.idx))
+		if (
+			old_row
+			and old_row.get("project_expense_account") == selected
+			and previous.workflow_state not in EMPLOYEE_EDITABLE_STATES
+		):
+			# Existing reviewed/approved claims retain their original ledger values,
+			# even if the category has since been disabled for new claims.
+			row.default_account = old_row.default_account
+			row.project_expense_account = selected
+			continue
 		if selected not in allowed:
 			frappe.throw(
-				_("Row {0}: Expense Account {1} is not available for Project {2}.").format(
+				_("Row {0}: Expense category {1} is not available for Project {2}.").format(
 					row.idx, selected, doc.project
 				),
-				title=_("Expense Account Not Allowed"),
+				title=_("Expense Category Not Allowed"),
 			)
-		_validate_account(selected, project.company or doc.company)
+		account = allowed[selected].expense_account
+		if not account:
+			frappe.throw(_("This expense label has not been mapped by an Accounts Manager."))
+		_validate_account(account, project.company or doc.company)
 
-		old_row = previous_rows.get(row.name)
 		old_account = (
 			cstr(old_row.get("project_expense_account") or old_row.get("default_account")).strip()
 			if old_row
@@ -132,7 +161,7 @@ def assign_and_validate_project_expense_accounts(doc) -> None:
 			changes.append((row.idx, old_account, selected))
 
 		row.project_expense_account = selected
-		row.default_account = selected
+		row.default_account = account
 		if row.meta.has_field("project"):
 			row.project = doc.project
 
@@ -146,7 +175,7 @@ def get_project_expense_account_options(
 ) -> list[dict]:
 	"""Return only employee-safe Project account options, never balances/budgets."""
 	if frappe.session.user == "Guest":
-		frappe.throw(_("Please log in to view Project Expense Accounts."), frappe.PermissionError)
+		frappe.throw(_("Please log in to view Project expense categories."), frappe.PermissionError)
 	values = _project_values(project)
 	if not values:
 		return []
@@ -155,24 +184,30 @@ def get_project_expense_account_options(
 	if company and values.company and company != values.company:
 		return []
 
+	return employee_options(project_doc, txt)
+
+
+def employee_options(project_doc, txt=""):
+	"""Opaque label IDs and approved labels only; no ledger names or balances."""
 	needle = cstr(txt).strip().casefold()
 	options = []
-	for row in _account_rows(project, active_only=True):
+	rows = [row for row in project_doc.get("account_budgets") or [] if cint(row.is_active)]
+	if any(not row.expense_account for row in rows):
+		return []
+	for row in rows:
 		account = _account_details(row.expense_account)
-		if not account or account.company != values.company:
+		if not account or account.company != project_doc.company:
 			continue
 		if account.root_type != "Expense" or cint(account.is_group) or cint(account.disabled):
 			continue
-		friendly = cstr(row.employee_label).strip() or account.account_name or account.name
-		haystack = f"{friendly} {account.account_name or ''} {account.name}".casefold()
-		if needle and needle not in haystack:
+		friendly = cstr(row.employee_label).strip()
+		if needle and needle not in friendly.casefold():
 			continue
-		label = friendly if friendly == account.name else f"{friendly} — {account.name}"
 		options.append(
 			{
-				"value": account.name,
-				"label": label,
-				"description": _("Available for Project {0}").format(project),
+				"value": row.budget_key,
+				"label": friendly,
+				"description": "",
 			}
 		)
 	return options
@@ -183,18 +218,21 @@ def add_account_change_audit_comment(doc, method=None) -> None:
 	changes = getattr(doc.flags, "project_expense_account_changes", None) or []
 	if not changes:
 		return
+	labels = {
+		row.budget_key: row.employee_label for row in _account_rows(doc.get("project")) if row.budget_key
+	}
 	lines = []
 	for idx, old_account, new_account in changes:
 		lines.append(
 			_("Row {0}: {1} → {2}").format(
 				idx,
-				escape_html(old_account or _("not set")),
-				escape_html(new_account),
+				escape_html(labels.get(old_account) or _("previous category")),
+				escape_html(labels.get(new_account) or _("updated category")),
 			)
 		)
 	doc.add_comment(
 		"Info",
-		_("Expense Account selection changed by {0}:<br>{1}").format(
+		_("Expense category selection changed by {0}:<br>{1}").format(
 			escape_html(frappe.session.user), "<br>".join(lines)
 		),
 	)

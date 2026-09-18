@@ -64,7 +64,7 @@ A claim means: *"I already paid with my own money. Please pay me back."*
 
 1. You pay the vendor or expense yourself (or settle an advance).
 2. Make an [Expense Claim](/app/expense-claim/new), **set the Project**, and attach the receipts.
-3. Your manager or Accounts approves it (the Project and Expense Account budget controls are checked on Approve).
+3. Your manager approves it (the Project and expense-category budget controls are checked on Approve).
 4. Accounts pays you. The claim is then marked **Paid**.
 
 There is no separate "already paid" checkbox. Making the claim *is* how you say you already paid.
@@ -234,9 +234,9 @@ On each [Project](/app/project), configure two controls independently:
 | Project field | What it controls |
 |---------------|------------------|
 | Overall Project Budget Control | All committed spending against Total Approved Budget |
-| Expense Account Budget Control | Each configured Chart of Accounts expense allocation |
+| Expense Category Budget Control | Each employee-facing expense-label allocation |
 
-Both controls offer **No Control**, **Warn Only**, and **Strict**. Strict overruns require a Budget Exceedance Reason and an authorised override. Board of Directors grade is always authorised; an optional extra role can be selected in [Accounting Settings](/app/volunteering-accounting-settings).
+Both controls offer **No Control**, **Warn Only**, and **Strict**. Strict overruns require a Budget Exceedance Reason and an authorised override. Board of Directors grade is always authorised; an optional extra role can be selected in [Accounting Settings](/app/volunteering-accounting-settings). Project Managers approve the employee-facing labels and their allocations; after approval, an Accounts Manager maps each label to its ledger expense account before claims can use the project.
 
 Expense Claims and Purchase Orders commit budget. Employee Advances do not; Purchase Invoices do not double-count an approved PO. A Project's Cost Centre is applied automatically to its transaction lines.
 

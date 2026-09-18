@@ -631,7 +631,10 @@ def backfill_project_expense_accounts(*, seed_empty_projects=False):
 					"is_active": 1,
 				},
 			)
-		project_doc.save(ignore_permissions=True)
+		from volunteering.volunteering.project_account_mapping import mapping_context
+
+		with mapping_context(project_doc.name):
+			project_doc.save(ignore_permissions=True)
 
 	# Preserve the visible choice on historical rows. Any future save still
 	# validates it against the Project's current active allow-list.

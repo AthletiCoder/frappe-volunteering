@@ -1,5 +1,18 @@
 <template>
 	<div>
+		<PageHeader
+			:title="payload?.allowed ? `Hello ${firstName}` : 'Home'"
+			:subtitle="payload?.greeting || ''"
+			eyebrow="Home"
+		>
+			<template #actions>
+				<RouterLink to="/profile" class="btn-secondary">Profile</RouterLink>
+				<button type="button" class="btn-secondary" :disabled="loggingOut" @click="logout">
+					{{ loggingOut ? "Logging out…" : "Logout" }}
+				</button>
+			</template>
+		</PageHeader>
+		<p v-if="logoutError" class="text-bad mb-4" role="alert">{{ logoutError }}</p>
 		<div v-if="error" class="text-bad mb-4">{{ error }}</div>
 		<div v-else-if="!payload" class="text-muted">Loading…</div>
 		<div
@@ -7,14 +20,8 @@
 			class="rounded-2xl border border-line bg-surface p-6 shadow-soft"
 		>
 			<h1 class="text-2xl font-bold text-ink">Home is for staff</h1>
-			<p class="text-sm text-muted mt-2">{{ payload.greeting }}</p>
 		</div>
 		<div v-else class="space-y-8">
-			<PageHeader
-				:title="`Hello ${firstName}`"
-				:subtitle="payload.greeting"
-				eyebrow="Home"
-			/>
 			<ActionGrid
 				v-if="payload.actions.projects?.length"
 				title="Projects"
@@ -101,7 +108,8 @@
 
 <script setup>
 import { computed, onMounted, ref } from "vue";
-import { homePayload, loadHomePayload } from "../lib/home";
+import { homePayload, loadHomePayload, stopHomePoll } from "../lib/home";
+import { call } from "../lib/frappe";
 import PageHeader from "../components/PageHeader.vue";
 import TodoList from "../components/TodoList.vue";
 import ActionGrid from "../components/ActionGrid.vue";
@@ -112,7 +120,24 @@ const HOME_WAITING_CAP = 3;
 const HOME_RESUME_CAP = 2;
 
 const error = ref("");
+const loggingOut = ref(false);
+const logoutError = ref("");
 const payload = computed(() => homePayload.value);
+
+async function logout() {
+	if (loggingOut.value) return;
+	loggingOut.value = true;
+	logoutError.value = "";
+	try {
+		await call("logout");
+		stopHomePoll();
+		homePayload.value = null;
+		window.location.replace("/login?redirect-to=%2Fvolunteering%2Fhome");
+	} catch (err) {
+		logoutError.value = err.message || "Unable to log out. Please try again.";
+		loggingOut.value = false;
+	}
+}
 
 const firstName = computed(() => {
 	const name = payload.value?.full_name || "";

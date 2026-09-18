@@ -375,14 +375,14 @@ def _budget_values(doc):
 		"account_budgets": sorted(
 			[
 				{
-					"expense_account": row.expense_account,
+					"budget_key": row.budget_key or "",
 					"employee_label": row.employee_label or "",
 					"approved_amount": flt(row.approved_amount),
 					"is_active": cint(row.is_active),
 				}
 				for row in doc.get("account_budgets") or []
 			],
-			key=lambda row: row["expense_account"] or "",
+			key=lambda row: row["budget_key"],
 		),
 		"financial_closed": doc.get("budget_status") == "Closed",
 	}
@@ -585,6 +585,10 @@ def _serialize(doc):
 		"name": doc.name,
 		"modified": str(doc.modified),
 		"legacy": not cint(doc.get("project_setup_version")),
+		"mapping_ready": all(
+			row.expense_account for row in doc.get("account_budgets") or [] if cint(row.is_active)
+		),
+		"can_map_accounts": frappe.session.user == "Administrator" or "Accounts Manager" in _roles(),
 		**{field: doc.get(field) or "" for field in DETAIL_FIELDS},
 		**(
 			{
@@ -602,7 +606,11 @@ def _serialize(doc):
 			for row in doc.get("project_participants") or []
 		],
 		"permitted_accounts": [
-			{"expense_account": row.expense_account, "employee_label": row.employee_label}
+			{
+				"budget_key": row.budget_key,
+				"employee_label": row.employee_label,
+				"mapped": bool(row.expense_account),
+			}
 			for row in doc.get("account_budgets") or []
 			if cint(row.is_active)
 		],
@@ -610,7 +618,7 @@ def _serialize(doc):
 			{
 				"account_budgets": [
 					{
-						"expense_account": row.expense_account,
+						"budget_key": row.budget_key,
 						"employee_label": row.employee_label,
 						"is_active": cint(row.is_active),
 						**({"approved_amount": flt(row.approved_amount)} if can_read_finance else {}),
@@ -722,15 +730,6 @@ def get_setup_options(project=None):
 		)
 		if _can_configure(doc)
 		else [],
-		"expense_accounts": frappe.get_all(
-			"Account",
-			filters={"root_type": "Expense", "is_group": 0, "disabled": 0, "company": ["in", company_names]},
-			fields=["name", "account_name", "company"],
-			order_by="account_name asc",
-			limit_page_length=1000,
-		)
-		if _can_configure(doc)
-		else [],
 	}
 
 
@@ -788,18 +787,20 @@ def _save_approved_project(data, project=None, proposed_by=None):
 		)
 	if "account_budgets" in data:
 		if not isinstance(data["account_budgets"], list) or len(data["account_budgets"]) > 100:
-			frappe.throw(_("Select at most 100 permitted accounts."))
+			frappe.throw(_("Select at most 100 expense labels."))
 		rows = []
 		for row in data["account_budgets"]:
 			if not isinstance(row, dict) or set(row) - {
-				"expense_account",
+				"budget_key",
 				"employee_label",
 				"approved_amount",
 				"is_active",
 			}:
-				frappe.throw(_("Invalid permitted-account fields."))
+				frappe.throw(_("Invalid expense-label fields."))
 			rows.append(dict(row))
-		doc.set("account_budgets", rows)
+		from volunteering.volunteering.project_account_mapping import resolve_budget_rows
+
+		doc.set("account_budgets", resolve_budget_rows(doc, rows))
 	doc.project_setup_version = 1
 	doc.project_budget_revision_reason = cstr(data.get("revision_reason")).strip()
 	if "financial_closed" in data:

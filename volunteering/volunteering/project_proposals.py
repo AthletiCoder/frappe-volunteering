@@ -53,7 +53,7 @@ def project_values(doc):
 		],
 		"account_budgets": [
 			{
-				"expense_account": row.expense_account,
+				"budget_key": row.budget_key or "",
 				"employee_label": row.employee_label or "",
 				"approved_amount": row.approved_amount or 0,
 				"is_active": cint(row.is_active),
@@ -135,15 +135,25 @@ def _data(data, project=None):
 		data["participants"] = members
 	if "account_budgets" in data:
 		if not isinstance(data["account_budgets"], list) or len(data["account_budgets"]) > 100:
-			frappe.throw(_("Select at most 100 permitted accounts."))
+			frappe.throw(_("Select at most 100 expense labels."))
 		for row in data["account_budgets"]:
 			if not isinstance(row, dict) or set(row) - {
-				"expense_account",
+				"budget_key",
 				"employee_label",
 				"approved_amount",
 				"is_active",
 			}:
-				frappe.throw(_("Invalid permitted-account fields."))
+				frappe.throw(_("Project proposals contain expense labels and budgets, not ledger accounts."))
+			if not row.get("budget_key"):
+				row["budget_key"] = frappe.generate_hash(length=20)
+			elif frappe.db.exists(
+				"Project Account Budget",
+				{
+					"budget_key": row["budget_key"],
+					"parent": ["!=", project.name if project else ""],
+				},
+			):
+				frappe.throw(_("This expense label belongs to another project."))
 	if "is_archived" in data and not workspace.is_project_manager():
 		frappe.throw(
 			_("Only Projects Managers can remove or restore unused projects."), frappe.PermissionError
@@ -358,7 +368,9 @@ def _candidate(doc):
 	if "participants" in data:
 		project.set("project_participants", data["participants"])
 	if "account_budgets" in data:
-		project.set("account_budgets", [dict(row) for row in data["account_budgets"]])
+		from volunteering.volunteering.project_account_mapping import resolve_budget_rows
+
+		project.set("account_budgets", resolve_budget_rows(project, data["account_budgets"]))
 	if "financial_closed" in data:
 		project.budget_status = "Closed" if cint(data["financial_closed"]) else "Active"
 	project.project_setup_version = 1

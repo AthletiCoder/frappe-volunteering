@@ -33,7 +33,19 @@ class IntegrationTestProjectExpenseAccounts(IntegrationTestCase):
 		cls._email_patcher = mute_accounting_test_emails()
 		setup_accounting_custom_fields()
 		ensure_expense_claim_field_visibility()
-		cls.project = get_or_create_project_with_cost_center()
+		base = frappe.get_doc("Project", get_or_create_project_with_cost_center())
+		cls.project = (
+			frappe.get_doc(
+				{
+					"doctype": "Project",
+					"project_name": "Project account choices " + frappe.generate_hash(length=8),
+					"company": base.company,
+					"cost_center": base.cost_center,
+				}
+			)
+			.insert(ignore_permissions=True)
+			.name
+		)
 		cls.employee_email = get_or_create_user(
 			"project-account-employee@example.com", ["Employee"], "Project Account Employee"
 		)
@@ -78,7 +90,17 @@ class IntegrationTestProjectExpenseAccounts(IntegrationTestCase):
 		self.assertFalse(frappe.has_permission("Account", "read", user=self.employee_email))
 		self.assertFalse(frappe.has_permission("Expense Claim Type", "read", user=self.employee_email))
 		options = get_project_expense_account_options(self.project, self.company)
-		self.assertEqual([row["value"] for row in options], [self.allowed_account])
+		self.assertEqual(
+			[row["value"] for row in options],
+			[
+				frappe.db.get_value(
+					"Project Account Budget",
+					{"parent": self.project, "expense_account": self.allowed_account},
+					"budget_key",
+				)
+			],
+		)
+		self.assertNotIn(self.allowed_account, frappe.as_json(options))
 		self.assertIn("Employee-friendly expense", options[0]["label"])
 		self.assertNotIn("approved_amount", options[0])
 		self.assertNotIn("balance", options[0])
@@ -87,7 +109,7 @@ class IntegrationTestProjectExpenseAccounts(IntegrationTestCase):
 		frappe.set_user(self.employee_email)
 		claim = make_expense_claim(self.employee, self.project, amount=500)
 		row = claim.expenses[0]
-		self.assertEqual(row.project_expense_account, self.allowed_account)
+		self.assertNotEqual(row.project_expense_account, self.allowed_account)
 		self.assertEqual(row.default_account, self.allowed_account)
 
 	def test_typed_unlinked_account_is_rejected_server_side(self):
@@ -119,7 +141,7 @@ class IntegrationTestProjectExpenseAccounts(IntegrationTestCase):
 
 		frappe.set_user(self.employee_email)
 		self.assertEqual(get_project_expense_account_options(self.project, self.company), [])
-		with self.assertRaisesRegex(frappe.ValidationError, "no Expense Accounts available"):
+		with self.assertRaisesRegex(frappe.ValidationError, "no expense categories available"):
 			make_expense_claim(
 				self.employee,
 				self.project,

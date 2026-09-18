@@ -218,9 +218,9 @@ volunteering.accounting_workflow.setup_project_expense_account_selector = functi
 					"expenses",
 					"description",
 					(options || []).length
-						? __("Choose an Expense Account made available by the selected Project.")
+						? __("Choose an approved expense category for the selected Project.")
 						: __(
-								"This Project has no Expense Accounts available to employees. Ask Accounts to configure the Project.",
+								"This Project has no mapped expense categories. Ask a Projects Manager to approve labels and an Accounts Manager to map them.",
 							),
 				);
 			}
@@ -470,7 +470,7 @@ volunteering.accounting_workflow.show_spend_hints = function (frm) {
 					]);
 				} else {
 					budget = __(
-						"Project budget control: {0}. Expense Account budget control: {1}.",
+						"Project budget control: {0}. Expense category budget control: {1}.",
 						[snap.project_control, snap.account_control],
 					);
 				}

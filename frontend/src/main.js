@@ -12,6 +12,8 @@ import ExpenseClaim from "./views/ExpenseClaim.vue";
 import Projects from "./views/Projects.vue";
 import BankAccounts from "./views/BankAccounts.vue";
 import OfficeAddresses from "./views/OfficeAddresses.vue";
+import Profile from "./views/Profile.vue";
+import ProjectAccountMapping from "./views/ProjectAccountMapping.vue";
 
 initTheme();
 
@@ -20,6 +22,7 @@ const router = createRouter({
 	routes: [
 		{ path: "/", redirect: "/home" },
 		{ path: "/home", component: Home, name: "Home" },
+		{ path: "/profile", component: Profile, name: "Profile" },
 		{ path: "/todos", component: Todos, name: "Todos" },
 		{ path: "/budget-health", component: BudgetHealth, name: "BudgetHealth" },
 		{ path: "/advances", component: Advances, name: "Advances" },
@@ -29,6 +32,11 @@ const router = createRouter({
 		{ path: "/bank-account", component: BankAccounts, name: "BankAccounts" },
 		{ path: "/office-addresses", component: OfficeAddresses, name: "OfficeAddresses" },
 		{ path: "/projects", component: Projects, name: "Projects" },
+		{
+			path: "/project-account-mapping",
+			component: ProjectAccountMapping,
+			name: "ProjectAccountMapping",
+		},
 	],
 });
 

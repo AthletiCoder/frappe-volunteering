@@ -11,6 +11,7 @@ from volunteering.volunteering.home_access import (
 	require_logged_in_or_redirect,
 )
 from volunteering.volunteering.home_service import (
+	_bank_review_actions,
 	_compose_todos,
 	_money_actions,
 	_time_actions,
@@ -57,17 +58,13 @@ class UnitTestHomeAccess(UnitTestCase):
 		self.assertTrue(flags["deemphasize_self_service"])
 
 	def test_hr_sees_people_section(self):
-		flags = classify_home_access(
-			["Employee", "HR Manager"], has_employee=True, grade="Manager"
-		)
+		flags = classify_home_access(["Employee", "HR Manager"], has_employee=True, grade="Manager")
 		self.assertEqual(flags["persona"], "hr")
 		self.assertTrue(flags["show_people"])
 		self.assertFalse(flags["show_accounts"])
 
 	def test_coordinator_sees_programs_and_budget(self):
-		flags = classify_home_access(
-			["Employee", "NGO Coordinator"], has_employee=True, grade="Manager"
-		)
+		flags = classify_home_access(["Employee", "NGO Coordinator"], has_employee=True, grade="Manager")
 		self.assertEqual(flags["persona"], "coordinator")
 		self.assertTrue(flags["show_programs"])
 		self.assertTrue(flags["show_budget_health"])
@@ -125,6 +122,15 @@ class UnitTestHomeAccess(UnitTestCase):
 
 
 class UnitTestHomePayload(UnitTestCase):
+	@patch(
+		"volunteering.volunteering.home_service.frappe.get_roles",
+		return_value=["Accounts User", "Accounts Manager"],
+	)
+	def test_accounts_manager_home_includes_project_label_mapping(self, _roles):
+		actions = _bank_review_actions("accounts@example.com")
+		mapping = next(row for row in actions if row["id"] == "project_account_mapping")
+		self.assertEqual(mapping["route"], "/volunteering/project-account-mapping")
+
 	@patch("volunteering.volunteering.home_service.get_grade_for_user", return_value=None)
 	@patch("volunteering.volunteering.home_service.get_employee_for_user", return_value=None)
 	@patch("volunteering.volunteering.home_service.frappe.get_roles", return_value=["NGO Member"])

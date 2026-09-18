@@ -297,7 +297,7 @@ ACCOUNTING_CUSTOM_FIELDS = {
 	"Expense Claim Detail": [
 		{
 			"fieldname": "project_expense_account",
-			"label": "Project Expense Account",
+			"label": "Project Expense Category",
 			"fieldtype": "Autocomplete",
 			"insert_after": "column_break_2",
 			"reqd": 1,
@@ -305,8 +305,8 @@ ACCOUNTING_CUSTOM_FIELDS = {
 			"print_width": "180px",
 			"width": "200px",
 			"description": (
-				"Choose an Expense Account permitted for the selected Project. "
-				"This does not provide Chart of Accounts or balance access."
+				"Choose an approved employee-facing expense label for the selected Project. "
+				"Its ledger account is assigned separately by an Accounts Manager."
 			),
 		},
 		{
@@ -442,23 +442,23 @@ ACCOUNTING_CUSTOM_FIELDS = {
 		},
 		{
 			"fieldname": "account_budget_control",
-			"label": "Expense Account Budget Control",
+			"label": "Expense Category Budget Control",
 			"fieldtype": "Select",
 			"options": "No Control\nWarn Only\nStrict",
 			"default": "No Control",
 			"reqd": 1,
 			"insert_after": "total_approved_budget",
-			"description": "Controls each Expense Account allocation independently.",
+			"description": "Controls each employee-facing expense label allocation independently.",
 		},
 		{
 			"fieldname": "account_budgets",
-			"label": "Allowed Expense Accounts & Budgets",
+			"label": "Expense Labels & Budgets",
 			"fieldtype": "Table",
 			"options": "Project Account Budget",
 			"insert_after": "account_budget_control",
 			"description": (
-				"These are the only Expense Accounts employees can select for this Project. "
-				"Approved Budget is optional when Expense Account Budget Control is No Control."
+				"Define the plain-language labels employees can select and the budget for each. "
+				"Accounts Managers map approved labels to ledger accounts separately."
 			),
 		},
 		{

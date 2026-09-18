@@ -5,26 +5,29 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "budget_key",
   "employee_label",
   "expense_account",
   "approved_amount",
   "is_active"
  ],
  "fields": [
+  {"fieldname": "budget_key", "fieldtype": "Data", "label": "Budget Label ID", "hidden": 1, "read_only": 1},
   {
-   "description": "Plain-language option shown to employees. Defaults to the account name when left blank.",
+   "description": "The expense category shown to employees. Ledger mapping is completed separately by an Accounts Manager after project approval.",
    "fieldname": "employee_label",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Employee-facing Label"
+   "label": "Employee-facing Label",
+   "reqd": 1
   },
   {
    "fieldname": "expense_account",
    "fieldtype": "Link",
-   "in_list_view": 1,
+   "hidden": 1,
    "label": "Expense Account",
    "options": "Account",
-   "reqd": 1
+   "read_only": 1
   },
   {
    "fieldname": "approved_amount",

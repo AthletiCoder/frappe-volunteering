@@ -303,7 +303,11 @@ def make_expense_claim(
 			"expenses": [
 				{
 					"expense_type": expense_type,
-					"project_expense_account": expense_account,
+					"project_expense_account": frappe.db.get_value(
+						"Project Account Budget",
+						{"parent": project, "expense_account": expense_account},
+						"budget_key",
+					),
 					"description": "Test expense",
 					"amount": amount,
 					"sanctioned_amount": amount,
@@ -520,17 +524,26 @@ def set_project_budget(
 	project_doc.project_budget_control = project_control
 	project_doc.total_approved_budget = allocated_amount
 	project_doc.account_budget_control = account_control
-	project_doc.account_budgets = []
+	existing = {row.expense_account: row for row in project_doc.get("account_budgets") or []}
+	if account_budgets is None:
+		save_test_project(project_doc)
+		return project_doc
+	for row in project_doc.account_budgets:
+		row.is_active = 0
 	for account, amount in account_budgets or []:
-		project_doc.append(
-			"account_budgets",
-			{
-				"employee_label": frappe.db.get_value("Account", account, "account_name") or account,
-				"expense_account": account,
-				"approved_amount": amount,
-				"is_active": 1,
-			},
-		)
+		if account in existing:
+			existing[account].approved_amount = amount
+			existing[account].is_active = 1
+		else:
+			project_doc.append(
+				"account_budgets",
+				{
+					"employee_label": frappe.db.get_value("Account", account, "account_name") or account,
+					"expense_account": account,
+					"approved_amount": amount,
+					"is_active": 1,
+				},
+			)
 	save_test_project(project_doc)
 	return project_doc
 
@@ -541,6 +554,7 @@ def save_test_project(project_doc):
 	Production code cannot set this ContextVar; tests use it only to prepare
 	legacy accounting fixtures without manufacturing an approval request.
 	"""
+	from volunteering.volunteering.project_account_mapping import mapping_context
 	from volunteering.volunteering.project_proposals import _application
 
 	previous_user = frappe.session.user
@@ -548,7 +562,8 @@ def save_test_project(project_doc):
 	project_doc.project_budget_revision_reason = "Automated test fixture setup"
 	token = _application.set((None if project_doc.is_new() else project_doc.name, "test-fixture"))
 	try:
-		project_doc.save(ignore_permissions=True)
+		with mapping_context(project_doc.name):
+			project_doc.save(ignore_permissions=True)
 	finally:
 		_application.reset(token)
 		frappe.set_user(previous_user)

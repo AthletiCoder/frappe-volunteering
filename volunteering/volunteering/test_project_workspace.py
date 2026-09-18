@@ -101,7 +101,6 @@ class IntegrationTestProjectGovernance(IntegrationTestCase):
 			"account_budget_control": "Warn Only",
 			"account_budgets": [
 				{
-					"expense_account": self.account,
 					"employee_label": "Materials",
 					"approved_amount": 8000,
 					"is_active": 1,
@@ -343,9 +342,7 @@ class IntegrationTestProjectGovernance(IntegrationTestCase):
 		approved = self.approve()
 		frappe.set_user(self.manager)
 		project = frappe.get_doc("Project", approved["project"])
-		with patch(
-			"volunteering.volunteering.project_workspace.has_financial_records", return_value=True
-		):
+		with patch("volunteering.volunteering.project_workspace.has_financial_records", return_value=True):
 			with self.assertRaisesRegex(frappe.ValidationError, "financial records"):
 				remove_unused_project(project.name, str(project.modified), "Project already has spending")
 		project.reload()

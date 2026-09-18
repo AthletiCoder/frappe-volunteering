@@ -331,6 +331,7 @@ doc_events = {
 	"Project": {
 		"validate": [
 			"volunteering.volunteering.budget_service.validate_project_budgets",
+			"volunteering.volunteering.project_account_mapping.validate_mapping_changes",
 			"volunteering.volunteering.project_workspace.validate_project_structure",
 		],
 		"on_update": "volunteering.volunteering.project_workspace.record_budget_revision",
@@ -347,6 +348,7 @@ after_migrate = [
 	"volunteering.volunteering.desk_icons_setup.ensure_desk_icons",
 	"volunteering.volunteering.accounting_setup.after_migrate",
 	"volunteering.volunteering.project_workspace.setup_project_workspace",
+	"volunteering.volunteering.project_account_mapping.backfill_budget_labels",
 ]
 
 boot_session = "volunteering.volunteering.workspace_setup.boot_session"

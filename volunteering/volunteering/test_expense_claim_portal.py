@@ -84,7 +84,11 @@ class IntegrationTestExpenseClaimPortal(IntegrationTestCase):
 			"expenses": [
 				{
 					"expense_date": frappe.utils.nowdate(),
-					"account": self.account,
+					"account": frappe.db.get_value(
+						"Project Account Budget",
+						{"parent": self.project, "expense_account": self.account},
+						"budget_key",
+					),
 					"supplier_name": "Portal supplier",
 					"invoice_number": "PORTAL-001",
 					"description": "Portal test expense",
@@ -107,7 +111,11 @@ class IntegrationTestExpenseClaimPortal(IntegrationTestCase):
 		self.assertEqual(defaults["employee"], self.employee)
 		self.assertIn(self.project, [row["value"] for row in defaults["projects"]])
 		accounts = get_project_accounts(self.project)
-		self.assertIn(self.account, [row["value"] for row in accounts])
+		key = frappe.db.get_value(
+			"Project Account Budget", {"parent": self.project, "expense_account": self.account}, "budget_key"
+		)
+		self.assertIn(key, [row["value"] for row in accounts])
+		self.assertNotIn(self.account, frappe.as_json(accounts))
 		for account in accounts:
 			self.assertNotIn("approved_amount", account)
 			self.assertNotIn("balance", account)

@@ -135,12 +135,20 @@ def _organisation_actions():
 def _bank_review_actions(user):
 	if "Accounts Manager" not in frappe.get_roles(user):
 		return []
-	return [{
-		"id": "bank_account",
-		"label": _("Review reimbursement bank accounts"),
-		"hint": _("Approve, return or reject employee bank details and private bank proof."),
-		"route": "/volunteering/bank-account?queue=1",
-	}]
+	return [
+		{
+			"id": "bank_account",
+			"label": _("Review reimbursement bank accounts"),
+			"hint": _("Approve, return or reject employee bank details and private bank proof."),
+			"route": "/volunteering/bank-account?queue=1",
+		},
+		{
+			"id": "project_account_mapping",
+			"label": _("Map project expense labels"),
+			"hint": _("Assign ledger accounts to the labels and budgets approved by Projects Managers."),
+			"route": "/volunteering/project-account-mapping",
+		},
+	]
 
 
 def _project_actions(flags):
@@ -150,7 +158,7 @@ def _project_actions(flags):
 		{
 			"id": "projects",
 			"label": _("Projects and proposals"),
-			"hint": _("Purpose, participants, permitted accounts and project status."),
+			"hint": _("Purpose, participants, expense labels, budgets and project status."),
 			"route": "/volunteering/projects",
 		}
 	]
@@ -603,9 +611,7 @@ def _pending_approver_inbox(doctype, kind, user):
 def _accounts_queues():
 	queues = []
 	if "Accounts Manager" in frappe.get_roles():
-		bank_requests = _safe_count(
-			"Employee Bank Account Request", {"request_status": "Pending Approval"}
-		)
+		bank_requests = _safe_count("Employee Bank Account Request", {"request_status": "Pending Approval"})
 		if bank_requests:
 			queues.append(
 				{

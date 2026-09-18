@@ -14,6 +14,17 @@ frappe.ui.form.on("Project", {
 	refresh(frm) {
 		volunteering.project_budget.make_single_scroll_page(frm);
 		volunteering.project_budget.toggle_account_budget_amounts(frm);
+		if (
+			!frm.is_new() &&
+			(frappe.session.user === "Administrator" ||
+				frappe.user_roles.includes("Accounts Manager"))
+		) {
+			frm.add_custom_button(__("Map expense labels"), () => {
+				window.location.href =
+					"/volunteering/project-account-mapping?project=" +
+					encodeURIComponent(frm.doc.name);
+			});
+		}
 		if (!frm.doc.name || frm.is_new()) {
 			return;
 		}
@@ -30,7 +41,7 @@ frappe.ui.form.on("Project", {
 						volunteering.form_hints.set_headline(
 							frm,
 							__(
-								"Project budget: {0}. Expense Account budgets: {1}. Spend is committed by Expense Claims and Purchase Orders, not advances.",
+								"Project budget: {0}. Expense category budgets: {1}. Spend is committed by Expense Claims and Purchase Orders, not advances.",
 								[snap.project_control, snap.account_control],
 							),
 						);
@@ -67,8 +78,10 @@ volunteering.project_budget.toggle_account_budget_amounts = function (frm) {
 		"approved_amount",
 		"description",
 		controlled
-			? __("Required because Expense Account budget control is enabled.")
-			: __("Optional; this row still controls whether employees may select the account."),
+			? __("Required because expense category budget control is enabled.")
+			: __(
+					"Optional; the label still controls which expense categories employees may select.",
+				),
 	);
 	frm.refresh_field("account_budgets");
 };

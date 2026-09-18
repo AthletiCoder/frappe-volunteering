@@ -68,10 +68,6 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
     const options = (await api(page, workspaceService + "get_setup_options"))
       .data.message;
     const centre = options.cost_centres[0].name;
-    const account = options.expense_accounts.find(
-      (row: any) => !row.name.startsWith("_Test"),
-    );
-    expect(account).toBeTruthy();
     await expect(page.getByLabel(/^Company/)).toHaveCount(0);
     await page.getByLabel("Project name *", { exact: true }).fill(projectName);
     await page
@@ -88,23 +84,12 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
       .selectOption("Strict");
     await page.getByLabel(/^Total approved budget/).fill("10000");
     await page
-      .getByLabel(/^Expense-account budget control/)
+      .getByLabel(/^Expense-category budget control/)
       .selectOption("Warn Only");
-    const accountInput = page.getByRole("combobox", {
-      name: "Expense account *",
-      exact: true,
-    });
-    await accountInput.fill(account.name);
     await page
-      .getByRole("option", {
-        name: `${account.account_name} ${account.name}`,
-        exact: true,
-      })
-      .click();
-    await page
-      .getByLabel("Employee-facing label", { exact: true })
+      .getByLabel("Employee-facing label *", { exact: true })
       .fill("Programme materials");
-    await page.getByLabel(/^Account allocation/).fill("8000");
+    await page.getByLabel(/^Budget allocation/).fill("8000");
     await page
       .getByRole("button", { name: "Save draft / edits" })
       .last()
@@ -204,11 +189,9 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
     await signIn(page, PERSONAS.employee.email);
     await page.goto(`/volunteering/projects?project=${projectId}`);
     await expect(
-      page.getByRole("heading", { name: "Accounts available for your bills" }),
+      page.getByRole("heading", { name: "Expense categories for your bills" }),
     ).toBeVisible();
-    await expect(
-      page.getByText("Programme materials", { exact: true }),
-    ).toBeVisible();
+    await expect(page.getByText(/^Programme materials/)).toBeVisible();
     await expect(page.getByLabel(/^Total approved budget/)).toHaveCount(0);
     await expect(page.getByText(/local-project-plan/)).toBeVisible();
     await expect(page.getByText(/local-approved-budget/)).toHaveCount(0);

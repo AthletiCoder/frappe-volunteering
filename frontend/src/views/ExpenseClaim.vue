@@ -86,8 +86,9 @@
 					</label>
 				</div>
 				<p v-if="!defaults.projects.length" class="warning-box mt-3">
-					No active project with expense accounts is available to you. A Projects Manager
-					must add you as a member and configure permitted expense accounts first.
+					No active project with mapped expense categories is available to you. A
+					Projects Manager must add you as a member and approve labels; an Accounts
+					Manager must then map them.
 				</p>
 			</section>
 
@@ -220,8 +221,8 @@
 							v-model="item.account"
 							:options="accountOptions"
 							:disabled="!form.project || loadingAccounts"
-							label="Project expense account *"
-							placeholder="Type to find a permitted expense account"
+							label="Project expense category *"
+							placeholder="Type to find an approved expense category"
 							required
 						/>
 						<label class="field-label"

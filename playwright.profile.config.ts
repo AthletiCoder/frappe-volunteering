@@ -1,14 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// Deliberately opt-in: no full seeder, no writes outside the local demo project.
-process.env.E2E_PROJECT_DEMOS = "1";
+// Read-only profile checks and logout in isolated browser sessions. No seeder.
 export default defineConfig({
-  testDir: "./e2e/tests/projects",
-  testMatch: ["workspace.spec.ts", "layout.spec.ts", "account-mapping.spec.ts"],
-  outputDir: "./test-results/project-workspace",
+  testDir: "./e2e/tests/profile",
+  outputDir: "./test-results/profile",
   workers: 1,
   reporter: "line",
-  timeout: 90000,
+  timeout: 60000,
   use: {
     ...devices["Desktop Chrome"],
     channel: "chrome",
