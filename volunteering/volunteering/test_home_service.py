@@ -3,6 +3,7 @@
 
 from unittest.mock import patch
 
+import frappe
 from frappe.tests import UnitTestCase
 
 from volunteering.volunteering.home_access import (
@@ -13,6 +14,7 @@ from volunteering.volunteering.home_access import (
 from volunteering.volunteering.home_service import (
 	_bank_review_actions,
 	_compose_todos,
+	_employee_draft_todos,
 	_money_actions,
 	_time_actions,
 	get_home_payload,
@@ -201,3 +203,24 @@ class UnitTestHomePayload(UnitTestCase):
 		claim = next(row for row in _money_actions() if row["id"] == "claim")
 		self.assertEqual(claim["route"], "/volunteering/expense-claim")
 		self.assertEqual(claim["list_route"], "/desk/expense-claim")
+
+	@patch("volunteering.volunteering.home_service.frappe.db.exists", return_value=True)
+	@patch("volunteering.volunteering.home_service.frappe.db.has_column", return_value=True)
+	@patch("volunteering.volunteering.home_service.frappe.get_all")
+	def test_draft_advance_resumes_in_home_portal(self, get_all, _has_column, _exists):
+		get_all.side_effect = [
+			[
+				frappe._dict(
+					{
+						"name": "HR-EAD-2026-00001",
+						"creation": "2026-09-18 09:00:00",
+						"modified": "2026-09-18 09:10:00",
+						"advance_amount": 0,
+						"workflow_state": "Draft",
+					}
+				)
+			],
+			[],
+		]
+		todos = _employee_draft_todos("HR-EMP-00001")
+		self.assertEqual(todos[0]["route"], "/volunteering/advances/HR-EAD-2026-00001")

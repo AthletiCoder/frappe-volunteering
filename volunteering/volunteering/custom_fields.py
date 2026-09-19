@@ -376,6 +376,50 @@ ACCOUNTING_CUSTOM_FIELDS = {
 			"hidden": 1,
 			"description": "Auto-set for budget tracking; hidden from employees.",
 		},
+		{
+			"fieldname": "intended_project",
+			"label": "Intended Project",
+			"fieldtype": "Link",
+			"options": "Project",
+			"insert_after": "project",
+			"reqd": 0,
+			"description": (
+				"Informational project for which the advance is requested. "
+				"The advance itself does not consume project budget."
+			),
+		},
+		{
+			"fieldname": "required_by_date",
+			"label": "Required By",
+			"fieldtype": "Date",
+			"insert_after": "intended_project",
+		},
+		{
+			"fieldname": "expected_settlement_date",
+			"label": "Expected Settlement Date",
+			"fieldtype": "Date",
+			"insert_after": "required_by_date",
+		},
+		{
+			"fieldname": "advance_use",
+			"label": "Advance Use",
+			"fieldtype": "Select",
+			"options": "My expenses\nTeam expenses",
+			"default": "My expenses",
+			"insert_after": "expected_settlement_date",
+		},
+		{
+			"fieldname": "advance_additional_note",
+			"label": "Additional Note",
+			"fieldtype": "Small Text",
+			"insert_after": "advance_use",
+		},
+		{
+			"fieldname": "advance_supporting_document",
+			"label": "Estimate / Quotation",
+			"fieldtype": "Attach",
+			"insert_after": "advance_additional_note",
+		},
 		*_approval_routing_fields("return_amount", include_emergency=False),
 		{
 			"fieldname": "spend_guide_section",

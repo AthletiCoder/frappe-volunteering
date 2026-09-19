@@ -1,0 +1,105 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-09-18 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "employee",
+  "employee_name",
+  "action",
+  "reason",
+  "acted_by",
+  "acted_on",
+  "manager_employee"
+ ],
+ "fields": [
+  {
+   "default": "EAFR-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "EAFR-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Employee",
+   "options": "Employee",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fetch_from": "employee.employee_name",
+   "fieldname": "employee_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Employee Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "action",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Action",
+   "options": "Freeze\nUnfreeze",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Reason",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "acted_by",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Acted By",
+   "options": "User",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "acted_on",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Acted On",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "manager_employee",
+   "fieldtype": "Link",
+   "label": "Supervisor Employee",
+   "options": "Employee",
+   "read_only": 1,
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-09-18 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Volunteering",
+ "name": "Employee Advance Freeze Event",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {"read": 1, "report": 1, "role": "HR Manager"},
+  {"read": 1, "report": 1, "role": "Accounts Manager"},
+  {"read": 1, "report": 1, "role": "System Manager"}
+ ],
+ "sort_field": "acted_on",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

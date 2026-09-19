@@ -88,6 +88,21 @@ def get_document_amount(doc):
 	return flt(doc.get(get_amount_field(doc.doctype)) or 0)
 
 
+def get_document_approval_amount(doc):
+	"""Amount used for approval authority, distinct from transaction value."""
+	if doc.doctype == "Employee Advance" and doc.get("employee"):
+		from volunteering.volunteering.employee_advance_controls import (
+			get_advance_approval_exposure,
+		)
+
+		return get_advance_approval_exposure(
+			doc.employee,
+			current_name=doc.get("name"),
+			current_amount=get_document_amount(doc),
+		)["total_outstanding"]
+	return get_document_amount(doc)
+
+
 def get_requester_user(doc):
 	if doc.doctype in ("Expense Claim", "Employee Advance") and doc.get("employee"):
 		user = frappe.db.get_value("Employee", doc.employee, "user_id")
@@ -116,9 +131,7 @@ def get_approval_band_for_employee(employee):
 	"""Employee Grade carries the limits; fall back to Designation pre-migration."""
 	if not employee:
 		return None
-	return get_grade_for_employee(employee) or frappe.db.get_value(
-		"Employee", employee, "designation"
-	)
+	return get_grade_for_employee(employee) or frappe.db.get_value("Employee", employee, "designation")
 
 
 def get_approval_band_for_user(user):
@@ -172,8 +185,8 @@ def walk_approval_chain(employee, amount, start_after_employee=None):
 		current = manager
 
 
-def find_first_approver(employee, amount, start_after_employee=None):
-	"""Return first manager user in chain (prefer one who can approve; else next manager)."""
+def find_first_approver(employee, amount, start_after_employee=None, require_authority=True):
+	"""Return a reporting manager; advances must visit each manager without skips."""
 	first = None
 	for user, _emp, _grade, can_approve in walk_approval_chain(
 		employee, amount, start_after_employee=start_after_employee
@@ -182,7 +195,7 @@ def find_first_approver(employee, amount, start_after_employee=None):
 			continue
 		if first is None:
 			first = user
-		if can_approve:
+		if not require_authority or can_approve:
 			return user
 	if first:
 		return first
@@ -211,11 +224,18 @@ def assign_pending_approver(doc):
 		doc.pending_approver = get_fallback_board_approver()
 		return
 
-	approver = find_first_approver(employee, amount)
+	require_authority = doc.doctype != "Employee Advance"
+	approver = find_first_approver(employee, amount, require_authority=require_authority)
 	if approver and approver == requester:
 		# Skip self — escalate one more hop
 		emp = get_employee_for_user(approver)
-		approver = find_first_approver(employee, amount, start_after_employee=emp) if emp else get_fallback_board_approver()
+		approver = (
+			find_first_approver(
+				employee, amount, start_after_employee=emp, require_authority=require_authority
+			)
+			if emp
+			else get_fallback_board_approver()
+		)
 
 	doc.pending_approver = approver or get_fallback_board_approver()
 
@@ -228,7 +248,10 @@ def escalate_to_next_approver(doc):
 	amount = get_document_amount(doc)
 
 	next_approver = find_first_approver(
-		requester_emp, amount, start_after_employee=current_emp
+		requester_emp,
+		amount,
+		start_after_employee=current_emp,
+		require_authority=doc.doctype != "Employee Advance",
 	)
 	if not next_approver or next_approver == current_user:
 		next_approver = get_fallback_board_approver()
@@ -244,7 +267,7 @@ def escalate_to_next_approver(doc):
 
 def get_amount_approval_level(doc):
 	settings = get_accounting_settings()
-	amount = get_document_amount(doc)
+	amount = get_document_approval_amount(doc)
 	tier_1 = flt(settings.tier_1_limit or 2000)
 	tier_2 = flt(settings.tier_2_limit or 10000)
 
@@ -258,7 +281,7 @@ def get_amount_approval_level(doc):
 def get_requester_minimum_level(doc):
 	requester = get_requester_user(doc)
 
-	if user_has_board_of_directors(requester):
+	if doc.doctype != "Employee Advance" and user_has_board_of_directors(requester):
 		frappe.throw(
 			_("Board of Directors cannot create {0} requests.").format(doc.doctype),
 			title=_("Not Allowed"),
@@ -345,7 +368,7 @@ def validate_approver_authority(doc):
 	if not use_grade_approval():
 		return
 
-	amount = get_document_amount(doc)
+	amount = get_document_approval_amount(doc)
 	user = frappe.session.user
 	if user != (doc.get("pending_approver") or previous.get("pending_approver")):
 		# Board chair override path still allowed if they have unlimited
@@ -359,11 +382,58 @@ def validate_approver_authority(doc):
 
 	if not user_can_approve_amount(user, amount):
 		frappe.throw(
-			_(
-				"Your grade approval limit is below {0}. "
-				"Reject or Escalate to a higher authority."
-			).format(frappe.format_value(amount, "Currency"))
+			_("Your grade approval limit is below {0}. Reject or Escalate to a higher authority.").format(
+				frappe.format_value(amount, "Currency")
+			)
 		)
+
+
+def validate_advance_review_assignment(doc):
+	"""An advance must be reviewed by its current assignee, without chain bypasses."""
+	if doc.doctype != "Employee Advance":
+		return
+	previous = doc.get_doc_before_save()
+	if not previous or previous.workflow_state != PENDING_APPROVAL:
+		return
+	# Both save and submit enter this guard. Submission skips before_save, so
+	# checking here also prevents reducing the amount to bypass grade authority.
+	request_fields = (
+		"employee",
+		"advance_amount",
+		"purpose",
+		"company",
+		"currency",
+		"advance_account",
+		"intended_project",
+		"required_by_date",
+		"expected_settlement_date",
+		"advance_use",
+		"advance_additional_note",
+		"advance_supporting_document",
+		"posting_date",
+	)
+	if any(doc.get(field) != previous.get(field) for field in request_fields):
+		frappe.throw(_("Pending advance request details cannot be changed during review or approval."))
+	assigned = previous.get("pending_approver")
+	routing_changed = doc.get("pending_approver") != assigned
+	if doc.workflow_state in ("Approved", "Rejected") or routing_changed:
+		if frappe.session.user != assigned:
+			frappe.throw(_("Only the currently assigned advance reviewer may approve, reject or escalate."))
+	if routing_changed and doc.workflow_state == PENDING_APPROVAL:
+		next_user = find_first_approver(
+			get_requester_employee(doc),
+			get_document_amount(doc),
+			start_after_employee=get_employee_for_user(assigned),
+			require_authority=False,
+		)
+		if not next_user or next_user == assigned:
+			next_user = get_fallback_board_approver()
+		if doc.pending_approver != next_user:
+			frappe.throw(
+				_(
+					"Escalate the advance to the next linked reviewer; intermediate reviewers cannot be skipped."
+				)
+			)
 
 
 def validate_escalation_reason(doc):
@@ -425,8 +495,10 @@ def sync_expense_claim_approval_status_before_submit(doc, method=None):
 def before_accounting_document_save(doc, method=None):
 	if doc.doctype not in ACCOUNTING_WORKFLOW_DOCTYPES:
 		return
+	validate_advance_review_assignment(doc)
 
-	# Always block Board of Directors create (grade and legacy tier modes)
+	# Advance requests are available to every eligible employee, including board
+	# grades. EC/PO retain their existing board-request rule; self-approval is blocked.
 	get_requester_minimum_level(doc)
 	if doc.doctype == "Expense Claim" and doc.workflow_state == "Pending Receipt Review":
 		# Receipt review deliberately precedes manager routing. Keeping these
@@ -474,6 +546,7 @@ def before_accounting_document_submit(doc, method=None):
 	"""Approve → submit skips before_save; re-run authority checks."""
 	if doc.doctype not in ACCOUNTING_WORKFLOW_DOCTYPES:
 		return
+	validate_advance_review_assignment(doc)
 	validate_no_self_approval(doc)
 	validate_approver_authority(doc)
 	if doc.doctype == "Expense Claim":
@@ -501,15 +574,10 @@ def on_accounting_workflow_state_change(doc, method=None):
 	previous = doc.get_doc_before_save()
 	if previous and previous.workflow_state == doc.workflow_state:
 		# Still notify if pending_approver changed (escalation)
-		if not (
-			use_grade_approval()
-			and previous.get("pending_approver") != doc.get("pending_approver")
-		):
+		if not (use_grade_approval() and previous.get("pending_approver") != doc.get("pending_approver")):
 			return
 
-	if use_grade_approval() and doc.workflow_state == PENDING_APPROVAL and not doc.get(
-		"pending_approver"
-	):
+	if use_grade_approval() and doc.workflow_state == PENDING_APPROVAL and not doc.get("pending_approver"):
 		assign_pending_approver(doc)
 
 	notify_pending_approvers(doc)
@@ -522,9 +590,9 @@ def notify_pending_approvers(doc):
 
 	subject = _("Approval required: {0} {1}").format(doc.doctype, doc.name)
 	link = frappe.utils.get_url_to_form(doc.doctype, doc.name)
-	message = _(
-		'{0} <a href="{1}">{2}</a> is awaiting your approval at stage: {3}.'
-	).format(doc.doctype, link, doc.name, doc.workflow_state)
+	message = _('{0} <a href="{1}">{2}</a> is awaiting your approval at stage: {3}.').format(
+		doc.doctype, link, doc.name, doc.workflow_state
+	)
 
 	frappe.sendmail(
 		recipients=recipients,
@@ -635,14 +703,42 @@ def _remove_stale_approver_share(doc):
 
 
 @frappe.whitelist()
+def get_live_workflow_transitions(doc, workflow=None, raise_exception=False):
+	"""Keep Desk's native advance actions in sync with live approval authority.
+
+	Other DocTypes use Frappe's unchanged implementation. The actual approval
+	continues to be independently checked by validate_approver_authority.
+	"""
+	from frappe.model.document import Document
+	from frappe.model.workflow import get_transitions
+
+	payload = doc if isinstance(doc, Document) else frappe.parse_json(doc)
+	if payload.get("doctype") != "Employee Advance":
+		return get_transitions(doc, workflow, raise_exception)
+
+	advance = payload if isinstance(payload, Document) else frappe.get_doc(payload)
+	if not advance.is_new():
+		advance.load_from_db()
+	transitions = get_transitions(advance, workflow, raise_exception)
+	if advance.get("workflow_state") != PENDING_APPROVAL:
+		return transitions
+
+	flags = get_approver_action_flags(advance.doctype, advance.name)
+	return [
+		transition
+		for transition in transitions
+		if transition.get("action") != "Approve" or flags.get("can_approve")
+	]
+
+
+@frappe.whitelist()
 def get_approver_action_flags(doctype, name):
 	"""Return which Review actions the current user should see."""
 	doc = frappe.get_doc(doctype, name)
 	doc.check_permission("read")
 
 	is_pending_approver = (
-		doc.get("workflow_state") == PENDING_APPROVAL
-		and doc.get("pending_approver") == frappe.session.user
+		doc.get("workflow_state") == PENDING_APPROVAL and doc.get("pending_approver") == frappe.session.user
 	)
 	if not is_pending_approver:
 		return {
@@ -652,7 +748,18 @@ def get_approver_action_flags(doctype, name):
 			"can_reject": False,
 		}
 
-	amount = get_document_amount(doc)
+	exposure = None
+	if doc.doctype == "Employee Advance":
+		from volunteering.volunteering.employee_advance_controls import (
+			get_advance_approval_exposure,
+		)
+
+		exposure = get_advance_approval_exposure(
+			doc.employee,
+			current_name=doc.name,
+			current_amount=get_document_amount(doc),
+		)
+	amount = exposure["total_outstanding"] if exposure else get_document_approval_amount(doc)
 	can_approve = True
 	if use_grade_approval():
 		can_approve = user_can_approve_amount(frappe.session.user, amount)
@@ -678,6 +785,14 @@ def get_approver_action_flags(doctype, name):
 		"strict_budget_blocked": strict_budget_blocked,
 		"strict_budget_messages": strict_budget_messages,
 	}
+	if exposure:
+		flags.update(
+			{
+				"request_amount": exposure["request_amount"],
+				"other_outstanding": exposure["other_outstanding"],
+				"approval_exposure": exposure["total_outstanding"],
+			}
+		)
 	if doc.doctype == "Expense Claim":
 		from volunteering.volunteering.manager_float_service import enrich_approver_action_flags
 

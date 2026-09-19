@@ -63,9 +63,15 @@ class UnitTestEmployeeBankDetails(UnitTestCase):
 				banking._proof({**details(), **overrides})
 
 	def test_only_accounts_manager_gets_home_review_action(self):
-		for roles, count in ((["Accounts User"], 0), (["System Manager"], 0), (["Accounts Manager"], 1)):
+		for roles, expected in (
+			(["Accounts User"], []),
+			(["System Manager"], []),
+			(["Accounts Manager"], ["bank_account", "project_account_mapping"]),
+		):
 			with patch("frappe.get_roles", return_value=roles):
-				self.assertEqual(len(_bank_review_actions("test@example.com")), count)
+				self.assertEqual(
+					[action["id"] for action in _bank_review_actions("test@example.com")], expected
+				)
 
 
 class IntegrationTestEmployeeBankAccounts(IntegrationTestCase):

@@ -66,8 +66,13 @@ def has_permission(doc, ptype, user):
 	if ptype in {"read", "print", "email", "export", "report"}:
 		return is_own or is_manager
 
-	# Draft editing/creation stays with the requesting employee
-	if ptype in {"write", "create", "delete"}:
+	# Submitting an existing draft passes through Frappe's write check before
+	# the submit check, so the reporting manager needs write on that draft.
+	# Creation and deletion remain restricted to the requesting employee.
+	if ptype == "write":
+		return is_own or is_manager
+
+	if ptype in {"create", "delete"}:
 		return is_own
 
 	return False

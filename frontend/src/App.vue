@@ -1,8 +1,12 @@
 <template>
 	<div class="min-h-screen bg-bg text-ink pb-24 md:pb-8">
-	<header class="app-header sticky top-0 left-0 right-0 z-20 w-full border-b border-line">
+		<header class="app-header sticky top-0 left-0 right-0 z-20 w-full border-b border-line">
 			<div class="max-w-5xl mx-auto px-4 md:px-6 py-3 flex items-center w-full gap-3">
-				<AppNav class="max-md:hidden md:flex shrink-0" :items="navItems" aria-label="Sections" />
+				<AppNav
+					class="max-md:hidden md:flex shrink-0"
+					:items="navItems"
+					aria-label="Sections"
+				/>
 				<div class="md:hidden font-semibold tracking-tight">Sevamrita</div>
 				<div class="ml-auto flex items-center gap-0.5 shrink-0">
 					<button
@@ -52,12 +56,13 @@ const dark = ref(false);
 const nav = computed(() => ({
 	projects: homePayload.value?.nav?.projects ?? false,
 	advances: homePayload.value?.nav?.advances ?? true,
+	team: homePayload.value?.nav?.team ?? false,
 	volunteering: homePayload.value?.nav?.volunteering ?? false,
 	budget_health: homePayload.value?.nav?.budget_health ?? false,
 }));
 
 const todoCount = computed(
-	() => homePayload.value?.waiting_count ?? homePayload.value?.todo_count ?? 0
+	() => homePayload.value?.waiting_count ?? homePayload.value?.todo_count ?? 0,
 );
 
 const navItems = computed(() => {
@@ -67,6 +72,9 @@ const navItems = computed(() => {
 	}
 	if (nav.value.advances) {
 		items.push({ to: "/advances", label: "Advances", icon: "wallet" });
+	}
+	if (nav.value.team) {
+		items.push({ to: "/team", label: "Team", icon: "people" });
 	}
 	if (nav.value.volunteering) {
 		items.push({ href: "/desk/volunteering", label: "Volunteering", icon: "people" });

@@ -14,6 +14,7 @@ import BankAccounts from "./views/BankAccounts.vue";
 import OfficeAddresses from "./views/OfficeAddresses.vue";
 import Profile from "./views/Profile.vue";
 import ProjectAccountMapping from "./views/ProjectAccountMapping.vue";
+import Team from "./views/Team.vue";
 
 initTheme();
 
@@ -27,6 +28,7 @@ const router = createRouter({
 		{ path: "/budget-health", component: BudgetHealth, name: "BudgetHealth" },
 		{ path: "/advances", component: Advances, name: "Advances" },
 		{ path: "/advances/:name", component: Advances, name: "AdvanceDetail" },
+		{ path: "/team", component: Team, name: "Team" },
 		{ path: "/invoice-generator", component: InvoiceGenerator, name: "InvoiceGenerator" },
 		{ path: "/expense-claim", component: ExpenseClaim, name: "ExpenseClaim" },
 		{ path: "/bank-account", component: BankAccounts, name: "BankAccounts" },

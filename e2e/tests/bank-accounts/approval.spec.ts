@@ -222,9 +222,7 @@ test.describe.serial("Employee bank approval @bank-accounts @ui", () => {
         await supplier
           .getByLabel("GSTIN *", { exact: true })
           .fill("27ABCDE1234F1Z5");
-        await page
-          .getByLabel("Place of supply *", { exact: true })
-          .fill("Maharashtra");
+        await page.getByLabel("GST amount", { exact: true }).fill("90");
       }
       let invoiceNumber: string | undefined;
       for (const [button, extension] of [

@@ -47,16 +47,17 @@ If you really must use your own money above the threshold, you must write a shor
 An advance is money the organisation gives you **before** you buy something.
 
 - You can take an advance **only for yourself**. (Accounts or HR can do it for others.)
-- Do **not** tag an advance to a project. It is cash in your hands, not program spend yet.
+- Select an intended active project in which you are a member and have an approved reimbursement bank account. The intended project is informational, not program spend yet.
 - When you settle, make an [Expense Claim](/app/expense-claim/new), **choose the Project** the bills belong to, and link the advance. Budget Health checks that project.
-- You cannot take a new advance while an old one still has a large **leftover** (more than 10% of what you were paid).
-- If the leftover is small (10% or less), you may take another advance. But you must still return or claim the leftover — it is never ignored.
+- You may submit multiple advance requests of any positive amount regardless of your grade or the outstanding balance of earlier advances. Each request still needs approval and respects any manager freeze.
+- Every advance request starts with your reporting manager. At each review, authority is compared with your live total outstanding advances including the request being reviewed, not that request alone. When the total exceeds their authority, they review and escalate to the next person in Reports To, one step at a time without skipping linked reviewers.
+- You must still return or claim every leftover — another request never clears an earlier balance.
 - Check the status of your advances on the [Advance Portal](/volunteering/advances).
 - To close an advance, make an [Expense Claim](/app/expense-claim/new) and link it to the advance.
 
 > **Note:** The **Get Advances** button only shows advances that are **approved and already paid** to you.
 
-Open: [New Employee Advance](/app/employee-advance/new)
+Open: [Request an Advance](/volunteering/advances?new=1)
 
 ## 3. Claim money back (reimbursement)
 
@@ -173,18 +174,19 @@ This page shows **where** to set spending limits and rules, and **who** can chan
 | Approval & Advance Limits | Accounts Manager, System Manager | HR Manager, Employees |
 | Accounting Settings | Accounts Manager, System Manager | — |
 
-## 1. Set approval and advance limits (by grade)
+## 1. Set approval authority (by grade)
 
-Limits are set for each **grade** (seniority band), not for each person. You give each person the right grade on their Employee record, and they get that grade's limits. See [HR Configuration](/help/hr/configuration) for how to set a grade.
+Approval authority is set for each **grade** (seniority band), not for each person. Give each person the right grade on their Employee record. Their grade determines what they can approve for others, not how much they can request. See [HR Configuration](/help/hr/configuration) for how to set a grade.
 
 **Open the page:** [Home](/volunteering/home) → Setup → **Approval & Advance Limits**, or go to [Approval and Advance Limits](/app/approval-and-advance-limits).
 
-Each grade has two separate limits:
+The grade table sets approval authority:
 
 | Column | Meaning |
 |--------|---------|
 | **Max Approval Authority** | The biggest amount this person can **approve for other people**. |
-| **Max Self Advance** | The biggest advance this person can take **for themselves**. |
+
+Every eligible employee may request any positive advance amount. Requests start with the immediate reporting manager; each reviewer must review and escalate to the next linked person if the employee's live total outstanding exceeds their authority. Authority is recalculated when the request is opened and acted on. Legacy self-advance caps are hidden and ignored.
 
 Anyone on the **Board of Directors** grade can approve **any** amount.
 
@@ -197,16 +199,16 @@ Anyone on the **Board of Directors** grade can approve **any** amount.
 
 ### Standard values
 
-| Grade | Can approve for others | Own advance limit |
-|-------------|------------------------|-------------------|
-| Associate | 0 | 2,000 |
-| Manager | 2,000 | 5,000 |
-| Vice President | 5,000 | 10,000 |
-| President | 10,000 | 15,000 |
-| Director | 25,000 | 50,000 |
-| CEO | 50,000 | 50,000 |
-| Executive Board | 100,000 | 100,000 |
-| Board of Directors | Unlimited | — |
+| Grade | Can approve for others |
+|-------------|------------------------|
+| Associate | 0 |
+| Manager | 2,000 |
+| Vice President | 5,000 |
+| President | 10,000 |
+| Director | 25,000 |
+| CEO | 50,000 |
+| Executive Board | 100,000 |
+| Board of Directors | Unlimited |
 
 ## 2. Turn grade approval on or off
 
@@ -224,8 +226,9 @@ All of these are on [Accounting Settings](/app/volunteering-accounting-settings)
 | Vendor Payment Threshold | Above this amount, staff should ask the organisation to pay the vendor, not use their own money. | 5,000 |
 | Cash Payment Limit | Largest amount allowed to be paid in cash. | 2,000 |
 | Monthly Reimbursement Cap | Most a person can claim back in one month (0 = no limit). | 0 |
-| Advance Replenish Leftover % | If an advance's leftover is at or below this, the person may take a new advance. | 10% |
-| Max Blocking Advances | How many large-leftover advances block a new one. | 1 |
+| Manager Advance Source Residual % | Used for choosing an expense claim's own versus manager advance source and residual reporting; does not restrict new advance requests. | 10% |
+
+There is no request-count or request-amount cap preventing an employee from submitting another advance. Approval still requires authority covering the employee's live total outstanding advances, recalculated at each reviewer step. The legacy Max Unsettled Advances field is hidden and ignored.
 
 ## 4. Budget controls
 

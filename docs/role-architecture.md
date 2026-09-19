@@ -52,20 +52,22 @@ roles, after which grade and `department_head` are the only sources of authority
 The limits child table keeps the fieldname `designation` (to avoid a DB rename);
 its values are Employee Grades and the field is labelled **Grade**.
 
-## Seeded Grades (approve / self-advance defaults)
+## Seeded Grades (approval authority for others)
 
-| Grade | Max approve (others) | Max self advance |
-|-------|----------------------|------------------|
-| Associate | 0 | 2,000 |
-| Manager | 2,000 | 5,000 |
-| Vice President | 5,000 | 10,000 |
-| President | 10,000 | 15,000 |
-| Director | 25,000 | 50,000 |
-| CEO | 50,000 | 50,000 |
-| Executive Board | 100,000 | 100,000 |
-| Board of Directors | Unlimited | — |
+| Grade | Max approve (others) |
+|-------|----------------------|
+| Associate | 0 |
+| Manager | 2,000 |
+| Vice President | 5,000 |
+| President | 10,000 |
+| Director | 25,000 |
+| CEO | 50,000 |
+| Executive Board | 100,000 |
+| Board of Directors | Unlimited |
 
-Board of Directors also gates: create-block for EC/PO/EA, budget hard-override, leave > 7 days, digests, fallback approver, and workflow override Approve/Reject.
+Every eligible employee may request any positive advance amount. Advances go to the immediate reporting manager and escalate one person at a time when authority is insufficient. Legacy self-advance values are retained for database compatibility only, hidden and ignored.
+
+Board of Directors also gates: create-block for EC/PO (not employee advances), budget hard-override, leave > 7 days, digests, fallback approver, and workflow override Approve/Reject. Self-approval remains prohibited.
 
 ## Onboarding checklist
 

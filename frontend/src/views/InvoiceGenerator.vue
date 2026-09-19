@@ -127,14 +127,6 @@
 							class="field-input"
 					/></label>
 				</div>
-				<p v-if="isVolunteer" class="mt-3 text-sm text-muted">
-					You will sign an expense statement confirming your own expense details, not on
-					behalf of the supplier. Attach the signed statement and available original
-					bills to your claim. Receipt review and approval are still required.
-					<span v-if="isGst"
-						>This does not replace a supplier-issued GST tax invoice.</span
-					>
-				</p>
 			</section>
 
 			<section class="form-card">
@@ -288,7 +280,7 @@
 							</button>
 						</div>
 						<div class="grid sm:grid-cols-12 gap-3">
-							<label class="field-label sm:col-span-4"
+							<label class="field-label sm:col-span-5"
 								>Description *<input
 									v-model.trim="item.description"
 									required
@@ -302,14 +294,6 @@
 									class="field-input"
 							/></label>
 							<label class="field-label sm:col-span-2"
-								>Unit *<input
-									v-model.trim="item.unit"
-									required
-									maxlength="20"
-									class="field-input"
-									placeholder="Nos, kg, hours…"
-							/></label>
-							<label class="field-label sm:col-span-2"
 								>Quantity *<input
 									v-model.number="item.quantity"
 									required
@@ -318,7 +302,7 @@
 									step="0.001"
 									class="field-input"
 							/></label>
-							<label class="field-label sm:col-span-2"
+							<label class="field-label sm:col-span-3"
 								>Rate (INR) *<input
 									v-model.number="item.rate"
 									required
@@ -355,35 +339,14 @@
 							class="field-input"
 					/></label>
 					<label v-if="isGst" class="field-label"
-						>GST type *<select v-model="form.tax_mode" required class="field-input">
-							<option value="CGST_SGST">Intra-state: CGST + SGST</option>
-							<option value="IGST">Inter-state: IGST</option>
-						</select></label
-					>
-					<label v-if="isGst" class="field-label"
-						>GST rate *<select
-							v-model.number="form.gst_rate"
+						>GST amount<input
+							v-model.number="form.gst_amount"
+							type="number"
+							min="0"
+							step="0.01"
 							required
-							class="field-input"
-						>
-							<option :value="0">0%</option>
-							<option :value="5">5%</option>
-							<option :value="12">12%</option>
-							<option :value="18">18%</option>
-							<option :value="28">28%</option>
-						</select></label
-					>
-					<label v-if="isGst" class="field-label"
-						>Place of supply *<input
-							v-model.trim="form.place_of_supply"
-							required
-							maxlength="100"
 							class="field-input"
 					/></label>
-					<label v-if="isGst" class="field-label flex items-center gap-2 mt-6"
-						><input v-model="form.reverse_charge" type="checkbox" /> Tax payable on
-						reverse charge</label
-					>
 				</div>
 				<div
 					class="mt-4 ml-auto max-w-sm rounded-xl border border-line overflow-hidden text-sm"
@@ -447,7 +410,7 @@
 				<p class="text-sm text-ink mt-1">
 					Invoice number: <strong>{{ result.invoice_number }}</strong>
 				</p>
-				<p class="text-sm text-muted mt-1">{{ result.notice }}</p>
+				<p v-if="result.notice" class="text-sm text-muted mt-1">{{ result.notice }}</p>
 				<div class="flex flex-wrap gap-2 mt-3">
 					<button
 						v-if="result.pdf"
@@ -535,10 +498,7 @@ const form = reactive({
 	items: [blankItem()],
 	transportation_charges: 0,
 	other_charges: 0,
-	tax_mode: "CGST_SGST",
-	gst_rate: 18,
-	place_of_supply: "",
-	reverse_charge: false,
+	gst_amount: 0,
 	authorised_signatory: "",
 });
 const loading = ref(true);
@@ -558,9 +518,7 @@ const taxableTotal = computed(
 		Number(form.transportation_charges || 0) +
 		Number(form.other_charges || 0),
 );
-const gstAmount = computed(() =>
-	isGst.value ? (taxableTotal.value * Number(form.gst_rate || 0)) / 100 : 0,
-);
+const gstAmount = computed(() => (isGst.value ? Number(form.gst_amount || 0) : 0));
 const grandTotal = computed(() => taxableTotal.value + gstAmount.value);
 
 const PartyFields = defineComponent({
@@ -627,7 +585,6 @@ function applyOfficeAddress(target) {
 	if (!selected) return;
 	Object.assign(form[target], selected.party);
 	if (target === "consignee") {
-		form.place_of_supply = selected.party.state || "";
 		if (form.buyer_same_as_consignee) {
 			form.buyer_address_name = selected.name;
 			Object.assign(form.buyer, selected.party);
@@ -659,7 +616,6 @@ onMounted(async () => {
 		form.buyer_address_name = defaults.default_office_address || "";
 		Object.assign(form.consignee, defaults.consignee || {});
 		Object.assign(form.buyer, defaults.consignee || {});
-		form.place_of_supply = defaults.consignee?.state || "";
 	} catch (e) {
 		error.value = e.message || String(e);
 	} finally {

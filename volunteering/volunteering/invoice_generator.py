@@ -250,12 +250,8 @@ def _normalise_payload(payload, bank_override=None, invoice_number_override=None
 	data = {
 		"invoice_type": invoice_type,
 		"signer_type": signer_type,
-		"copy_label": _("For expense reimbursement")
-		if signer_type == "VOLUNTEER"
-		else _("Original for recipient"),
-		"title": ("EXPENSE STATEMENT WITH GST DETAILS" if invoice_type == "GST" else "EXPENSE STATEMENT")
-		if signer_type == "VOLUNTEER"
-		else ("TAX INVOICE" if invoice_type == "GST" else "INVOICE"),
+		"copy_label": _("ORIGINAL FOR RECIPIENT"),
+		"title": "TAX INVOICE" if invoice_type == "GST" else "INVOICE",
 		"invoice_number": invoice_number_override
 		if invoice_number_override is not None
 		else _required_text(raw, "invoice_number", _("Invoice number"), 80),
@@ -286,16 +282,21 @@ def _normalise_payload(payload, bank_override=None, invoice_number_override=None
 		_validate_gstin(data["consignee"].get("gstin"), _("Consignee GSTIN"), required=False)
 		if len(data["invoice_number"]) > 16:
 			frappe.throw(_("A GST invoice number cannot exceed 16 characters."))
-		data["tax_mode"] = _required_choice(raw, "tax_mode", ALLOWED_TAX_MODES, _("GST type"))
-		data["gst_rate"] = _rate(raw.get("gst_rate"))
-		data["place_of_supply"] = _text(raw.get("place_of_supply"), 100) or data["consignee"]["state"]
-		data["reverse_charge"] = bool(raw.get("reverse_charge"))
+		# The supplied Tax Invoice template has one GST amount row, not separate
+		# tax-mode/rate/place-of-supply fields. Accept the amount shown on the bill.
+		if "gst_amount" in raw:
+			data["gst_amount"] = _money(raw.get("gst_amount"), _("GST amount"))
+		else:
+			# Compatibility for saved/older clients while the home form migrates.
+			legacy_rate = _rate(raw.get("gst_rate"))
+			data["gst_amount"] = None
+		data["tax_mode"] = _text(raw.get("tax_mode"), 20)
+		data["gst_rate"] = _rate(raw.get("gst_rate")) if raw.get("gst_rate") is not None else Decimal("0")
 	else:
 		_validate_pan(data["supplier"].get("pan"))
 		data["tax_mode"] = ""
 		data["gst_rate"] = Decimal("0")
-		data["place_of_supply"] = ""
-		data["reverse_charge"] = False
+		data["gst_amount"] = Decimal("0")
 
 	items = raw.get("items")
 	if not isinstance(items, list) or not items:
@@ -333,7 +334,10 @@ def _normalise_payload(payload, bank_override=None, invoice_number_override=None
 	if taxable_total > MAX_MONEY:
 		frappe.throw(_("Invoice total is too large."))
 	data["taxable_total"] = _quantise(taxable_total)
-	data["gst_amount"] = _quantise(data["taxable_total"] * data["gst_rate"] / Decimal("100"))
+	if data["gst_amount"] is None:
+		data["gst_amount"] = _quantise(data["taxable_total"] * legacy_rate / Decimal("100"))
+	else:
+		data["gst_amount"] = _quantise(data["gst_amount"])
 	data["cgst_amount"] = Decimal("0")
 	data["sgst_amount"] = Decimal("0")
 	data["igst_amount"] = Decimal("0")
@@ -355,34 +359,20 @@ def _normalise_payload(payload, bank_override=None, invoice_number_override=None
 		volunteer = volunteer if isinstance(volunteer, dict) else {}
 		data["signatory_name"] = _required_text(volunteer, "name", _("Volunteer name"), 160)
 		data["signature_employee"] = _required_text(volunteer, "employee", _("Volunteer employee"), 140)
-		data["signature_context"] = _("Volunteer expense confirmation")
-		data["signature_label"] = _("Volunteer signature")
-		data["declaration_title"] = _("Volunteer declaration")
-		data["declaration"] = _(
-			"I, {0}, confirm that the expense described above was incurred on behalf of {1} and "
-			"that the details are accurate to the best of my knowledge. I sign as the volunteer "
-			"claiming the expense, not as a representative of the supplier."
-		).format(data["signatory_name"], data["buyer"]["name"])
-		data["notice"] = _(
-			"Prepared for volunteer expense confirmation. Attach the signed statement and available "
-			"original bills to the Expense Claim. Receipt review and expenditure approval remain required."
-		)
-		if invoice_type == "GST":
-			data["notice"] += " " + _("This statement does not replace a supplier-issued GST tax invoice.")
+		data["signature_context"] = _("Volunteer Signatory")
+		data["signature_label"] = _("Signature")
+		data["notice"] = ""
 	else:
 		data["signatory_name"] = data["authorised_signatory"]
 		data["signature_context"] = _("For {0}").format(data["supplier"]["name"])
-		data["signature_label"] = _("Authorised signatory and supplier signature")
+		data["signature_label"] = _("Authorised Signatory")
 		if invoice_type == "NON_GST":
-			data["declaration_title"] = _("Non-GST declaration")
+			data["declaration_title"] = _("Declaration")
 			data["declaration"] = _(
 				"I, {0}, proprietor/authorised person of {1}, declare that this business is not registered "
 				"under the Goods and Services Tax (GST) Act and therefore does not have a GSTIN."
 			).format(data["authorised_signatory"] or _("the undersigned"), data["supplier"]["name"])
-		data["notice"] = _(
-			"Ask the supplier to verify the details and sign this document before attaching it to the "
-			"Expense Claim. Receipt review and expenditure approval remain required."
-		)
+		data["notice"] = ""
 	return data
 
 
@@ -523,40 +513,35 @@ def _render_pdf_html(data):
 
 	items = "".join(
 		f"<tr><td>{item['number']}</td><td>{h(item['description'])}</td>"
-		f"<td>{h(item['hsn_sac'])}</td><td>{h(item['unit'])}</td><td class='num'>{_quantity_text(item['quantity'])}</td>"
+		f"<td>{h(item['hsn_sac'])}</td><td class='num'>{_quantity_text(item['quantity'])}</td>"
 		f"<td class='num'>{_money_text(item['rate'])}</td><td class='num'>{_money_text(item['amount'])}</td></tr>"
 		for item in data["items"]
 	)
 	summary = [
-		(_("Items subtotal"), data["items_total"]),
-		(_("Transportation"), data["transportation_charges"]),
-		(_("Other charges"), data["other_charges"]),
+		(_("Total"), data["items_total"]),
 	]
-	if data["tax_mode"] == "CGST_SGST":
-		half_rate = data["gst_rate"] / Decimal("2")
-		summary.extend(
-			[
-				(_("CGST @ {0}%").format(half_rate), data["cgst_amount"]),
-				(_("SGST @ {0}%").format(half_rate), data["sgst_amount"]),
-			]
-		)
-	elif data["tax_mode"] == "IGST":
-		summary.append((_("IGST @ {0}%").format(data["gst_rate"]), data["igst_amount"]))
+	if data["invoice_type"] == "GST":
+		summary.append((_("GST"), data["gst_amount"]))
+	summary.extend(
+		[
+			(_("Transportation"), data["transportation_charges"]),
+			(_("Others"), data["other_charges"]),
+		]
+	)
 	summary_rows = "".join(
-		f"<tr><td colspan='6' class='summary-label'>{h(label)}</td><td class='num'>{_money_text(value)}</td></tr>"
+		f"<tr><td colspan='5' class='summary-label'>{h(label)}</td><td class='num'>{_money_text(value)}</td></tr>"
 		for label, value in summary
-		if value or label == _("Items subtotal")
 	)
 	bank = data["bank"]
 	bank_lines = [
-		(_("Bank"), bank["bank_name"]),
+		(_("Bank Name"), bank["bank_name"]),
 		(_("Branch"), bank["branch"]),
-		(_("Account name"), bank["account_name"]),
-		(_("Account number"), bank["account_number"]),
-		(_("IFSC"), bank["ifsc"]),
-		(_("SWIFT"), bank["swift"]),
+		(_("Account Name"), bank["account_name"]),
+		(_("Account No."), bank["account_number"]),
+		(_("IFSC Code"), bank["ifsc"]),
+		(_("Swift Code"), bank["swift"]),
 	]
-	bank_html = "<br>".join(f"<b>{h(label)}:</b> {h(value)}" for label, value in bank_lines if value)
+	bank_html = "<br>".join(f"<b>{h(label)}:</b> {h(value)}" for label, value in bank_lines)
 	declaration = (
 		f"<div class='declaration'><b>{h(data['declaration_title'])}:</b> {h(data['declaration'])}</div>"
 		if data["declaration"]
@@ -572,6 +557,10 @@ h1 {{ text-align: center; font-size: 17pt; margin: 0 0 3mm; letter-spacing: .5px
 table {{ width: 100%; border-collapse: collapse; }}
 td, th {{ border: 1px solid #555; padding: 4px 5px; vertical-align: top; }}
 th {{ background: #ececec; text-align: center; }}
+thead {{ display: table-header-group; }}
+tr {{ page-break-inside: avoid; }}
+.items {{ table-layout: fixed; }}
+.items td {{ overflow-wrap: break-word; }}
 .party {{ width: 50%; }}
 .label {{ color: #555; font-size: 8pt; text-transform: uppercase; }}
 .value {{ font-weight: 600; margin-top: 1px; }}
@@ -581,17 +570,15 @@ th {{ background: #ececec; text-align: center; }}
 .section {{ margin-top: 3mm; }}
 .declaration {{ border: 1px solid #555; padding: 5px; margin-top: 3mm; }}
 .signature {{ height: 22mm; text-align: right; }}
-.notice {{ margin-top: 3mm; padding-top: 2mm; border-top: 1px solid #777; font-size: 8pt; color: #444; }}
 </style></head><body>
 <h1>{h(data["title"])}</h1><div class="copy">{h(data["copy_label"])}</div>
-<table><tr><td class="party"><div class="label">{h(_("Supplier"))}</div><div class="value">{h(data["supplier"]["name"])}</div>{h(data["supplier"]["address"])}<br>{h(data["supplier"]["state"])} {h(data["supplier"]["pin_code"])}<br>{h(_("GSTIN")) if data["invoice_type"] == "GST" else h(_("PAN"))}: {h(data["supplier"]["gstin"] if data["invoice_type"] == "GST" else data["supplier"]["pan"])}</td>
-<td><b>{h(_("Invoice number"))}:</b> {h(data["invoice_number"])}<br><b>{h(_("Invoice date"))}:</b> {h(data["invoice_date"])}<br><b>{h(_("Buyer order"))}:</b> {h(data["buyer_order_number"])} {h(data["buyer_order_date"])}<br><b>{h(_("Supplier reference"))}:</b> {h(data["supplier_reference"])}<br><b>{h(_("Dispatch document"))}:</b> {h(data["dispatch_document_number"])}<br><b>{h(_("Delivery note date"))}:</b> {h(data["delivery_note_date"])}{f"<br><b>{h(_('Place of supply'))}:</b> {h(data['place_of_supply'])}<br><b>{h(_('Reverse charge'))}:</b> {h(_('Yes') if data['reverse_charge'] else _('No'))}" if data["invoice_type"] == "GST" else ""}</td></tr>
-<tr><td><div class="label">{h(_("Consignee"))}</div><div class="value">{h(data["consignee"]["name"])}</div>{h(data["consignee"]["address"])}<br>{h(data["consignee"]["state"])} {h(data["consignee"]["pin_code"])}<br>{h(_("GSTIN"))}: {h(data["consignee"]["gstin"])}</td>
-<td><div class="label">{h(_("Buyer"))}</div><div class="value">{h(buyer["name"])}</div>{h(buyer["address"])}<br>{h(buyer["state"])} {h(buyer["pin_code"])}<br>{h(_("GSTIN"))}: {h(buyer["gstin"])}</td></tr></table>
-<table class="section"><thead><tr><th>{h(_("Sr."))}</th><th>{h(_("Description"))}</th><th>{h(_("HSN/SAC"))}</th><th>{h(_("Unit"))}</th><th>{h(_("Qty"))}</th><th>{h(_("Rate (INR)"))}</th><th>{h(_("Amount (INR)"))}</th></tr></thead><tbody>{items}{summary_rows}<tr class="grand"><td colspan="6" class="summary-label">{h(_("Grand total"))}</td><td class="num">{_money_text(data["grand_total"])}</td></tr></tbody></table>
+<table><tr><td class="party"><div class="label">{h(_("Supplier Details"))}</div><div class="value">{h(data["supplier"]["name"])}</div>{h(data["supplier"]["address"])}<br>{h(data["supplier"]["state"])} {h(data["supplier"]["pin_code"])}<br>{h(_("GSTIN / UID No.")) if data["invoice_type"] == "GST" else h(_("PAN No."))}: {h(data["supplier"]["gstin"] if data["invoice_type"] == "GST" else data["supplier"]["pan"])}</td>
+<td><b>{h(_("Invoice No."))}:</b> {h(data["invoice_number"])}<br><b>{h(_("Invoice Date"))}:</b> {h(data["invoice_date"])}<br><b>{h(_("Buyer's Order No."))}:</b> {h(data["buyer_order_number"])}<br><b>{h(_("Date"))}:</b> {h(data["buyer_order_date"])}<br><b>{h(_("Supplier's Reference"))}:</b> {h(data["supplier_reference"])}<br><b>{h(_("Despatch Document No."))}:</b> {h(data["dispatch_document_number"])}<br><b>{h(_("Delivery Note Date"))}:</b> {h(data["delivery_note_date"])}</td></tr>
+<tr><td><div class="label">{h(_("Consignee's Details"))}</div><div class="value">{h(data["consignee"]["name"])}</div>{h(data["consignee"]["address"])}<br>{h(data["consignee"]["state"])} {h(data["consignee"]["pin_code"])}<br>{h(_("GSTIN / UID No."))}: {h(data["consignee"]["gstin"])}</td>
+<td><div class="label">{h(_("Buyer's Details (if other than Consignee)"))}</div><div class="value">{h(buyer["name"])}</div>{h(buyer["address"])}<br>{h(buyer["state"])} {h(buyer["pin_code"])}<br>{h(_("GSTIN / UID No."))}: {h(buyer["gstin"])}</td></tr></table>
+<table class="section items"><colgroup><col style="width:6%"><col style="width:42%"><col style="width:12%"><col style="width:8%"><col style="width:14%"><col style="width:18%"></colgroup><thead><tr><th>{h(_("Sr. No."))}</th><th>{h(_("Description"))}</th><th>{h(_("HSN / SAC"))}</th><th>{h(_("Qty."))}</th><th>{h(_("Rate"))}</th><th>{h(_("Amount (INR)"))}</th></tr></thead><tbody>{items}{summary_rows}<tr class="grand"><td colspan="5" class="summary-label">{h(_("Grand Total"))}</td><td class="num">{_money_text(data["grand_total"])}</td></tr></tbody></table>
 <div class="declaration"><b>{h(_("Amount in words"))}:</b> {h(data["amount_in_words"])}</div>{declaration}
-<table class="section"><tr><td class="party"><b>{h(_("Employee reimbursement remittance details"))}</b><br>{bank_html or h(_("Not provided"))}<br><small>{h(_("For reimbursement to the employee, not payment to the supplier."))}</small></td><td class="signature"><b>{h(data["signature_context"])}</b><br><br><br>{h(data["signatory_name"])}{f"<br>{h(data['signature_employee'])}" if data["signature_employee"] else ""}<br>{h(data["signature_label"])}</td></tr></table>
-<div class="notice">{h(data["notice"])}</div>
+<table class="section"><tr><td class="party"><b>{h(_("Remittance Details"))}</b><br>{bank_html or h(_("Not provided"))}</td><td class="signature"><b>{h(data["signature_context"])}</b><br><br><br>{h(data["signatory_name"])}{f"<br>{h(data['signature_employee'])}" if data["signature_employee"] else ""}<br>{h(data["signature_label"])}</td></tr></table>
 </body></html>"""
 
 
@@ -626,6 +613,7 @@ def _build_docx(data):
 	from docx import Document
 	from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_TABLE_ALIGNMENT
 	from docx.enum.text import WD_ALIGN_PARAGRAPH
+	from docx.oxml import OxmlElement
 	from docx.shared import Mm, Pt
 
 	doc = Document()
@@ -652,42 +640,44 @@ def _build_docx(data):
 	header = doc.add_table(rows=2, cols=2)
 	header.alignment = WD_TABLE_ALIGNMENT.CENTER
 	header.style = "Table Grid"
-	_add_party_cell(header.cell(0, 0), _("Supplier"), data["supplier"], data["invoice_type"])
+	_set_table_widths(header, (95, 95))
+	_add_party_cell(header.cell(0, 0), _("Supplier Details"), data["supplier"], data["invoice_type"])
 	header_lines = [
-		(_("Invoice number"), data["invoice_number"]),
-		(_("Invoice date"), data["invoice_date"]),
-		(_("Buyer order"), " ".join(filter(None, [data["buyer_order_number"], data["buyer_order_date"]]))),
-		(_("Supplier reference"), data["supplier_reference"]),
-		(_("Dispatch document"), data["dispatch_document_number"]),
-		(_("Delivery note date"), data["delivery_note_date"]),
+		(_("Invoice No."), data["invoice_number"]),
+		(_("Invoice Date"), data["invoice_date"]),
+		(_("Buyer's Order No."), data["buyer_order_number"]),
+		(_("Date"), data["buyer_order_date"]),
+		(_("Supplier's Reference"), data["supplier_reference"]),
+		(_("Despatch Document No."), data["dispatch_document_number"]),
+		(_("Delivery Note Date"), data["delivery_note_date"]),
 	]
-	if data["invoice_type"] == "GST":
-		header_lines.extend(
-			[
-				(_("Place of supply"), data["place_of_supply"]),
-				(_("Reverse charge"), _("Yes") if data["reverse_charge"] else _("No")),
-			]
-		)
-	_add_lines(header.cell(0, 1), header_lines)
-	_add_party_cell(header.cell(1, 0), _("Consignee"), data["consignee"], "GST")
-	_add_party_cell(header.cell(1, 1), _("Buyer"), data["buyer"], "GST")
+	_add_lines(header.cell(0, 1), header_lines, include_empty=True)
+	_add_party_cell(header.cell(1, 0), _("Consignee's Details"), data["consignee"], "GST")
+	_add_party_cell(
+		header.cell(1, 1),
+		_("Buyer's Details (if other than Consignee)"),
+		data["buyer"],
+		"GST",
+	)
 	for row in header.rows:
 		for cell in row.cells:
 			cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP
 
 	doc.add_paragraph()
-	table = doc.add_table(rows=1, cols=7)
+	table = doc.add_table(rows=1, cols=6)
 	table.style = "Table Grid"
 	table.alignment = WD_TABLE_ALIGNMENT.CENTER
+	_set_table_widths(table, (11, 80, 23, 15, 27, 34))
+	repeat_header = OxmlElement("w:tblHeader")
+	table.rows[0]._tr.get_or_add_trPr().append(repeat_header)
 	for cell, text in zip(
 		table.rows[0].cells,
 		[
-			_("Sr."),
+			_("Sr. No."),
 			_("Description"),
-			_("HSN/SAC"),
-			_("Unit"),
-			_("Qty"),
-			_("Rate (INR)"),
+			_("HSN / SAC"),
+			_("Qty."),
+			_("Rate"),
 			_("Amount (INR)"),
 		],
 		strict=True,
@@ -701,36 +691,29 @@ def _build_docx(data):
 			item["number"],
 			item["description"],
 			item["hsn_sac"],
-			item["unit"],
 			_quantity_text(item["quantity"]),
 			_money_text(item["rate"]),
 			_money_text(item["amount"]),
 		]
 		for index, (cell, value) in enumerate(zip(cells, values, strict=True)):
 			cell.text = str(value)
-			if index >= 4:
+			if index >= 3:
 				cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
 	summary = [
-		(_("Items subtotal"), data["items_total"]),
-		(_("Transportation"), data["transportation_charges"]),
-		(_("Other charges"), data["other_charges"]),
+		(_("Total"), data["items_total"]),
 	]
-	if data["tax_mode"] == "CGST_SGST":
-		half_rate = data["gst_rate"] / Decimal("2")
-		summary.extend(
-			[
-				(_("CGST @ {0}%").format(half_rate), data["cgst_amount"]),
-				(_("SGST @ {0}%").format(half_rate), data["sgst_amount"]),
-			]
-		)
-	elif data["tax_mode"] == "IGST":
-		summary.append((_("IGST @ {0}%").format(data["gst_rate"]), data["igst_amount"]))
+	if data["invoice_type"] == "GST":
+		summary.append((_("GST"), data["gst_amount"]))
+	summary.extend(
+		[
+			(_("Transportation"), data["transportation_charges"]),
+			(_("Others"), data["other_charges"]),
+		]
+	)
 	for label, amount in summary:
-		if not amount and label != _("Items subtotal"):
-			continue
 		_add_summary_row(table, label, amount, bold=False)
-	_add_summary_row(table, _("Grand total"), data["grand_total"], bold=True)
+	_add_summary_row(table, _("Grand Total"), data["grand_total"], bold=True)
 
 	p = doc.add_paragraph()
 	p.add_run(f"{_('Amount in words')}: ").bold = True
@@ -742,18 +725,19 @@ def _build_docx(data):
 
 	footer = doc.add_table(rows=1, cols=2)
 	footer.style = "Table Grid"
+	footer.alignment = WD_TABLE_ALIGNMENT.CENTER
+	_set_table_widths(footer, (95, 95))
 	bank_lines = [
-		(_("Bank"), data["bank"]["bank_name"]),
+		(_("Bank Name"), data["bank"]["bank_name"]),
 		(_("Branch"), data["bank"]["branch"]),
-		(_("Account name"), data["bank"]["account_name"]),
-		(_("Account number"), data["bank"]["account_number"]),
-		(_("IFSC"), data["bank"]["ifsc"]),
-		(_("SWIFT"), data["bank"]["swift"]),
+		(_("Account Name"), data["bank"]["account_name"]),
+		(_("Account No."), data["bank"]["account_number"]),
+		(_("IFSC Code"), data["bank"]["ifsc"]),
+		(_("Swift Code"), data["bank"]["swift"]),
 	]
-	footer.cell(0, 0).text = str(_("Employee reimbursement remittance details"))
+	footer.cell(0, 0).text = str(_("Remittance Details"))
 	footer.cell(0, 0).paragraphs[0].runs[0].bold = True
-	_add_lines(footer.cell(0, 0), bank_lines)
-	footer.cell(0, 0).add_paragraph(_("For reimbursement to the employee, not payment to the supplier."))
+	_add_lines(footer.cell(0, 0), bank_lines, include_empty=True)
 	sig = footer.cell(0, 1)
 	sig.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
 	sig.paragraphs[0].add_run(data["signature_context"]).bold = True
@@ -766,16 +750,25 @@ def _build_docx(data):
 		p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 	p = sig.add_paragraph(data["signature_label"])
 	p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-
-	notice = doc.add_paragraph(data["notice"])
-	notice.paragraph_format.space_before = Pt(5)
-	for run in notice.runs:
-		run.italic = True
-		run.font.size = Pt(8)
+	for current_table in (header, table, footer):
+		for row in current_table.rows:
+			no_split = OxmlElement("w:cantSplit")
+			row._tr.get_or_add_trPr().append(no_split)
 
 	buffer = BytesIO()
 	doc.save(buffer)
 	return buffer.getvalue()
+
+
+def _set_table_widths(table, widths_mm):
+	from docx.shared import Mm
+
+	table.autofit = False
+	for column, width in zip(table.columns, widths_mm, strict=True):
+		column.width = Mm(width)
+	for row in table.rows:
+		for cell, width in zip(row.cells, widths_mm, strict=True):
+			cell.width = Mm(width)
 
 
 def _add_party_cell(cell, heading, party, invoice_type):
@@ -787,17 +780,16 @@ def _add_party_cell(cell, heading, party, invoice_type):
 	for value in (party["address"], " ".join(filter(None, [party["state"], party["pin_code"]]))):
 		if value:
 			cell.add_paragraph(value)
-	identity_label = _("GSTIN") if invoice_type == "GST" else _("PAN")
+	identity_label = _("GSTIN / UID No.") if invoice_type == "GST" else _("PAN No.")
 	identity = party["gstin"] if invoice_type == "GST" else party["pan"]
-	if identity:
-		p = cell.add_paragraph()
-		p.add_run(f"{identity_label}: ").bold = True
-		p.add_run(identity)
+	p = cell.add_paragraph()
+	p.add_run(f"{identity_label}: ").bold = True
+	p.add_run(identity)
 
 
-def _add_lines(cell, lines):
+def _add_lines(cell, lines, include_empty=False):
 	for label, value in lines:
-		if not value:
+		if not value and not include_empty:
 			continue
 		p = cell.add_paragraph()
 		p.add_run(f"{label}: ").bold = True
@@ -806,12 +798,12 @@ def _add_lines(cell, lines):
 
 def _add_summary_row(table, label, amount, bold):
 	cells = table.add_row().cells
-	merged = cells[0].merge(cells[5])
+	merged = cells[0].merge(cells[4])
 	merged.text = str(label)
 	merged.paragraphs[0].alignment = 2
-	cells[6].text = _money_text(amount)
-	cells[6].paragraphs[0].alignment = 2
+	cells[5].text = _money_text(amount)
+	cells[5].paragraphs[0].alignment = 2
 	if bold:
-		for cell in (merged, cells[6]):
+		for cell in (merged, cells[5]):
 			for run in cell.paragraphs[0].runs:
 				run.bold = True

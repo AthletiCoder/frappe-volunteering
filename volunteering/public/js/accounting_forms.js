@@ -505,6 +505,14 @@ volunteering.accounting_workflow.toggle_exception_fields = function (frm) {
 };
 
 volunteering.accounting_workflow.render_review_buttons = function (frm, flags, transitions) {
+	if (frm.doctype === "Employee Advance") {
+		// A refresh may change live authority without changing workflow state.
+		if (frm.page.btn_primary.text().trim() === __("Approve")) {
+			frm.page.clear_primary_action();
+		}
+		frm.remove_custom_button(__("Reject"), __("Review"));
+		frm.remove_custom_button(__("Escalate"), __("Review"));
+	}
 	const actions = (transitions || []).filter((transition) =>
 		WORKFLOW_ACTIONS.includes(transition.action),
 	);
@@ -512,6 +520,21 @@ volunteering.accounting_workflow.render_review_buttons = function (frm, flags, t
 	actions.forEach((t) => {
 		by_name[t.action] = t;
 	});
+
+	if (frm.doctype === "Employee Advance" && flags.approval_exposure !== undefined) {
+		frm.dashboard.clear_headline();
+		frm.dashboard.set_headline_alert(
+			__(
+				"Approval authority is based on the employee's live total outstanding: {0} for this request + {1} from other active advances = {2}.",
+				[
+					format_currency(flags.request_amount, frm.doc.currency),
+					format_currency(flags.other_outstanding, frm.doc.currency),
+					format_currency(flags.approval_exposure, frm.doc.currency),
+				],
+			),
+			flags.can_approve ? "blue" : "orange",
+		);
+	}
 
 	if (flags.can_approve && by_name.Approve) {
 		frm.page.set_primary_action(__("Approve"), () =>

@@ -67,8 +67,12 @@ def list_fundable_manager_advances(manager_employee: str, min_amount: float = 0)
 	for row in list_open_advances_for_employee(manager_employee):
 		if row.docstatus != 1 or flt(row.paid_amount) <= 0:
 			continue
+		# Keep legacy manager floats usable, but respect the explicit choice
+		# on requests made under the new project-eligible advance workflow.
+		if row.get("intended_project") and row.get("advance_use") != "Team expenses":
+			continue
 		residual = advance_residual_amount(row)
-		if residual < flt(min_amount):
+		if residual <= 0 or residual < flt(min_amount):
 			continue
 		out.append(
 			{
@@ -258,9 +262,15 @@ def settle_expense_claim_from_manager_float(doc) -> None:
 	manager = doc.get("manager_float_holder")
 	advance_name = doc.get("manager_float_advance") or pick_manager_advance(manager, amount)
 	if not advance_name:
-		frappe.throw(_("Cannot settle: no manager advance with sufficient residual."), title=_("Settlement Failed"))
+		frappe.throw(
+			_("Cannot settle: no manager advance with sufficient residual."), title=_("Settlement Failed")
+		)
 
 	advance = frappe.get_doc("Employee Advance", advance_name)
+	if advance.employee != manager or (
+		advance.get("intended_project") and advance.get("advance_use") != "Team expenses"
+	):
+		frappe.throw(_("The selected advance is not available for this manager's team expenses."))
 	residual = advance_residual_amount(advance)
 	if amount > residual + 0.01:
 		frappe.throw(
@@ -355,8 +365,9 @@ def get_manager_float_context(employee=None):
 		"can_request": can_request,
 		"own_blocking_advance": own_blocking.name if own_blocking else None,
 		"block_reason": (
-			_("You have an unsettled Employee Advance ({0}). Use Get Advances or Out of Pocket.")
-			.format(own_blocking.name)
+			_("You have an unsettled Employee Advance ({0}). Use Get Advances or Out of Pocket.").format(
+				own_blocking.name
+			)
 			if own_blocking
 			else None
 		),
@@ -405,7 +416,9 @@ def get_team_manager_float_requests():
 	requests = []
 	for row in claims:
 		amount = flt(row.total_sanctioned_amount or row.total_claimed_amount)
-		status = manager_float_funding_status(frappe._dict(**row, reimbursement_source=REIMBURSEMENT_MANAGER_ADVANCE))
+		status = manager_float_funding_status(
+			frappe._dict(**row, reimbursement_source=REIMBURSEMENT_MANAGER_ADVANCE)
+		)
 		requests.append(
 			{
 				**row,
@@ -426,7 +439,9 @@ def get_team_manager_float_requests():
 
 def _resolve_session_employee(employee=None):
 	roles = set(frappe.get_roles())
-	staff = roles.intersection({"Accounts Manager", "Accounts User", "System Manager", "HR Manager", "HR User"})
+	staff = roles.intersection(
+		{"Accounts Manager", "Accounts User", "System Manager", "HR Manager", "HR User"}
+	)
 	session_employee = frappe.db.get_value("Employee", {"user_id": frappe.session.user}, "name")
 	if employee and staff:
 		return employee

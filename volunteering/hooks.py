@@ -399,6 +399,7 @@ extend_doctype_class = {
 # ------------------------------
 #
 override_whitelisted_methods = {
+	"frappe.model.workflow.get_transitions": "volunteering.volunteering.approval_routing.get_live_workflow_transitions",
 	"frappe.desk.doctype.dashboard_chart.dashboard_chart.get": "volunteering.volunteering.dashboard_chart.get",
 	"frappe.desk.doctype.number_card.number_card.get_result": "volunteering.volunteering.number_card.get_result",
 }

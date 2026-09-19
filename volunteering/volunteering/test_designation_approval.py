@@ -10,6 +10,7 @@ from volunteering.volunteering.approval_routing import (
 	find_first_approver,
 )
 from volunteering.volunteering.doctype.volunteering_accounting_settings.volunteering_accounting_settings import (
+	grade_advance_limit,
 	grade_can_approve,
 )
 from volunteering.volunteering.payout_provider import ManualPayoutProvider, get_payout_provider
@@ -22,15 +23,9 @@ def _settings_with_limits():
 		tier_1_limit=2000,
 		tier_2_limit=10000,
 		designation_limits=[
-			frappe._dict(
-				designation="Manager", max_approve_amount=2000, max_advance_amount=5000
-			),
-			frappe._dict(
-				designation="CEO", max_approve_amount=50000, max_advance_amount=50000
-			),
-			frappe._dict(
-				designation="Board of Directors", max_approve_amount=0, max_advance_amount=0
-			),
+			frappe._dict(designation="Manager", max_approve_amount=2000, max_advance_amount=5000),
+			frappe._dict(designation="CEO", max_approve_amount=50000, max_advance_amount=50000),
+			frappe._dict(designation="Board of Directors", max_approve_amount=0, max_advance_amount=0),
 		],
 	)
 
@@ -70,6 +65,16 @@ class TestGradeApproval(UnitTestCase):
 		mock_get_value.side_effect = _get_value
 		self.assertEqual(find_first_approver("EMP", 5000), "ceo@example.com")
 		self.assertEqual(find_first_approver("EMP", 1500), "mgr@example.com")
+		self.assertEqual(find_first_approver("EMP", 5000, require_authority=False), "mgr@example.com")
+		self.assertEqual(
+			find_first_approver("EMP", 5000, start_after_employee="MGR", require_authority=False),
+			"ceo@example.com",
+		)
+
+	def test_legacy_self_advance_values_do_not_limit_any_grade(self):
+		for grade in (None, "Associate", "Manager", "CEO", "Board of Directors", "Unlisted Grade"):
+			with self.subTest(grade=grade):
+				self.assertIsNone(grade_advance_limit(grade, _settings_with_limits()))
 
 	def test_manual_payout_provider_default(self):
 		provider = get_payout_provider()
@@ -94,12 +99,25 @@ class TestLegacyTierStillWork(UnitTestCase):
 
 
 class TestApproverActionFlags(UnitTestCase):
+	@patch("frappe.model.workflow.get_transitions")
+	def test_live_transition_filter_preserves_other_doctypes(self, transitions):
+		from volunteering.volunteering.approval_routing import get_live_workflow_transitions
+
+		for doctype in ("Expense Claim", "Purchase Order", "Project"):
+			payload = {"doctype": doctype, "name": "TEST-1"}
+			transitions.return_value = [frappe._dict(action="Approve")]
+			self.assertEqual(get_live_workflow_transitions(payload), transitions.return_value)
+			transitions.assert_called_with(payload, None, False)
+
 	def _mock_doc(self, mock_get_doc):
 		doc = MagicMock()
 		doc.name = "EC-1"
 		doc.doctype = "Expense Claim"
 		doc.workflow_state = "Pending Approval"
 		doc.pending_approver = frappe.session.user
+		# This authority-only fixture has no project budget or manager-float source.
+		doc.project = None
+		doc.reimbursement_source = "Out of Pocket"
 		doc.get = lambda key, default=None: getattr(doc, key, default)
 		mock_get_doc.return_value = doc
 		return doc

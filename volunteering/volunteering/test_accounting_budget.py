@@ -273,6 +273,7 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 				"posting_date": frappe.utils.nowdate(),
 			}
 		)
+		advance.flags.ignore_advance_eligibility = True
 		advance.insert(ignore_permissions=True)
 		apply_workflow(advance, "Submit")
 		self.assertFalse(advance.project)

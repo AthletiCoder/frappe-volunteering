@@ -24,9 +24,9 @@ If you must reimburse above the threshold, fill **Vendor Payment Override Reason
 
 ## Employee Advance
 
-- New advance blocked while residual on another is **above** replenish threshold (default **10%**)
-- Residual ≤10% allows replenishment; leftovers must still be claimed or returned ([Advances with Residual](query report))
-- Do **not** tag the advance to a project. Settle via Expense Claim **on the Project** the spend belongs to — that is what budget controls check.
+- Multiple advance requests of any positive amount are allowed regardless of grade or previous outstanding balances. Each request starts with the reporting manager and moves up one reviewer at a time. At each step, the reviewer is allowed to approve only if their authority covers the employee's live total outstanding advances, including this request; otherwise they must escalate. Project/bank eligibility and freeze controls still apply.
+- Leftovers must still be claimed or returned; new requests do not clear earlier balances ([Advances with Residual](query report)).
+- Select an intended active project in which you are a member; this is informational and does not commit budget. Settle via Expense Claim **on the Project** the spend belongs to — that is what budget controls check.
 
 ## Expense Claim
 

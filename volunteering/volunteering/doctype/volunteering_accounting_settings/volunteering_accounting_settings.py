@@ -7,7 +7,7 @@ from frappe.utils import flt
 
 from volunteering.volunteering.authority import BOARD_OF_DIRECTORS
 
-# (Employee Grade, max approve for others, max self advance)
+# (Employee Grade, max approve for others, legacy self-advance value, unused)
 DEFAULT_GRADE_LIMITS = (
 	("Associate", 0, 2000),
 	("Manager", 2000, 5000),
@@ -42,7 +42,7 @@ def get_accounting_settings():
 		vendor_payment_threshold=5000,
 		cash_payment_limit=2000,
 		invoice_split_window_days=7,
-		max_unsettled_advances=1,
+		max_unsettled_advances=0,  # Legacy compatibility value; no request-count limit.
 		advance_replenish_residual_pct=10,
 		enable_budget_warnings=1,
 		budget_hard_block_pct=25,
@@ -105,16 +105,8 @@ def grade_can_approve(grade, amount, settings=None):
 
 
 def grade_advance_limit(grade, settings=None):
-	limits = get_grade_limit_map(settings)
-	if not grade:
-		return 0
-	if grade not in limits:
-		# Unknown grade: do not hard-block at 0 — treat as unset
-		return None
-	row = limits[grade]
-	if row.get("unlimited"):
-		return 10**12
-	return flt(row.get("max_advance_amount"))
+	"""Legacy API: no grade restricts the amount an employee may request."""
+	return None
 
 
 # --- Legacy wrappers (call sites migrating from Designation to Grade) -------

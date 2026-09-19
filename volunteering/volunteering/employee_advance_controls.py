@@ -5,14 +5,9 @@
 
 import frappe
 from frappe import _
-from frappe.utils import flt
+from frappe.utils import cstr, flt, getdate, nowdate
 
-from volunteering.volunteering.doctype.volunteering_accounting_settings.volunteering_accounting_settings import (
-	get_accounting_settings,
-	grade_advance_limit,
-)
-
-# Fully settled statuses never block replenishment
+# Fully settled advances have no outstanding balance.
 SETTLED_STATUSES = ("Claimed", "Returned", "Cancelled")
 
 
@@ -27,8 +22,81 @@ def before_employee_advance_save(doc, method=None):
 
 	_ensure_currency(doc)
 	_ensure_advance_account(doc)
-	_validate_max_unsettled(doc)
-	_validate_grade_advance_limit(doc)
+	_validate_portal_request_fields(doc)
+	# Multiple requests are allowed regardless of prior unpaid/unsettled balances.
+	# Outstanding amounts determine live approval authority, never replenishment gates.
+
+
+def _is_new_request_or_submission(doc):
+	if doc.is_new():
+		return True
+	previous = doc.get_doc_before_save()
+	if not previous:
+		return False
+	return (previous.get("workflow_state") or "Draft") in ("Draft", "Rejected") and (
+		doc.get("workflow_state") or "Draft"
+	) not in ("Draft", "Rejected")
+
+
+def _validate_portal_request_fields(doc):
+	"""Enforce the same eligibility rules from both Home and Desk."""
+	if doc.flags.get("ignore_advance_eligibility"):
+		return
+	if not _is_new_request_or_submission(doc):
+		return
+	from volunteering.volunteering.advance_freeze import validate_not_frozen
+	from volunteering.volunteering.employee_bank_accounts import get_approved_bank_details
+
+	validate_not_frozen(doc.employee)
+	project_name = cstr(doc.get("intended_project")).strip()
+	if not project_name:
+		frappe.throw(_("Select an active Project in which you are a member."))
+	_validate_advance_project(project_name, doc.employee)
+
+	required_by = getdate(doc.get("required_by_date") or nowdate())
+	settlement = getdate(doc.get("expected_settlement_date") or required_by)
+	if required_by < getdate(nowdate()):
+		frappe.throw(_("Required By cannot be in the past."))
+	if settlement < required_by:
+		frappe.throw(_("Expected Settlement Date cannot be before Required By."))
+	doc.required_by_date = required_by
+	doc.expected_settlement_date = settlement
+
+	advance_use = cstr(doc.get("advance_use") or "My expenses").strip()
+	if advance_use not in ("My expenses", "Team expenses"):
+		frappe.throw(_("Choose a valid advance use."))
+	if advance_use == "Team expenses" and not frappe.db.exists(
+		"Employee", {"reports_to": doc.employee, "status": "Active"}
+	):
+		frappe.throw(_("Team expenses can only be selected by an employee with an active direct report."))
+	doc.advance_use = advance_use
+
+	if not get_approved_bank_details(doc.employee, reveal=False):
+		frappe.throw(
+			_(
+				"An Accounts Manager must approve your reimbursement bank account before you request an advance."
+			)
+		)
+
+
+def _validate_advance_project(project_name, employee):
+	project = frappe.get_doc("Project", project_name)
+	user = frappe.db.get_value("Employee", employee, "user_id")
+	member = project.get("project_owner") == user or any(
+		row.user == user for row in project.get("project_participants") or []
+	)
+	if not member:
+		frappe.throw(_("You must be a listed member of the selected Project."), frappe.PermissionError)
+	if not frappe.utils.cint(project.get("project_setup_version")):
+		frappe.throw(_("The selected Project has not completed its approved setup."))
+	if project.get("operational_status") != "Active":
+		frappe.throw(_("Advance requests require an Active Project."))
+	if project.get("budget_status") == "Closed" or frappe.utils.cint(project.get("is_archived")):
+		frappe.throw(_("The selected Project is closed."))
+	company = frappe.db.get_value("Employee", employee, "company")
+	if project.company != company:
+		frappe.throw(_("The selected Project belongs to a different Company."))
+	return project
 
 
 def _ensure_currency(doc):
@@ -48,9 +116,7 @@ def _ensure_advance_account(doc):
 		return
 	account = frappe.db.get_value("Employee", doc.employee, "employee_advance_account")
 	if not account and doc.get("company"):
-		account = frappe.db.get_value(
-			"Company", doc.company, "default_employee_advance_account"
-		)
+		account = frappe.db.get_value("Company", doc.company, "default_employee_advance_account")
 	if account:
 		doc.advance_account = account
 
@@ -88,7 +154,7 @@ def advance_residual_ratio(row) -> float:
 
 
 def is_blocking_advance(row, replenish_pct: float) -> bool:
-	"""True when residual exceeds replenish threshold (default 10%)."""
+	"""Manager-float source selection only; never a limit on new advance requests."""
 	if (row.get("status") or "") in SETTLED_STATUSES:
 		return False
 	threshold = flt(replenish_pct) / 100.0
@@ -113,6 +179,10 @@ def list_open_advances_for_employee(employee, exclude_name=None):
 			"claimed_amount",
 			"return_amount",
 			"docstatus",
+			"intended_project",
+			"advance_use",
+			"workflow_state",
+			"purpose",
 		],
 	)
 	if exclude_name:
@@ -120,48 +190,59 @@ def list_open_advances_for_employee(employee, exclude_name=None):
 	return rows
 
 
-def _validate_max_unsettled(doc):
-	settings = get_accounting_settings()
-	max_open = int(settings.get("max_unsettled_advances") or 1)
-	if max_open <= 0:
-		return
+def advance_counts_towards_approval_exposure(row) -> bool:
+	"""Whether an advance contributes to the employee's live approval exposure.
 
-	replenish_pct = flt(settings.get("advance_replenish_residual_pct"))
-	if settings.get("advance_replenish_residual_pct") is None:
-		replenish_pct = 10.0
+	Drafts and rejected requests have not been accepted into the approval chain.
+	Pending requests and approved/disbursed advances continue to count until their
+	remaining commitment is claimed, returned, or cancelled.
+	"""
+	if int(row.get("docstatus") or 0) == 2 or (row.get("status") or "") == "Cancelled":
+		return False
+	workflow_state = (row.get("workflow_state") or "").strip()
+	if workflow_state in ("Draft", "Rejected", "Cancelled"):
+		return False
+	if int(row.get("docstatus") or 0) == 0 and not (
+		workflow_state == "Approved" or workflow_state.startswith("Pending")
+	):
+		return False
+	return advance_approval_outstanding_amount(row) > 0
 
-	rows = list_open_advances_for_employee(doc.employee, exclude_name=doc.name)
-	blocking = [r for r in rows if is_blocking_advance(r, replenish_pct)]
-	non_blocking_residual = [
-		r for r in rows if advance_residual_amount(r) > 0 and not is_blocking_advance(r, replenish_pct)
-	]
 
-	if len(blocking) >= max_open:
-		frappe.throw(
-			_(
-				"Employee {0} already has {1} unsettled advance(s) with residual above {2}%. "
-				"Settle or return the previous advance before requesting a new one."
-			).format(doc.employee, len(blocking), flt(replenish_pct, 2)),
-			title=_("Unsettled Advance Exists"),
-		)
+def advance_approval_outstanding_amount(row) -> float:
+	"""Reserve active request value, including an approved unpaid remainder.
 
-	if non_blocking_residual:
-		parts = []
-		for r in non_blocking_residual:
-			parts.append(
-				_("{0}: residual {1}").format(
-					r.name,
-					frappe.format_value(advance_residual_amount(r), "Currency"),
-				)
-			)
-		frappe.msgprint(
-			_(
-				"Replenishing while prior advance(s) still have a small residual (≤{0}%). "
-				"Please claim or return these leftovers: {1}"
-			).format(flt(replenish_pct, 2), "; ".join(parts)),
-			title=_("Advance Residual Reminder"),
-			indicator="orange",
-		)
+	The disbursed residual used for bill reconciliation is not sufficient for
+	approval authority: a partly paid advance can still be paid the remainder.
+	Keep that commitment in exposure until claims/returns reduce it or the
+	advance is fully settled or cancelled. HRMS can label a partly disbursed
+	advance Claimed/Returned even though its unpaid remainder is still payable,
+	so those labels alone must not release that commitment.
+	"""
+	if int(row.get("docstatus") or 0) == 2 or (row.get("status") or "") == "Cancelled":
+		return 0.0
+	committed = max(flt(row.get("advance_amount")), flt(row.get("paid_amount")))
+	return max(committed - flt(row.get("claimed_amount")) - flt(row.get("return_amount")), 0.0)
+
+
+def get_advance_approval_exposure(employee, current_name=None, current_amount=0):
+	"""Return the live amount against which an advance approver is authorised.
+
+	The request currently being reviewed is always counted at its requested
+	amount. Other active advances are read afresh from the database so a reviewer
+	sees, and the approval action rechecks, the employee's current total exposure.
+	"""
+	request_amount = max(flt(current_amount), 0.0)
+	other_outstanding = sum(
+		advance_approval_outstanding_amount(row)
+		for row in list_open_advances_for_employee(employee, exclude_name=current_name)
+		if advance_counts_towards_approval_exposure(row)
+	)
+	return {
+		"request_amount": flt(request_amount, 2),
+		"other_outstanding": flt(other_outstanding, 2),
+		"total_outstanding": flt(request_amount + other_outstanding, 2),
+	}
 
 
 def residual_advances_for_employee(employee):
@@ -181,28 +262,11 @@ def residual_advances_for_employee(employee):
 
 @frappe.whitelist()
 def get_grade_advance_limit_for_employee(employee):
-	"""Max self-service advance for the employee's grade (for Desk form hint)."""
-	from volunteering.volunteering.approval_routing import get_approval_band_for_employee
-
-	if not employee:
-		return {}
-	grade = get_approval_band_for_employee(employee)
-	if not grade:
-		return {"grade": None, "limit": None, "label": ""}
-	limit = grade_advance_limit(grade)
-	if limit is None:
-		return {"grade": grade, "limit": None, "label": _("No advance limit configured for {0}.").format(grade)}
-	if limit >= 10**11:
-		return {
-			"grade": grade,
-			"limit": None,
-			"label": _("No self-service advance cap for {0}.").format(grade),
-		}
+	"""Compatibility endpoint for Desk clients: request amounts have no grade cap."""
 	return {
-		"grade": grade,
-		"limit": limit,
-		"label": _("Max self advance for {0}: {1}").format(
-			grade, frappe.format_value(limit, "Currency")
+		"limit": None,
+		"label": _(
+			"You may request any amount. Your reporting manager reviews first, then escalates one step at a time when your live total outstanding exceeds their approval authority."
 		),
 	}
 
@@ -247,29 +311,3 @@ def get_linkable_advances_hint(employee):
 		"No advances qualify for Get Advances yet (needs Submitted + Paid amount > 0 + not fully claimed). "
 		"{0}"
 	).format("; ".join(parts))
-
-
-def _validate_grade_advance_limit(doc):
-	from volunteering.volunteering.approval_routing import get_approval_band_for_employee
-
-	grade = get_approval_band_for_employee(doc.employee)
-	if not grade:
-		return
-
-	limit = grade_advance_limit(grade)
-	amount = flt(doc.advance_amount)
-	# None = grade not configured — skip hard block
-	if limit is None:
-		return
-	# Board unlimited uses large sentinel
-	if limit >= 10**11:
-		return
-	if amount > limit:
-		frappe.throw(
-			_("Advance amount {0} exceeds the grade limit ({1}) for {2}.").format(
-				frappe.format_value(amount, "Currency"),
-				frappe.format_value(limit, "Currency"),
-				grade,
-			),
-			title=_("Advance Limit Exceeded"),
-		)

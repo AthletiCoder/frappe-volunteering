@@ -29,11 +29,12 @@
   },
   {
    "default": "0",
-   "description": "Largest advance a person of this grade may hold for THEMSELVES.",
+   "description": "Legacy value retained for database compatibility only. Employees may request any amount; approval authority determines routing.",
    "fieldname": "max_advance_amount",
    "fieldtype": "Currency",
-   "in_list_view": 1,
-   "label": "Max Self Advance (own float)"
+   "hidden": 1,
+   "read_only": 1,
+   "label": "Max Self Advance (legacy, unused)"
   }
  ],
  "index_web_pages_for_search": 0,

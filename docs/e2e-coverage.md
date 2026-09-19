@@ -2,6 +2,14 @@
 
 Source: `sevamrit-erp-testing.xlsx` (108 spreadsheet cases). All 108 IDs are automated in Playwright specs under `e2e/tests/`.
 
+**Current execution evidence:** See [local staging-readiness report, 19 September 2026](STAGING_E2E_REPORT_2026-09-19.md).
+The broad Chromium run had 115 passed, 64 failed, and 10 downstream skips; "automated"
+below does not mean currently passing. All 26 current project/profile/bank/invoice/
+employee-expense portal checks passed. Six added localhost advance/team/full expense
+settlement checks (`AP-001`–`AP-005`, `REL-001`) also passed together using
+`playwright.staging-readiness.config.ts`. The report distinguishes stale fixtures/UI
+assertions from unresolved permissions/attendance/vendor issues and coverage gaps.
+
 **Last verified:** Aug 2026 — suite converted to **browser UI** (`@ui`); API helpers limited to setup/assert. Manager-float AC-MFL-001–005 hardened (settlement on Approve→submit, Desk Review/Escalate selectors, portal row scoping).
 
 **Execution:** All 108 spreadsheet IDs use **UI** for create/submit/approve. **API-setup** is used only for cleanup, fixtures (`seed_manager_paid_advance`, `seed_expense_claim`, `seed_workflow_action`), `trigger_attendance_job`, `set_advance_settlement`, and post-action `get_doc_field` / `get_attendance_status` assertions. Supplementary **VO-001…006** gap tests in `e2e/tests/volunteering/gap.spec.ts`.
@@ -9,6 +17,8 @@ Source: `sevamrit-erp-testing.xlsx` (108 spreadsheet cases). All 108 IDs are aut
 **Level rules:** Cases in `*/smoke.spec.ts` without `@regression`/`@critical` tags are **smoke**. Others use **critical** when the spec line has `@critical`, else **regression**.
 
 **Convention:** `test()` titles start with the spreadsheet ID (e.g. `HR-DWL-001`, `AC-ADV-001`, `XM-001`).
+
+**Supplemental advance regression:** `AC-ADV-012` in `e2e/tests/accounts/advance.spec.ts` verifies live total-outstanding authority: a second pending request removes Approve, and rejecting it restores Approve. This is additional coverage beyond the 108 spreadsheet cases; the focused local check passed on Sep 18, 2026.
 
 ## HR (59)
 
@@ -78,17 +88,17 @@ Source: `sevamrit-erp-testing.xlsx` (108 spreadsheet cases). All 108 IDs are aut
 
 | ID | Title (short) | Level | Spec file | Status |
 |----|---------------|-------|-----------|--------|
-| AC-ADV-001 | Self advance within Max Self Advance | critical | `e2e/tests/accounts/advance.spec.ts` | automated |
-| AC-ADV-002 | Self advance above Max Self Advance blocked | critical | `e2e/tests/accounts/advance.spec.ts` | automated |
+| AC-ADV-001 | Employee advance within manager approval authority | critical | `e2e/tests/accounts/advance.spec.ts` | automated |
+| AC-ADV-002 | Request above former grade cap starts with reporting manager | critical | `e2e/tests/accounts/advance.spec.ts` | automated |
 | AC-ADV-003 | Employee cannot create advance for another person | critical | `e2e/tests/accounts/advance.spec.ts` | automated |
 | AC-ADV-004 | Accounts can create advance for another | regression | `e2e/tests/accounts/advance.spec.ts` | automated |
-| AC-ADV-005 | Large leftover blocks new advance | critical | `e2e/tests/accounts/advance.spec.ts` | automated |
+| AC-ADV-005 | Fully outstanding paid advance allows another request | critical | `e2e/tests/accounts/advance.spec.ts` | automated |
 | AC-ADV-006 | Small leftover allows new advance | critical | `e2e/tests/accounts/advance.spec.ts` | automated |
 | AC-ADV-007 | Settle advance via Expense Claim link | critical | `e2e/tests/accounts/advance.spec.ts` | automated |
 | AC-ADV-008 | Get Advances hides unpaid advances | critical | `e2e/tests/accounts/advance.spec.ts` | automated |
 | AC-ADV-009 | Advance Portal shows status | smoke | `e2e/tests/accounts/smoke.spec.ts` | automated |
 | AC-ADV-010 | Employee Advances with Residual report | regression | `e2e/tests/accounts/advance.spec.ts` | automated |
-| AC-ADV-011 | Manager self advance limit 5000 | regression | `e2e/tests/accounts/advance.spec.ts` | automated |
+| AC-ADV-011 | Manager can request above former self-advance cap | regression | `e2e/tests/accounts/advance.spec.ts` | automated |
 | AC-APR-001 | Approve when amount <= Max Approval Authority | critical | `e2e/tests/accounts/approval.spec.ts` | automated |
 | AC-APR-002 | Cannot Approve when over authority; can Escalate | critical | `e2e/tests/accounts/approval.spec.ts` | automated |
 | AC-APR-003 | Associate authority 0 cannot approve others | critical | `e2e/tests/accounts/approval.spec.ts` | automated |

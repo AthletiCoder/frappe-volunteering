@@ -101,19 +101,20 @@
    "reqd": 1
   },
   {
-   "default": "1",
-   "description": "Maximum advances whose residual exceeds the replenish threshold. Small leftovers at or below the threshold do not block a new (replenish) advance.",
+   "default": "0",
+   "description": "Legacy field retained for compatibility only. Request count and outstanding balances no longer restrict new employee advances.",
    "fieldname": "max_unsettled_advances",
    "fieldtype": "Int",
-   "label": "Max Blocking Unsettled Advances Per Employee",
-   "reqd": 1
+   "hidden": 1,
+   "read_only": 1,
+   "label": "Max Unsettled Advances (legacy, unused)"
   },
   {
    "default": "10",
-   "description": "If residual on a paid advance is at or below this percent of paid amount, staff may request a replenishment advance. Residuals are not auto-written-off.",
+   "description": "Used only to prefer an employee's own advance over Manager Advance when submitting expense claims, and to flag residuals in reporting. Does not limit new advance requests. Residuals are not auto-written-off.",
    "fieldname": "advance_replenish_residual_pct",
    "fieldtype": "Percent",
-   "label": "Advance Replenish Residual %",
+   "label": "Manager Advance Source Residual %",
    "reqd": 1
   },
   {

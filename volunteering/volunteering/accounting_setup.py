@@ -800,7 +800,7 @@ def ensure_accounting_settings():
 	if settings.get("invoice_split_window_days") is None:
 		settings.invoice_split_window_days = 7
 	if settings.get("max_unsettled_advances") is None:
-		settings.max_unsettled_advances = 1
+		settings.max_unsettled_advances = 0  # Legacy field; no longer limits requests.
 	if settings.get("advance_replenish_residual_pct") is None:
 		settings.advance_replenish_residual_pct = 10
 	if settings.get("budget_hard_block_pct") is None:

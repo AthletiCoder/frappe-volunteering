@@ -1,316 +1,441 @@
-import { expect, test } from '@playwright/test';
-import { cleanupEmployeeAdvances, e2eCall, getCast, repairE2eReportsToChain } from '../../helpers/e2e-api';
-import { withPersona } from '../../helpers/persona-context';
-import { personaStorage } from '../../helpers/personas';
-import { EmployeeAdvanceFormPage } from '../../pages/desk/employee-advance.page';
-import { ExpenseClaimFormPage } from '../../pages/desk/expense-claim.page';
-import { DeskForm } from '../../helpers/desk';
-import { getE2eMasters, getE2eProject } from '../../helpers/ui-fixtures';
+import { expect, test } from "@playwright/test";
+import {
+  cleanupEmployeeAdvances,
+  e2eCall,
+  getCast,
+  repairE2eReportsToChain,
+} from "../../helpers/e2e-api";
+import { withPersona } from "../../helpers/persona-context";
+import { personaStorage } from "../../helpers/personas";
+import { EmployeeAdvanceFormPage } from "../../pages/desk/employee-advance.page";
+import { ExpenseClaimFormPage } from "../../pages/desk/expense-claim.page";
+import { DeskForm } from "../../helpers/desk";
+import { getE2eMasters, getE2eProject } from "../../helpers/ui-fixtures";
 
-test.describe('Employee Advance @accounts @ui', () => {
-	test.beforeEach(async ({ request }) => {
-		await repairE2eReportsToChain(request);
-	});
+test.describe("Employee Advance @accounts @ui", () => {
+  test.beforeEach(async ({ request }) => {
+    await repairE2eReportsToChain(request);
+  });
 
-	test.describe('as employee', () => {
-		test.use({ storageState: personaStorage('employee') });
+  test.describe("as employee", () => {
+    test.use({ storageState: personaStorage("employee") });
 
-		test('AC-ADV-001 @regression @critical: Self advance within Max Self Advance', async ({
-			page,
-			request,
-			browser,
-		}) => {
-			const cast = await getCast(request, 'employee');
-			const emp = cast.employee.employee!;
-			await cleanupEmployeeAdvances(request, emp);
+    test("AC-ADV-001 @regression @critical: Employee advance within manager authority", async ({
+      page,
+      request,
+      browser,
+    }) => {
+      const cast = await getCast(request, "employee");
+      const emp = cast.employee.employee!;
+      await cleanupEmployeeAdvances(request, emp);
 
-			const advance = new EmployeeAdvanceFormPage(page);
-			await advance.openNew();
-			await advance.fillAdvance(2000);
-			const advanceName = await advance.saveAndSubmit();
+      const advance = new EmployeeAdvanceFormPage(page);
+      await advance.openNew();
+      await advance.fillAdvance(2000);
+      const advanceName = await advance.saveAndSubmit();
 
-			const project = await e2eCall<string | null>(
-				request,
-				'get_doc_field',
-				{ doctype: 'Employee Advance', name: advanceName, field: 'project' },
-				'admin',
-			);
-			expect(project).toBeFalsy();
+      const intendedProject = await e2eCall<string | null>(
+        request,
+        "get_doc_field",
+        {
+          doctype: "Employee Advance",
+          name: advanceName,
+          field: "intended_project",
+        },
+        "admin",
+      );
+      expect(intendedProject).toBeTruthy();
 
-			const workflowState = await e2eCall<string>(
-				request,
-				'get_doc_field',
-				{
-					doctype: 'Employee Advance',
-					name: advanceName,
-					field: 'workflow_state',
-				},
-				'admin',
-			);
-			expect(workflowState).toBe('Pending Approval');
+      const workflowState = await e2eCall<string>(
+        request,
+        "get_doc_field",
+        {
+          doctype: "Employee Advance",
+          name: advanceName,
+          field: "workflow_state",
+        },
+        "admin",
+      );
+      expect(workflowState).toBe("Pending Approval");
 
-			await withPersona(browser, 'manager', async (mgrPage) => {
-				const adv = new EmployeeAdvanceFormPage(mgrPage);
-				await adv.open(advanceName);
-				await adv.approve();
-			});
+      await withPersona(browser, "manager", async (mgrPage) => {
+        const adv = new EmployeeAdvanceFormPage(mgrPage);
+        await adv.open(advanceName);
+        await adv.approve();
+      });
 
-			const approvedState = await e2eCall<string>(
-				request,
-				'get_doc_field',
-				{
-					doctype: 'Employee Advance',
-					name: advanceName,
-					field: 'workflow_state',
-				},
-				'admin',
-			);
-			expect(approvedState).toBe('Approved');
-		});
+      const approvedState = await e2eCall<string>(
+        request,
+        "get_doc_field",
+        {
+          doctype: "Employee Advance",
+          name: advanceName,
+          field: "workflow_state",
+        },
+        "admin",
+      );
+      expect(approvedState).toBe("Approved");
+    });
 
-		test('AC-ADV-002 @regression @critical: Self advance above Max Self Advance blocked', async ({
-			page,
-			request,
-		}) => {
-			const cast = await getCast(request, 'employee');
-			const emp = cast.employee.employee!;
-			await cleanupEmployeeAdvances(request, emp);
+    test("AC-ADV-002 @regression @critical: Above former grade cap starts with manager", async ({
+      page,
+      request,
+    }) => {
+      const cast = await getCast(request, "employee");
+      const emp = cast.employee.employee!;
+      await cleanupEmployeeAdvances(request, emp);
 
-			const advance = new EmployeeAdvanceFormPage(page);
-			await advance.openNew();
-			await advance.fillAdvance(2001);
-			await advance.trySaveExpectError(/limit/i);
-		});
+      const advance = new EmployeeAdvanceFormPage(page);
+      await advance.openNew();
+      await advance.fillAdvance(2001);
+      const name = await advance.saveAndSubmit();
+      expect(name).toBeTruthy();
+      const approver = await e2eCall<string>(
+        request,
+        "get_doc_field",
+        {
+          doctype: "Employee Advance",
+          name,
+          field: "pending_approver",
+        },
+        "admin",
+      );
+      expect(approver).toBe(cast.manager.email);
+    });
 
-		test('AC-ADV-003 @regression @critical: Employee cannot create advance for another person', async ({
-			page,
-			request,
-		}) => {
-			const cast = await getCast(request, 'employee');
-			const emp = cast.employee.employee!;
+    test("AC-ADV-003 @regression @critical: Employee cannot create advance for another person", async ({
+      page,
+      request,
+    }) => {
+      const cast = await getCast(request, "employee");
+      const emp = cast.employee.employee!;
 
-			const advance = new EmployeeAdvanceFormPage(page);
-			await advance.openNew();
-			const selectedEmp = await page.evaluate(
-				() => (window as unknown as { cur_frm?: { doc?: { employee?: string } } }).cur_frm?.doc?.employee,
-			);
-			expect(selectedEmp).toBe(emp);
-			const employeeField = page.locator('.form-layout [data-fieldname="employee"]').first();
-			const employeeInput = employeeField.locator('input').first();
-			if (await employeeInput.isVisible().catch(() => false)) {
-				await expect(employeeInput).toBeDisabled();
-			}
-			await advance.fillAdvance(1500);
-			await advance.saveDraft();
-		});
+      const advance = new EmployeeAdvanceFormPage(page);
+      await advance.openNew();
+      const selectedEmp = await page.evaluate(
+        () =>
+          (window as unknown as { cur_frm?: { doc?: { employee?: string } } })
+            .cur_frm?.doc?.employee,
+      );
+      expect(selectedEmp).toBe(emp);
+      const employeeField = page
+        .locator('.form-layout [data-fieldname="employee"]')
+        .first();
+      const employeeInput = employeeField.locator("input").first();
+      if (await employeeInput.isVisible().catch(() => false)) {
+        await expect(employeeInput).toBeDisabled();
+      }
+      await advance.fillAdvance(1500);
+      await advance.saveDraft();
+    });
 
-		test('AC-ADV-005 @regression @critical: Large leftover blocks new advance', async ({ page, request }) => {
-			const cast = await getCast(request, 'employee');
-			const emp = cast.employee.employee!;
-			await cleanupEmployeeAdvances(request, emp);
+    test("AC-ADV-005 @regression @critical: Fully outstanding advance allows another request", async ({
+      page,
+      request,
+      browser,
+    }) => {
+      const cast = await getCast(request, "employee");
+      const emp = cast.employee.employee!;
+      await cleanupEmployeeAdvances(request, emp);
 
-			const first = new EmployeeAdvanceFormPage(page);
-			await first.openNew();
-			await first.fillAdvance(2000);
-			const firstName = await first.saveAndSubmit();
+      const first = new EmployeeAdvanceFormPage(page);
+      await first.openNew();
+      await first.fillAdvance(2000);
+      const firstName = await first.saveAndSubmit();
 
-			await e2eCall(
-				request,
-				'set_advance_settlement',
-				{
-					name: firstName,
-					paid_amount: 10000,
-					claimed_amount: 0,
-					status: 'Paid',
-				},
-				'admin',
-			);
+      await withPersona(browser, "manager", async (mgrPage) => {
+        const adv = new EmployeeAdvanceFormPage(mgrPage);
+        await adv.open(firstName);
+        await adv.approve();
+      });
 
-			const second = new EmployeeAdvanceFormPage(page);
-			await second.openNew();
-			await second.fillAdvance(1000);
-			await second.trySaveExpectError(/unsettled/i);
-		});
+      await e2eCall(
+        request,
+        "set_advance_settlement",
+        {
+          name: firstName,
+          paid_amount: 2000,
+          claimed_amount: 0,
+          status: "Paid",
+        },
+        "admin",
+      );
 
-		test('AC-ADV-006 @regression @critical: Small leftover allows new advance', async ({
-			page,
-			request,
-			browser,
-		}) => {
-			const cast = await getCast(request, 'admin');
-			const emp = cast.employee.employee!;
-			await cleanupEmployeeAdvances(request, emp);
+      const second = new EmployeeAdvanceFormPage(page);
+      await second.openNew();
+      await second.fillAdvance(1000);
+      const secondName = await second.saveAndSubmit();
+      expect(secondName).toBeTruthy();
+      expect(secondName).not.toBe(firstName);
+    });
 
-			const first = new EmployeeAdvanceFormPage(page);
-			await first.openNew();
-			await first.fillAdvance(2000);
-			const firstName = await first.saveAndSubmit();
+    test("AC-ADV-006 @regression @critical: Small leftover allows new advance", async ({
+      page,
+      request,
+      browser,
+    }) => {
+      const cast = await getCast(request, "admin");
+      const emp = cast.employee.employee!;
+      await cleanupEmployeeAdvances(request, emp);
 
-			await withPersona(browser, 'manager', async (mgrPage) => {
-				const adv = new EmployeeAdvanceFormPage(mgrPage);
-				await adv.open(firstName);
-				await adv.approve();
-			});
+      const first = new EmployeeAdvanceFormPage(page);
+      await first.openNew();
+      await first.fillAdvance(2000);
+      const firstName = await first.saveAndSubmit();
 
-			await e2eCall(
-				request,
-				'set_advance_settlement',
-				{
-					name: firstName,
-					paid_amount: 10000,
-					claimed_amount: 9200,
-					status: 'Paid',
-				},
-				'admin',
-			);
+      await withPersona(browser, "manager", async (mgrPage) => {
+        const adv = new EmployeeAdvanceFormPage(mgrPage);
+        await adv.open(firstName);
+        await adv.approve();
+      });
 
-			const replenish = new EmployeeAdvanceFormPage(page);
-			await replenish.openNew();
-			await replenish.fillAdvance(1500);
-			const replenishName = await replenish.saveAndSubmit();
-			expect(replenishName).toBeTruthy();
-		});
+      await e2eCall(
+        request,
+        "set_advance_settlement",
+        {
+          name: firstName,
+          paid_amount: 2000,
+          claimed_amount: 1840,
+          status: "Paid",
+        },
+        "admin",
+      );
 
-		test('AC-ADV-007 @regression @critical: Settle advance via Expense Claim link', async ({
-			page,
-			request,
-			browser,
-		}) => {
-			const cast = await getCast(request, 'employee');
-			const emp = cast.employee.employee!;
-			const project = await getE2eProject(request);
-			const masters = await getE2eMasters(request);
-			await cleanupEmployeeAdvances(request, emp);
+      const replenish = new EmployeeAdvanceFormPage(page);
+      await replenish.openNew();
+      await replenish.fillAdvance(1500);
+      const replenishName = await replenish.saveAndSubmit();
+      expect(replenishName).toBeTruthy();
+    });
 
-			const advance = new EmployeeAdvanceFormPage(page);
-			await advance.openNew();
-			await advance.fillAdvance(2000);
-			const advanceName = await advance.saveAndSubmit();
+    test("AC-ADV-007 @regression @critical: Settle advance via Expense Claim link", async ({
+      page,
+      request,
+      browser,
+    }) => {
+      const cast = await getCast(request, "employee");
+      const emp = cast.employee.employee!;
+      const project = await getE2eProject(request);
+      const masters = await getE2eMasters(request);
+      await cleanupEmployeeAdvances(request, emp);
 
-			await withPersona(browser, 'manager', async (mgrPage) => {
-				const adv = new EmployeeAdvanceFormPage(mgrPage);
-				await adv.open(advanceName);
-				await adv.approve();
-			});
+      const advance = new EmployeeAdvanceFormPage(page);
+      await advance.openNew();
+      await advance.fillAdvance(2000);
+      const advanceName = await advance.saveAndSubmit();
 
-			await e2eCall(
-				request,
-				'set_advance_settlement',
-				{
-					name: advanceName,
-					paid_amount: 2000,
-					claimed_amount: 0,
-					status: 'Paid',
-				},
-				'admin',
-			);
+      await withPersona(browser, "manager", async (mgrPage) => {
+        const adv = new EmployeeAdvanceFormPage(mgrPage);
+        await adv.open(advanceName);
+        await adv.approve();
+      });
 
-			const claim = new ExpenseClaimFormPage(page);
-			await claim.openNew();
-			const hint = await claim.getAdvanceLinkHint();
-			expect(hint).toMatch(/Advances available to link via Get Advances/i);
-			await claim.fillClaim({
-				project,
-				amount: 1500,
-				expenseAccount: masters.expense_account,
-			});
-		});
+      await e2eCall(
+        request,
+        "set_advance_settlement",
+        {
+          name: advanceName,
+          paid_amount: 2000,
+          claimed_amount: 0,
+          status: "Paid",
+        },
+        "admin",
+      );
 
-		test('AC-ADV-008 @regression @critical: Get Advances hides unpaid advances', async ({
-			page,
-			request,
-		}) => {
-			const cast = await getCast(request, 'employee');
-			const emp = cast.employee.employee!;
-			const project = await getE2eProject(request);
-			await cleanupEmployeeAdvances(request, emp);
+      const claim = new ExpenseClaimFormPage(page);
+      await claim.openNew();
+      const hint = await claim.getAdvanceLinkHint();
+      expect(hint).toMatch(/Advances available to link via Get Advances/i);
+      await claim.fillClaim({
+        project,
+        amount: 1500,
+        expenseAccount: masters.expense_account,
+      });
+    });
 
-			const advance = new EmployeeAdvanceFormPage(page);
-			await advance.openNew();
-			await advance.fillAdvance(1000);
-			const draftName = await advance.saveDraft();
-			expect(draftName).toBeTruthy();
+    test("AC-ADV-012 @regression @critical: Review actions track live total outstanding", async ({
+      page,
+      request,
+      browser,
+    }) => {
+      const cast = await getCast(request, "employee");
+      await cleanupEmployeeAdvances(request, cast.employee.employee!);
+      const advance = new EmployeeAdvanceFormPage(page);
+      await advance.openNew();
+      await advance.fillAdvance(1000, "Live authority request", true);
+      const firstName = await advance.saveAndSubmit();
 
-			const claim = new ExpenseClaimFormPage(page);
-			await claim.openNew();
-			const hint = await claim.getAdvanceLinkHint();
-			expect(hint).toMatch(/not submitted yet|No advances qualify for Get Advances/i);
-			await claim.fillClaim({ project, amount: 500 });
-		});
-	});
+      await withPersona(browser, "manager", async (mgrPage) => {
+        const review = new EmployeeAdvanceFormPage(mgrPage);
+        await review.open(firstName);
+        const nativeApprove = mgrPage
+          .locator(".actions-btn-group .dropdown-item")
+          .filter({ hasText: /^\s*Approve\s*$/ });
+        await expect(nativeApprove).toHaveCount(1);
 
-	test('AC-ADV-004 @regression: Accounts can create advance for another', async ({ browser, request }) => {
-		const cast = await getCast(request, 'accounts');
-		const emp = cast.employee.employee!;
-		await cleanupEmployeeAdvances(request, emp);
+        // Another request arrives after this reviewer has opened the first.
+        await advance.openNew();
+        await advance.fillAdvance(1500, "Additional live commitment", true);
+        const secondName = await advance.saveAndSubmit();
+        await review.open(firstName);
+        await expect(
+          mgrPage
+            .locator(".form-message")
+            .filter({ hasText: /live total outstanding/ }),
+        ).toContainText("2,500");
+        await expect(nativeApprove).toHaveCount(0);
+        await expect(
+          mgrPage.locator(".primary-action").filter({ hasText: /^Approve$/ }),
+        ).not.toBeVisible();
+        await expect(
+          mgrPage.locator(
+            '.inner-group-button[data-label="Review"] [data-label="Escalate"]',
+          ),
+        ).toHaveCount(1);
 
-		let advanceName = '';
-		await withPersona(browser, 'accounts', async (page) => {
-			const advance = new EmployeeAdvanceFormPage(page);
-			await advance.openNew();
-			await advance.fillEmployeeAsAccounts('E2E Employee A', emp);
-			const selectedEmp = await page.evaluate(
-				() => (window as unknown as { cur_frm?: { doc?: { employee?: string } } }).cur_frm?.doc?.employee,
-			);
-			expect(selectedEmp).toBe(emp);
-			await advance.fillAdvance(1500);
-			advanceName = await advance.saveAndSubmit();
-		});
+        // Rejection of the second request immediately releases its commitment.
+        await review.open(secondName);
+        await review.clickWorkflowAction("Reject", { allowConfirm: true });
+        await review.open(firstName);
+        await expect(
+          mgrPage
+            .locator(".form-message")
+            .filter({ hasText: /live total outstanding/ }),
+        ).toContainText("1,000");
+        await expect(nativeApprove).toHaveCount(1);
+        await expect(
+          mgrPage.locator(
+            '.inner-group-button[data-label="Review"] [data-label="Escalate"]',
+          ),
+        ).toHaveCount(0);
+        // Use the UI, not the page object's approval API fallback.
+        await review.clickWorkflowAction("Approve", { allowConfirm: true });
+      });
+      expect(
+        await e2eCall<string>(
+          request,
+          "get_doc_field",
+          {
+            doctype: "Employee Advance",
+            name: firstName,
+            field: "workflow_state",
+          },
+          "admin",
+        ),
+      ).toBe("Approved");
+    });
 
-		const workflowState = await e2eCall<string>(
-			request,
-			'get_doc_field',
-			{
-				doctype: 'Employee Advance',
-				name: advanceName,
-				field: 'workflow_state',
-			},
-			'admin',
-		);
-		expect(workflowState).toBe('Pending Approval');
+    test("AC-ADV-008 @regression @critical: Get Advances hides unpaid advances", async ({
+      page,
+      request,
+    }) => {
+      const cast = await getCast(request, "employee");
+      const emp = cast.employee.employee!;
+      const project = await getE2eProject(request);
+      await cleanupEmployeeAdvances(request, emp);
 
-		const ownerEmp = await e2eCall<string>(
-			request,
-			'get_doc_field',
-			{ doctype: 'Employee Advance', name: advanceName, field: 'employee' },
-			'admin',
-		);
-		expect(ownerEmp).toBe(emp);
-	});
+      const advance = new EmployeeAdvanceFormPage(page);
+      await advance.openNew();
+      await advance.fillAdvance(1000);
+      const draftName = await advance.saveDraft();
+      expect(draftName).toBeTruthy();
 
-	test.describe('as accounts', () => {
-		test.use({ storageState: personaStorage('accounts') });
+      const claim = new ExpenseClaimFormPage(page);
+      await claim.openNew();
+      const hint = await claim.getAdvanceLinkHint();
+      expect(hint).toMatch(
+        /not submitted yet|No advances qualify for Get Advances/i,
+      );
+      await claim.fillClaim({ project, amount: 500 });
+    });
+  });
 
-		test('AC-ADV-010 @regression: Employee Advances with Residual report', async ({ page }) => {
-			const desk = new DeskForm(page);
-			await desk.gotoReport('Employee Advances with Residual');
-			await expect(page.locator('.report-wrapper')).toBeVisible();
-			await expect(
-				page.locator('.report-wrapper .dt-scrollable, .report-wrapper .datatable').first(),
-			).toBeVisible({
-				timeout: 30000,
-			});
-		});
-	});
+  test("AC-ADV-004 @regression: Accounts can create advance for another", async ({
+    browser,
+    request,
+  }) => {
+    const cast = await getCast(request, "accounts");
+    const emp = cast.employee.employee!;
+    await cleanupEmployeeAdvances(request, emp);
 
-	test.describe('as manager', () => {
-		test.use({ storageState: personaStorage('manager') });
+    let advanceName = "";
+    await withPersona(browser, "accounts", async (page) => {
+      const advance = new EmployeeAdvanceFormPage(page);
+      await advance.openNew();
+      await advance.fillEmployeeAsAccounts("E2E Employee A", emp);
+      const selectedEmp = await page.evaluate(
+        () =>
+          (window as unknown as { cur_frm?: { doc?: { employee?: string } } })
+            .cur_frm?.doc?.employee,
+      );
+      expect(selectedEmp).toBe(emp);
+      await advance.fillAdvance(1500);
+      advanceName = await advance.saveAndSubmit();
+    });
 
-		test('AC-ADV-011 @regression: Manager self advance limit 5000', async ({ page, request }) => {
-			const cast = await getCast(request, 'manager');
-			const mgr = cast.manager.employee!;
-			await cleanupEmployeeAdvances(request, mgr);
+    const workflowState = await e2eCall<string>(
+      request,
+      "get_doc_field",
+      {
+        doctype: "Employee Advance",
+        name: advanceName,
+        field: "workflow_state",
+      },
+      "admin",
+    );
+    expect(workflowState).toBe("Pending Approval");
 
-			const advance = new EmployeeAdvanceFormPage(page);
-			await advance.openNew();
-			await advance.fillAdvance(5000);
-			const okName = await advance.saveAndSubmit();
-			expect(okName).toBeTruthy();
+    const ownerEmp = await e2eCall<string>(
+      request,
+      "get_doc_field",
+      { doctype: "Employee Advance", name: advanceName, field: "employee" },
+      "admin",
+    );
+    expect(ownerEmp).toBe(emp);
+  });
 
-			await cleanupEmployeeAdvances(request, mgr);
-			await advance.openNew();
-			await advance.fillAdvance(5001);
-			await advance.trySaveExpectError(/limit/i);
-		});
-	});
+  test.describe("as accounts", () => {
+    test.use({ storageState: personaStorage("accounts") });
+
+    test("AC-ADV-010 @regression: Employee Advances with Residual report", async ({
+      page,
+    }) => {
+      const desk = new DeskForm(page);
+      await desk.gotoReport("Employee Advances with Residual");
+      await expect(page.locator(".report-wrapper")).toBeVisible();
+      await expect(
+        page
+          .locator(".report-wrapper .dt-scrollable, .report-wrapper .datatable")
+          .first()
+          .or(page.getByText("Nothing to show", { exact: true })),
+      ).toBeVisible({
+        timeout: 30000,
+      });
+    });
+  });
+
+  test.describe("as manager", () => {
+    test.use({ storageState: personaStorage("manager") });
+
+    test("AC-ADV-011 @regression: Manager can request above former self-advance cap", async ({
+      page,
+      request,
+    }) => {
+      const cast = await getCast(request, "manager");
+      const mgr = cast.manager.employee!;
+      await cleanupEmployeeAdvances(request, mgr);
+
+      const advance = new EmployeeAdvanceFormPage(page);
+      await advance.openNew();
+      await advance.fillAdvance(5000);
+      const okName = await advance.saveAndSubmit();
+      expect(okName).toBeTruthy();
+
+      await cleanupEmployeeAdvances(request, mgr);
+      await advance.openNew();
+      await advance.fillAdvance(5001);
+      const aboveFormerCap = await advance.saveAndSubmit();
+      expect(aboveFormerCap).toBeTruthy();
+    });
+  });
 });

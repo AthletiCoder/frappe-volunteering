@@ -64,7 +64,7 @@ Edit in Desk → **Wiki Document**. If pages already existed, paste updated cont
 1. Small Expense Claim → employee selects Project and one of its allowed Expense Accounts → receipt reviewer verifies → reports-to manager approves.
 2. Amount above manager limit → Escalate or Reject only (no Approve).
 3. EC above vendor threshold without override reason → blocked on submit path.
-4. Second Employee Advance while first residual >10% → blocked; residual ≤10% → allowed with warning.
+4. Multiple Employee Advances of any positive amount while earlier requests are pending or paid balances remain fully outstanding → allowed. Start with the immediate reporting manager, then review/escalate one person at a time. At each review, compare that employee's live total outstanding advances (including the current request) with the reviewer's authority. Project/bank eligibility, approval and freeze controls still apply.
 5. Supplier Payment Entry against Approved PO → allowed; against Draft PO → blocked.
 6. Cash Payment Entry above limit → blocked.
 7. Accounts creates Payment Entry only after Approved (PI or PO as applicable).

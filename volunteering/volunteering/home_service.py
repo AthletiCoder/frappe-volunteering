@@ -21,6 +21,7 @@ from volunteering.volunteering.workspace_setup import get_latest_ngo_event
 HOME_URL = "/volunteering/home"
 TODOS_URL = "/volunteering/todos"
 ADVANCES_URL = "/volunteering/advances"
+TEAM_URL = "/volunteering/team"
 BUDGET_HEALTH_URL = "/volunteering/budget-health"
 INBOX_CAP = 12
 HELP_URL = "/help"
@@ -51,6 +52,11 @@ def get_home_payload():
 
 	flags["can_create_projects"] = flags["allowed"] and can_propose_project()
 	flags["can_review_projects"] = flags["allowed"] and is_project_manager()
+	flags["has_team"] = bool(
+		flags["allowed"]
+		and employee
+		and frappe.db.exists("Employee", {"reports_to": employee, "status": "Active"})
+	)
 	full_name = frappe.db.get_value("User", user, "full_name") or user
 
 	if not flags["allowed"]:
@@ -60,7 +66,7 @@ def get_home_payload():
 			"full_name": full_name,
 			"greeting": PERSONA_GREETING["volunteer"],
 			"help_url": HELP_URL,
-			"nav": {"home": True, "advances": False, "volunteering": False, "budget_health": False},
+			"nav": {"home": True, "advances": False, "team": False, "volunteering": False, "budget_health": False},
 			"inbox": [],
 			"waiting": [],
 			"waiting_count": 0,
@@ -68,7 +74,7 @@ def get_home_payload():
 			"todos": [],
 			"todo_count": 0,
 			"accounts_queues": [],
-			"actions": {"time": [], "money": [], "projects": [], "accounts": [], "organisation": []},
+			"actions": {"time": [], "money": [], "team": [], "projects": [], "accounts": [], "organisation": []},
 			"status": [],
 			"programs": None,
 			"people": [],
@@ -94,6 +100,7 @@ def get_home_payload():
 		"nav": {
 			"home": True,
 			"advances": flags["show_advances"],
+			"team": flags["has_team"],
 			"volunteering": flags["show_programs"],
 			"budget_health": flags["show_budget_health"],
 			"projects": flags["show_projects"],
@@ -108,6 +115,7 @@ def get_home_payload():
 		"actions": {
 			"time": _time_actions(pending) if flags["show_time"] else [],
 			"money": _money_actions(pending) if flags["show_money"] else [],
+			"team": _team_actions() if flags["has_team"] else [],
 			"projects": _project_actions(flags),
 			"accounts": _bank_review_actions(user),
 			"organisation": _organisation_actions(),
@@ -128,6 +136,17 @@ def _organisation_actions():
 			"label": _("Office addresses"),
 			"hint": _("View Sevamrita's current office, billing and correspondence addresses."),
 			"route": "/volunteering/office-addresses",
+		}
+	]
+
+
+def _team_actions():
+	return [
+		{
+			"id": "my_team",
+			"label": _("My team"),
+			"hint": _("Direct reports, attendance context and advance status."),
+			"route": TEAM_URL,
 		}
 	]
 
@@ -267,7 +286,11 @@ def _employee_draft_todos(employee):
 					"kind": kind,
 					"title": row.name,
 					"subtitle": " · ".join(subtitle_parts),
-					"route": desk_route(doctype, row.name),
+					"route": (
+						f"/volunteering/advances/{row.name}"
+						if doctype == "Employee Advance"
+						else desk_route(doctype, row.name)
+					),
 					"bucket": "resume",
 					"modified": str(row.modified or ""),
 					"raised_at": str(row.creation or ""),
@@ -397,9 +420,9 @@ def _money_actions(pending=None):
 				"id": "advance",
 				"label": _("Request an advance"),
 				"hint": _("Get money from the organisation before you spend."),
-				"route": "/desk/employee-advance/new",
+				"route": "/volunteering/advances?new=1",
 			},
-			"/desk/employee-advance",
+			"/volunteering/advances",
 			_("Previous advances"),
 			"advance",
 			pending,

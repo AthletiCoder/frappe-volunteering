@@ -308,12 +308,13 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from "vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, useRoute } from "vue-router";
 import PageHeader from "../components/PageHeader.vue";
 import SearchSelect from "../components/SearchSelect.vue";
 import { call } from "../lib/frappe";
 
 const API = "volunteering.volunteering.expense_claim_portal.";
+const route = useRoute();
 let itemKey = 1;
 let accountRequest = 0;
 const defaults = ref({
@@ -406,6 +407,15 @@ async function loadDefaults() {
 		defaults.value = await call(`${API}get_expense_claim_form`);
 		form.expenses.forEach((item) => (item.expense_date = defaults.value.expense_date));
 		form.emergency_date = defaults.value.expense_date;
+		if (
+			route.query.reimbursement_source === "OWN_ADVANCE" &&
+			defaults.value.own_advances.some(
+				(advance) => advance.name === route.query.employee_advance,
+			)
+		) {
+			form.reimbursement_source = "OWN_ADVANCE";
+			form.employee_advance = String(route.query.employee_advance);
+		}
 		if (defaults.value.projects.length === 1) {
 			form.project = defaults.value.projects[0].value;
 			await projectChanged();

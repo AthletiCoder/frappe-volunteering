@@ -51,8 +51,7 @@
 					</li>
 				</ul>
 				<p v-if="!filtered.length" class="px-3 py-3 text-sm text-muted" role="status">
-					No matching account. Choose an existing Expense account; new ledger accounts
-					must be created by authorized Accounts staff.
+					{{ emptyText }}
 				</p>
 			</div>
 		</div>
@@ -67,6 +66,12 @@ const props = defineProps({
 	options: { type: Array, default: () => [] },
 	label: { type: String, required: true },
 	placeholder: { type: String, default: "Type to find an expense account" },
+	emptyText: {
+		type: String,
+		default:
+			"No matching account. Choose an existing Expense account; new ledger accounts must be created by authorized Accounts staff.",
+	},
+	selectionError: { type: String, default: "Choose an expense account from the suggestions." },
 	disabled: Boolean,
 	required: Boolean,
 });
@@ -95,9 +100,7 @@ watch(
 );
 watchEffect(() =>
 	input.value?.setCustomValidity(
-		props.required && !props.disabled && !selected.value
-			? "Choose an expense account from the suggestions."
-			: "",
+		props.required && !props.disabled && !selected.value ? props.selectionError : "",
 	),
 );
 function focus() {

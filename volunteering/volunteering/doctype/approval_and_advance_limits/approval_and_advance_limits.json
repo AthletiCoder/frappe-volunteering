@@ -11,12 +11,12 @@
   {
    "fieldname": "intro_html",
    "fieldtype": "HTML",
-   "options": "<div class=\"alert alert-info\" style=\"font-size:13px;\">\n<b>Two independent limits per grade:</b>\n<ul style=\"margin:6px 0 0 18px;padding:0;\">\n<li><b>Max Approval Authority</b> \u2014 the largest amount a person of this grade can <b>approve for others</b> (approvals route up <i>Reports To</i> until someone has enough authority).</li>\n<li><b>Max Self Advance</b> \u2014 the largest <b>Employee Advance</b> a person of this grade may hold for themselves.</li>\n</ul>\n<div style=\"margin-top:6px;\">Set the band on <b>Employee \u2192 Grade</b>. Designation stays the job title. Board of Directors has unlimited approval authority regardless of the amount entered. Grades not listed here fall back to built-in defaults.</div>\n</div>"
+   "options": "<div class=\"alert alert-info\" style=\"font-size:13px;\">\n<b>Approval authority by grade</b>\n<p>Max Approval Authority is the largest amount a person of this grade can approve for others. Every eligible employee may request any advance amount, regardless of grade or previous outstanding advances.</p>\n<p>Advance requests start with the immediate reporting manager. At each review, approval authority is checked against the employee's live total outstanding advances, including the current request. If the total exceeds their authority, they review and escalate to the next person in Reports To, one step at a time. Linked reviewers are not skipped. No employee may approve their own request.</p>\n<p>Set the band on Employee &rarr; Grade. Designation remains the job title. Board of Directors has unlimited approval authority. Unlisted grades fall back to built-in defaults.</p>\n</div>"
   },
   {
    "fieldname": "designation_limits",
    "fieldtype": "Table",
-   "label": "Grade Limits",
+   "label": "Grade Approval Authority",
    "options": "Designation Approval Limit"
   }
  ],

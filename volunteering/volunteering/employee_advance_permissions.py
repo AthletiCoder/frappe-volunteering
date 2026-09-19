@@ -2,6 +2,7 @@
 
 Employees create/see only their own advances.
 Managers see reportees (reports_to).
+Assigned higher approvers see only the specific pending requests routed to them.
 Accounts / HR / System Manager and board-level grades see all.
 """
 
@@ -41,10 +42,33 @@ def get_permission_query_conditions(user):
 		return "1=0"
 
 	own = frappe.db.escape(employee)
+	assigned = frappe.db.escape(user)
 	return f"""(`tabEmployee Advance`.employee = {own}
 		OR `tabEmployee Advance`.employee IN (
 			SELECT name FROM `tabEmployee` WHERE reports_to = {own}
-		))"""
+		)
+		OR (`tabEmployee Advance`.pending_approver = {assigned}
+			AND `tabEmployee Advance`.workflow_state = 'Pending Approval'
+			AND `tabEmployee Advance`.docstatus = 0))"""
+
+
+def _is_assigned_pending_approver(doc, user):
+	"""Use stored routing, never client-supplied assignment, to grant access."""
+	if not doc.name or doc.is_new():
+		return False
+	stored = frappe.db.get_value(
+		"Employee Advance",
+		doc.name,
+		["employee", "pending_approver", "workflow_state", "docstatus"],
+		as_dict=True,
+	)
+	return bool(
+		stored
+		and stored.employee == doc.employee
+		and stored.pending_approver == user
+		and stored.workflow_state == "Pending Approval"
+		and stored.docstatus == 0
+	)
 
 
 def has_permission(doc, ptype, user):
@@ -64,9 +88,10 @@ def has_permission(doc, ptype, user):
 
 	is_own = doc.employee == employee
 	is_manager = frappe.db.get_value("Employee", doc.employee, "reports_to") == employee
+	is_assigned = _is_assigned_pending_approver(doc, user)
 
 	if ptype in {"read", "print", "email", "export", "report", "select"}:
-		return is_own or is_manager
+		return is_own or is_manager or is_assigned
 
 	# Create is allowed for any linked employee; validate_employee_self_only
 	# still blocks creating for someone else (clear "yourself" error).
@@ -75,13 +100,13 @@ def has_permission(doc, ptype, user):
 
 	# Managers must write/submit to Approve via workflow.
 	if ptype == "write":
-		return is_own or is_manager
+		return is_own or is_manager or is_assigned
 
 	if ptype == "delete":
 		return is_own
 
 	if ptype in {"submit", "cancel", "amend"}:
-		return is_own or is_manager
+		return is_own or is_manager or (ptype == "submit" and is_assigned)
 
 	return False
 
@@ -141,10 +166,11 @@ def validate_employee_self_only(doc, method=None):
 
 	if _has_full_access(frappe.session.user):
 		return
+	if _is_assigned_pending_approver(doc, frappe.session.user):
+		# The shared routing guard protects request details on both save and submit.
+		return
 
-	session_employee = frappe.db.get_value(
-		"Employee", {"user_id": frappe.session.user}, "name"
-	)
+	session_employee = frappe.db.get_value("Employee", {"user_id": frappe.session.user}, "name")
 	if not session_employee:
 		frappe.throw(_("Your user is not linked to an Employee record."))
 

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import base64
 from contextlib import contextmanager
 from unittest.mock import patch
 
@@ -27,6 +28,7 @@ from volunteering.volunteering.accounting_test_utils import (
 	make_purchase_order,
 	make_supplier_payment_entry,
 	mute_accounting_test_emails,
+	save_test_project,
 )
 from volunteering.volunteering.accounting_test_utils import (
 	set_project_budget as configure_project_budget,
@@ -215,13 +217,128 @@ def _strip_rpc_kwargs(kwargs: dict) -> dict:
 	return {k: v for k, v in kwargs.items() if k not in skip}
 
 
+def _configure_e2e_project(project: str) -> str:
+	"""Make the shared browser fixture a current, governed project.
+
+	The historical suite used a legacy Project while newer portal tests used a
+	separate accounting Project.  That made link fields and employee-safe expense
+	labels disagree.  All browser tests now use this one project and its explicit
+	membership; no production permissions are broadened.
+	"""
+	doc = frappe.get_doc("Project", project)
+	doc.project_name = E2E_PROJECT_NAME
+	doc.company = doc.company or frappe.db.get_value("Company", {}, "name")
+	accounting_project = get_or_create_project_with_cost_center()
+	doc.cost_center = doc.cost_center or frappe.db.get_value("Project", accounting_project, "cost_center")
+	doc.project_setup_version = 1
+	doc.project_purpose = "Shared local browser-test project"
+	doc.project_owner = PERSONAS["manager"]["email"]
+	doc.operational_status = "Active"
+	doc.budget_status = "Active"
+	doc.is_archived = 0
+	doc.set(
+		"project_participants",
+		[
+			{
+				"user": PERSONAS[alias]["email"],
+				"access_level": "Financial" if alias in ("manager", "accounts") else "Basic",
+			}
+			for alias in (
+				"employee",
+				"employee_b",
+				"associate",
+				"manager",
+				"director",
+				"chair",
+				"hr",
+				"accounts",
+				"receipt_reviewer",
+				"unpaid",
+				"coordinator",
+			)
+		],
+	)
+	save_test_project(doc)
+	return doc.name
+
+
+def _ensure_e2e_project_proposal(project: str) -> None:
+	"""Record that the canonical test project passed project-manager review."""
+	if frappe.db.exists("Project Proposal", {"project": project, "proposal_status": "Approved"}):
+		return
+	from volunteering.volunteering.project_proposals import mutation
+
+	with mutation():
+		frappe.get_doc(
+			{
+				"doctype": "Project Proposal",
+				"title": E2E_PROJECT_NAME,
+				"request_kind": "New Project",
+				"project": project,
+				"proposed_by": PERSONAS["employee"]["email"],
+				"proposal_status": "Approved",
+				"request_reason": "Canonical local E2E fixture",
+				"proposal_data": "{}",
+				"decided_by": PERSONAS["manager"]["email"],
+			}
+		).insert(ignore_permissions=True)
+
+
+def _ensure_e2e_approved_bank(alias: str, sequence: int) -> None:
+	"""Prepare the bank prerequisite for advance tests through real services."""
+	from volunteering.volunteering.employee_bank_accounts import (
+		get_approved_bank_details,
+		review_bank_account_request,
+		submit_bank_account_request,
+	)
+
+	employee = _cast_employee(alias)
+	if get_approved_bank_details(employee, reveal=False):
+		return
+	previous_user = frappe.session.user
+	try:
+		pending = frappe.db.get_value(
+			"Employee Bank Account Request",
+			{"employee": employee, "request_status": "Pending Approval"},
+			"name",
+		)
+		if not pending:
+			frappe.set_user(PERSONAS[alias]["email"])
+			created = submit_bank_account_request(
+				{
+					"account_holder_name": PERSONAS[alias]["employee_name"],
+					"bank_name": "E2E Local Bank",
+					"branch": "Local test branch",
+					"account_type": "Savings",
+					"account_number": f"900000000{sequence:03d}",
+					"account_number_confirmation": f"900000000{sequence:03d}",
+					"ifsc": "TEST0000001",
+					"ownership_confirmed": 1,
+					"proof_filename": "e2e-bank-proof.png",
+					"proof_content": base64.b64encode(
+						base64.b64decode(
+							"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZlVAAAAAASUVORK5CYII="
+						)
+					).decode(),
+				}
+			)
+			pending = created["name"]
+		frappe.set_user(PERSONAS["accounts"]["email"])
+		doc = frappe.get_doc("Employee Bank Account Request", pending)
+		review_bank_account_request(pending, "approve", str(doc.modified), "Canonical E2E fixture")
+	finally:
+		frappe.set_user(previous_user)
+
+
 @frappe.whitelist()
 def get_masters():
 	"""Desk link-field values for UI tests (setup-only)."""
 	_guard_e2e()
 	from volunteering.volunteering.accounting_test_utils import get_or_create_purchase_item
 
-	project = get_or_create_project_with_cost_center()
+	project = frappe.db.get_value("Project", {"project_name": E2E_PROJECT_NAME}, "name")
+	if not project:
+		frappe.throw(_("E2E project not found — run ensure_fixtures / globalSetup first."))
 	company = frappe.db.get_value("Project", project, "company")
 	expense_account = get_or_create_expense_account(company)
 	allow_project_expense_account(
@@ -275,6 +392,10 @@ def ensure_fixtures():
 		project = get_or_create_project_with_cost_center()
 		if not frappe.db.exists("Project", {"project_name": E2E_PROJECT_NAME}):
 			frappe.db.set_value("Project", project, "project_name", E2E_PROJECT_NAME)
+	project = _configure_e2e_project(project)
+	_ensure_e2e_project_proposal(project)
+	for sequence, alias in enumerate(("employee", "manager", "accounts"), start=1):
+		_ensure_e2e_approved_bank(alias, sequence)
 	company = frappe.db.get_value("Project", project, "company")
 	allow_project_expense_account(
 		project,
@@ -806,6 +927,7 @@ def create_employee_advance(employee=None, amount=2000, submit=0):
 			"posting_date": nowdate(),
 		}
 	)
+	doc.flags.ignore_advance_eligibility = True
 	doc.insert(ignore_permissions=True)
 	if cint(submit):
 		_apply_workflow(doc, "Submit")
@@ -847,6 +969,7 @@ def seed_manager_paid_advance(employee=None, paid_amount=5000):
 			"posting_date": nowdate(),
 		}
 	)
+	doc.flags.ignore_advance_eligibility = True
 	doc.insert(ignore_permissions=True)
 	_apply_workflow(doc, "Submit")
 	doc.reload()
@@ -889,6 +1012,7 @@ def seed_employee_paid_advance(employee=None, paid_amount=1500):
 			"posting_date": nowdate(),
 		}
 	)
+	doc.flags.ignore_advance_eligibility = True
 	doc.insert(ignore_permissions=True)
 	frappe.db.set_value(
 		"Employee Advance",
@@ -1072,7 +1196,9 @@ def seed_expense_claim(
 	"""E2E fixture: expense claim with optional manager-float reimbursement source."""
 	_guard_e2e()
 	employee = employee or _cast_employee("employee")
-	project = get_or_create_project_with_cost_center()
+	project = frappe.db.get_value("Project", {"project_name": E2E_PROJECT_NAME}, "name")
+	if not project:
+		frappe.throw(_("E2E project not found — run ensure_fixtures / globalSetup first."))
 	claim = make_expense_claim(employee, project, amount=flt(amount))
 	if reimbursement_source:
 		claim.reimbursement_source = reimbursement_source

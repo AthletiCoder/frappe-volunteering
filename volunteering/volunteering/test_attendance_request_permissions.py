@@ -59,7 +59,9 @@ class IntegrationTestAttendanceRequestPermissions(IntegrationTestCase):
 		doc = self._make_request_doc()
 		self.assertTrue(has_permission(doc, "submit", MANAGER_EMAIL))
 		self.assertTrue(has_permission(doc, "read", MANAGER_EMAIL))
-		self.assertFalse(has_permission(doc, "write", MANAGER_EMAIL))
+		self.assertTrue(has_permission(doc, "write", MANAGER_EMAIL))
+		self.assertFalse(has_permission(doc, "create", MANAGER_EMAIL))
+		self.assertFalse(has_permission(doc, "delete", MANAGER_EMAIL))
 
 	def test_employee_cannot_submit_own_request(self):
 		doc = self._make_request_doc()

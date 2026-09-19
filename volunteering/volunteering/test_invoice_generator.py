@@ -50,10 +50,7 @@ def _payload(invoice_type="GST"):
 		],
 		"transportation_charges": 10,
 		"other_charges": 0,
-		"tax_mode": "CGST_SGST",
-		"gst_rate": 18,
-		"place_of_supply": "Maharashtra",
-		"reverse_charge": False,
+		"gst_amount": 37.80,
 		"authorised_signatory": "Asha Vendor",
 		"signer_type": "SUPPLIER",
 	}
@@ -91,8 +88,6 @@ class UnitTestInvoiceGenerator(UnitTestCase):
 		self.assertEqual(data["items_total"], Decimal("200.00"))
 		self.assertEqual(data["taxable_total"], Decimal("210.00"))
 		self.assertEqual(data["gst_amount"], Decimal("37.80"))
-		self.assertEqual(data["cgst_amount"], Decimal("18.90"))
-		self.assertEqual(data["sgst_amount"], Decimal("18.90"))
 		self.assertEqual(data["grand_total"], Decimal("247.80"))
 
 	def test_supplier_non_gst_has_no_tax_and_has_registration_declaration(self):
@@ -101,7 +96,7 @@ class UnitTestInvoiceGenerator(UnitTestCase):
 		self.assertEqual(data["gst_amount"], Decimal("0.00"))
 		self.assertIn("not registered", data["declaration"])
 		self.assertIn("Example Kitchen Supplies", data["declaration"])
-		self.assertEqual(data["declaration_title"], "Non-GST declaration")
+		self.assertEqual(data["declaration_title"], "Declaration")
 
 	def test_non_gst_pan_is_optional_but_checked_when_supplied(self):
 		payload = _payload("NON_GST")
@@ -169,15 +164,15 @@ class UnitTestInvoiceGenerator(UnitTestCase):
 					payload, volunteer_override={"name": "Test Volunteer", "employee": "HR-EMP-TEST"}
 				)
 				self.assertEqual(data["authorised_signatory"], "")
-				self.assertIn("EXPENSE STATEMENT", data["title"])
+				self.assertEqual(data["title"], "TAX INVOICE" if invoice_type == "GST" else "INVOICE")
 				document = Document(BytesIO(_build_docx(data)))
 				word_text = "\n".join(
 					[p.text for p in document.paragraphs]
 					+ [cell.text for table in document.tables for row in table.rows for cell in row.cells]
 				)
 				for text in (_render_pdf_html(data), word_text):
-					self.assertIn("Volunteer declaration", text)
-					self.assertIn("Volunteer signature", text)
+					self.assertIn("Volunteer Signatory", text)
+					self.assertIn("Signature", text)
 					self.assertIn("Test Volunteer", text)
 					self.assertIn("HR-EMP-TEST", text)
 					self.assertNotIn("Forged", text)
@@ -185,9 +180,8 @@ class UnitTestInvoiceGenerator(UnitTestCase):
 					self.assertNotIn("not registered", text)
 					self.assertNotIn("Non-GST declaration", text)
 					self.assertNotIn("Authorised signatory and supplier signature", text)
-					self.assertNotIn("TAX INVOICE", text)
-					if invoice_type == "GST":
-						self.assertIn("does not replace a supplier-issued GST tax invoice", text)
+					self.assertNotIn("EXPENSE STATEMENT", text)
+					self.assertNotIn("Prepared for volunteer", text)
 
 	def test_supplier_non_gst_declaration_is_conditional_in_both_documents(self):
 		from docx import Document
@@ -205,14 +199,14 @@ class UnitTestInvoiceGenerator(UnitTestCase):
 					)
 					for text in (_render_pdf_html(data), word_text):
 						if invoice_type == "NON_GST":
-							self.assertIn("Non-GST declaration", text)
+							self.assertIn("Declaration", text)
 							self.assertIn("not registered", text)
 							self.assertIn("does not have a GSTIN", text)
 							self.assertIn(signatory or "the undersigned", text)
 						else:
 							self.assertNotIn("Non-GST declaration", text)
 							self.assertNotIn("not registered", text)
-						self.assertIn("Authorised signatory and supplier signature", text)
+						self.assertIn("Authorised Signatory", text)
 						self.assertNotIn("Volunteer declaration", text)
 
 	def test_gst_invoice_number_is_limited_to_sixteen_characters(self):
@@ -258,7 +252,9 @@ class UnitTestInvoiceGenerator(UnitTestCase):
 		self.assertIn("TAX INVOICE", text)
 		self.assertIn("INV/2026/001", text)
 		self.assertIn("247.80", text)
-		self.assertIn("Ask the supplier to verify", text)
+		self.assertIn("Remittance Details", text)
+		self.assertNotIn("expense reimbursement", text.lower())
+		self.assertNotIn("Receipt review", text)
 
 	def test_safe_filename_removes_path_characters(self):
 		self.assertEqual(_safe_filename("../../INV 001"), "invoice-INV-001")
@@ -375,7 +371,7 @@ class IntegrationTestGeneratedInvoiceNumbers(IntegrationTestCase):
 		self.assertNotIn("Forged", html)
 		self.assertNotIn("not registered", html)
 		self.assertEqual(volunteer["signer_type"], "VOLUNTEER")
-		self.assertIn("volunteer expense confirmation", volunteer["notice"])
+		self.assertEqual(volunteer["notice"], "")
 
 	def test_changed_content_gets_new_number_not_reference_number(self):
 		payload = _payload()

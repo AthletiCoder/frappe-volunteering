@@ -19,7 +19,9 @@ from volunteering.volunteering.manager_float_service import (
 class TestManagerFloatService(IntegrationTestCase):
 	def test_is_manager_float_claim(self):
 		self.assertFalse(is_manager_float_claim(frappe._dict(reimbursement_source="Out of Pocket")))
-		self.assertTrue(is_manager_float_claim(frappe._dict(reimbursement_source=REIMBURSEMENT_MANAGER_ADVANCE)))
+		self.assertTrue(
+			is_manager_float_claim(frappe._dict(reimbursement_source=REIMBURSEMENT_MANAGER_ADVANCE))
+		)
 
 	def test_list_fundable_manager_advances_empty_without_paid(self):
 		rows = list_fundable_manager_advances("__no_such_employee__")
@@ -38,6 +40,25 @@ class TestManagerFloatService(IntegrationTestCase):
 
 	def test_pick_manager_advance_returns_none_when_empty(self):
 		self.assertIsNone(pick_manager_advance("__no_such__", 100))
+
+	@patch("volunteering.volunteering.manager_float_service.list_open_advances_for_employee")
+	def test_new_personal_advances_are_not_offered_as_team_float(self, advances):
+		base = dict(
+			docstatus=1,
+			status="Paid",
+			advance_amount=1000,
+			paid_amount=1000,
+			claimed_amount=0,
+			return_amount=0,
+			intended_project="PROJ-1",
+		)
+		advances.return_value = [
+			frappe._dict(**base, name="PERSONAL", advance_use="My expenses"),
+			frappe._dict(**base, name="TEAM", advance_use="Team expenses"),
+			frappe._dict(**{**base, "intended_project": None}, name="LEGACY"),
+			frappe._dict(**{**base, "claimed_amount": 1000}, name="SETTLED", advance_use="Team expenses"),
+		]
+		self.assertEqual([row["name"] for row in list_fundable_manager_advances("MGR-1")], ["TEAM", "LEGACY"])
 
 	@patch("volunteering.volunteering.manager_float_service.get_direct_manager_employee")
 	@patch("volunteering.volunteering.manager_float_service.list_open_advances_for_employee")

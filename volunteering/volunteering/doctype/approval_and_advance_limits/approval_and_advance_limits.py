@@ -19,8 +19,8 @@ class ApprovalandAdvanceLimits(Document):
 				)
 			seen.add(row.designation)
 
-			if flt(row.max_approve_amount) < 0 or flt(row.max_advance_amount) < 0:
-				frappe.throw(_("Row {0}: Limits cannot be negative.").format(row.idx))
+			if flt(row.max_approve_amount) < 0:
+				frappe.throw(_("Row {0}: Approval authority cannot be negative.").format(row.idx))
 
 	def on_update(self):
 		frappe.clear_cache(doctype="Approval and Advance Limits")
