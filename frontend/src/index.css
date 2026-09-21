@@ -181,3 +181,20 @@ body[data-path^="volunteering"] .page_content {
 	margin: 0;
 	min-height: 100vh;
 }
+
+/* Keep portal forms comfortable to use on phones. A 16px control font avoids
+   Safari zooming the page when a field receives focus, while larger summary
+   rows provide a reliable touch target for collapsible sections. */
+@media (max-width: 767px) {
+	body[data-path^="volunteering"] input:not([type="checkbox"]):not([type="radio"]),
+	body[data-path^="volunteering"] select,
+	body[data-path^="volunteering"] textarea {
+		font-size: 16px !important;
+	}
+
+	body[data-path^="volunteering"] summary {
+		display: flex;
+		min-height: 44px;
+		align-items: center;
+	}
+}

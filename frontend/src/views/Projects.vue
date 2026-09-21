@@ -1,17 +1,13 @@
 <template>
 	<div class="space-y-6 project-workspace">
-		<PageHeader
-			title="Projects"
-			subtitle="Give spending a purpose. Keep delivery, evidence and financial authority separate."
-			eyebrow="Workspace"
-		>
+		<PageHeader :title="pageTitle" :subtitle="pageSubtitle" :eyebrow="pageEyebrow">
 			<template #actions>
 				<RouterLink to="/home" class="btn-secondary">Home</RouterLink>
 				<button v-if="caps.can_create && !editing" class="btn-primary" @click="create">
 					Propose a project
 				</button>
 				<button v-if="editing" class="btn-secondary" @click="back">
-					Projects and proposals
+					Back to projects
 				</button>
 				<button
 					v-if="saved && !requestMode && caps.can_propose_changes"
@@ -48,95 +44,152 @@
 		</div>
 
 		<template v-if="!loading && !editing">
-			<section class="form-card" aria-labelledby="requests-title">
-				<h2 id="requests-title" class="form-title">
-					{{
-						caps.can_manage
-							? "Project approval queue and history"
-							: "Your proposals and change requests"
-					}}
-				</h2>
-				<p class="form-hint">
-					One Projects Manager's approval activates a new project or applies later
-					changes. Pending requests do not change the approved project.
-				</p>
-				<label class="field-label"
-					>Request status<select v-model="requestFilter" class="field-input">
-						<option value="">All requests</option>
-						<option>Pending Approval</option>
-						<option>Draft</option>
-						<option>Correction Required</option>
-						<option>Approved</option>
-						<option>Rejected</option>
-						<option>Withdrawn</option>
-					</select></label
+			<nav class="flex flex-wrap gap-2" aria-label="Project workspace views">
+				<RouterLink
+					:to="{ path: '/projects', query: { view: 'approved' } }"
+					:class="listView === 'approved' ? 'btn-primary' : 'btn-secondary'"
+					>Approved projects</RouterLink
 				>
-				<p v-if="!filteredRequests.length" class="text-sm text-muted mt-4">
+				<RouterLink
+					v-if="caps.can_create"
+					:to="{ path: '/projects', query: { view: 'mine' } }"
+					:class="listView === 'mine' ? 'btn-primary' : 'btn-secondary'"
+					>Your proposals and change requests</RouterLink
+				>
+				<RouterLink
+					v-if="caps.can_manage"
+					:to="{ path: '/projects', query: { view: 'review' } }"
+					:class="listView === 'review' ? 'btn-primary' : 'btn-secondary'"
+					>Review project proposals</RouterLink
+				>
+			</nav>
+
+			<section v-if="listView === 'mine'" class="form-card" aria-labelledby="requests-title">
+				<h2 id="requests-title" class="form-title">Requests you submitted</h2>
+				<p class="form-hint">
+					Continue your drafts and track requests you submitted to a Projects Manager.
+					Managers can also propose projects and send them to another manager.
+				</p>
+				<RequestFilter v-model="requestFilter" />
+				<p v-if="!filteredMyRequests.length" class="text-sm text-muted mt-4">
 					No matching requests.
 				</p>
 				<button
-					v-for="item in filteredRequests"
+					v-for="item in filteredMyRequests"
 					:key="item.name"
 					class="project-tile block w-full text-left mt-3"
 					@click="openRequest(item.name)"
 				>
-					<span class="project-badge">{{ item.proposal_status }}</span
-					><strong class="block mt-2">{{ item.title }}</strong
-					><span class="text-xs text-muted"
-						>{{ item.request_kind }} · {{ item.proposed_by }}</span
+					<span class="project-badge">{{ item.proposal_status }}</span>
+					<strong class="block mt-2">{{ item.title }}</strong>
+					<span class="text-xs text-muted"
+						>{{ item.request_kind }} · Assigned to {{ item.assigned_approver }}</span
 					>
 				</button>
 			</section>
-			<div class="flex flex-wrap items-center gap-3">
-				<label class="grow field-label"
-					>Find a project<input
-						v-model="search"
-						class="field-input"
-						placeholder="Search by name, project ID or status"
-				/></label>
-				<div class="text-sm text-muted pt-5">{{ filteredProjects.length }} projects</div>
-			</div>
-			<p class="text-sm text-muted">
-				These are approved projects. Open a card to view the effective details.
-			</p>
-			<label v-if="caps.can_manage" class="text-sm"
-				><input v-model="includeRemoved" type="checkbox" @change="load" /> Include removed
-				projects</label
+
+			<section
+				v-else-if="listView === 'review' && caps.can_manage"
+				class="form-card"
+				aria-labelledby="review-requests-title"
 			>
-			<div v-if="!filteredProjects.length" class="form-card text-center py-10">
-				<h2 class="form-title">No projects here yet</h2>
-				<p class="text-sm text-muted">
-					{{
-						caps.can_create
-							? "Create a project to define its purpose, people, expense labels and budgets."
-							: "Only your own projects and projects you are a member of appear here, unless another role grants wider access."
-					}}
+				<h2 id="review-requests-title" class="form-title">Approval queue and history</h2>
+				<p class="form-hint">
+					Every Projects Manager can view these requests. Only the manager selected by
+					the proposer can edit, approve, return or reject a pending request.
 				</p>
-			</div>
-			<div class="grid sm:grid-cols-2 gap-4">
+				<RequestFilter v-model="requestFilter" />
+				<p v-if="!filteredReviewRequests.length" class="text-sm text-muted mt-4">
+					No matching requests from other proposers.
+				</p>
 				<button
-					v-for="project in filteredProjects"
-					:key="project.name"
-					class="project-tile text-left"
-					@click="open(project.name)"
+					v-for="item in filteredReviewRequests"
+					:key="item.name"
+					class="project-tile block w-full text-left mt-3"
+					@click="openRequest(item.name)"
 				>
-					<div class="flex justify-between gap-3 items-start">
-						<span class="text-xs font-medium text-muted">{{ project.name }}</span
-						><span class="project-badge">{{
-							project.operational_status || project.status
-						}}</span>
+					<div class="flex flex-wrap justify-between gap-2">
+						<span class="project-badge">{{ item.proposal_status }}</span>
+						<span
+							v-if="item.assigned_approver === caps.current_user"
+							class="project-badge"
+							>Assigned to you</span
+						>
 					</div>
-					<h2 class="text-lg font-semibold mt-4 text-ink">{{ project.project_name }}</h2>
-					<p class="text-sm text-accent mt-2">Open project →</p>
-					<div
-						class="mt-5 pt-3 border-t border-line text-xs text-muted flex flex-wrap gap-2 justify-between"
+					<strong class="block mt-2">{{ item.title }}</strong>
+					<span class="text-xs text-muted"
+						>{{ item.request_kind }} · Proposed by {{ item.proposed_by }} · Assigned to
+						{{ item.assigned_approver }}</span
 					>
-						<span>{{
-							project.project_owner || "Legacy setup · owner not assigned"
-						}}</span>
-					</div>
 				</button>
-			</div>
+			</section>
+
+			<template v-else>
+				<div class="flex flex-wrap items-end gap-3">
+					<label class="grow field-label"
+						>Find a project<input
+							v-model="search"
+							class="field-input"
+							placeholder="Search by name, project ID or status"
+					/></label>
+					<label class="field-label min-w-48"
+						>Project status<select v-model="projectStatusFilter" class="field-input">
+							<option value="">All statuses</option>
+							<option value="Active">Running</option>
+							<option value="Planned">Planned</option>
+							<option value="On Hold">On hold</option>
+							<option value="Completed">Completed</option>
+							<option value="Cancelled">Cancelled</option>
+						</select></label
+					>
+					<div class="text-sm text-muted pb-2">
+						{{ filteredProjects.length }} projects
+					</div>
+				</div>
+				<p class="text-sm text-muted">
+					These are approved projects. Open a card to view the effective details.
+				</p>
+				<label v-if="caps.can_manage" class="text-sm"
+					><input v-model="includeRemoved" type="checkbox" @change="load" /> Include
+					removed projects</label
+				>
+				<div v-if="!filteredProjects.length" class="form-card text-center py-10">
+					<h2 class="form-title">No projects here yet</h2>
+					<p class="text-sm text-muted">
+						{{
+							caps.can_create
+								? "Create a project to define its purpose, people, expense labels and budgets."
+								: "Only your own projects and projects you are a member of appear here, unless another role grants wider access."
+						}}
+					</p>
+				</div>
+				<div class="grid sm:grid-cols-2 gap-4">
+					<button
+						v-for="project in filteredProjects"
+						:key="project.name"
+						class="project-tile text-left"
+						@click="open(project.name)"
+					>
+						<div class="flex justify-between gap-3 items-start">
+							<span class="text-xs font-medium text-muted">{{ project.name }}</span>
+							<span class="project-badge">{{
+								project.operational_status || project.status
+							}}</span>
+						</div>
+						<h2 class="text-lg font-semibold mt-4 text-ink">
+							{{ project.project_name }}
+						</h2>
+						<p class="text-sm text-accent mt-2">Open project →</p>
+						<div
+							class="mt-5 pt-3 border-t border-line text-xs text-muted flex flex-wrap gap-2 justify-between"
+						>
+							<span>{{
+								project.project_owner || "Legacy setup · owner not assigned"
+							}}</span>
+						</div>
+					</button>
+				</div>
+			</template>
 		</template>
 
 		<form
@@ -168,6 +221,27 @@
 						:required="Boolean(saved)"
 					/>
 				</label>
+				<label class="field-label mt-4"
+					>Assigned Projects Manager *<select
+						v-model="assignedApprover"
+						required
+						class="field-input"
+						:disabled="Boolean(request) && !request.can_submit"
+					>
+						<option value="">Choose one manager</option>
+						<option
+							v-for="manager in managerOptions"
+							:key="manager.name"
+							:value="manager.name"
+						>
+							{{ manager.full_name }} · {{ manager.name }}
+						</option>
+					</select>
+					<span class="field-help"
+						>All Projects Managers can view the proposal. Only this manager can edit it
+						while pending or approve, return or reject it.</span
+					></label
+				>
 				<div v-if="request?.can_review" class="mt-4 space-y-3">
 					<details>
 						<summary class="cursor-pointer font-semibold">
@@ -221,8 +295,12 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 						</button>
 					</div>
 				</div>
-				<div v-else-if="request?.can_edit" class="flex flex-wrap gap-2 mt-4">
+				<div
+					v-else-if="request?.can_submit || request?.can_withdraw"
+					class="flex flex-wrap gap-2 mt-4"
+				>
 					<button
+						v-if="request?.can_submit"
 						type="button"
 						class="btn-primary"
 						:disabled="busy"
@@ -234,6 +312,7 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 						class="btn-secondary"
 						:disabled="busy"
 						@click="withdraw"
+						v-if="request?.can_withdraw"
 					>
 						Withdraw draft
 					</button>
@@ -258,14 +337,10 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 					saving to adopt the new project structure.
 				</p>
 			</div>
-			<div v-if="saved" class="form-card grid sm:grid-cols-3 gap-4">
+			<div v-if="saved" class="form-card grid sm:grid-cols-2 gap-4">
 				<div>
 					<span class="text-xs text-muted">Operational status</span>
 					<p class="font-semibold mt-1">{{ saved.operational_status }}</p>
-				</div>
-				<div v-if="showFinance">
-					<span class="text-xs text-muted">Committed project spending</span>
-					<p class="font-semibold mt-1">{{ currency(saved.committed) }}</p>
 				</div>
 				<div v-if="showFinance">
 					<span class="text-xs text-muted">Financial closure</span>
@@ -278,6 +353,84 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 					</p>
 				</div>
 			</div>
+			<section
+				v-if="saved && showFinance && saved.financial_status"
+				class="form-card"
+				aria-labelledby="financial-status-title"
+			>
+				<div class="section-eyebrow">Financial status</div>
+				<h2 id="financial-status-title" class="form-title">
+					How the budget is being used
+				</h2>
+				<p class="form-hint">
+					Submitted claims reserve budget while they await review and approval. Approval
+					moves the sanctioned amount into approved expenditure; it does not reserve it a
+					second time.
+				</p>
+				<div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+					<div class="rounded-xl border border-line bg-bg p-4">
+						<span class="text-xs text-muted">Approved project budget</span>
+						<p class="text-lg font-semibold mt-1">
+							{{ currency(saved.financial_status.approved_budget) }}
+						</p>
+					</div>
+					<div class="rounded-xl border border-line bg-bg p-4">
+						<span class="text-xs text-muted">Pending commitments</span>
+						<p class="text-lg font-semibold mt-1">
+							{{ currency(saved.financial_status.pending_commitments) }}
+						</p>
+						<p class="text-xs text-muted mt-1">
+							Claims awaiting approval and active purchase orders
+						</p>
+					</div>
+					<div class="rounded-xl border border-line bg-bg p-4">
+						<span class="text-xs text-muted">Approved expenditure</span>
+						<p class="text-lg font-semibold mt-1">
+							{{ currency(saved.financial_status.approved_expenditure) }}
+						</p>
+						<p class="text-xs text-muted mt-1">Sanctioned expense claims</p>
+					</div>
+					<div class="rounded-xl border border-line bg-accent-soft p-4">
+						<span class="text-xs text-muted">Available after commitments</span>
+						<p
+							class="text-lg font-semibold mt-1"
+							:class="{
+								'text-bad': saved.financial_status.available_after_commitments < 0,
+							}"
+						>
+							{{
+								saved.financial_status.has_project_budget
+									? currency(saved.financial_status.available_after_commitments)
+									: "No ceiling"
+							}}
+						</p>
+					</div>
+				</div>
+				<div class="grid sm:grid-cols-3 gap-3 mt-3 text-sm">
+					<div class="rounded-xl bg-soft px-3 py-2">
+						<span class="text-muted">Pending claims</span>
+						<strong class="block mt-1">{{
+							currency(saved.financial_status.pending_claim_commitments)
+						}}</strong>
+					</div>
+					<div class="rounded-xl bg-soft px-3 py-2">
+						<span class="text-muted">Purchase-order commitments</span>
+						<strong class="block mt-1">{{
+							currency(saved.financial_status.purchase_order_commitments)
+						}}</strong>
+					</div>
+					<div class="rounded-xl bg-soft px-3 py-2">
+						<span class="text-muted">Total committed</span>
+						<strong class="block mt-1">{{
+							currency(saved.financial_status.total_committed)
+						}}</strong>
+					</div>
+				</div>
+				<p class="field-help mt-3">
+					Draft, rejected and cancelled claims are excluded. Paying an approved claim
+					settles the liability but does not record the project expense a second time.
+				</p>
+			</section>
 
 			<section class="form-card" aria-labelledby="identity-title">
 				<div class="section-eyebrow">01 · Identity and lifecycle</div>
@@ -383,22 +536,11 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 						</label>
 					</div>
 				</div>
-				<div class="space-y-2 mt-4">
-					<label v-for="user in form.participants" :key="user" class="field-label"
-						>{{ user }} · Visibility<select
-							v-model="form.memberLevels[user]"
-							:disabled="!detailEditable"
-							class="field-input"
-						>
-							<option>Basic</option>
-							<option>Financial</option>
-						</select></label
-					>
-					<p class="field-help">
-						Every listed member can submit bills. Financial visibility does not grant
-						project approval or payment authority.
-					</p>
-				</div>
+				<p class="field-help mt-3">
+					Every listed member can view the project's basic details and submit bills. Only
+					the project owner, Projects Managers, Accounts Managers and Administrator can
+					see financial details.
+				</p>
 				<label class="field-label mt-4"
 					>Expected outcomes / deliverables<textarea
 						v-model.trim="form.project_outcomes"
@@ -412,13 +554,13 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 			</section>
 
 			<section v-if="showFinance" class="form-card" aria-labelledby="budget-title">
-				<div class="section-eyebrow">03 · Expense labels and budgets</div>
+				<div class="section-eyebrow">03 · Expense break up</div>
 				<h2 id="budget-title" class="form-title">Where can spending go?</h2>
 				<p class="form-hint">
-					Choose plain-language expense labels and their allocations. Project and
-					category budget controls are independent. After project approval, an Accounts
-					Manager maps each label to a ledger account. Employees see labels, not ledger
-					accounts or balances.
+					Enter the project's expense break up in plain language. Project and break-up
+					budget controls are independent. After project approval, an Accounts Manager
+					maps each label to a ledger account. Employees see labels, not ledger accounts
+					or balances.
 				</p>
 				<p
 					v-if="saved && !budgetEditable"
@@ -477,7 +619,7 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 							class="field-input"
 					/></label>
 					<label class="field-label sm:col-span-2"
-						>Expense-category budget control *<select
+						>Expense break-up budget control *<select
 							v-model="form.account_budget_control"
 							class="field-input"
 						>
@@ -496,12 +638,16 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 					</div>
 				</div>
 				<div class="flex justify-between gap-3 items-center mb-3">
-					<h3 class="text-sm font-semibold">Employee-facing expense labels *</h3>
+					<h3 class="text-sm font-semibold">Expense break up *</h3>
 					<button
 						v-if="budgetEditable"
 						type="button"
 						class="btn-secondary text-sm"
-						:disabled="form.account_budgets.length >= 100"
+						:disabled="
+							form.account_budgets.length +
+								(breakupRemainder > 0 || othersBudgetKey ? 1 : 0) >=
+							100
+						"
 						@click="addAccount"
 					>
 						Add label
@@ -527,13 +673,21 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 						</div>
 						<div class="form-grid">
 							<label class="field-label"
-								>Employee-facing label *<input
+								>Expense break-up label *<input
 									v-model.trim="row.employee_label"
 									required
 									maxlength="140"
 									class="field-input"
-									placeholder="Plain-language name shown to employees"
-							/></label>
+									list="approved-expense-breakup-labels"
+									placeholder="Plain-language name shown to employees" /><datalist
+									id="approved-expense-breakup-labels"
+								>
+									<option
+										v-for="label in options.expense_breakup_labels"
+										:key="label"
+										:value="label"
+									/></datalist
+							></label>
 							<label v-if="row.approved_amount !== undefined" class="field-label"
 								>Budget allocation ({{ companyCurrency }})<input
 									v-model.number="row.approved_amount"
@@ -543,7 +697,7 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 									:required="form.account_budget_control !== 'No Control'"
 									class="field-input"
 								/><span class="field-help"
-									>Optional when category control is No Control.</span
+									>Optional when break-up control is No Control.</span
 								></label
 							>
 							<label class="flex items-center gap-2 text-sm sm:pt-6"
@@ -552,13 +706,34 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 							>
 						</div>
 					</fieldset>
+					<fieldset
+						v-if="breakupRemainder > 0 || othersBudgetKey"
+						disabled
+						class="rounded-xl border border-line bg-accent-soft p-3"
+					>
+						<div class="flex justify-between items-center mb-3">
+							<strong class="text-xs text-muted">Automatic remainder</strong>
+							<span class="text-xs text-muted">Managed by the system</span>
+						</div>
+						<div class="form-grid">
+							<label class="field-label"
+								>Expense break-up label<input value="Others" class="field-input"
+							/></label>
+							<label class="field-label"
+								>Budget allocation ({{ companyCurrency }})<input
+									:value="breakupRemainder"
+									class="field-input"
+							/></label>
+						</div>
+					</fieldset>
 				</div>
-				<p
-					v-if="budgetEditable && form.account_budget_control !== 'No Control'"
-					class="field-help mt-3"
-				>
-					Allocated across labels: {{ currency(allocatedTotal) }}. Each category ceiling
-					is enforced independently of the total project ceiling.
+				<p v-if="breakupOverBy > 0" class="text-sm text-bad mt-3" role="alert">
+					Expense break up exceeds the total project budget by
+					{{ currency(breakupOverBy) }}.
+				</p>
+				<p v-else class="field-help mt-3">
+					Expense break up total: {{ currency(allocatedTotal) }}. Any unallocated amount
+					is automatically recorded as Others.
 				</p>
 				<label v-if="false" class="field-label mt-4"
 					>Reason for financial setup changes<textarea
@@ -571,7 +746,7 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 				</label>
 			</section>
 			<section v-if="!showFinance" class="form-card">
-				<h2 class="form-title">Expense categories for your bills</h2>
+				<h2 class="form-title">Expense break up for your bills</h2>
 				<p class="form-hint">
 					Only approved labels are shown, not budgets or ledger balances.
 				</p>
@@ -787,10 +962,9 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, defineComponent, h, onMounted, reactive, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import PageHeader from "../components/PageHeader.vue";
-import SearchSelect from "../components/SearchSelect.vue";
 import { call } from "../lib/frappe";
 import { loadHomePayload } from "../lib/home";
 
@@ -801,9 +975,12 @@ const request = ref(null),
 	requestFilter = ref(""),
 	requestMode = ref(false),
 	includeRemoved = ref(false);
+const projectStatusFilter = ref("");
 const reason = ref(""),
 	comments = ref(""),
 	documentVisibility = ref("Basic");
+const assignedApprover = ref("");
+const othersBudgetKey = ref("");
 const baseline = ref({});
 const route = useRoute(),
 	router = useRouter();
@@ -823,6 +1000,8 @@ const options = ref({
 	companies: [],
 	cost_centres: [],
 	expense_accounts: [],
+	project_managers: [],
+	expense_breakup_labels: [],
 	project_types: [],
 });
 const modes = ["No Control", "Warn Only", "Strict"],
@@ -838,6 +1017,69 @@ const modeHints = [
 const form = reactive({});
 const projectForm = ref(null);
 let rowKey = 0;
+const RequestFilter = defineComponent({
+	props: { modelValue: { type: String, default: "" } },
+	emits: ["update:modelValue"],
+	setup(props, { emit }) {
+		const statuses = [
+			"Pending Approval",
+			"Draft",
+			"Correction Required",
+			"Approved",
+			"Rejected",
+			"Withdrawn",
+		];
+		return () =>
+			h("label", { class: "field-label" }, [
+				"Request status",
+				h(
+					"select",
+					{
+						class: "field-input",
+						value: props.modelValue,
+						onChange: (event) => emit("update:modelValue", event.target.value),
+					},
+					[
+						h("option", { value: "" }, "All requests"),
+						...statuses.map((status) => h("option", { value: status }, status)),
+					],
+				),
+			]);
+	},
+});
+const listView = computed(() => {
+	const view = String(route.query.view || "approved");
+	if (view === "mine" && caps.value.can_create) return "mine";
+	if (view === "review" && caps.value.can_manage) return "review";
+	return "approved";
+});
+const pageTitle = computed(() => {
+	if (saved.value && !requestMode.value) return saved.value.project_name || saved.value.name;
+	if (request.value) return request.value.title || "Project proposal";
+	if (requestMode.value)
+		return saved.value ? `Change ${saved.value.project_name}` : "Propose a project";
+	if (listView.value === "mine") return "Your proposals and change requests";
+	if (listView.value === "review") return "Review project proposals";
+	return "Approved projects";
+});
+const pageSubtitle = computed(() => {
+	if (saved.value && !requestMode.value)
+		return `${saved.value.name} · ${saved.value.operational_status || "Project"}`;
+	if (request.value)
+		return `${request.value.name} · ${request.value.request_kind} · ${request.value.proposal_status}`;
+	if (requestMode.value)
+		return "Prepare the project details and send them to one Projects Manager for approval.";
+	if (listView.value === "mine")
+		return "Continue your drafts and track the proposals or changes you submitted.";
+	if (listView.value === "review")
+		return "View proposals from others and decide the requests assigned to you.";
+	return "View approved projects and filter them by their current status.";
+});
+const pageEyebrow = computed(() => {
+	if (saved.value && !requestMode.value) return "Project";
+	if (requestMode.value) return "Project proposal";
+	return "Projects";
+});
 const detailEditable = computed(
 	() => requestMode.value && (!request.value || request.value.can_edit),
 );
@@ -854,20 +1096,44 @@ const attachments = computed(() => [
 	...(saved.value?.attachments || []),
 	...(request.value?.attachments || []),
 ]);
-const filteredRequests = computed(() =>
+const requestMatchesFilter = (item) =>
+	!requestFilter.value || item.proposal_status === requestFilter.value;
+const filteredMyRequests = computed(() =>
 	requests.value.filter(
-		(item) => !requestFilter.value || item.proposal_status === requestFilter.value,
+		(item) => item.proposed_by === caps.value.current_user && requestMatchesFilter(item),
 	),
 );
+const filteredReviewRequests = computed(() =>
+	requests.value.filter(
+		(item) => item.proposed_by !== caps.value.current_user && requestMatchesFilter(item),
+	),
+);
+function stableValue(value) {
+	if (Array.isArray(value)) return value.map(stableValue);
+	if (value && typeof value === "object")
+		return Object.fromEntries(
+			Object.keys(value)
+				.sort()
+				.map((key) => [key, stableValue(value[key])]),
+		);
+	return value;
+}
 const changed = computed(
-	() => request.value && JSON.stringify(patchData()) !== JSON.stringify(request.value.data),
+	() =>
+		request.value &&
+		JSON.stringify(stableValue(patchData())) !==
+			JSON.stringify(stableValue(request.value.data)),
 );
 const filteredProjects = computed(() =>
-	projects.value.filter((project) =>
-		`${project.project_name} ${project.name} ${project.operational_status || project.status}`
-			.toLowerCase()
-			.includes(search.value.toLowerCase()),
-	),
+	projects.value.filter((project) => {
+		const status = project.operational_status || project.status;
+		return (
+			(!projectStatusFilter.value || status === projectStatusFilter.value) &&
+			`${project.project_name} ${project.name} ${status}`
+				.toLowerCase()
+				.includes(search.value.toLowerCase())
+		);
+	}),
 );
 const peopleOptions = computed(() =>
 	options.value.users.length
@@ -876,6 +1142,16 @@ const peopleOptions = computed(() =>
 				.filter(Boolean)
 				.map((name) => ({ name, full_name: name })),
 );
+const managerOptions = computed(() => {
+	const values = [...(options.value.project_managers || [])];
+	if (
+		assignedApprover.value &&
+		!values.some((manager) => manager.name === assignedApprover.value)
+	) {
+		values.push({ name: assignedApprover.value, full_name: assignedApprover.value });
+	}
+	return values;
+});
 const filteredPeople = computed(() =>
 	peopleOptions.value.filter((user) =>
 		detailEditable.value
@@ -900,9 +1176,16 @@ const companyCurrency = computed(
 		options.value.companies.find((row) => row.name === form.company)?.default_currency ||
 		"INR",
 );
-const allocatedTotal = computed(() =>
+const manualAllocatedTotal = computed(() =>
 	(form.account_budgets || []).reduce((sum, row) => sum + Number(row.approved_amount || 0), 0),
 );
+const breakupRemainder = computed(() =>
+	Math.max(0, Number(form.total_approved_budget || 0) - manualAllocatedTotal.value),
+);
+const breakupOverBy = computed(() =>
+	Math.max(0, manualAllocatedTotal.value - Number(form.total_approved_budget || 0)),
+);
+const allocatedTotal = computed(() => manualAllocatedTotal.value + breakupRemainder.value);
 const currency = (value) =>
 	new Intl.NumberFormat("en-IN", { style: "currency", currency: companyCurrency.value }).format(
 		Number(value || 0),
@@ -936,23 +1219,29 @@ function populate(data = {}) {
 	);
 	if (!form.company) form.company = options.value.default_company || "";
 	form.participants = [...(form.participants || [])];
-	form.memberLevels = Object.fromEntries(
-		(data.members || []).map((row) => [row.user, row.access_level || "Basic"]),
-	);
 	if (form.participants.some((row) => typeof row === "object")) {
-		form.memberLevels = Object.fromEntries(
-			form.participants.map((row) => [row.user, row.access_level || "Basic"]),
-		);
 		form.participants = form.participants.map((row) => row.user);
 	}
-	form.participants.forEach((user) => {
-		if (!form.memberLevels[user]) form.memberLevels[user] = "Basic";
-	});
-	form.account_budgets = (form.account_budgets || []).map((row) => ({
-		...row,
-		is_active: Boolean(row.is_active),
-		key: ++rowKey,
-	}));
+	const breakup = form.account_budgets || [];
+	const others = breakup.find(
+		(row) =>
+			String(row.employee_label || "")
+				.trim()
+				.toLowerCase() === "others",
+	);
+	othersBudgetKey.value = others?.budget_key || "";
+	form.account_budgets = breakup
+		.filter(
+			(row) =>
+				String(row.employee_label || "")
+					.trim()
+					.toLowerCase() !== "others",
+		)
+		.map((row) => ({
+			...row,
+			is_active: Boolean(row.is_active),
+			key: ++rowKey,
+		}));
 	if (!saved.value && !form.account_budgets.length) addAccount();
 }
 
@@ -964,6 +1253,8 @@ async function load() {
 	request.value = null;
 	requestMode.value = false;
 	reason.value = comments.value = "";
+	assignedApprover.value = "";
+	othersBudgetKey.value = "";
 	try {
 		if (route.query.proposal) {
 			request.value = await call(proposalMethod + "get_proposal", {
@@ -976,18 +1267,22 @@ async function load() {
 					: null;
 			caps.value =
 				saved.value?.capabilities || (await call(method + "get_projects")).capabilities;
-			options.value = request.value.can_edit
-				? await call(method + "get_setup_options", { project: saved.value?.name })
-				: {
-						users: [],
-						companies: [],
-						cost_centres: [],
-						expense_accounts: [],
-						project_types: [],
-					};
+			options.value =
+				request.value.can_edit || request.value.can_submit
+					? await call(method + "get_setup_options", { project: saved.value?.name })
+					: {
+							users: [],
+							project_managers: [],
+							expense_breakup_labels: [],
+							companies: [],
+							cost_centres: [],
+							expense_accounts: [],
+							project_types: [],
+						};
 			baseline.value = saved.value ? valueData(saved.value) : {};
 			populate({ ...baseline.value, ...request.value.data });
 			reason.value = request.value.request_reason;
+			assignedApprover.value = request.value.assigned_approver || "";
 			editing.value = true;
 		} else if (route.query.project) {
 			saved.value = await call(method + "get_project", { project: route.query.project });
@@ -996,6 +1291,8 @@ async function load() {
 				? await call(method + "get_setup_options", { project: saved.value.name })
 				: {
 						users: [],
+						project_managers: [],
+						expense_breakup_labels: [],
 						companies: [{ name: saved.value.company }],
 						cost_centres: [],
 						expense_accounts: [],
@@ -1055,12 +1352,20 @@ function proposeChange() {
 	populate(saved.value);
 }
 function back() {
-	router.push("/projects");
+	router.push({ path: "/projects", query: { view: "approved" } });
 }
 
 async function save() {
 	if (uploading.value) {
 		error.value = "Wait for the supporting document upload to finish.";
+		return;
+	}
+	if (breakupOverBy.value > 0) {
+		error.value = "Expense break up cannot exceed the total project budget.";
+		return;
+	}
+	if (!assignedApprover.value) {
+		error.value = "Choose the Projects Manager who should review this proposal.";
 		return;
 	}
 	error.value = "";
@@ -1073,6 +1378,7 @@ async function save() {
 			modified: request.value?.modified,
 			data: patchData(),
 			reason: reason.value,
+			assigned_approver: assignedApprover.value,
 		});
 		request.value = result;
 		if (route.query.proposal !== result.name)
@@ -1110,11 +1416,10 @@ function valueData(value) {
 			.filter((key) => key in value)
 			.map((key) => [key, value[key]]),
 	);
-	data.participants = (value.members || value.participants || []).map((row) =>
-		typeof row === "string"
-			? { user: row, access_level: "Basic" }
-			: { user: row.user, access_level: row.access_level || "Basic" },
-	);
+	data.participants = (value.members || value.participants || []).map((row) => ({
+		user: typeof row === "string" ? row : row.user,
+		access_level: "Basic",
+	}));
 	if (value.account_budgets)
 		data.account_budgets = value.account_budgets.map((row) => ({
 			budget_key: row.budget_key || "",
@@ -1128,7 +1433,7 @@ function patchData() {
 	const data = Object.fromEntries(detailKeys.map((key) => [key, form[key] || ""]));
 	data.participants = form.participants.map((user) => ({
 		user,
-		access_level: form.memberLevels[user] || "Basic",
+		access_level: "Basic",
 	}));
 	if (showFinance.value) {
 		financeKeys.forEach((key) => {
@@ -1140,6 +1445,14 @@ function patchData() {
 			approved_amount: Number(row.approved_amount || 0),
 			is_active: Number(row.is_active),
 		}));
+		if (breakupRemainder.value > 0 || othersBudgetKey.value) {
+			data.account_budgets.push({
+				budget_key: othersBudgetKey.value,
+				employee_label: "Others",
+				approved_amount: breakupRemainder.value,
+				is_active: Number(breakupRemainder.value > 0),
+			});
+		}
 	}
 	if (request.value?.data.is_archived !== undefined)
 		data.is_archived = request.value.data.is_archived;
@@ -1269,7 +1582,7 @@ function revisionText(value) {
 	if (!Object.keys(data).length) return "No previous setup";
 	return [
 		`Project: ${data.project_budget_control} · ${currency(data.total_approved_budget)}`,
-		`Expense categories: ${data.account_budget_control}`,
+		`Expense break up: ${data.account_budget_control}`,
 		`Cost centre: ${data.cost_center}`,
 		...(data.account_budgets || []).map(
 			(row) =>

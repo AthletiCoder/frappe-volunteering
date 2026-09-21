@@ -200,15 +200,13 @@ test.describe.serial("Employee bank approval @bank-accounts @ui", () => {
     await expect(
       supplier.getByLabel("PAN (optional)", { exact: true }),
     ).not.toHaveAttribute("required", "");
-    const consignee = page.locator("section").filter({
-      has: page.getByRole("heading", { name: "Consignee and buyer" }),
+    const office = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "Sevamrita office" }),
     });
     await expect(
-      consignee.getByLabel("Consignee office address *", { exact: true }),
+      office.getByLabel("Office address *", { exact: true }),
     ).not.toHaveValue("");
-    await expect(
-      consignee.getByLabel("Address *", { exact: true }),
-    ).toHaveAttribute("readonly", "");
+    await expect(office.locator("address")).not.toHaveText("");
     await page
       .getByLabel("Description *", { exact: true })
       .fill("Local test utensils");

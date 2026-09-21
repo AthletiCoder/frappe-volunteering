@@ -4,12 +4,22 @@ export async function call(method, args = {}) {
 		headers: {
 			"Content-Type": "application/json",
 			Accept: "application/json",
+			"X-Requested-With": "XMLHttpRequest",
 			"X-Frappe-CSRF-Token": window.csrf_token || "",
 		},
 		credentials: "include",
 		body: JSON.stringify(args),
 	});
-	const data = await res.json();
+	const responseText = await res.text();
+	let data = {};
+	try {
+		data = responseText ? JSON.parse(responseText) : {};
+	} catch (_) {
+		if (!res.ok) {
+			throw new Error(`Request failed (${res.status})`);
+		}
+		throw new Error("The server returned an invalid response.");
+	}
 	// Frappe also sends advisory msgprint warnings in _server_messages after
 	// successful requests.  Only failed responses/exceptions are errors.
 	if (!res.ok || data.exc || data.exception) {

@@ -187,7 +187,9 @@ volunteering.accounting_workflow.setup_project_expense_account_selector = functi
 	frm._project_expense_account_project = frm.doc.project || null;
 	const project = frm.doc.project;
 	const company = frm.doc.company;
-	if (!project) {
+	// Reviewers and approvers can inspect an existing claim without being
+	// granted access to the project's expense-category catalogue.
+	if (!project || !volunteering.accounting_workflow.can_edit_project_expense_accounts(frm)) {
 		volunteering.accounting_workflow.apply_project_expense_account_options(frm, []);
 		return;
 	}
@@ -443,9 +445,12 @@ volunteering.accounting_workflow.show_spend_hints = function (frm) {
 		frm.doc.docstatus === 0 &&
 		frm.doc.workflow_state === "Draft" &&
 		frm.doctype !== "Purchase Invoice";
+	const can_view_budget =
+		frappe.session.user === "Administrator" ||
+		frappe.user.has_role(["Projects Manager", "Accounts Manager"]);
 	volunteering.form_hints.run_once(frm, "spend_budget", () => {
 		const spend = show_spend ? volunteering.accounting_workflow.spend_guide_html() : "";
-		if (frm.doctype === "Employee Advance" || !frm.doc.project) {
+		if (frm.doctype === "Employee Advance" || !frm.doc.project || !show_spend || !can_view_budget) {
 			if (spend) {
 				volunteering.form_hints.set_headline(frm, spend);
 			}

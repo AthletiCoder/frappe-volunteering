@@ -9,7 +9,7 @@
  "fields": [
   {"fieldname": "user", "label": "User", "fieldtype": "Link", "options": "User", "reqd": 1, "in_list_view": 1},
   {"fieldname": "full_name", "label": "Name", "fieldtype": "Data", "read_only": 1, "in_list_view": 1},
-  {"fieldname": "access_level", "label": "Visibility", "fieldtype": "Select", "options": "Basic\nFinancial", "default": "Basic", "reqd": 1, "in_list_view": 1}
+  {"fieldname": "access_level", "label": "Visibility", "fieldtype": "Select", "options": "Basic", "default": "Basic", "reqd": 1, "hidden": 1, "read_only": 1}
  ],
  "permissions": []
 }

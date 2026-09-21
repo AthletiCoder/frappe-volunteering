@@ -41,15 +41,15 @@ test("supplier and volunteer signing generate distinct GST/non-GST documents", a
     .getByLabel("Address *", { exact: true })
     .fill("12 Demo Market Road, Mumbai");
   await supplier.getByLabel("State *", { exact: true }).fill("Maharashtra");
-  const consignee = page.locator("section").filter({
-    has: page.getByRole("heading", { name: "Consignee and buyer" }),
+  const office = page.locator("section").filter({
+    has: page.getByRole("heading", { name: "Sevamrita office" }),
   });
   await expect(
-    consignee.getByLabel("Consignee office address *", { exact: true }),
+    office.getByLabel("Office address *", { exact: true }),
   ).toHaveValue(defaults.default_office_address);
-  await expect(
-    consignee.getByLabel("Address *", { exact: true }),
-  ).toHaveAttribute("readonly", "");
+  await expect(office.locator("address")).toContainText(
+    defaults.consignee.address,
+  );
   await page
     .getByLabel("Description *", { exact: true })
     .fill("Local test utensils");
@@ -80,6 +80,29 @@ test("supplier and volunteer signing generate distinct GST/non-GST documents", a
     await page
       .getByLabel("Who will sign? *", { exact: true })
       .selectOption(signer);
+    await page
+      .getByRole("button", { name: "Sign on screen", exact: true })
+      .click();
+    const signatureCanvas = page.locator("canvas.signature-canvas");
+    await expect(signatureCanvas).toBeVisible();
+    const signatureBox = await signatureCanvas.boundingBox();
+    expect(signatureBox).toBeTruthy();
+    await page.mouse.move(signatureBox!.x + 60, signatureBox!.y + 120);
+    await page.mouse.down();
+    await page.mouse.move(signatureBox!.x + 180, signatureBox!.y + 55, {
+      steps: 8,
+    });
+    await page.mouse.move(signatureBox!.x + 280, signatureBox!.y + 135, {
+      steps: 8,
+    });
+    await page.mouse.move(signatureBox!.x + 430, signatureBox!.y + 50, {
+      steps: 8,
+    });
+    await page.mouse.up();
+    await page
+      .getByRole("button", { name: "Use this signature", exact: true })
+      .click();
+    await expect(page.getByAltText("Captured signature preview")).toBeVisible();
     for (const type of ["NON_GST", "GST"]) {
       await page
         .getByRole("button", {
@@ -128,6 +151,7 @@ test("supplier and volunteer signing generate distinct GST/non-GST documents", a
         expect(generated.signer_type).toBe(signer);
         const payload = response.request().postDataJSON().payload;
         expect(payload.items[0].hsn_sac).toBe("");
+        expect(payload.signature_data).toMatch(/^data:image\/png;base64,/);
         expect(payload).not.toHaveProperty("signature_confirmation_required");
         expect(payload).not.toHaveProperty("supplier_confirmation_required");
         if (number) expect(generated.invoice_number).toBe(number);

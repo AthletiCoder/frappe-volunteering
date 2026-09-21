@@ -492,16 +492,16 @@ ACCOUNTING_CUSTOM_FIELDS = {
 			"default": "No Control",
 			"reqd": 1,
 			"insert_after": "total_approved_budget",
-			"description": "Controls each employee-facing expense label allocation independently.",
+			"description": "Controls each approved expense break up allocation independently.",
 		},
 		{
 			"fieldname": "account_budgets",
-			"label": "Expense Labels & Budgets",
+			"label": "Expense Break Up",
 			"fieldtype": "Table",
 			"options": "Project Account Budget",
 			"insert_after": "account_budget_control",
 			"description": (
-				"Define the plain-language labels employees can select and the budget for each. "
+				"Define the project's plain-language expense break up and the budget for each label. "
 				"Accounts Managers map approved labels to ledger accounts separately."
 			),
 		},

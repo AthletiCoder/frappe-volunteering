@@ -181,6 +181,41 @@ def get_consumed_amount(project, department=None, exclude=None):
 	return total
 
 
+def get_budget_commitment_breakdown(project):
+	"""Explain whole-Project commitment without changing budget enforcement semantics.
+
+	Pending claims and Purchase Orders reserve budget. Approved Expense Claims are
+	shown separately because they have become accounting expenditure, although all
+	three categories remain part of the same committed total used by budget checks.
+	"""
+	allocated = get_project_total_allocated(project)
+	pending_claims = 0
+	approved_expenditure = 0
+	for row in _active_budget_documents("Expense Claim", project):
+		amount = _get_budget_document_amount(frappe.get_doc("Expense Claim", row.name))
+		if row.workflow_state == "Approved":
+			approved_expenditure += amount
+		else:
+			pending_claims += amount
+
+	purchase_orders = sum(
+		_get_budget_document_amount(frappe.get_doc("Purchase Order", row.name))
+		for row in _active_budget_documents("Purchase Order", project)
+	)
+	pending_commitments = pending_claims + purchase_orders
+	total_committed = pending_commitments + approved_expenditure
+	return {
+		"has_project_budget": bool(allocated),
+		"approved_budget": allocated,
+		"pending_claim_commitments": pending_claims,
+		"purchase_order_commitments": purchase_orders,
+		"pending_commitments": pending_commitments,
+		"approved_expenditure": approved_expenditure,
+		"total_committed": total_committed,
+		"available_after_commitments": allocated - total_committed,
+	}
+
+
 def get_account_consumed_amount(project, account, exclude=None):
 	if not project or not account:
 		return 0
@@ -405,7 +440,8 @@ def get_budget_snapshot(project, department=None):
 		return {}
 	values = _project_budget_fields(project)
 	allocated = flt(values.get("total_approved_budget"))
-	consumed = get_consumed_amount(project)
+	breakdown = get_budget_commitment_breakdown(project)
+	consumed = breakdown["total_committed"]
 	account_allocations = _account_allocations(project)
 	account_consumption = get_project_account_consumption(project)
 	accounts = []
@@ -436,6 +472,7 @@ def get_budget_snapshot(project, department=None):
 		"consumed": consumed,
 		"remaining": allocated - consumed,
 		"utilisation_pct": (consumed / allocated * 100) if allocated else 0,
+		"financial_status": breakdown,
 		"accounts": accounts if can_view_account_details else [],
 	}
 
@@ -457,7 +494,7 @@ def validate_project_budgets(doc, method=None):
 		if not label and account and not cint(doc.get("project_setup_version")):
 			label = frappe.db.get_value("Account", account, "account_name") or account
 		if not label or len(label) > 140:
-			frappe.throw(_("Enter an employee-facing expense label (at most 140 characters)."))
+			frappe.throw(_("Enter an expense break up label (at most 140 characters)."))
 		if label.casefold() in seen:
 			frappe.throw(_("Expense label {0} appears more than once.").format(label))
 		seen.add(label.casefold())

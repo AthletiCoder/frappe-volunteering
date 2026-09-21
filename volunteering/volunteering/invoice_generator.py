@@ -14,6 +14,7 @@ import base64
 import hashlib
 import json
 import re
+import struct
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from io import BytesIO
 
@@ -27,6 +28,7 @@ from markupsafe import escape
 from volunteering.volunteering.authority import get_employee_for_user
 
 MAX_ITEMS = 20
+MAX_SIGNATURE_BYTES = 500_000
 MONEY_PLACES = Decimal("0.01")
 MAX_MONEY = Decimal("999999999999.99")
 MAX_QUANTITY = Decimal("999999999")
@@ -101,8 +103,12 @@ def _generate_invoice_documents(payload, output_format="both", generation_refere
 		invoice_number_override="INV-AUTOMATIC",
 		volunteer_override=_employee_signer(employee),
 	)
+	fingerprint_data = {key: value for key, value in data.items() if key != "signature_png"}
+	fingerprint_data["signature_sha256"] = (
+		hashlib.sha256(data["signature_png"]).hexdigest() if data["signature_png"] else ""
+	)
 	fingerprint = hashlib.sha256(
-		json.dumps(data, sort_keys=True, default=str, separators=(",", ":")).encode()
+		json.dumps(fingerprint_data, sort_keys=True, default=str, separators=(",", ":")).encode()
 	).hexdigest()
 	data["invoice_number"] = _number_for_generation(employee, fingerprint, generation_reference)
 	stem = _safe_filename(data["invoice_number"])
@@ -215,9 +221,7 @@ def _apply_selected_office_addresses(payload, employee):
 	if not isinstance(raw, dict):
 		return raw
 	consignee_name = str(raw.get("consignee_address_name") or "").strip()
-	buyer_same = bool(raw.get("buyer_same_as_consignee", True))
-	buyer_name = str(raw.get("buyer_address_name") or "").strip()
-	if not consignee_name and (buyer_same or not buyer_name):
+	if not consignee_name:
 		return raw
 
 	company = frappe.db.get_value("Employee", employee, "company")
@@ -227,10 +231,10 @@ def _apply_selected_office_addresses(payload, employee):
 		if consignee_name not in choices:
 			frappe.throw(_("Choose a current Sevamrita office address for the consignee."))
 		values["consignee"] = choices[consignee_name]["party"]
-	if not buyer_same:
-		if not buyer_name or buyer_name not in choices:
-			frappe.throw(_("Choose a current Sevamrita office address for the buyer."))
-		values["buyer"] = choices[buyer_name]["party"]
+	# Buyer and consignee are one Sevamrita office for these employee-generated
+	# invoices. Browser-supplied alternate buyer data is deliberately ignored.
+	values["buyer"] = values["consignee"]
+	values["buyer_same_as_consignee"] = True
 	return values
 
 
@@ -263,7 +267,7 @@ def _normalise_payload(payload, bank_override=None, invoice_number_override=None
 		"delivery_note_date": _optional_date(raw.get("delivery_note_date")),
 		"supplier": _party(raw.get("supplier"), _("Supplier")),
 		"consignee": _party(raw.get("consignee"), _("Consignee")),
-		"buyer_same_as_consignee": bool(raw.get("buyer_same_as_consignee", True)),
+		"buyer_same_as_consignee": True,
 		"transportation_charges": _money(raw.get("transportation_charges"), _("Transportation charges")),
 		"other_charges": _money(raw.get("other_charges"), _("Other charges")),
 		# The public endpoint always supplies an approved server-side override. Keeping
@@ -272,10 +276,9 @@ def _normalise_payload(payload, bank_override=None, invoice_number_override=None
 		"authorised_signatory": _text(raw.get("authorised_signatory"), 120)
 		if signer_type == "SUPPLIER"
 		else "",
+		"signature_png": _signature_png(raw.get("signature_data")),
 	}
-	data["buyer"] = (
-		data["consignee"] if data["buyer_same_as_consignee"] else _party(raw.get("buyer"), _("Buyer"))
-	)
+	data["buyer"] = data["consignee"]
 
 	if invoice_type == "GST":
 		_validate_gstin(data["supplier"].get("gstin"), _("Supplier GSTIN"), required=True)
@@ -374,6 +377,48 @@ def _normalise_payload(payload, bank_override=None, invoice_number_override=None
 			).format(data["authorised_signatory"] or _("the undersigned"), data["supplier"]["name"])
 		data["notice"] = ""
 	return data
+
+
+def _signature_png(value):
+	"""Accept only a modest, non-blank PNG created by the signature canvas."""
+	if not value:
+		return b""
+	if not isinstance(value, str) or not value.startswith("data:image/png;base64,"):
+		frappe.throw(_("The on-screen signature must be a PNG image."))
+	encoded = value.partition(",")[2]
+	if len(encoded) > ((MAX_SIGNATURE_BYTES * 4) // 3) + 8:
+		frappe.throw(_("The on-screen signature is too large. Clear it and sign again."))
+	try:
+		content = base64.b64decode(encoded, validate=True)
+	except Exception:
+		frappe.throw(_("The on-screen signature image is invalid."))
+	if len(content) > MAX_SIGNATURE_BYTES or not content.startswith(b"\x89PNG\r\n\x1a\n"):
+		frappe.throw(_("The on-screen signature image is invalid."))
+	if len(content) < 24:
+		frappe.throw(_("The on-screen signature image is invalid."))
+	width, height = struct.unpack(">II", content[16:24])
+	if width < 120 or height < 40 or width > 1600 or height > 800 or width * height > 1_280_000:
+		frappe.throw(_("The on-screen signature has invalid dimensions."))
+	try:
+		from PIL import Image, ImageChops
+
+		with Image.open(BytesIO(content)) as image:
+			image.load()
+			if image.format != "PNG" or image.size != (width, height):
+				raise ValueError
+			# Composite transparency over the canvas's white background so a fully
+			# transparent PNG cannot masquerade as a non-blank signature.
+			rgba = image.convert("RGBA")
+			white = Image.new("RGBA", rgba.size, "white")
+			white.alpha_composite(rgba)
+			rgb = white.convert("RGB")
+			if ImageChops.difference(rgb, Image.new("RGB", rgb.size, "white")).getbbox() is None:
+				frappe.throw(_("Draw a signature before saving it."))
+	except frappe.ValidationError:
+		raise
+	except Exception:
+		frappe.throw(_("The on-screen signature image is invalid."))
+	return content
 
 
 def _party(value, label):
@@ -547,6 +592,11 @@ def _render_pdf_html(data):
 		if data["declaration"]
 		else ""
 	)
+	signature_image = (
+		f'<img class="signature-image" src="data:image/png;base64,{base64.b64encode(data["signature_png"]).decode("ascii")}">'
+		if data["signature_png"]
+		else "<br><br><br>"
+	)
 	buyer = data["buyer"]
 	return f"""<!doctype html>
 <html><head><meta charset="utf-8"><style>
@@ -569,7 +619,8 @@ tr {{ page-break-inside: avoid; }}
 .grand td {{ font-size: 11pt; font-weight: 700; background: #f2f2f2; }}
 .section {{ margin-top: 3mm; }}
 .declaration {{ border: 1px solid #555; padding: 5px; margin-top: 3mm; }}
-.signature {{ height: 22mm; text-align: right; }}
+.signature {{ min-height: 22mm; text-align: right; }}
+.signature-image {{ display: block; max-width: 58mm; max-height: 24mm; margin: 1mm 0 1mm auto; object-fit: contain; }}
 </style></head><body>
 <h1>{h(data["title"])}</h1><div class="copy">{h(data["copy_label"])}</div>
 <table><tr><td class="party"><div class="label">{h(_("Supplier Details"))}</div><div class="value">{h(data["supplier"]["name"])}</div>{h(data["supplier"]["address"])}<br>{h(data["supplier"]["state"])} {h(data["supplier"]["pin_code"])}<br>{h(_("GSTIN / UID No.")) if data["invoice_type"] == "GST" else h(_("PAN No."))}: {h(data["supplier"]["gstin"] if data["invoice_type"] == "GST" else data["supplier"]["pan"])}</td>
@@ -578,7 +629,7 @@ tr {{ page-break-inside: avoid; }}
 <td><div class="label">{h(_("Buyer's Details (if other than Consignee)"))}</div><div class="value">{h(buyer["name"])}</div>{h(buyer["address"])}<br>{h(buyer["state"])} {h(buyer["pin_code"])}<br>{h(_("GSTIN / UID No."))}: {h(buyer["gstin"])}</td></tr></table>
 <table class="section items"><colgroup><col style="width:6%"><col style="width:42%"><col style="width:12%"><col style="width:8%"><col style="width:14%"><col style="width:18%"></colgroup><thead><tr><th>{h(_("Sr. No."))}</th><th>{h(_("Description"))}</th><th>{h(_("HSN / SAC"))}</th><th>{h(_("Qty."))}</th><th>{h(_("Rate"))}</th><th>{h(_("Amount (INR)"))}</th></tr></thead><tbody>{items}{summary_rows}<tr class="grand"><td colspan="5" class="summary-label">{h(_("Grand Total"))}</td><td class="num">{_money_text(data["grand_total"])}</td></tr></tbody></table>
 <div class="declaration"><b>{h(_("Amount in words"))}:</b> {h(data["amount_in_words"])}</div>{declaration}
-<table class="section"><tr><td class="party"><b>{h(_("Remittance Details"))}</b><br>{bank_html or h(_("Not provided"))}</td><td class="signature"><b>{h(data["signature_context"])}</b><br><br><br>{h(data["signatory_name"])}{f"<br>{h(data['signature_employee'])}" if data["signature_employee"] else ""}<br>{h(data["signature_label"])}</td></tr></table>
+<table class="section"><tr><td class="party"><b>{h(_("Remittance Details"))}</b><br>{bank_html or h(_("Not provided"))}</td><td class="signature"><b>{h(data["signature_context"])}</b>{signature_image}{h(data["signatory_name"])}{f"<br>{h(data['signature_employee'])}" if data["signature_employee"] else ""}<br>{h(data["signature_label"])}</td></tr></table>
 </body></html>"""
 
 
@@ -741,8 +792,13 @@ def _build_docx(data):
 	sig = footer.cell(0, 1)
 	sig.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
 	sig.paragraphs[0].add_run(data["signature_context"]).bold = True
-	for _index in range(3):
-		sig.add_paragraph()
+	if data["signature_png"]:
+		p = sig.add_paragraph()
+		p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+		p.add_run().add_picture(BytesIO(data["signature_png"]), width=Mm(55))
+	else:
+		for _index in range(3):
+			sig.add_paragraph()
 	p = sig.add_paragraph(data["signatory_name"])
 	p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 	if data["signature_employee"]:

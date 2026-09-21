@@ -73,7 +73,7 @@ test("employees view office addresses while Accounts Manager administers them", 
       employeeCard.getByRole("button", { name: "Delete" }),
     ).toHaveCount(0);
     await page.goto("/volunteering/invoice-generator");
-    const addressSelect = page.getByLabel("Consignee office address *", {
+    const addressSelect = page.getByLabel("Office address *", {
       exact: true,
     });
     const optionValue = await addressSelect
@@ -82,15 +82,12 @@ test("employees view office addresses while Accounts Manager administers them", 
       .getAttribute("value");
     expect(optionValue).toBeTruthy();
     await addressSelect.selectOption(optionValue!);
-    const consignee = page.locator("section").filter({
-      has: page.getByRole("heading", { name: "Consignee and buyer" }),
+    const office = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "Sevamrita office" }),
     });
-    await expect(
-      consignee.getByLabel("Address *", { exact: true }),
-    ).toHaveValue(/101 Local Browser Test Road/);
-    await expect(
-      consignee.getByLabel("Address *", { exact: true }),
-    ).toHaveAttribute("readonly", "");
+    await expect(office.locator("address")).toContainText(
+      "101 Local Browser Test Road",
+    );
     const denied = await api(page, API + "save_office_address", {
       details: {
         address_title: "Blocked employee office",

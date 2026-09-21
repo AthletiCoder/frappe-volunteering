@@ -23,6 +23,18 @@
 		</div>
 		<div v-else class="space-y-8">
 			<ActionGrid
+				v-if="payload.actions.hr_management?.length"
+				title="HR Management"
+				icon="people"
+				:actions="payload.actions.hr_management"
+			/>
+			<ActionGrid
+				v-if="payload.actions.system_management?.length"
+				title="System Management"
+				icon="desk"
+				:actions="payload.actions.system_management"
+			/>
+			<ActionGrid
 				v-if="payload.actions.team?.length"
 				title="My team"
 				icon="people"

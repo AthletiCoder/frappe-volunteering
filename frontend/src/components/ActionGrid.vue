@@ -48,7 +48,12 @@ defineProps({
 function iconFor(id) {
 	const map = {
 		projects: "book",
+		approved_projects: "book",
 		create_project: "book",
+		my_project_requests: "book",
+		review_project_proposals: "fix",
+		manage_employees: "people",
+		manage_users: "desk",
 		log_work: "clock",
 		wfh: "sun",
 		leave: "leave",

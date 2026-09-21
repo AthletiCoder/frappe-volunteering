@@ -63,7 +63,15 @@ class UnitTestHomeAccess(UnitTestCase):
 		flags = classify_home_access(["Employee", "HR Manager"], has_employee=True, grade="Manager")
 		self.assertEqual(flags["persona"], "hr")
 		self.assertTrue(flags["show_people"])
+		self.assertTrue(flags["show_hr_management"])
+		self.assertFalse(flags["show_system_management"])
 		self.assertFalse(flags["show_accounts"])
+
+	def test_system_manager_sees_system_management_not_hr_management(self):
+		flags = classify_home_access(["System Manager"], has_employee=False)
+		self.assertTrue(flags["allowed"])
+		self.assertTrue(flags["show_system_management"])
+		self.assertFalse(flags["show_hr_management"])
 
 	def test_coordinator_sees_programs_and_budget(self):
 		flags = classify_home_access(["Employee", "NGO Coordinator"], has_employee=True, grade="Manager")
@@ -202,7 +210,7 @@ class UnitTestHomePayload(UnitTestCase):
 
 		claim = next(row for row in _money_actions() if row["id"] == "claim")
 		self.assertEqual(claim["route"], "/volunteering/expense-claim")
-		self.assertEqual(claim["list_route"], "/desk/expense-claim")
+		self.assertEqual(claim["list_route"], "/volunteering/expense-claims")
 
 	@patch("volunteering.volunteering.home_service.frappe.db.exists", return_value=True)
 	@patch("volunteering.volunteering.home_service.frappe.db.has_column", return_value=True)

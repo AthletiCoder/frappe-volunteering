@@ -88,9 +88,6 @@ test("REL-001: Home claim → actual receipt reviewer → manager → cash settl
     .first()
     .click();
   await page
-    .getByLabel("Purpose of this claim *", { exact: true })
-    .fill("Local release gate: fictional ₹1 expense");
-  await page
     .getByLabel("Supplier / payee", { exact: true })
     .fill("Fictional local QA supplier");
   await page

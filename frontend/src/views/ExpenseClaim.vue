@@ -6,6 +6,7 @@
 			eyebrow="Expenses"
 		>
 			<template #actions>
+				<RouterLink to="/expense-claims" class="btn-secondary">My claims</RouterLink>
 				<RouterLink to="/home" class="btn-secondary">Back to Home</RouterLink>
 			</template>
 		</PageHeader>
@@ -30,6 +31,11 @@
 					</p>
 				</div>
 				<div class="flex flex-wrap justify-center gap-2 mt-5">
+					<RouterLink
+						:to="{ path: '/expense-claims', query: { claim: result.name } }"
+						class="btn-primary px-5 py-2.5"
+						>Track this claim</RouterLink
+					>
 					<button type="button" class="btn-primary px-5 py-2.5" @click="startAnother">
 						Submit another expense
 					</button>
@@ -74,16 +80,6 @@
 							</option>
 						</select></label
 					>
-					<label class="field-label sm:col-span-2"
-						>Purpose of this claim *<textarea
-							v-model.trim="form.purpose"
-							required
-							maxlength="500"
-							rows="3"
-							class="field-input"
-							placeholder="Why was this expense incurred for the project?"
-						></textarea>
-					</label>
 				</div>
 				<p v-if="!defaults.projects.length" class="warning-box mt-3">
 					No active project with mapped expense categories is available to you. A
@@ -339,7 +335,6 @@ const blankExpense = () => ({
 });
 const form = reactive({
 	project: "",
-	purpose: "",
 	reimbursement_source: "PERSONAL",
 	employee_advance: "",
 	is_emergency: false,
@@ -517,7 +512,6 @@ async function submitClaim() {
 function startAnother() {
 	result.value = null;
 	form.project = "";
-	form.purpose = "";
 	form.reimbursement_source = "PERSONAL";
 	form.employee_advance = "";
 	form.is_emergency = false;

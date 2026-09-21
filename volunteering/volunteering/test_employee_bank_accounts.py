@@ -299,7 +299,7 @@ class IntegrationTestEmployeeBankAccounts(IntegrationTestCase):
 		for content in (html, text):
 			self.assertIn(details()["account_number"], content)
 			self.assertIn("Test Reimbursement Bank", content)
-			self.assertIn("Employee reimbursement remittance details", content)
+			self.assertIn("Remittance Details", content)
 			self.assertNotIn("999999999999", content)
 			self.assertNotIn("Forged Bank", content)
 

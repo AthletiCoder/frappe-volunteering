@@ -385,7 +385,7 @@ def _claim_row(name, allocated_amount):
 	return {
 		**ec,
 		"allocated_amount": allocated_amount,
-		"route": f"/desk/expense-claim/{ec.name}",
+		"route": f"/volunteering/expense-claims?claim={ec.name}",
 	}
 
 

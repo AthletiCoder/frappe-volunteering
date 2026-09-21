@@ -127,6 +127,37 @@
 							class="field-input"
 					/></label>
 				</div>
+				<div class="mt-4 rounded-xl border border-line bg-bg p-3">
+					<div class="flex flex-wrap items-center justify-between gap-3">
+						<div>
+							<p class="font-medium text-ink">On-screen signature</p>
+							<p class="text-xs text-muted">
+								Optional. The selected supplier representative or volunteer can
+								sign on this device, and the signature will be placed in the
+								downloaded document.
+							</p>
+						</div>
+						<div class="flex gap-2">
+							<button type="button" class="btn-secondary" @click="openSignature">
+								{{ form.signature_data ? "Replace signature" : "Sign on screen" }}
+							</button>
+							<button
+								v-if="form.signature_data"
+								type="button"
+								class="btn-secondary text-bad"
+								@click="clearSavedSignature"
+							>
+								Clear
+							</button>
+						</div>
+					</div>
+					<img
+						v-if="form.signature_data"
+						:src="form.signature_data"
+						alt="Captured signature preview"
+						class="signature-preview mt-3"
+					/>
+				</div>
 			</section>
 
 			<section class="form-card">
@@ -184,21 +215,15 @@
 			</section>
 
 			<section class="form-card">
-				<h2 class="form-title">Consignee and buyer</h2>
-				<p class="form-hint">
-					Buyer means the organisation purchasing the goods or services—normally
-					Sevamrita Foundation, not the volunteer paying on its behalf. Consignee means
-					the recipient of the goods. Select the relevant Sevamrita office instead of
-					typing the company address manually.
-				</p>
+				<h2 class="form-title">Sevamrita office</h2>
 				<div v-if="officeAddresses.length" class="space-y-3">
 					<label class="field-label"
-						>Consignee office address *<select
-							aria-label="Consignee office address *"
+						>Office address *<select
+							aria-label="Office address *"
 							v-model="form.consignee_address_name"
 							required
 							class="field-input"
-							@change="applyOfficeAddress('consignee')"
+							@change="applyOfficeAddress"
 						>
 							<option
 								v-for="address in officeAddresses"
@@ -209,41 +234,15 @@
 							</option>
 						</select></label
 					>
-					<PartyFields v-model="form.consignee" :gst-required="false" readonly />
+					<address class="rounded-xl bg-soft p-3 text-sm not-italic text-ink">
+						<strong class="block">{{ form.consignee.name }}</strong>
+						{{ form.consignee.address }}<br />
+						{{ form.consignee.state }} {{ form.consignee.pin_code }}
+					</address>
 				</div>
 				<div v-else class="rounded-xl border border-bad bg-bad-soft p-4 text-sm text-bad">
 					No active Sevamrita office address is available. Ask an Accounts Manager to add
 					one before generating an invoice.
-				</div>
-				<label class="mt-4 flex items-start gap-2 text-sm text-ink">
-					<input
-						v-model="form.buyer_same_as_consignee"
-						type="checkbox"
-						class="mt-0.5"
-						@change="buyerSameChanged"
-					/>
-					Buyer is the same as consignee
-				</label>
-				<div v-if="!form.buyer_same_as_consignee" class="mt-5 pt-5 border-t border-line">
-					<h3 class="font-semibold text-ink mb-3">Buyer details</h3>
-					<label class="field-label"
-						>Buyer office address *<select
-							aria-label="Buyer office address *"
-							v-model="form.buyer_address_name"
-							required
-							class="field-input"
-							@change="applyOfficeAddress('buyer')"
-						>
-							<option
-								v-for="address in officeAddresses"
-								:key="address.name"
-								:value="address.name"
-							>
-								{{ address.label }}
-							</option>
-						</select></label
-					>
-					<PartyFields v-model="form.buyer" :gst-required="false" readonly />
 				</div>
 			</section>
 
@@ -452,11 +451,46 @@
 				</button>
 			</div>
 		</form>
+		<div
+			v-if="signatureOpen"
+			class="signature-modal"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="signature-dialog-title"
+		>
+			<div class="signature-dialog">
+				<h2 id="signature-dialog-title" class="form-title">Sign on screen</h2>
+				<p class="form-hint">
+					Use a finger, stylus or mouse. The white panel is the signature area.
+				</p>
+				<canvas
+					ref="signatureCanvas"
+					class="signature-canvas"
+					@pointerdown="startSignature"
+					@pointermove="drawSignature"
+					@pointerup="stopSignature"
+					@pointercancel="stopSignature"
+					@pointerleave="stopSignature"
+				></canvas>
+				<p v-if="signatureError" class="text-sm text-bad mt-2">{{ signatureError }}</p>
+				<div class="flex flex-wrap justify-end gap-2 mt-4">
+					<button type="button" class="btn-secondary" @click="clearSignatureCanvas">
+						Clear
+					</button>
+					<button type="button" class="btn-secondary" @click="closeSignature">
+						Cancel
+					</button>
+					<button type="button" class="btn-primary" @click="saveSignature">
+						Use this signature
+					</button>
+				</div>
+			</div>
+		</div>
 	</div>
 </template>
 
 <script setup>
-import { computed, defineComponent, h, onMounted, reactive, ref } from "vue";
+import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import PageHeader from "../components/PageHeader.vue";
 import { call } from "../lib/frappe";
@@ -492,14 +526,12 @@ const form = reactive({
 	supplier: blankParty(),
 	consignee_address_name: "",
 	consignee: blankParty(),
-	buyer_same_as_consignee: true,
-	buyer_address_name: "",
-	buyer: blankParty(),
 	items: [blankItem()],
 	transportation_charges: 0,
 	other_charges: 0,
 	gst_amount: 0,
 	authorised_signatory: "",
+	signature_data: "",
 });
 const loading = ref(true);
 const generating = ref(null);
@@ -509,6 +541,11 @@ const error = ref("");
 const result = ref(null);
 const approvedBank = ref(null);
 const officeAddresses = ref([]);
+const signatureOpen = ref(false);
+const signatureCanvas = ref(null);
+const signatureError = ref("");
+let signing = false;
+let signatureHasInk = false;
 const isGst = computed(() => form.invoice_type === "GST");
 const isVolunteer = computed(() => form.signer_type === "VOLUNTEER");
 const itemsTotal = computed(() => form.items.reduce((sum, item) => sum + itemAmount(item), 0));
@@ -520,49 +557,6 @@ const taxableTotal = computed(
 );
 const gstAmount = computed(() => (isGst.value ? Number(form.gst_amount || 0) : 0));
 const grandTotal = computed(() => taxableTotal.value + gstAmount.value);
-
-const PartyFields = defineComponent({
-	name: "PartyFields",
-	props: {
-		modelValue: { type: Object, required: true },
-		gstRequired: { type: Boolean, default: false },
-		readonly: { type: Boolean, default: false },
-	},
-	emits: ["update:modelValue"],
-	setup(props, { emit }) {
-		const update = (key, value) =>
-			emit("update:modelValue", { ...props.modelValue, [key]: value });
-		const field = (key, label, options = {}) =>
-			h("label", { class: options.wide ? "field-label sm:col-span-2" : "field-label" }, [
-				label,
-				h(options.multiline ? "textarea" : "input", {
-					class: "field-input",
-					value: props.modelValue[key],
-					required: options.required,
-					readonly: props.readonly,
-					maxlength: options.maxlength,
-					rows: options.multiline ? 3 : undefined,
-					onInput: (event) => update(key, event.target.value),
-				}),
-			]);
-		return () =>
-			h("div", { class: "form-grid" }, [
-				field("name", "Name *", { wide: true, required: true, maxlength: 160 }),
-				field("address", "Address *", {
-					wide: true,
-					required: true,
-					maxlength: 600,
-					multiline: true,
-				}),
-				field("state", "State *", { required: true, maxlength: 100 }),
-				field("pin_code", "PIN code", { maxlength: 12 }),
-				field("gstin", props.gstRequired ? "GSTIN *" : "GSTIN", {
-					required: props.gstRequired,
-					maxlength: 15,
-				}),
-			]);
-	},
-});
 
 function itemAmount(item) {
 	return Number(item.quantity || 0) * Number(item.rate || 0);
@@ -579,28 +573,82 @@ function removeItem(index) {
 	if (form.items.length > 1) form.items.splice(index, 1);
 }
 
-function applyOfficeAddress(target) {
-	const field = target === "buyer" ? "buyer_address_name" : "consignee_address_name";
-	const selected = officeAddresses.value.find((address) => address.name === form[field]);
+function applyOfficeAddress() {
+	const selected = officeAddresses.value.find(
+		(address) => address.name === form.consignee_address_name,
+	);
 	if (!selected) return;
-	Object.assign(form[target], selected.party);
-	if (target === "consignee") {
-		if (form.buyer_same_as_consignee) {
-			form.buyer_address_name = selected.name;
-			Object.assign(form.buyer, selected.party);
-		}
-	}
+	Object.assign(form.consignee, selected.party);
 }
 
-function buyerSameChanged() {
-	if (form.buyer_same_as_consignee) {
-		form.buyer_address_name = form.consignee_address_name;
-		Object.assign(form.buyer, form.consignee);
-	} else if (!form.buyer_address_name) {
-		form.buyer_address_name =
-			form.consignee_address_name || officeAddresses.value[0]?.name || "";
-		applyOfficeAddress("buyer");
+function canvasPoint(event) {
+	const rect = signatureCanvas.value.getBoundingClientRect();
+	return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+}
+async function openSignature() {
+	signatureOpen.value = true;
+	signatureError.value = "";
+	await nextTick();
+	const canvas = signatureCanvas.value;
+	const rect = canvas.getBoundingClientRect();
+	const scale = Math.min(window.devicePixelRatio || 1, 2);
+	canvas.width = Math.round(rect.width * scale);
+	canvas.height = Math.round(rect.height * scale);
+	const context = canvas.getContext("2d");
+	context.setTransform(scale, 0, 0, scale, 0, 0);
+	context.fillStyle = "white";
+	context.fillRect(0, 0, rect.width, rect.height);
+	context.strokeStyle = "#111827";
+	context.lineWidth = 2.4;
+	context.lineCap = "round";
+	context.lineJoin = "round";
+	signatureHasInk = false;
+}
+function startSignature(event) {
+	event.preventDefault();
+	signing = true;
+	signatureHasInk = true;
+	signatureCanvas.value.setPointerCapture?.(event.pointerId);
+	const point = canvasPoint(event);
+	const context = signatureCanvas.value.getContext("2d");
+	context.beginPath();
+	context.moveTo(point.x, point.y);
+}
+function drawSignature(event) {
+	if (!signing) return;
+	event.preventDefault();
+	const point = canvasPoint(event);
+	const context = signatureCanvas.value.getContext("2d");
+	context.lineTo(point.x, point.y);
+	context.stroke();
+}
+function stopSignature() {
+	signing = false;
+}
+function clearSignatureCanvas() {
+	const canvas = signatureCanvas.value;
+	const rect = canvas.getBoundingClientRect();
+	const context = canvas.getContext("2d");
+	context.fillStyle = "white";
+	context.fillRect(0, 0, rect.width, rect.height);
+	context.beginPath();
+	signatureHasInk = false;
+	signatureError.value = "";
+}
+function saveSignature() {
+	if (!signatureHasInk) {
+		signatureError.value = "Draw a signature before using it.";
+		return;
 	}
+	form.signature_data = signatureCanvas.value.toDataURL("image/png");
+	signatureOpen.value = false;
+}
+function closeSignature() {
+	signatureOpen.value = false;
+	signing = false;
+}
+function clearSavedSignature() {
+	form.signature_data = "";
 }
 
 onMounted(async () => {
@@ -613,15 +661,18 @@ onMounted(async () => {
 		Object.assign(form.volunteer, defaults.volunteer || {});
 		form.invoice_date = defaults.invoice_date || "";
 		form.consignee_address_name = defaults.default_office_address || "";
-		form.buyer_address_name = defaults.default_office_address || "";
 		Object.assign(form.consignee, defaults.consignee || {});
-		Object.assign(form.buyer, defaults.consignee || {});
 	} catch (e) {
 		error.value = e.message || String(e);
 	} finally {
 		loading.value = false;
 	}
 });
+
+watch(
+	() => form.signer_type,
+	() => clearSavedSignature(),
+);
 
 async function generate(event) {
 	if (generating.value) return;
@@ -696,6 +747,32 @@ function download(file) {
 }
 .total-row {
 	@apply flex items-center justify-between gap-4 px-3 py-2 border-b border-line last:border-b-0;
+}
+.signature-preview {
+	display: block;
+	width: min(100%, 30rem);
+	height: 8rem;
+	object-fit: contain;
+	object-position: left center;
+	background: white;
+	border: 1px solid var(--line);
+	border-radius: 0.75rem;
+}
+.signature-modal {
+	@apply fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4;
+}
+.signature-dialog {
+	@apply w-full max-w-3xl rounded-2xl border border-line bg-surface p-4 sm:p-6 shadow-xl;
+}
+.signature-canvas {
+	display: block;
+	width: 100%;
+	height: min(34vh, 15rem);
+	background: white;
+	border: 2px solid var(--line);
+	border-radius: 0.75rem;
+	touch-action: none;
+	cursor: crosshair;
 }
 button:disabled {
 	@apply opacity-60 cursor-not-allowed;

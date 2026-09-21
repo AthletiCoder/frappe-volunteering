@@ -3,6 +3,7 @@
 import json
 from contextlib import contextmanager
 from contextvars import ContextVar
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 import frappe
 from frappe import _
@@ -13,6 +14,7 @@ from volunteering.volunteering import project_workspace as workspace
 _mutation = ContextVar("project_request_mutation", default=False)
 _application = ContextVar("approved_project_application", default=None)
 EDITABLE = {"Draft", "Correction Required"}
+OTHERS_LABEL = "Others"
 REQUEST_FIELDS = set(workspace.DETAIL_FIELDS + workspace.FINANCIAL_FIELDS) | {
 	"participants",
 	"account_budgets",
@@ -66,6 +68,28 @@ def project_values(doc):
 
 def _readable(doc, user=None):
 	return workspace.is_project_manager(user) or doc.proposed_by == (user or frappe.session.user)
+
+
+def _is_assigned_manager(doc, user=None):
+	user = user or frappe.session.user
+	return bool(
+		doc.assigned_approver and doc.assigned_approver == user and workspace.is_project_manager(user)
+	)
+
+
+def _validate_assigned_approver(user):
+	user = cstr(user).strip()
+	if not user:
+		frappe.throw(_("Choose the Projects Manager who should review this proposal."))
+	values = frappe.db.get_value("User", user, ["enabled", "user_type"], as_dict=True)
+	if (
+		not values
+		or not values.enabled
+		or values.user_type != "System User"
+		or not workspace.is_project_manager(user)
+	):
+		frappe.throw(_("The assigned reviewer must be an enabled Projects Manager."))
+	return user
 
 
 def has_permission(doc, user=None, ptype=None, **kwargs):
@@ -129,9 +153,7 @@ def _data(data, project=None):
 			if not isinstance(row, dict) or set(row) - {"user", "access_level"}:
 				frappe.throw(_("Invalid project membership."))
 			workspace._validate_staff_user(row.get("user"))
-			if row.get("access_level", "Basic") not in ("Basic", "Financial"):
-				frappe.throw(_("Choose Basic or Financial membership visibility."))
-			members.append({"user": row["user"], "access_level": row.get("access_level") or "Basic"})
+			members.append({"user": row["user"], "access_level": "Basic"})
 		data["participants"] = members
 	if "account_budgets" in data:
 		if not isinstance(data["account_budgets"], list) or len(data["account_budgets"]) > 100:
@@ -167,6 +189,52 @@ def _data(data, project=None):
 	return data
 
 
+def _amount(value, label):
+	try:
+		amount = Decimal(str(value or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+	except InvalidOperation, ValueError:
+		frappe.throw(_("{0} must be a valid amount.").format(label))
+	if not amount.is_finite() or amount < 0:
+		frappe.throw(_("{0} must be a finite, non-negative amount.").format(label))
+	return amount
+
+
+def _normalise_expense_breakup(project):
+	"""Make the approved breakup equal the project ceiling, with a server-owned Others row."""
+	total = _amount(project.get("total_approved_budget"), _("Total approved budget"))
+	others = []
+	allocated = Decimal("0")
+	for row in project.get("account_budgets") or []:
+		label = " ".join(cstr(row.get("employee_label")).split())
+		if label.casefold() == OTHERS_LABEL.casefold():
+			others.append(row)
+			continue
+		allocated += _amount(row.get("approved_amount"), label or _("Expense breakup amount"))
+	if allocated > total:
+		frappe.throw(
+			_("Expense break up exceeds the total project budget by {0}.").format(
+				frappe.format_value(float(allocated - total), {"fieldtype": "Currency"})
+			)
+		)
+	remainder = total - allocated
+	primary = others[0] if others else None
+	if primary is None and remainder > 0:
+		primary = project.append(
+			"account_budgets",
+			{
+				"budget_key": frappe.generate_hash(length=20),
+				"employee_label": OTHERS_LABEL,
+			},
+		)
+	if primary:
+		primary.employee_label = OTHERS_LABEL
+		primary.approved_amount = float(remainder)
+		primary.is_active = int(remainder > 0)
+	for duplicate in others[1:]:
+		project.remove(duplicate)
+	return project
+
+
 def _event(doc, action, comment="", before=None, after=None):
 	doc.append(
 		"events",
@@ -185,6 +253,34 @@ def _store(doc):
 	with mutation():
 		doc.save(ignore_permissions=True)
 	return _serialize(doc)
+
+
+def backfill_unassigned_project_proposals():
+	"""Return legacy pending requests so their proposer can assign a manager.
+
+	Older databases may contain pending proposals created before the assigned
+	reviewer field existed. Leaving them pending would make them impossible to
+	decide under the new assigned-manager rule. This migration is idempotent and
+	keeps the transition in the proposal's audit history.
+	"""
+	if not frappe.db.table_exists("Project Proposal") or not frappe.db.has_column(
+		"Project Proposal", "assigned_approver"
+	):
+		return
+	for name in frappe.db.sql_list(
+		"""SELECT name FROM `tabProject Proposal`
+		WHERE proposal_status='Pending Approval'
+			AND TRIM(COALESCE(assigned_approver, ''))=''"""
+	):
+		doc = frappe.get_doc("Project Proposal", name)
+		doc.proposal_status = "Correction Required"
+		_event(
+			doc,
+			"Returned for manager assignment",
+			"Choose a Projects Manager and resubmit this legacy request.",
+		)
+		with mutation():
+			doc.save(ignore_permissions=True)
 
 
 def _redact(data, finance):
@@ -208,7 +304,6 @@ def _serialize(doc):
 	)
 	data = _redact(json.loads(doc.proposal_data or "{}"), finance)
 	current = _redact(project_values(project), workspace.can_view_finance(project)) if project else {}
-	manager = workspace.is_project_manager()
 	return {
 		"name": doc.name,
 		"modified": str(doc.modified),
@@ -216,6 +311,7 @@ def _serialize(doc):
 		"request_kind": doc.request_kind,
 		"project": doc.project,
 		"proposed_by": doc.proposed_by,
+		"assigned_approver": doc.assigned_approver,
 		"proposal_status": doc.proposal_status,
 		"request_reason": doc.request_reason or "",
 		"base_modified": doc.base_modified,
@@ -226,9 +322,11 @@ def _serialize(doc):
 		),
 		"decided_by": doc.decided_by,
 		"decided_on": doc.decided_on,
-		"can_edit": (doc.proposal_status in EDITABLE and (manager or doc.proposed_by == frappe.session.user))
-		or (manager and doc.proposal_status == "Pending Approval"),
-		"can_review": manager and doc.proposal_status == "Pending Approval",
+		"can_edit": (doc.proposal_status in EDITABLE and doc.proposed_by == frappe.session.user)
+		or (_is_assigned_manager(doc) and doc.proposal_status == "Pending Approval"),
+		"can_submit": doc.proposal_status in EDITABLE and doc.proposed_by == frappe.session.user,
+		"can_withdraw": doc.proposal_status in EDITABLE and doc.proposed_by == frappe.session.user,
+		"can_review": _is_assigned_manager(doc) and doc.proposal_status == "Pending Approval",
 		"can_view_financials": finance,
 		"events": [
 			{
@@ -259,25 +357,36 @@ def get_proposals():
 	return frappe.get_all(
 		"Project Proposal",
 		filters=filters,
-		fields=["name", "title", "request_kind", "project", "proposed_by", "proposal_status", "modified"],
+		fields=[
+			"name",
+			"title",
+			"request_kind",
+			"project",
+			"proposed_by",
+			"assigned_approver",
+			"proposal_status",
+			"modified",
+		],
 		order_by="modified desc",
 		limit_page_length=100,
 	)
 
 
 @frappe.whitelist(methods=["POST"])
-def save_proposal(data, proposal=None, project=None, modified=None, reason=""):
+def save_proposal(data, proposal=None, project=None, modified=None, reason="", assigned_approver=None):
 	workspace._logged_in()
 	doc = _load(proposal, modified, lock=True) if proposal else None
 	if doc:
 		if not modified:
 			frappe.throw(_("Reload the request before saving."), frappe.TimestampMismatchError)
 		if doc.proposal_status not in EDITABLE and not (
-			workspace.is_project_manager() and doc.proposal_status == "Pending Approval"
+			_is_assigned_manager(doc) and doc.proposal_status == "Pending Approval"
 		):
 			frappe.throw(
 				_("Submitted requests are locked until returned for correction."), frappe.PermissionError
 			)
+		if doc.proposal_status in EDITABLE and doc.proposed_by != frappe.session.user:
+			frappe.throw(_("Only the proposer may edit a draft or returned request."), frappe.PermissionError)
 		project = doc.project if doc.request_kind == "Project Change" else None
 	project_doc = _project(project) if project else None
 	if not doc and not project and not workspace.can_propose_project():
@@ -306,6 +415,14 @@ def save_proposal(data, proposal=None, project=None, modified=None, reason=""):
 				"proposal_status": "Draft",
 			}
 		)
+		doc.assigned_approver = _validate_assigned_approver(assigned_approver)
+	elif assigned_approver and assigned_approver != doc.assigned_approver:
+		if doc.proposed_by != frappe.session.user or doc.proposal_status not in EDITABLE:
+			frappe.throw(
+				_("Only the proposer may change the assigned manager before submission."),
+				frappe.PermissionError,
+			)
+		doc.assigned_approver = _validate_assigned_approver(assigned_approver)
 	if project_doc and doc.proposal_status in EDITABLE:
 		doc.base_modified = str(project_doc.modified)
 	doc.proposal_data = json.dumps(patch, sort_keys=True)
@@ -330,6 +447,9 @@ def submit_proposal(proposal, modified):
 	doc = _load(proposal, modified, lock=True)
 	if doc.proposal_status not in EDITABLE:
 		frappe.throw(_("Only draft or returned requests may be submitted."))
+	if doc.proposed_by != frappe.session.user:
+		frappe.throw(_("Only the proposer may submit this request."), frappe.PermissionError)
+	doc.assigned_approver = _validate_assigned_approver(doc.assigned_approver)
 	if doc.request_kind == "New Project" and not workspace.can_propose_project():
 		frappe.throw(_("Project proposal authority is required."), frappe.PermissionError)
 	if doc.request_kind == "Project Change":
@@ -381,6 +501,7 @@ def _validate_candidate(doc):
 	from volunteering.volunteering.budget_service import validate_project_department_budgets
 
 	project = _candidate(doc)
+	_normalise_expense_breakup(project)
 	# Validation only: bypass approval enforcement through a distinct validator parameter,
 	# never a client-supplied Document flag. Permission/decision checks are not performed here.
 	validate_project_department_budgets(project)
@@ -391,12 +512,12 @@ def _validate_candidate(doc):
 @frappe.whitelist(methods=["POST"])
 def review_proposal(proposal, action, modified, comments="", data=None):
 	workspace._logged_in()
-	if not workspace.is_project_manager():
+	doc = _load(proposal, modified, lock=True)
+	if not _is_assigned_manager(doc):
 		frappe.throw(
-			_("Only Projects Managers may approve, return or reject project requests."),
+			_("Only the Projects Manager assigned by the proposer may decide this request."),
 			frappe.PermissionError,
 		)
-	doc = _load(proposal, modified, lock=True)
 	if doc.proposal_status != "Pending Approval":
 		frappe.throw(_("This request is no longer awaiting approval."))
 	comments = cstr(comments).strip()
@@ -429,7 +550,11 @@ def review_proposal(proposal, action, modified, comments="", data=None):
 					),
 					frappe.TimestampMismatchError,
 				)
-		_validate_candidate(doc)
+		candidate = _validate_candidate(doc)
+		normalised = project_values(candidate)
+		stored = json.loads(doc.proposal_data)
+		stored["account_budgets"] = normalised["account_budgets"]
+		doc.proposal_data = json.dumps(stored, sort_keys=True)
 		patch = json.loads(doc.proposal_data)
 		if (
 			doc.request_kind == "Project Change"
@@ -471,6 +596,8 @@ def withdraw_proposal(proposal, modified):
 	doc = _load(proposal, modified, lock=True)
 	if doc.proposal_status not in EDITABLE:
 		frappe.throw(_("Only drafts or returned requests may be withdrawn."))
+	if doc.proposed_by != frappe.session.user:
+		frappe.throw(_("Only the proposer may withdraw this request."), frappe.PermissionError)
 	doc.proposal_status = "Withdrawn"
 	_event(doc, "Withdrawn")
 	return _store(doc)
@@ -480,9 +607,13 @@ def withdraw_proposal(proposal, modified):
 def upload_proposal_document(proposal, filename, content, modified, visibility="Basic"):
 	doc = _load(proposal, modified, lock=True)
 	if doc.proposal_status not in EDITABLE and not (
-		workspace.is_project_manager() and doc.proposal_status == "Pending Approval"
+		_is_assigned_manager(doc) and doc.proposal_status == "Pending Approval"
 	):
 		frappe.throw(_("Documents may only be added to editable requests."), frappe.PermissionError)
+	if doc.proposal_status in EDITABLE and doc.proposed_by != frappe.session.user:
+		frappe.throw(
+			_("Only the proposer may add documents to a draft or returned request."), frappe.PermissionError
+		)
 	if not filename or len(content or "") > 14_000_000:
 		frappe.throw(_("Choose a supporting document smaller than 10 MB."))
 	from frappe.utils.file_manager import save_file
@@ -527,7 +658,10 @@ def remove_unused_project(project, modified, reason):
 	if not cstr(reason).strip():
 		frappe.throw(_("Explain why the unused project is being removed."))
 	request = save_proposal(
-		{"is_archived": 1, "operational_status": "Cancelled"}, project=project, reason=reason
+		{"is_archived": 1, "operational_status": "Cancelled"},
+		project=project,
+		reason=reason,
+		assigned_approver=frappe.session.user,
 	)
 	request = submit_proposal(request["name"], request["modified"])
 	return review_proposal(request["name"], "approve", request["modified"], comments=reason)

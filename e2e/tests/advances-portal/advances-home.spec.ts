@@ -334,7 +334,11 @@ test("AP-005: Advance request and team dashboard fit mobile and dark theme", asy
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openRequest(page);
-  await page.getByRole("button", { name: "Toggle colour theme" }).click();
+  await expect(
+    page.getByRole("button", { name: "Toggle colour theme" }),
+  ).toHaveCount(0);
+  await page.evaluate(() => localStorage.setItem("volunteering.theme", "dark"));
+  await page.reload();
   await expect(page.locator("html")).toHaveClass(/dark/);
   expect(
     await page.evaluate(

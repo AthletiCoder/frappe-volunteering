@@ -25,6 +25,8 @@ from volunteering.volunteering.expense_claim_portal import (
 	_attach_own_advance,
 	_normalise_expenses,
 	get_expense_claim_form,
+	get_my_expense_claim,
+	get_my_expense_claims,
 	get_project_accounts,
 	submit_expense_claim,
 )
@@ -75,7 +77,6 @@ class IntegrationTestExpenseClaimPortal(IntegrationTestCase):
 	def _payload(self, **overrides):
 		payload = {
 			"project": self.project,
-			"purpose": "Validate the employee expense portal",
 			"reimbursement_source": "PERSONAL",
 			"employee_advance": "",
 			"is_emergency": False,
@@ -127,6 +128,7 @@ class IntegrationTestExpenseClaimPortal(IntegrationTestCase):
 		self.assertEqual(claim.employee, self.employee)
 		self.assertEqual(claim.workflow_state, "Pending Receipt Review")
 		self.assertEqual(claim.receipt_review_status, "Pending Review")
+		self.assertEqual(claim.remark, "Portal test expense")
 		self.assertEqual(claim.expenses[0].supplier_name, "Portal supplier")
 		self.assertEqual(claim.expenses[0].supplier_invoice_number, "PORTAL-001")
 		self.assertTrue(claim.expenses[0].receipt_attachment.startswith("/private/files/"))
@@ -138,6 +140,23 @@ class IntegrationTestExpenseClaimPortal(IntegrationTestCase):
 		)
 		self.assertEqual(file_row.is_private, 1)
 		self.assertEqual(file_row.file_url, claim.expenses[0].receipt_attachment)
+
+	def test_employee_history_lists_and_opens_only_their_claim(self):
+		frappe.set_user(self.user)
+		result = submit_expense_claim(self._payload())
+		workspace = get_my_expense_claims()
+		row = next(item for item in workspace["claims"] if item["name"] == result["name"])
+		self.assertEqual(row["stage"], "Receipt review")
+		self.assertEqual(row["project"], self.project)
+		self.assertEqual(row["claimed_amount"], 125)
+		self.assertGreaterEqual(workspace["counts"]["Receipt review"], 1)
+
+		detail = get_my_expense_claim(result["name"])
+		self.assertEqual(detail["name"], result["name"])
+		self.assertEqual(detail["source"], "Paid personally")
+		self.assertEqual(detail["expenses"][0]["category"], "Portal project costs")
+		self.assertTrue(detail["expenses"][0]["receipt_attachment"].startswith("/private/files/"))
+		self.assertEqual(detail["timeline"][0]["label"], "Claim created")
 
 	def test_each_expense_requires_its_own_receipt(self):
 		frappe.set_user(self.user)

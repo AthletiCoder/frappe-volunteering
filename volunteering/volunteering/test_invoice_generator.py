@@ -56,6 +56,20 @@ def _payload(invoice_type="GST"):
 	}
 
 
+def _signature_data(blank=False, transparent=False):
+	from PIL import Image, ImageDraw
+
+	image = Image.new(
+		"RGBA" if transparent else "RGB", (600, 180), (255, 255, 255, 0) if transparent else "white"
+	)
+	if not blank:
+		draw = ImageDraw.Draw(image)
+		draw.line([(80, 120), (180, 55), (260, 130), (390, 45), (510, 110)], fill="black", width=6)
+	buffer = BytesIO()
+	image.save(buffer, format="PNG")
+	return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode()
+
+
 class UnitTestInvoiceGenerator(UnitTestCase):
 	def test_generation_retries_transaction_conflict(self):
 		result = {"invoice_number": "INV-2098-000001"}
@@ -89,6 +103,43 @@ class UnitTestInvoiceGenerator(UnitTestCase):
 		self.assertEqual(data["taxable_total"], Decimal("210.00"))
 		self.assertEqual(data["gst_amount"], Decimal("37.80"))
 		self.assertEqual(data["grand_total"], Decimal("247.80"))
+
+	def test_buyer_is_always_the_selected_consignee(self):
+		payload = _payload()
+		payload["buyer_same_as_consignee"] = False
+		payload["buyer"] = {
+			"name": "Forged Buyer",
+			"address": "Another address",
+			"state": "Goa",
+		}
+		data = _normalise_payload(payload)
+		self.assertTrue(data["buyer_same_as_consignee"])
+		self.assertEqual(data["buyer"], data["consignee"])
+		self.assertNotEqual(data["buyer"]["name"], "Forged Buyer")
+
+	def test_on_screen_signature_is_validated_and_embedded_in_pdf_and_word(self):
+		from docx import Document
+
+		payload = _payload()
+		payload["signature_data"] = _signature_data()
+		data = _normalise_payload(payload)
+		self.assertTrue(data["signature_png"].startswith(b"\x89PNG"))
+		self.assertIn("data:image/png;base64,", _render_pdf_html(data))
+		document = Document(BytesIO(_build_docx(data)))
+		self.assertEqual(len(document.inline_shapes), 1)
+
+	def test_blank_or_non_png_on_screen_signature_is_rejected(self):
+		for signature in (
+			_signature_data(blank=True),
+			_signature_data(blank=True, transparent=True),
+			"data:image/png;base64,Zm9yZ2Vk",
+			"not-an-image",
+		):
+			with self.subTest(signature=signature[:30]):
+				payload = _payload()
+				payload["signature_data"] = signature
+				with self.assertRaises(frappe.ValidationError):
+					_normalise_payload(payload)
 
 	def test_supplier_non_gst_has_no_tax_and_has_registration_declaration(self):
 		payload = _payload("NON_GST")

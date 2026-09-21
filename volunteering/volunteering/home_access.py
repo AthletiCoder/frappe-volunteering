@@ -80,6 +80,8 @@ def classify_home_access(roles, has_employee, grade=None):
 	show_programs = allowed and is_ops
 	show_people = allowed and (is_hr or is_admin_user)
 	show_admin = allowed and (is_admin_user or is_board)
+	show_hr_management = allowed and is_hr
+	show_system_management = allowed and is_admin_user
 	show_budget_health = allowed and (
 		bool(role_set.intersection(BUDGET_HEALTH_ROLES)) or is_admin_user or is_board
 	)
@@ -106,6 +108,8 @@ def classify_home_access(roles, has_employee, grade=None):
 		"show_programs": show_programs,
 		"show_people": show_people,
 		"show_admin": show_admin,
+		"show_hr_management": show_hr_management,
+		"show_system_management": show_system_management,
 		"show_budget_health": show_budget_health,
 		"show_advances": show_advances,
 		"deemphasize_self_service": show_accounts or show_people or show_programs,

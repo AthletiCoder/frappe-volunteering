@@ -14,11 +14,11 @@
  "fields": [
   {"fieldname": "budget_key", "fieldtype": "Data", "label": "Budget Label ID", "hidden": 1, "read_only": 1},
   {
-   "description": "The expense category shown to employees. Ledger mapping is completed separately by an Accounts Manager after project approval.",
+   "description": "One line in the approved project expense break up. Ledger mapping is completed separately by an Accounts Manager after project approval.",
    "fieldname": "employee_label",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Employee-facing Label",
+   "label": "Expense Break Up Label",
    "reqd": 1
   },
   {

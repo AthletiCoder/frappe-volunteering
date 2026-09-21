@@ -243,7 +243,7 @@ def backfill_budget_labels():
 			)
 	# Existing technical field names are retained for database/API compatibility.
 	for name, label in (
-		("Project-account_budgets", "Expense Labels and Budgets"),
+		("Project-account_budgets", "Expense Break Up"),
 		("Project-account_budget_control", "Expense Category Budget Control"),
 		("Expense Claim Detail-project_expense_account", "Project Expense Category"),
 	):

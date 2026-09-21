@@ -348,6 +348,7 @@ after_migrate = [
 	"volunteering.volunteering.desk_icons_setup.ensure_desk_icons",
 	"volunteering.volunteering.accounting_setup.after_migrate",
 	"volunteering.volunteering.project_workspace.setup_project_workspace",
+	"volunteering.volunteering.project_proposals.backfill_unassigned_project_proposals",
 	"volunteering.volunteering.project_account_mapping.backfill_budget_labels",
 ]
 

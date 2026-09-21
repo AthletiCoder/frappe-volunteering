@@ -3,7 +3,7 @@
 		<PageHeader
 			title="Project account mapping"
 			eyebrow="Accounts"
-			subtitle="Map approved employee-facing labels to ledger accounts. Labels, allocations and project details cannot be changed here."
+			subtitle="Map the approved project expense break up to ledger accounts. Labels, allocations and project details cannot be changed here."
 		>
 			<template #actions
 				><RouterLink to="/home" class="btn-secondary">Back to Home</RouterLink></template

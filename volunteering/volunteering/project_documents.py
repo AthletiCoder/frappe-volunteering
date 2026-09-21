@@ -130,8 +130,8 @@ def file_query(user=None):
 	escaped = frappe.db.escape(user)
 	finance = (
 		"1=1"
-		if workspace.FINANCE_READ_ROLES.intersection(workspace._roles(user))
-		else f"EXISTS (SELECT 1 FROM `tabProject Participant` pm WHERE pm.parent=p.name AND pm.parenttype='Project' AND pm.user={escaped} AND pm.access_level='Financial')"
+		if workspace._is_admin(user) or workspace.FINANCE_READ_ROLES.intersection(workspace._roles(user))
+		else f"(p.owner={escaped} OR p.project_owner={escaped})"
 	)
 	view = (
 		"1=1"

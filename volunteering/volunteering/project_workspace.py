@@ -14,19 +14,13 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.permissions import add_permission, update_permission_property
 from frappe.utils import cint, cstr, flt, getdate, now_datetime
 
-from volunteering.volunteering.authority import user_has_board_of_directors
-from volunteering.volunteering.budget_service import CONTROL_MODES, get_consumed_amount
+from volunteering.volunteering.budget_service import CONTROL_MODES, get_budget_commitment_breakdown
 
 PROJECT_ROLES = frozenset({"Project Proposer", "Projects User", "Projects Manager", "Project Viewer"})
 SEVAMRITA_COMPANY = "Sevamrita Foundation"
-BUDGET_EDITOR_ROLES = frozenset({"Projects Manager", "System Manager"})
-FINANCE_READ_ROLES = BUDGET_EDITOR_ROLES | {"Accounts User", "Accounts Manager", "Auditor"}
-OVERSIGHT_ROLES = FINANCE_READ_ROLES | {
-	"Expense Approver",
-	"Expense Receipt Reviewer",
-	"HR Manager",
-	"Project Viewer",
-}
+BUDGET_EDITOR_ROLES = frozenset({"Projects Manager"})
+FINANCE_READ_ROLES = frozenset({"Projects Manager", "Accounts Manager"})
+VIEW_ALL_ROLES = frozenset({"Projects Manager", "Accounts Manager", "Project Viewer"})
 FINANCE_FIELDS = frozenset(
 	{
 		"cost_center",
@@ -204,6 +198,13 @@ def setup_project_workspace():
 		update_permission_property(
 			"Project", role, 2, "write", int(role in BUDGET_EDITOR_ROLES), validate=False
 		)
+	# Earlier iterations granted these general roles level-2 project fields. They
+	# are intentionally revoked: only project owner, Projects Manager, Accounts
+	# Manager and Administrator may see a project's financial setup.
+	for role in ("System Manager", "Accounts User", "Auditor"):
+		if frappe.db.exists("Custom DocPerm", {"parent": "Project", "role": role, "permlevel": 2}):
+			for permission in ("read", "write", "create", "delete", "report", "export", "share"):
+				update_permission_property("Project", role, 2, permission, 0, validate=False)
 	frappe.clear_cache(doctype="Project")
 
 
@@ -217,7 +218,9 @@ def _roles(user=None):
 
 
 def _is_admin(user=None):
-	return (user or frappe.session.user) == "Administrator" or "System Manager" in _roles(user)
+	# The Administrator account is the Frappe superuser. System Manager is not a
+	# project-finance role and must not silently inherit project financial data.
+	return (user or frappe.session.user) == "Administrator"
 
 
 def can_edit_budgets(user=None):
@@ -234,14 +237,7 @@ def can_propose_project(user=None):
 
 def can_view_finance(doc, user=None):
 	user = user or frappe.session.user
-	return (
-		_is_admin(user)
-		or bool(_roles(user) & FINANCE_READ_ROLES)
-		or any(
-			row.user == user and row.get("access_level") == "Financial"
-			for row in doc.get("project_participants") or []
-		)
-	)
+	return _is_admin(user) or bool(_roles(user) & FINANCE_READ_ROLES) or doc.get("project_owner") == user
 
 
 def can_propose_changes(doc, user=None):
@@ -254,11 +250,7 @@ def can_propose_changes(doc, user=None):
 
 
 def _can_oversee(user=None):
-	return (
-		_is_admin(user)
-		or bool(_roles(user) & OVERSIGHT_ROLES)
-		or user_has_board_of_directors(user or frappe.session.user)
-	)
+	return _is_admin(user) or bool(_roles(user) & VIEW_ALL_ROLES)
 
 
 def _is_member(doc, user):
@@ -448,9 +440,9 @@ def validate_project_structure(doc, method=None, validation_only=False):
 			frappe.throw(_("Project participant {0} appears more than once.").format(row.user))
 		seen.add(row.user)
 		row.full_name = _validate_staff_user(row.user)
-		row.access_level = row.get("access_level") or "Basic"
-		if row.access_level not in ("Basic", "Financial"):
-			frappe.throw(_("Choose Basic or Financial membership visibility."))
+		# All participant membership is deliberately basic. Financial access comes
+		# only from project ownership or the company-wide manager roles.
+		row.access_level = "Basic"
 	if previous:
 		_validate_existing_shares(doc)
 	if doc.operational_status not in LIFECYCLE_STATES:
@@ -552,9 +544,7 @@ def validate_project_claim_access(doc, method=None):
 	)
 	if not user or not _is_member(project, user):
 		frappe.throw(
-			_(
-				"The claimant must be a listed project member. Basic and Financial members can both submit bills."
-			),
+			_("The claimant must be a listed project member. Every project member can submit bills."),
 			frappe.PermissionError,
 		)
 	if project.operational_status != "Active":
@@ -567,6 +557,7 @@ def validate_project_claim_access(doc, method=None):
 
 def _capabilities(doc=None):
 	return {
+		"current_user": frappe.session.user,
 		"can_create": can_propose_project(),
 		"can_manage": is_project_manager(),
 		"can_propose_changes": bool(doc and can_propose_changes(doc)),
@@ -581,6 +572,7 @@ def _capabilities(doc=None):
 def _serialize(doc):
 	capabilities = _capabilities(doc)
 	can_read_finance = can_view_finance(doc)
+	financial_status = get_budget_commitment_breakdown(doc.name) if can_read_finance else None
 	result = {
 		"name": doc.name,
 		"modified": str(doc.modified),
@@ -595,15 +587,15 @@ def _serialize(doc):
 				**{field: doc.get(field) or "" for field in FINANCIAL_FIELDS},
 				"financial_closed": doc.get("budget_status") == "Closed",
 				"budget_status": doc.get("budget_status"),
-				"committed": get_consumed_amount(doc.name),
+				"committed": financial_status["total_committed"],
+				"financial_status": financial_status,
 			}
 			if can_read_finance
 			else {}
 		),
 		"participants": [row.user for row in doc.get("project_participants") or []],
 		"members": [
-			{"user": row.user, "full_name": row.full_name, "access_level": row.get("access_level") or "Basic"}
-			for row in doc.get("project_participants") or []
+			{"user": row.user, "full_name": row.full_name} for row in doc.get("project_participants") or []
 		],
 		"permitted_accounts": [
 			{
@@ -705,6 +697,35 @@ def get_setup_options(project=None):
 		order_by="full_name asc",
 		limit_page_length=500,
 	)
+	project_managers = frappe.get_all(
+		"Has Role",
+		filters={"role": "Projects Manager", "parenttype": "User"},
+		fields=["parent as name"],
+		limit_page_length=0,
+	)
+	manager_names = sorted({row.name for row in project_managers})
+	manager_details = {
+		row.name: row
+		for row in frappe.get_all(
+			"User",
+			filters={
+				"enabled": 1,
+				"user_type": "System User",
+				"name": ["in", manager_names or [""]],
+			},
+			fields=["name", "full_name"],
+			limit_page_length=0,
+		)
+	}
+	expense_labels = frappe.db.sql_list(
+		"""SELECT DISTINCT TRIM(b.employee_label)
+		FROM `tabProject Account Budget` b
+		JOIN `tabProject` p ON p.name=b.parent AND b.parenttype='Project'
+		WHERE p.project_setup_version > 0
+			AND TRIM(COALESCE(b.employee_label, '')) != ''
+			AND LOWER(TRIM(b.employee_label)) != 'others'
+		ORDER BY TRIM(b.employee_label)"""
+	)
 	companies = frappe.get_list(
 		"Company", filters={"name": SEVAMRITA_COMPANY}, fields=["name", "default_currency"]
 	)
@@ -718,6 +739,11 @@ def get_setup_options(project=None):
 		"current_user": frappe.session.user,
 		"default_company": SEVAMRITA_COMPANY,
 		"users": users,
+		"project_managers": sorted(
+			(manager_details[name] for name in manager_names if name in manager_details),
+			key=lambda row: ((row.full_name or "").casefold(), row.name.casefold()),
+		),
+		"expense_breakup_labels": expense_labels,
 		"companies": companies,
 		"control_modes": CONTROL_MODES,
 		"lifecycle_states": LIFECYCLE_STATES,
@@ -781,7 +807,9 @@ def _save_approved_project(data, project=None, proposed_by=None):
 		doc.set(
 			"project_participants",
 			[
-				{"user": row, "access_level": "Basic"} if isinstance(row, str) else row
+				{"user": row, "access_level": "Basic"}
+				if isinstance(row, str)
+				else {"user": row.get("user"), "access_level": "Basic"}
 				for row in data["participants"]
 			],
 		)

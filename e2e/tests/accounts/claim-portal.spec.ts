@@ -123,7 +123,13 @@ test.describe("Employee expense portal @ui @expense-portal", () => {
         () => document.documentElement.scrollWidth <= window.innerWidth,
       ),
     ).toBeTruthy();
-    await page.getByRole("button", { name: "Toggle colour theme" }).click();
+    await expect(
+      page.getByRole("button", { name: "Toggle colour theme" }),
+    ).toHaveCount(0);
+    await page.evaluate(() =>
+      localStorage.setItem("volunteering.theme", "dark"),
+    );
+    await page.reload();
     await expect(page.locator("html")).toHaveClass(/dark/);
     await expect
       .poll(() =>
@@ -138,6 +144,21 @@ test.describe("Employee expense portal @ui @expense-portal", () => {
       path: "test-results/expense-portal/mobile-form.png",
       fullPage: true,
     });
+  });
+
+  test("previous claims use the employee portal instead of Desk", async ({
+    page,
+  }) => {
+    await page.goto("/volunteering/home");
+    await page.getByRole("link", { name: /Previous claims/ }).click();
+    await expect(page).toHaveURL(/\/volunteering\/expense-claims$/);
+    await expect(
+      page.getByRole("heading", { name: "My reimbursement claims" }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Status")).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Submit an expense" }),
+    ).toBeVisible();
   });
 
   test("browser submission attaches the item receipt and enters receipt review", async ({
@@ -162,9 +183,9 @@ test.describe("Employee expense portal @ui @expense-portal", () => {
       .getByRole("option")
       .first()
       .click();
-    await page
-      .getByLabel("Purpose of this claim *", { exact: true })
-      .fill("Local browser test of the employee Expense Claim form");
+    await expect(
+      page.getByLabel("Purpose of this claim *", { exact: true }),
+    ).toHaveCount(0);
     await page
       .getByLabel("Supplier / payee", { exact: true })
       .fill("Local demo supplier");
@@ -194,6 +215,29 @@ test.describe("Employee expense portal @ui @expense-portal", () => {
     ).toBeVisible();
     await expect(
       page.locator("strong").filter({ hasText: /^HR-EXP-/ }),
+    ).toBeVisible();
+    const claimName = (
+      await page
+        .locator("strong")
+        .filter({ hasText: /^HR-EXP-/ })
+        .textContent()
+    )?.trim();
+    expect(claimName).toBeTruthy();
+    await page.getByRole("link", { name: "Track this claim" }).click();
+    await expect(page).toHaveURL(
+      new RegExp(`/volunteering/expense-claims\\?claim=${claimName}$`),
+    );
+    await expect(
+      page.getByRole("heading", { name: claimName!, exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Receipt review", { exact: true }).first(),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "View attached receipt" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Status history" }),
     ).toBeVisible();
     await page.screenshot({
       path: "test-results/expense-portal/submitted-claim.png",

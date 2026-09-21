@@ -47,6 +47,12 @@ def get_home_payload():
 	employee = get_employee_for_user(user)
 	grade = get_grade_for_user(user)
 	flags = classify_home_access(roles, bool(employee), grade)
+	# Administrator is the Frappe superuser even when its effective role list is
+	# unusual. Keep the two management areas independently permissioned.
+	flags["show_hr_management"] = user == "Administrator" or bool(
+		{"HR Manager", "HR User"}.intersection(roles)
+	)
+	flags["show_system_management"] = user == "Administrator" or "System Manager" in roles
 	flags["show_projects"] = flags["allowed"] and bool(frappe.has_permission("Project", "read"))
 	from volunteering.volunteering.project_workspace import can_propose_project, is_project_manager
 
@@ -66,7 +72,13 @@ def get_home_payload():
 			"full_name": full_name,
 			"greeting": PERSONA_GREETING["volunteer"],
 			"help_url": HELP_URL,
-			"nav": {"home": True, "advances": False, "team": False, "volunteering": False, "budget_health": False},
+			"nav": {
+				"home": True,
+				"advances": False,
+				"team": False,
+				"volunteering": False,
+				"budget_health": False,
+			},
 			"inbox": [],
 			"waiting": [],
 			"waiting_count": 0,
@@ -74,7 +86,16 @@ def get_home_payload():
 			"todos": [],
 			"todo_count": 0,
 			"accounts_queues": [],
-			"actions": {"time": [], "money": [], "team": [], "projects": [], "accounts": [], "organisation": []},
+			"actions": {
+				"time": [],
+				"money": [],
+				"team": [],
+				"projects": [],
+				"accounts": [],
+				"organisation": [],
+				"hr_management": [],
+				"system_management": [],
+			},
 			"status": [],
 			"programs": None,
 			"people": [],
@@ -119,6 +140,8 @@ def get_home_payload():
 			"projects": _project_actions(flags),
 			"accounts": _bank_review_actions(user),
 			"organisation": _organisation_actions(),
+			"hr_management": _hr_management_actions() if flags["show_hr_management"] else [],
+			"system_management": (_system_management_actions() if flags["show_system_management"] else []),
 		},
 		"status": status,
 		"programs": _programs_block() if flags["show_programs"] else None,
@@ -127,6 +150,28 @@ def get_home_payload():
 		"flags": flags,
 	}
 	return payload
+
+
+def _hr_management_actions():
+	return [
+		{
+			"id": "manage_employees",
+			"label": _("Employees"),
+			"hint": _("Add employees and maintain reporting, grade and employment details."),
+			"route": "/volunteering/hr-management",
+		}
+	]
+
+
+def _system_management_actions():
+	return [
+		{
+			"id": "manage_users",
+			"label": _("Users and roles"),
+			"hint": _("Create login accounts, enable or disable access, and assign roles."),
+			"route": "/volunteering/system-management",
+		}
+	]
 
 
 def _organisation_actions():
@@ -175,29 +220,35 @@ def _project_actions(flags):
 		return []
 	links = [
 		{
-			"id": "projects",
-			"label": _("Projects and proposals"),
-			"hint": _("Purpose, participants, expense labels, budgets and project status."),
-			"route": "/volunteering/projects",
+			"id": "approved_projects",
+			"label": _("Approved projects"),
+			"hint": _("View approved projects and filter them by their current status."),
+			"route": "/volunteering/projects?view=approved",
 		}
 	]
 	if flags.get("can_create_projects"):
-		links.insert(
-			0,
+		links = [
 			{
 				"id": "create_project",
 				"label": _("Propose a project"),
 				"hint": _("Prepare scope, membership and budgets for one Projects Manager to approve."),
 				"route": "/volunteering/projects?new=1",
 			},
-		)
+			links[0],
+			{
+				"id": "my_project_requests",
+				"label": _("Your proposals and change requests"),
+				"hint": _("Continue drafts and track proposals or changes you submitted."),
+				"route": "/volunteering/projects?view=mine",
+			},
+		]
 	if flags.get("can_review_projects"):
 		links.append(
 			{
-				"id": "project_approvals",
-				"label": _("Project approvals"),
-				"hint": _("Review new proposals and later project changes."),
-				"route": "/volunteering/projects?queue=1",
+				"id": "review_project_proposals",
+				"label": _("Review project proposals"),
+				"hint": _("View proposals from others; decide those assigned to you."),
+				"route": "/volunteering/projects?view=review",
 			}
 		)
 	return links
@@ -289,7 +340,7 @@ def _employee_draft_todos(employee):
 					"route": (
 						f"/volunteering/advances/{row.name}"
 						if doctype == "Employee Advance"
-						else desk_route(doctype, row.name)
+						else f"/volunteering/expense-claims?claim={row.name}"
 					),
 					"bucket": "resume",
 					"modified": str(row.modified or ""),
@@ -434,7 +485,7 @@ def _money_actions(pending=None):
 				"hint": _("Record what you spent and settle your advance or get reimbursed."),
 				"route": "/volunteering/expense-claim",
 			},
-			"/desk/expense-claim",
+			"/volunteering/expense-claims",
 			_("Previous claims"),
 			"claim",
 			pending,

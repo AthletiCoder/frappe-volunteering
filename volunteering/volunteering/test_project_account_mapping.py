@@ -70,7 +70,7 @@ class IntegrationTestProjectAccountMapping(IntegrationTestCase):
 				{"employee_label": "Materials", "approved_amount": 600, "is_active": 1},
 			],
 		}
-		self.proposal = save_proposal(self.data)
+		self.proposal = save_proposal(self.data, assigned_approver=self.manager)
 		self.proposal = submit_proposal(self.proposal["name"], self.proposal["modified"])
 		frappe.set_user(self.manager)
 		approved = review_proposal(self.proposal["name"], "approve", self.proposal["modified"])
@@ -125,8 +125,8 @@ class IntegrationTestProjectAccountMapping(IntegrationTestCase):
 	def test_mapping_preserves_approved_budgets_and_logs_actor(self):
 		result = self._map()
 		self.assertTrue(result["ready"])
-		self.assertEqual([row["approved_amount"] for row in result["rows"]], [100, 600])
-		self.assertEqual(get_account_allocated_budget(self.project, self.account), 700)
+		self.assertEqual([row["approved_amount"] for row in result["rows"]], [100, 600, 300])
+		self.assertEqual(get_account_allocated_budget(self.project, self.account), 1000)
 		log = frappe.get_all(
 			"Project Budget Revision",
 			filters={"project": self.project, "reason": "Expense label ledger mapping (Accounts Manager)"},
@@ -139,7 +139,7 @@ class IntegrationTestProjectAccountMapping(IntegrationTestCase):
 		self._map()
 		frappe.set_user(self.proposer)
 		choices = employee_options(frappe.get_doc("Project", self.project))
-		self.assertEqual([row["label"] for row in choices], ["Travel", "Materials"])
+		self.assertEqual([row["label"] for row in choices], ["Travel", "Materials", "Others"])
 		self.assertNotIn(self.account, json.dumps(choices))
 		self.assertNotIn("expense_accounts", get_setup_options(self.project))
 		self.assertNotIn("expense_account", get_project(self.project)["account_budgets"][0])
@@ -216,13 +216,19 @@ class IntegrationTestProjectAccountMapping(IntegrationTestCase):
 		rows = get_project(self.project)["account_budgets"]
 		rows[0]["approved_amount"] = 200
 		rows.append({"employee_label": "Meals", "approved_amount": 100, "is_active": 1})
-		proposal = save_proposal({"account_budgets": rows}, project=self.project, reason="Add a category")
+		proposal = save_proposal(
+			{"account_budgets": rows},
+			project=self.project,
+			reason="Add a category",
+			assigned_approver=self.manager,
+		)
 		proposal = submit_proposal(proposal["name"], proposal["modified"])
 		frappe.set_user(self.manager)
 		review_proposal(proposal["name"], "approve", proposal["modified"])
 		doc = frappe.get_doc("Project", self.project)
 		self.assertEqual(doc.account_budgets[0].expense_account, self.account)
-		self.assertFalse(doc.account_budgets[2].expense_account)
+		meals = next(row for row in doc.account_budgets if row.employee_label == "Meals")
+		self.assertFalse(meals.expense_account)
 		self.assertEqual(employee_options(doc), [])
 
 	def test_used_mapping_is_locked(self):

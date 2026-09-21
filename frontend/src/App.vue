@@ -9,16 +9,6 @@
 				/>
 				<div class="md:hidden font-semibold tracking-tight">Sevamrita</div>
 				<div class="ml-auto flex items-center gap-0.5 shrink-0">
-					<button
-						type="button"
-						class="btn-ghost"
-						:title="dark ? 'Switch to light mode' : 'Switch to dark mode'"
-						:aria-pressed="dark"
-						aria-label="Toggle colour theme"
-						@click="onThemeClick"
-					>
-						<Icon :name="dark ? 'sun' : 'moon'" />
-					</button>
 					<NotifyMenu />
 					<a href="/desk" class="btn-ghost" title="Open Desk" aria-label="Open Desk">
 						<Icon name="desk" />
@@ -43,15 +33,12 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted } from "vue";
 import { RouterView } from "vue-router";
 import { homePayload, loadHomePayload, startHomePoll, stopHomePoll } from "./lib/home";
-import { isDark, toggleTheme } from "./lib/theme";
 import AppNav from "./components/AppNav.vue";
 import Icon from "./components/Icon.vue";
 import NotifyMenu from "./components/NotifyMenu.vue";
-
-const dark = ref(false);
 
 const nav = computed(() => ({
 	projects: homePayload.value?.nav?.projects ?? false,
@@ -85,12 +72,7 @@ const navItems = computed(() => {
 	return items;
 });
 
-function onThemeClick() {
-	dark.value = toggleTheme();
-}
-
 onMounted(() => {
-	dark.value = isDark();
 	if (!homePayload.value) {
 		loadHomePayload().catch(() => {});
 	}

@@ -7,8 +7,11 @@ from volunteering.volunteering import project_workspace as workspace
 class VolunteeringProject(Project):
 	def get_permlevel_access(self, permission_type="write"):
 		levels = super().get_permlevel_access(permission_type)
-		if permission_type == "read" and workspace.can_view_finance(self) and 2 not in levels:
-			levels.append(2)
+		if permission_type == "read":
+			if workspace.can_view_finance(self) and 2 not in levels:
+				levels.append(2)
+			elif not workspace.can_view_finance(self) and 2 in levels:
+				levels.remove(2)
 		return levels
 
 
@@ -22,4 +25,4 @@ def revision_query(user=None):
 	if workspace._is_admin(user) or workspace.FINANCE_READ_ROLES.intersection(workspace._roles(user)):
 		return ""
 	escaped = frappe.db.escape(user or frappe.session.user)
-	return f"EXISTS (SELECT 1 FROM `tabProject Participant` pm WHERE pm.parent=`tabProject Budget Revision`.project AND pm.parenttype='Project' AND pm.user={escaped} AND pm.access_level='Financial')"
+	return f"EXISTS (SELECT 1 FROM `tabProject` p WHERE p.name=`tabProject Budget Revision`.project AND p.project_owner={escaped})"

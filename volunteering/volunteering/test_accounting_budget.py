@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import frappe
 from frappe.model.workflow import apply_workflow
-from frappe.tests import IntegrationTestCase
+from frappe.tests import IntegrationTestCase, UnitTestCase
 
 from volunteering.volunteering.accounting_setup import (
 	ensure_accounting_roles,
@@ -27,10 +27,53 @@ from volunteering.volunteering.accounting_test_utils import (
 from volunteering.volunteering.approval_routing import get_approver_action_flags
 from volunteering.volunteering.budget_service import (
 	get_account_consumed_amount,
+	get_budget_commitment_breakdown,
 	get_budget_health,
 	get_consumed_amount,
 )
 from volunteering.volunteering.receipt_review import CHECKLIST_ITEMS, review_receipts
+
+
+class UnitTestBudgetCommitmentBreakdown(UnitTestCase):
+	@patch("volunteering.volunteering.budget_service.get_project_total_allocated", return_value=10000)
+	@patch("volunteering.volunteering.budget_service._active_budget_documents")
+	@patch("volunteering.volunteering.budget_service.frappe.get_doc")
+	def test_separates_pending_claims_approved_expenditure_and_purchase_orders(
+		self, get_doc, active_documents, _allocated
+	):
+		documents = {
+			("Expense Claim", "PENDING"): frappe._dict(
+				doctype="Expense Claim",
+				workflow_state="Pending Receipt Review",
+				expenses=[frappe._dict(default_account="Expense", amount=300)],
+			),
+			("Expense Claim", "APPROVED"): frappe._dict(
+				doctype="Expense Claim",
+				workflow_state="Approved",
+				expenses=[frappe._dict(default_account="Expense", amount=300, sanctioned_amount=250)],
+			),
+			("Purchase Order", "PO"): frappe._dict(
+				doctype="Purchase Order",
+				workflow_state="Approved",
+				items=[frappe._dict(expense_account="Expense", amount=400)],
+			),
+		}
+		active_documents.side_effect = lambda doctype, _project: {
+			"Expense Claim": [
+				frappe._dict(name="PENDING", workflow_state="Pending Receipt Review"),
+				frappe._dict(name="APPROVED", workflow_state="Approved"),
+			],
+			"Purchase Order": [frappe._dict(name="PO", workflow_state="Approved")],
+		}[doctype]
+		get_doc.side_effect = lambda doctype, name: documents[(doctype, name)]
+
+		status = get_budget_commitment_breakdown("PROJECT")
+		self.assertEqual(status["pending_claim_commitments"], 300)
+		self.assertEqual(status["purchase_order_commitments"], 400)
+		self.assertEqual(status["pending_commitments"], 700)
+		self.assertEqual(status["approved_expenditure"], 250)
+		self.assertEqual(status["total_committed"], 950)
+		self.assertEqual(status["available_after_commitments"], 9050)
 
 
 class IntegrationTestAccountingBudget(IntegrationTestCase):
@@ -49,12 +92,8 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 		frappe.db.set_single_value("Volunteering Accounting Settings", "enable_budget_warnings", 1)
 
 		cls.project = get_or_create_project_with_cost_center()
-		cls.employee_email = get_or_create_user(
-			"employee-acct@example.com", ["Employee"], "Employee User"
-		)
-		cls.manager_email = get_or_create_user(
-			"budget-mgr-acct@example.com", ["Employee"], "Budget Mgr"
-		)
+		cls.employee_email = get_or_create_user("employee-acct@example.com", ["Employee"], "Employee User")
+		cls.manager_email = get_or_create_user("budget-mgr-acct@example.com", ["Employee"], "Budget Mgr")
 		cls.reviewer_email = get_or_create_user(
 			"budget-receipt-reviewer@example.com",
 			["Expense Receipt Reviewer"],
@@ -125,6 +164,10 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 		apply_workflow(claim, "Submit")
 		consumed = get_consumed_amount(self.project)
 		self.assertGreaterEqual(consumed, 2000)
+		status = get_budget_commitment_breakdown(self.project)
+		self.assertGreaterEqual(status["pending_claim_commitments"], 2000)
+		self.assertEqual(status["total_committed"], consumed)
+		self.assertEqual(status["available_after_commitments"], status["approved_budget"] - consumed)
 
 	def test_budget_health_returns_one_project_row(self):
 		frappe.set_user("Administrator")
@@ -196,9 +239,7 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 		claim = frappe.get_doc("Expense Claim", claim.name)
 		claim.budget_override_reason = "Board-authorised exceptional expense."
 		claim.save(ignore_permissions=True)
-		with patch(
-			"volunteering.volunteering.budget_service._can_override_budget", return_value=True
-		):
+		with patch("volunteering.volunteering.budget_service._can_override_budget", return_value=True):
 			apply_workflow(claim, "Approve")
 		claim.reload()
 		self.assertEqual(claim.workflow_state, "Approved")
@@ -213,11 +254,21 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 		claim.save(ignore_permissions=True)
 		apply_workflow(claim, "Submit")
 		claim = self._review_claim(claim)
+		before_approval = get_budget_commitment_breakdown(self.project)
 
 		frappe.set_user(self.manager_email)
 		apply_workflow(frappe.get_doc("Expense Claim", claim.name), "Approve")
+		self.assertEqual(frappe.db.get_value("Expense Claim", claim.name, "workflow_state"), "Approved")
+		status = get_budget_commitment_breakdown(self.project)
 		self.assertEqual(
-			frappe.db.get_value("Expense Claim", claim.name, "workflow_state"), "Approved"
+			status["pending_claim_commitments"],
+			before_approval["pending_claim_commitments"] - 12000,
+		)
+		self.assertEqual(status["approved_expenditure"], before_approval["approved_expenditure"] + 12000)
+		self.assertEqual(status["total_committed"], before_approval["total_committed"])
+		self.assertEqual(
+			status["total_committed"],
+			status["pending_commitments"] + status["approved_expenditure"],
 		)
 
 	def test_expense_account_budget_is_independent_of_project_ceiling(self):
@@ -240,9 +291,7 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 		frappe.set_user(self.manager_email)
 		with self.assertRaises(frappe.ValidationError):
 			apply_workflow(frappe.get_doc("Expense Claim", claim.name), "Approve")
-		self.assertEqual(
-			get_account_consumed_amount(self.project, self.expense_account), before + 500
-		)
+		self.assertEqual(get_account_consumed_amount(self.project, self.expense_account), before + 500)
 
 	def test_form_has_approval_tab_and_budget_exceedance_label(self):
 		meta = frappe.get_meta("Expense Claim")

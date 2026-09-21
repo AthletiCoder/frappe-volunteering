@@ -51,9 +51,7 @@ class IntegrationTestOfficeAddresses(IntegrationTestCase):
 		super().setUpClass()
 		frappe.set_user("Administrator")
 		cls.employee_user = get_or_create_user("office-employee@example.com", ["Employee"])
-		cls.manager_user = get_or_create_user(
-			"office-manager@example.com", ["Employee", "Accounts Manager"]
-		)
+		cls.manager_user = get_or_create_user("office-manager@example.com", ["Employee", "Accounts Manager"])
 		cls.accounts_user = get_or_create_user(
 			"office-accounts-user@example.com", ["Employee", "Accounts User"]
 		)
@@ -101,21 +99,24 @@ class IntegrationTestOfficeAddresses(IntegrationTestCase):
 	def test_invoice_form_lists_addresses_and_server_replaces_forged_party_details(self):
 		frappe.set_user(self.employee_user)
 		defaults = invoices.get_invoice_generator_defaults()
-		choice = next(
-			row for row in defaults["office_addresses"] if row["name"] == self.address.name
+		choice = next(row for row in defaults["office_addresses"] if row["name"] == self.address.name)
+		self.assertEqual(
+			choice["party"]["address"], "12 Test Service Road, Near Test Market, Mumbai, Mumbai Suburban"
 		)
-		self.assertEqual(choice["party"]["address"], "12 Test Service Road, Near Test Market, Mumbai, Mumbai Suburban")
 		self.assertEqual(choice["party"]["state"], "Maharashtra")
 
 		selected = invoices._apply_selected_office_addresses(
 			{
 				"consignee_address_name": self.address.name,
 				"consignee": {"name": "Forged", "address": "Forged address"},
-				"buyer_same_as_consignee": True,
+				"buyer_same_as_consignee": False,
+				"buyer": {"name": "Forged buyer", "address": "Forged buyer address"},
 			},
 			self.employee,
 		)
 		self.assertEqual(selected["consignee"], choice["party"])
+		self.assertEqual(selected["buyer"], choice["party"])
+		self.assertTrue(selected["buyer_same_as_consignee"])
 		with self.assertRaises(frappe.ValidationError):
 			invoices._apply_selected_office_addresses(
 				{"consignee_address_name": "Not an office", "buyer_same_as_consignee": True},
@@ -133,9 +134,7 @@ class IntegrationTestOfficeAddresses(IntegrationTestCase):
 		self.assertTrue(offices.can_manage_office_addresses())
 		updated = address_details(self.address.address_title)
 		updated["address_line1"] = "34 Manager-approved Road"
-		workspace = offices.save_office_address(
-			updated, self.address.name, self.address.modified
-		)
+		workspace = offices.save_office_address(updated, self.address.name, self.address.modified)
 		changed = next(row for row in workspace["addresses"] if row.name == self.address.name)
 		self.assertEqual(changed.address_line1, "34 Manager-approved Road")
 		workspace = offices.delete_office_address(changed.name, changed.modified)
@@ -148,9 +147,7 @@ class IntegrationTestOfficeAddresses(IntegrationTestCase):
 		frappe.set_user(self.manager_user)
 		values = address_details(self.address.address_title)
 		values["disabled"] = True
-		manager_workspace = offices.save_office_address(
-			values, self.address.name, self.address.modified
-		)
+		manager_workspace = offices.save_office_address(values, self.address.name, self.address.modified)
 		self.assertIn(self.address.name, {row.name for row in manager_workspace["addresses"]})
 
 		frappe.set_user(self.employee_user)

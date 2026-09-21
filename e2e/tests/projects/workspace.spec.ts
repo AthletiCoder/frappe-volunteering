@@ -17,7 +17,9 @@ async function signIn(page: Page, email: string) {
   await page.context().clearCookies();
   await loginViaAPI(page.request, email, password);
   await page.goto("/volunteering/projects");
-  await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Approved projects" }),
+  ).toBeVisible();
 }
 
 async function api(page: Page, method: string, args = {}) {
@@ -27,11 +29,20 @@ async function api(page: Page, method: string, args = {}) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-Requested-With": "XMLHttpRequest",
           "X-Frappe-CSRF-Token": (window as any).csrf_token || "",
         },
         body: JSON.stringify(args),
       });
-      return { status: response.status, data: await response.json() };
+      const body = await response.text();
+      let data = {};
+      try {
+        data = body ? JSON.parse(body) : {};
+      } catch (_) {
+        data = { raw: body };
+      }
+      return { status: response.status, data };
     },
     { method, args },
   );
@@ -68,8 +79,15 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
     const options = (await api(page, workspaceService + "get_setup_options"))
       .data.message;
     const centre = options.cost_centres[0].name;
+    const assignedManager = options.project_managers.find(
+      (row: any) => row.name === manager,
+    );
+    expect(assignedManager).toBeTruthy();
     await expect(page.getByLabel(/^Company/)).toHaveCount(0);
     await page.getByLabel("Project name *", { exact: true }).fill(projectName);
+    await page
+      .getByLabel(/^Assigned Projects Manager \*/)
+      .selectOption(manager);
     await page
       .getByLabel("Purpose / scope *", { exact: true })
       .fill("Run a governed local programme with reviewed scope and budgets.");
@@ -84,12 +102,14 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
       .selectOption("Strict");
     await page.getByLabel(/^Total approved budget/).fill("10000");
     await page
-      .getByLabel(/^Expense-category budget control/)
+      .getByLabel(/^Expense break-up budget control/)
       .selectOption("Warn Only");
     await page
-      .getByLabel("Employee-facing label *", { exact: true })
+      .getByLabel("Expense break-up label *", { exact: true })
       .fill("Programme materials");
-    await page.getByLabel(/^Budget allocation/).fill("8000");
+    await page
+      .getByRole("spinbutton", { name: "Budget allocation (INR)" })
+      .fill("8000");
     await page
       .getByRole("button", { name: "Save draft / edits" })
       .last()
@@ -122,7 +142,10 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
       .getByRole("button", { name: "Submit for project approval" })
       .click();
     await expect(
-      page.getByText("New Project · Pending Approval"),
+      page.getByRole("heading", {
+        name: "New Project · Pending Approval",
+        exact: true,
+      }),
     ).toBeVisible();
     await expect(
       page
@@ -142,7 +165,10 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
     await signIn(page, manager);
     await page.goto(`/volunteering/projects?proposal=${proposalId}`);
     await expect(
-      page.getByText("New Project · Pending Approval"),
+      page.getByRole("heading", {
+        name: "New Project · Pending Approval",
+        exact: true,
+      }),
     ).toBeVisible();
     await page
       .getByLabel("Purpose / scope *", { exact: true })
@@ -154,7 +180,12 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
     await expect(
       page.getByRole("status").filter({ hasText: "Approved" }),
     ).toBeVisible();
-    await expect(page.getByText("New Project · Approved")).toBeVisible();
+    await expect(
+      page.getByRole("heading", {
+        name: "New Project · Approved",
+        exact: true,
+      }),
+    ).toBeVisible();
     const approved = (
       await api(page, proposalService + "get_proposal", {
         proposal: proposalId,
@@ -165,6 +196,10 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
 
     await page.getByRole("link", { name: "Open approved project" }).click();
     await expect(page).toHaveURL(new RegExp(`project=${projectId}`));
+    await expect(
+      page.getByRole("heading", { name: projectName }),
+    ).toBeVisible();
+    await expect(page.getByText(new RegExp(`^${projectId} ·`))).toBeVisible();
     await expect(
       page.getByLabel("Purpose / scope *", { exact: true }),
     ).toHaveValue("Manager-reviewed governed programme scope.");
@@ -177,6 +212,25 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
       })
     ).data.message;
     expect(project.total_approved_budget).toBe(10000);
+    expect(project.financial_status).toMatchObject({
+      approved_budget: 10000,
+      total_committed: expect.any(Number),
+      pending_commitments: expect.any(Number),
+      approved_expenditure: expect.any(Number),
+      available_after_commitments: expect.any(Number),
+    });
+    await expect(
+      page.getByRole("heading", { name: "How the budget is being used" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Pending commitments", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Approved expenditure", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Available after commitments", { exact: true }),
+    ).toBeVisible();
     expect(project.revisions).toHaveLength(1);
     financialDocumentUrl = project.attachments.find((row: any) =>
       row.file_name.startsWith("local-approved-budget"),
@@ -189,7 +243,7 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
     await signIn(page, PERSONAS.employee.email);
     await page.goto(`/volunteering/projects?project=${projectId}`);
     await expect(
-      page.getByRole("heading", { name: "Expense categories for your bills" }),
+      page.getByRole("heading", { name: "Expense break up for your bills" }),
     ).toBeVisible();
     await expect(page.getByText(/^Programme materials/)).toBeVisible();
     await expect(page.getByLabel(/^Total approved budget/)).toHaveCount(0);
@@ -204,7 +258,7 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
     ).data.message;
     expect(project.total_approved_budget).toBeUndefined();
     expect(project.account_budgets).toBeUndefined();
-    expect(project.permitted_accounts).toHaveLength(1);
+    expect(project.permitted_accounts).toHaveLength(2);
   });
 
   test("company viewer sees every approved project read-only without financials", async ({
@@ -241,6 +295,9 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
     await signIn(page, manager);
     await page.goto(`/volunteering/projects?project=${projectId}`);
     await page.getByRole("button", { name: "Propose changes" }).click();
+    await page
+      .getByLabel(/^Assigned Projects Manager \*/)
+      .selectOption(manager);
     await page.getByLabel(/^Total approved budget/).fill("12000");
     await page
       .getByLabel("Reason for this proposal / change")
@@ -258,7 +315,7 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
       })
     ).data.message;
     expect(before.total_approved_budget).toBe(10000);
-    await page.getByRole("button", { name: "Approve proposal" }).click();
+    await page.getByRole("button", { name: /^Approve/ }).click();
     await expect(
       page.getByRole("status").filter({ hasText: "Approved" }),
     ).toBeVisible();
@@ -269,6 +326,66 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
     ).data.message;
     expect(after.total_approved_budget).toBe(12000);
     expect(after.revisions).toHaveLength(2);
+  });
+
+  test("manager has separate approved, own-request and review views", async ({
+    page,
+  }) => {
+    await signIn(page, manager);
+
+    await page.goto("/volunteering/projects?view=mine");
+    await expect(
+      page.getByRole("heading", {
+        name: "Your proposals and change requests",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      page
+        .locator("button.project-tile")
+        .filter({ hasText: projectName })
+        .filter({
+          hasText: "Project Change",
+        }),
+    ).toBeVisible();
+
+    await page.goto("/volunteering/projects?view=review");
+    await expect(
+      page.getByRole("heading", {
+        name: "Review project proposals",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      page
+        .locator("button.project-tile")
+        .filter({ hasText: projectName })
+        .filter({
+          hasText: new RegExp(`New Project · Proposed by ${proposer}`),
+        }),
+    ).toBeVisible();
+    await expect(
+      page
+        .locator("button.project-tile")
+        .filter({ hasText: projectName })
+        .filter({
+          hasText: "Project Change",
+        }),
+    ).toHaveCount(0);
+
+    await page.goto("/volunteering/home");
+    await expect(
+      page.getByRole("link", { name: /Propose a project/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: /Approved projects/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: /Your proposals and change requests/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: /Review project proposals/ }),
+    ).toBeVisible();
   });
 
   test("proposal page stays usable on a narrow mobile screen", async ({

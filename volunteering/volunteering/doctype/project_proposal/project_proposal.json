@@ -1,12 +1,13 @@
 {
  "doctype": "DocType", "name": "Project Proposal", "module": "Volunteering",
  "autoname": "hash", "title_field": "title", "track_changes": 1,
- "field_order": ["title", "request_kind", "project", "proposed_by", "proposal_status", "request_reason", "base_modified", "proposal_data", "events", "decided_by", "decided_on"],
+ "field_order": ["title", "request_kind", "project", "proposed_by", "assigned_approver", "proposal_status", "request_reason", "base_modified", "proposal_data", "events", "decided_by", "decided_on"],
  "fields": [
   {"fieldname":"title","label":"Title","fieldtype":"Data","reqd":1,"in_list_view":1},
   {"fieldname":"request_kind","label":"Request Kind","fieldtype":"Select","options":"New Project\nProject Change","reqd":1,"in_list_view":1},
   {"fieldname":"project","label":"Project","fieldtype":"Link","options":"Project","read_only":1},
   {"fieldname":"proposed_by","label":"Proposed By","fieldtype":"Link","options":"User","read_only":1,"reqd":1},
+  {"fieldname":"assigned_approver","label":"Assigned Projects Manager","fieldtype":"Link","options":"User","read_only":1},
   {"fieldname":"proposal_status","label":"Status","fieldtype":"Select","options":"Draft\nPending Approval\nCorrection Required\nApproved\nRejected\nWithdrawn","reqd":1,"read_only":1,"in_list_view":1},
   {"fieldname":"request_reason","label":"Reason / Submission Note","fieldtype":"Small Text"},
   {"fieldname":"base_modified","label":"Approved Project Baseline","fieldtype":"Data","read_only":1},
@@ -17,12 +18,10 @@
  ],
  "permissions": [
   {"role":"Projects Manager","read":1,"report":1},
-  {"role":"System Manager","read":1,"report":1},
   {"role":"Project Proposer","read":1},
   {"role":"Projects User","read":1},
   {"role":"Employee","read":1},
   {"role":"Accounts Manager","read":1},
-  {"role":"Projects Manager","permlevel":2,"read":1},
-  {"role":"System Manager","permlevel":2,"read":1}
+  {"role":"Projects Manager","permlevel":2,"read":1}
  ]
 }

@@ -81,18 +81,25 @@ test.describe("SPA shell @smoke @volunteering", () => {
       await expect(page.getByRole("button", { name: /All/i })).toBeVisible();
     });
 
-    test("theme toggle flips html.dark", async ({ page }) => {
+    test("theme switch is hidden while stored preferences still apply", async ({
+      page,
+    }) => {
       const home = new HomePage(page);
       await home.goto();
       await home.expectLoaded();
-      const before = await page.evaluate(() =>
-        document.documentElement.classList.contains("dark"),
+      await expect(
+        page.getByRole("button", { name: "Toggle colour theme" }),
+      ).toHaveCount(0);
+      await page.evaluate(() =>
+        localStorage.setItem("volunteering.theme", "dark"),
       );
-      await page.getByRole("button", { name: "Toggle colour theme" }).click();
-      const after = await page.evaluate(() =>
-        document.documentElement.classList.contains("dark"),
+      await page.reload();
+      await expect(page.locator("html")).toHaveClass(/dark/);
+      await page.evaluate(() =>
+        localStorage.setItem("volunteering.theme", "light"),
       );
-      expect(after).toBe(!before);
+      await page.reload();
+      await expect(page.locator("html")).not.toHaveClass(/dark/);
     });
   });
 

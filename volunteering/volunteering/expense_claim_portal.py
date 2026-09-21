@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import json
 import math
 from pathlib import PurePath
 
@@ -32,6 +33,248 @@ MAX_EXPENSES = 10
 MAX_FILE_BYTES = 5 * 1024 * 1024
 MAX_TOTAL_FILE_BYTES = 25 * 1024 * 1024
 ALLOWED_SOURCE_VALUES = frozenset({"PERSONAL", "OWN_ADVANCE", "MANAGER_ADVANCE"})
+
+
+def _claim_stage(row) -> str:
+	"""Return a stable, employee-facing status bucket."""
+	workflow_state = cstr(row.get("workflow_state") or "Draft")
+	status = cstr(row.get("status"))
+	if cint(row.get("docstatus")) == 2 or status == "Cancelled":
+		return "Cancelled"
+	if cint(row.get("is_paid")) or status == "Paid":
+		return "Paid"
+	if workflow_state == "Pending Receipt Review":
+		return "Receipt review"
+	if workflow_state == "Receipt Correction Required":
+		return "Needs correction"
+	if workflow_state == "Pending Approval":
+		return "Manager approval"
+	if workflow_state == "Rejected" or row.get("approval_status") == "Rejected":
+		return "Rejected"
+	if workflow_state == "Approved" or row.get("approval_status") == "Approved":
+		return "Approved / unpaid"
+	return "Draft"
+
+
+def _next_claim_action(row) -> str:
+	stage = _claim_stage(row)
+	return {
+		"Draft": _("Complete and submit the claim"),
+		"Needs correction": _("Correct the receipts and resubmit"),
+		"Receipt review": _("Waiting for independent receipt review"),
+		"Manager approval": _("Waiting for manager approval"),
+		"Approved / unpaid": _("Waiting for Accounts to reimburse or settle it"),
+		"Rejected": _("Review the decision before resubmitting"),
+		"Paid": _("Complete"),
+		"Cancelled": _("Closed"),
+	}.get(stage, stage)
+
+
+def _claim_source(doc) -> str:
+	if doc.get("manager_float_advance") or doc.get("reimbursement_source") == REIMBURSEMENT_MANAGER_ADVANCE:
+		return _("Against manager's advance")
+	if doc.get("advances"):
+		return _("Against my advance")
+	return _("Paid personally")
+
+
+def _project_names(projects) -> dict[str, str]:
+	projects = sorted({cstr(project) for project in projects if project})
+	if not projects:
+		return {}
+	return {
+		row.name: row.project_name or row.name
+		for row in frappe.get_all(
+			"Project",
+			filters={"name": ["in", projects]},
+			fields=["name", "project_name"],
+			limit=500,
+		)
+	}
+
+
+def _claim_summary(row, project_names=None) -> dict:
+	project_names = project_names or {}
+	claimed = flt(row.get("total_claimed_amount"), 2)
+	sanctioned = flt(row.get("total_sanctioned_amount"), 2)
+	reimbursed = flt(row.get("total_amount_reimbursed"), 2)
+	stage = _claim_stage(row)
+	return {
+		"name": row.name,
+		"posting_date": row.posting_date,
+		"creation": row.creation,
+		"modified": row.modified,
+		"project": row.project,
+		"project_name": project_names.get(row.project) or row.project,
+		"purpose": row.get("remark") or "",
+		"currency": row.get("currency") or "INR",
+		"claimed_amount": claimed,
+		"sanctioned_amount": sanctioned,
+		"reimbursed_amount": reimbursed,
+		"outstanding_amount": max((sanctioned or claimed) - reimbursed, 0),
+		"workflow_state": row.get("workflow_state") or "Draft",
+		"receipt_review_status": row.get("receipt_review_status") or "Not Submitted",
+		"approval_status": row.get("approval_status") or "Draft",
+		"payment_status": "Paid" if stage == "Paid" else row.get("status") or "Unpaid",
+		"stage": stage,
+		"next_action": _next_claim_action(row),
+		"docstatus": cint(row.get("docstatus")),
+	}
+
+
+@frappe.whitelist(methods=["POST"])
+def get_my_expense_claims():
+	"""Employee-safe list of every claim belonging to the signed-in employee."""
+	employee = _require_employee()
+	rows = frappe.get_all(
+		"Expense Claim",
+		filters={"employee": employee},
+		fields=[
+			"name",
+			"posting_date",
+			"creation",
+			"modified",
+			"project",
+			"remark",
+			"currency",
+			"total_claimed_amount",
+			"total_sanctioned_amount",
+			"total_amount_reimbursed",
+			"workflow_state",
+			"receipt_review_status",
+			"approval_status",
+			"status",
+			"is_paid",
+			"docstatus",
+		],
+		order_by="posting_date desc, creation desc",
+		limit=500,
+	)
+	projects = _project_names(row.project for row in rows)
+	claims = [_claim_summary(row, projects) for row in rows]
+	counts = {"All": len(claims)}
+	for claim in claims:
+		counts[claim["stage"]] = counts.get(claim["stage"], 0) + 1
+	return {"employee": employee, "claims": claims, "counts": counts}
+
+
+def _expense_labels(project: str | None) -> dict[str, str]:
+	if not project:
+		return {}
+	return {
+		row.budget_key: row.employee_label
+		for row in frappe.get_all(
+			"Project Account Budget",
+			filters={
+				"parent": project,
+				"parenttype": "Project",
+				"parentfield": "account_budgets",
+			},
+			fields=["budget_key", "employee_label"],
+			limit=500,
+		)
+	}
+
+
+def _workflow_timeline(doc) -> list[dict]:
+	events = [
+		{
+			"label": _("Claim created"),
+			"when": doc.creation,
+			"by": doc.owner,
+			"detail": _("Saved as an expense claim."),
+		}
+	]
+	seen = set()
+	for version in frappe.get_all(
+		"Version",
+		filters={"ref_doctype": "Expense Claim", "docname": doc.name},
+		fields=["creation", "owner", "data"],
+		order_by="creation asc",
+		limit=200,
+	):
+		try:
+			changes = json.loads(version.data or "{}").get("changed") or []
+		except TypeError, ValueError:
+			continue
+		for change in changes:
+			if len(change) < 3 or change[0] != "workflow_state":
+				continue
+			state = cstr(change[2])
+			key = (state, str(version.creation))
+			if not state or key in seen:
+				continue
+			seen.add(key)
+			events.append(
+				{
+					"label": state,
+					"when": version.creation,
+					"by": version.owner,
+					"detail": _("Workflow status changed."),
+				}
+			)
+	if doc.get("receipt_reviewed_on"):
+		events.append(
+			{
+				"label": _("Receipt review: {0}").format(doc.get("receipt_review_status") or _("Reviewed")),
+				"when": doc.receipt_reviewed_on,
+				"by": doc.get("receipt_reviewed_by") or "",
+				"detail": doc.get("receipt_review_notes") or "",
+			}
+		)
+	if doc.get("clearance_date"):
+		events.append(
+			{
+				"label": _("Payment cleared"),
+				"when": doc.clearance_date,
+				"by": "",
+				"detail": _("The claim was marked paid or settled."),
+			}
+		)
+	return sorted(events, key=lambda event: str(event.get("when") or ""))
+
+
+@frappe.whitelist(methods=["POST"])
+def get_my_expense_claim(name: str):
+	"""Employee-safe detail for one of the signed-in employee's claims."""
+	employee = _require_employee()
+	doc = frappe.get_doc("Expense Claim", cstr(name).strip())
+	if doc.employee != employee:
+		frappe.throw(_("You can only view your own expense claims."), frappe.PermissionError)
+	projects = _project_names([doc.project])
+	labels = _expense_labels(doc.project)
+	summary = _claim_summary(doc, projects)
+	summary.update(
+		{
+			"source": _claim_source(doc),
+			"pending_with": (
+				frappe.db.get_value("User", doc.get("pending_approver"), "full_name")
+				if doc.get("pending_approver")
+				else ""
+			),
+			"receipt_reviewed_by": doc.get("receipt_reviewed_by") or "",
+			"receipt_reviewed_on": doc.get("receipt_reviewed_on"),
+			"receipt_review_notes": doc.get("receipt_review_notes") or "",
+			"clearance_date": doc.get("clearance_date"),
+			"is_emergency": cint(doc.get("is_emergency")),
+			"emergency_reason": doc.get("emergency_reason") or "",
+			"expenses": [
+				{
+					"expense_date": row.expense_date,
+					"category": labels.get(row.get("project_expense_account")) or _("Project expense"),
+					"supplier_name": row.get("supplier_name") or "",
+					"invoice_number": row.get("supplier_invoice_number") or "",
+					"description": row.description or "",
+					"amount": flt(row.amount, 2),
+					"sanctioned_amount": flt(row.sanctioned_amount, 2),
+					"receipt_attachment": row.get("receipt_attachment") or "",
+				}
+				for row in doc.expenses
+			],
+			"timeline": _workflow_timeline(doc),
+		}
+	)
+	return summary
 
 
 @frappe.whitelist(methods=["POST"])
@@ -107,7 +350,14 @@ def submit_expense_claim(payload):
 	if source not in ALLOWED_SOURCE_VALUES:
 		frappe.throw(_("Choose a valid reimbursement source."))
 
-	purpose = _text(data.get("purpose"), _("Claim purpose"), 500, required=True)
+	# Older clients may still send a claim-level purpose. The employee portal no
+	# longer asks for it because every line already requires a description and
+	# business purpose. Use those descriptions as the claim summary instead.
+	purpose = _text(data.get("purpose"), _("Claim purpose"), 500)
+	if not purpose:
+		purpose = " · ".join(dict.fromkeys(row["description"] for row in expenses))
+		if len(purpose) > 500:
+			purpose = purpose[:497].rstrip() + "..."
 	is_emergency = cint(data.get("is_emergency"))
 	emergency_reason = _text(data.get("emergency_reason"), _("Emergency reason"), 500)
 	emergency_date = data.get("emergency_date")
