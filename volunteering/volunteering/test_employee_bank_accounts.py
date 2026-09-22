@@ -14,7 +14,7 @@ from volunteering.volunteering.accounting_test_utils import (
 	get_or_create_user,
 	mute_accounting_test_emails,
 )
-from volunteering.volunteering.home_service import _bank_review_actions
+from volunteering.volunteering.home_service import _accounts_actions
 from volunteering.volunteering.test_invoice_generator import _payload
 
 
@@ -64,13 +64,21 @@ class UnitTestEmployeeBankDetails(UnitTestCase):
 
 	def test_only_accounts_manager_gets_home_review_action(self):
 		for roles, expected in (
-			(["Accounts User"], []),
+			(["Accounts User"], ["advance_disbursement", "advance_returns"]),
 			(["System Manager"], []),
-			(["Accounts Manager"], ["bank_account", "project_account_mapping"]),
+			(
+				["Accounts Manager"],
+				[
+					"advance_disbursement",
+					"advance_returns",
+					"bank_account",
+					"project_account_mapping",
+				],
+			),
 		):
 			with patch("frappe.get_roles", return_value=roles):
 				self.assertEqual(
-					[action["id"] for action in _bank_review_actions("test@example.com")], expected
+					[action["id"] for action in _accounts_actions("test@example.com")], expected
 				)
 
 

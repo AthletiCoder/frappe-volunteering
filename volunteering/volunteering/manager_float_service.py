@@ -10,7 +10,6 @@ from frappe import _
 from frappe.utils import flt
 
 from volunteering.volunteering.approval_routing import get_document_amount, get_reports_to_user
-from volunteering.volunteering.desk_routes import desk_route
 from volunteering.volunteering.employee_advance_controls import (
 	advance_residual_amount,
 	is_blocking_advance,
@@ -372,7 +371,7 @@ def get_manager_float_context(employee=None):
 			else None
 		),
 		"suggested_advance": advances[0]["name"] if advances else None,
-		"new_claim_url": desk_route("Expense Claim", "new"),
+		"new_claim_url": "/volunteering/expense-claim?reimbursement_source=MANAGER_ADVANCE",
 	}
 
 
@@ -423,7 +422,7 @@ def get_team_manager_float_requests():
 			{
 				**row,
 				"amount": amount,
-				"route": desk_route("Expense Claim", row.name),
+				"route": f"/volunteering/expense-claim-workflow?claim={row.name}",
 				"can_fund": status["eligible"],
 				"funding_message": status["message"],
 				"suggested_advance": status.get("advance_name"),

@@ -1,8 +1,12 @@
 <template>
 	<div class="max-w-5xl mx-auto">
 		<PageHeader
-			title="Submit an expense"
-			subtitle="Record project expenses, attach the bills, and send them for independent receipt review."
+			:title="isCorrection ? `Correct ${correctionName}` : 'Submit an expense'"
+			:subtitle="
+				isCorrection
+					? 'Correct the returned details or receipts, then send the claim through receipt review again.'
+					: 'Record project expenses, attach the bills, and send them for independent receipt review.'
+			"
 			eyebrow="Expenses"
 		>
 			<template #actions>
@@ -15,9 +19,16 @@
 		<div v-else-if="result" class="space-y-5">
 			<section class="form-card text-center py-8">
 				<div class="success-mark" aria-hidden="true">✓</div>
-				<h2 class="text-xl font-semibold text-ink mt-3">Sent for receipt review</h2>
+				<h2 class="text-xl font-semibold text-ink mt-3">
+					{{
+						isCorrection
+							? "Corrections sent for receipt review"
+							: "Sent for receipt review"
+					}}
+				</h2>
 				<p class="text-muted mt-2">
-					Expense Claim <strong class="text-ink">{{ result.name }}</strong> was created
+					Expense Claim <strong class="text-ink">{{ result.name }}</strong>
+					{{ isCorrection ? "was resubmitted" : "was created" }}
 					for {{ money(result.total) }}.
 				</p>
 				<p class="text-sm text-muted mt-1">
@@ -36,7 +47,12 @@
 						class="btn-primary px-5 py-2.5"
 						>Track this claim</RouterLink
 					>
-					<button type="button" class="btn-primary px-5 py-2.5" @click="startAnother">
+					<button
+						v-if="!isCorrection"
+						type="button"
+						class="btn-primary px-5 py-2.5"
+						@click="startAnother"
+					>
 						Submit another expense
 					</button>
 					<RouterLink to="/home" class="btn-secondary px-5 py-2.5"
@@ -47,6 +63,10 @@
 		</div>
 		<form v-else class="space-y-5" @submit.prevent="submitClaim">
 			<div v-if="error" class="error-box" role="alert">{{ error }}</div>
+			<div v-if="isCorrection && correctionDetail?.receipt_review_notes" class="warning-box">
+				<strong>Why correction was requested</strong>
+				<p class="mt-1 whitespace-pre-wrap">{{ correctionDetail.receipt_review_notes }}</p>
+			</div>
 
 			<section class="form-card">
 				<h2 class="form-title">Claim context</h2>
@@ -63,7 +83,7 @@
 							readonly
 							class="field-input"
 					/></label>
-					<label class="field-label sm:col-span-2"
+					<label v-if="!isCorrection" class="field-label sm:col-span-2"
 						>Project *<select
 							v-model="form.project"
 							required
@@ -80,15 +100,21 @@
 							</option>
 						</select></label
 					>
+					<label v-else class="field-label sm:col-span-2"
+						>Project<input
+							:value="correctionDetail?.project_name || correctionDetail?.project"
+							readonly
+							class="field-input"
+					/></label>
 				</div>
-				<p v-if="!defaults.projects.length" class="warning-box mt-3">
+				<p v-if="!isCorrection && !defaults.projects.length" class="warning-box mt-3">
 					No active project with mapped expense categories is available to you. A
 					Projects Manager must add you as a member and approve labels; an Accounts
 					Manager must then map them.
 				</p>
 			</section>
 
-			<section class="form-card">
+			<section v-if="!isCorrection" class="form-card">
 				<h2 class="form-title">How was this paid?</h2>
 				<div class="grid sm:grid-cols-3 gap-3">
 					<button
@@ -140,7 +166,7 @@
 				</p>
 			</section>
 
-			<section class="form-card">
+			<section v-if="!isCorrection" class="form-card">
 				<label class="flex items-start gap-3 cursor-pointer">
 					<input v-model="form.is_emergency" type="checkbox" class="mt-1" />
 					<span>
@@ -183,6 +209,7 @@
 						</p>
 					</div>
 					<button
+						v-if="!isCorrection"
 						type="button"
 						class="btn-secondary"
 						:disabled="form.expenses.length >= 10"
@@ -196,7 +223,7 @@
 					<div class="flex items-center justify-between gap-3 mb-4">
 						<h3 class="font-semibold text-ink">Expense item {{ index + 1 }}</h3>
 						<button
-							v-if="form.expenses.length > 1"
+							v-if="!isCorrection && form.expenses.length > 1"
 							type="button"
 							class="text-sm font-medium text-bad"
 							@click="removeExpense(index)"
@@ -256,7 +283,7 @@
 							>Receipt evidence *<input
 								type="file"
 								accept=".pdf,.png,.jpg,.jpeg"
-								required
+								:required="!item.receipt_attachment"
 								:disabled="readingFiles || submitting"
 								class="field-input"
 								@change="chooseReceipt($event, item)"
@@ -265,7 +292,27 @@
 					<p v-if="item.receipt_filename" class="text-xs text-muted mt-2">
 						Ready to upload privately: {{ item.receipt_filename }}
 					</p>
+					<a
+						v-else-if="item.receipt_attachment"
+						:href="item.receipt_attachment"
+						target="_blank"
+						rel="noopener"
+						class="text-sm text-accent underline mt-2 inline-block"
+						>Keep current receipt, or choose a replacement above</a
+					>
 				</article>
+			</section>
+
+			<section v-if="isCorrection" class="form-card">
+				<label class="field-label"
+					>Correction note<textarea
+						v-model.trim="form.correction_note"
+						maxlength="500"
+						rows="3"
+						class="field-input"
+						placeholder="Briefly tell the reviewer what you corrected"
+					></textarea>
+				</label>
 			</section>
 
 			<section class="form-card">
@@ -290,11 +337,17 @@
 						:disabled="
 							submitting ||
 							readingFiles ||
-							!defaults.projects.length ||
+							(!isCorrection && !defaults.projects.length) ||
 							managerFundingShortfall
 						"
 					>
-						{{ submitting ? "Submitting…" : "Submit for receipt review" }}
+						{{
+							submitting
+								? "Submitting…"
+								: isCorrection
+									? "Resubmit for receipt review"
+									: "Submit for receipt review"
+						}}
 					</button>
 				</div>
 			</section>
@@ -311,6 +364,9 @@ import { call } from "../lib/frappe";
 
 const API = "volunteering.volunteering.expense_claim_portal.";
 const route = useRoute();
+const correctionName = computed(() => String(route.query.correct || "").trim());
+const isCorrection = computed(() => Boolean(correctionName.value));
+const correctionDetail = ref(null);
 let itemKey = 1;
 let accountRequest = 0;
 const defaults = ref({
@@ -332,6 +388,7 @@ const blankExpense = () => ({
 	amount: null,
 	receipt_filename: "",
 	receipt_content: "",
+	receipt_attachment: "",
 });
 const form = reactive({
 	project: "",
@@ -340,6 +397,7 @@ const form = reactive({
 	is_emergency: false,
 	emergency_date: "",
 	emergency_reason: "",
+	correction_note: "",
 	expenses: [blankExpense()],
 });
 const accountOptions = ref([]);
@@ -387,7 +445,7 @@ const sourceChoices = computed(() => [
 	},
 ]);
 
-onMounted(loadDefaults);
+onMounted(loadForm);
 watch(
 	() => form.reimbursement_source,
 	(source) => {
@@ -411,10 +469,46 @@ async function loadDefaults() {
 			form.reimbursement_source = "OWN_ADVANCE";
 			form.employee_advance = String(route.query.employee_advance);
 		}
+		if (
+			route.query.reimbursement_source === "MANAGER_ADVANCE" &&
+			defaults.value.manager_advance.available
+		) {
+			form.reimbursement_source = "MANAGER_ADVANCE";
+		}
 		if (defaults.value.projects.length === 1) {
 			form.project = defaults.value.projects[0].value;
 			await projectChanged();
 		}
+	} catch (e) {
+		error.value = e.message || String(e);
+	} finally {
+		loading.value = false;
+	}
+}
+
+async function loadForm() {
+	await loadDefaults();
+	if (!isCorrection.value || error.value) return;
+	loading.value = true;
+	try {
+		const detail = await call(`${API}get_my_expense_claim`, { name: correctionName.value });
+		if (!detail.can_correct) throw new Error("This claim is not available for correction.");
+		correctionDetail.value = detail;
+		form.project = detail.project;
+		accountOptions.value = detail.account_options || [];
+		form.expenses = (detail.expenses || []).map((item) => ({
+			key: itemKey++,
+			name: item.name,
+			expense_date: item.expense_date,
+			account: item.account,
+			supplier_name: item.supplier_name,
+			invoice_number: item.invoice_number,
+			description: item.description,
+			amount: Number(item.amount || 0),
+			receipt_filename: "",
+			receipt_content: "",
+			receipt_attachment: item.receipt_attachment,
+		}));
 	} catch (e) {
 		error.value = e.message || String(e);
 	} finally {
@@ -488,18 +582,24 @@ function fileBase64(file) {
 async function submitClaim() {
 	if (submitting.value || readingFiles.value) return;
 	error.value = "";
-	if (form.expenses.some((item) => !item.receipt_content)) {
+	if (form.expenses.some((item) => !item.receipt_content && !item.receipt_attachment)) {
 		error.value = "Attach receipt evidence to every expense item.";
 		return;
 	}
 	submitting.value = true;
 	try {
 		// The stable key is only for Vue rendering; it is not claim data.
-		const payload = {
-			...form,
-			expenses: form.expenses.map(({ key, ...item }) => item),
-		};
-		result.value = await call(`${API}submit_expense_claim`, { payload });
+		const expenses = form.expenses.map(({ key, receipt_attachment, ...item }) => item);
+		if (isCorrection.value) {
+			result.value = await call(`${API}resubmit_expense_claim`, {
+				name: correctionName.value,
+				payload: { expenses, correction_note: form.correction_note },
+			});
+		} else {
+			const payload = { ...form, expenses };
+			delete payload.correction_note;
+			result.value = await call(`${API}submit_expense_claim`, { payload });
+		}
 		window.scrollTo({ top: 0, behavior: "smooth" });
 	} catch (e) {
 		error.value = e.message || String(e);

@@ -18,6 +18,7 @@ IGNORE_TEST_RECORD_DEPENDENCIES = [
 	"Currency",
 	"Fiscal Year",
 	"Payment Entry",
+	"Journal Entry",
 ]
 
 

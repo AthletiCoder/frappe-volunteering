@@ -138,7 +138,7 @@ def get_home_payload():
 			"money": _money_actions(pending) if flags["show_money"] else [],
 			"team": _team_actions() if flags["has_team"] else [],
 			"projects": _project_actions(flags),
-			"accounts": _bank_review_actions(user),
+			"accounts": _accounts_actions(user),
 			"organisation": _organisation_actions(),
 			"hr_management": _hr_management_actions() if flags["show_hr_management"] else [],
 			"system_management": (_system_management_actions() if flags["show_system_management"] else []),
@@ -196,10 +196,27 @@ def _team_actions():
 	]
 
 
-def _bank_review_actions(user):
-	if "Accounts Manager" not in frappe.get_roles(user):
+def _accounts_actions(user):
+	roles = set(frappe.get_roles(user))
+	if "Accounts Manager" not in roles and "Accounts User" not in roles and user != "Administrator":
 		return []
-	return [
+	links = [
+		{
+			"id": "advance_disbursement",
+			"label": _("Disburse approved advances"),
+			"hint": _("Review approved requests and record their Payment Entries."),
+			"route": "/volunteering/advance-workflow?view=disbursement",
+		},
+		{
+			"id": "advance_returns",
+			"label": _("Record unused advance returns"),
+			"hint": _("After receiving the funds, settle the unused balance against the advance."),
+			"route": "/volunteering/advance-workflow?view=return",
+		},
+	]
+	if "Accounts Manager" not in roles:
+		return links
+	return links + [
 		{
 			"id": "bank_account",
 			"label": _("Review reimbursement bank accounts"),
@@ -567,7 +584,8 @@ def _receipt_review_inbox(reviewer_employee):
 					frappe.format_value(flt(row.total_claimed_amount), "Currency"),
 				]
 			),
-			"route": desk_route("Expense Claim", row.name),
+			"route": f"/volunteering/expense-claim-workflow?claim={row.name}",
+			"bucket": "review",
 			"modified": str(row.modified or ""),
 			"raised_at": str(row.creation or ""),
 		}
@@ -674,7 +692,14 @@ def _pending_approver_inbox(doctype, kind, user):
 				"kind": kind,
 				"title": who,
 				"subtitle": " · ".join(subtitle_parts),
-				"route": desk_route(doctype, row.name),
+				"route": (
+					f"/volunteering/expense-claim-workflow?claim={row.name}"
+					if doctype == "Expense Claim"
+					else f"/volunteering/advance-workflow?advance={row.name}"
+					if doctype == "Employee Advance"
+					else desk_route(doctype, row.name)
+				),
+				"bucket": "review",
 				"modified": str(row.modified or ""),
 				"raised_at": str(row.creation or ""),
 			}
@@ -704,13 +729,32 @@ def _accounts_queues():
 		{"docstatus": 1, "outstanding_amount": [">", 0]},
 	)
 	residual = _residual_advance_count()
+	advance_disburse = sum(
+		1
+		for row in frappe.get_all(
+			"Employee Advance",
+			filters={"docstatus": 1, "workflow_state": "Approved"},
+			fields=["advance_amount", "paid_amount"],
+			limit=500,
+		)
+		if flt(row.advance_amount) - flt(row.paid_amount) > 0
+	)
+	if advance_disburse:
+		queues.append(
+			{
+				"id": "advance_disburse",
+				"label": _("Advances to disburse"),
+				"count": advance_disburse,
+				"route": "/volunteering/advance-workflow?view=disbursement",
+			}
+		)
 	if reimburse:
 		queues.append(
 			{
 				"id": "reimburse",
 				"label": _("Claims to reimburse"),
 				"count": reimburse,
-				"route": "/desk/expense-claim",
+				"route": "/volunteering/expense-claim-workflow?view=reimbursement",
 			}
 		)
 	if vendor:
@@ -728,7 +772,7 @@ def _accounts_queues():
 				"id": "residual",
 				"label": _("Advances with leftover"),
 				"count": residual,
-				"route": "/desk/query-report/Employee%20Advances%20with%20Residual",
+				"route": "/volunteering/advance-workflow?view=return",
 			}
 		)
 	return queues
@@ -743,7 +787,7 @@ def _residual_advance_count():
 		fields=["name", "advance_amount", "paid_amount", "claimed_amount", "return_amount", "status"],
 		limit=200,
 	)
-	return sum(1 for row in rows if advance_residual_amount(row) > 0)
+	return sum(1 for row in rows if flt(row.paid_amount) > 0 and advance_residual_amount(row) > 0)
 
 
 def _programs_block():

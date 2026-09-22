@@ -341,6 +341,14 @@
 					Edit draft
 				</button>
 			</div>
+			<p
+				v-if="Number(adv.paid_amount || 0) > 0 && Number(adv.residual || 0) > 0"
+				class="text-xs text-muted mt-3"
+			>
+				If you will not use the remaining amount, arrange its return with Accounts.
+				Accounts will confirm receipt and record it here; your Returned and Residual totals
+				will then update.
+			</p>
 		</div>
 
 		<div v-if="!advances.length && !loading" class="text-center text-muted py-10">

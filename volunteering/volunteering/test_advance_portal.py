@@ -20,13 +20,25 @@ from volunteering.volunteering.advance_portal import (
 	get_advance_request_form,
 	save_advance_request,
 )
+from volunteering.volunteering.advance_workflow_portal import (
+	decide_advance,
+	disburse_advance,
+	get_advance_work_item,
+	get_advance_work_queue,
+	record_advance_return,
+)
 from volunteering.volunteering.approval_routing import (
 	escalate_document,
 	get_approver_action_flags,
 	get_live_workflow_transitions,
 )
 from volunteering.volunteering.employee_advance_controls import get_grade_advance_limit_for_employee
+from volunteering.volunteering.employee_bank_accounts import (
+	review_bank_account_request,
+	submit_bank_account_request,
+)
 from volunteering.volunteering.team_portal import get_team_dashboard
+from volunteering.volunteering.test_employee_bank_accounts import details as bank_request_details
 
 
 class IntegrationTestAdvanceHome(IntegrationTestCase):
@@ -43,6 +55,12 @@ class IntegrationTestAdvanceHome(IntegrationTestCase):
 			"advance-home-employee@example.com", ["Employee"], "Advance Employee"
 		)
 		cls.other_user = get_or_create_user("advance-home-other@example.com", ["Employee"], "Other Employee")
+		cls.accounts_user = get_or_create_user(
+			"advance-home-accounts@example.com", ["Employee", "Accounts User"], "Advance Accounts"
+		)
+		cls.accounts_manager_user = get_or_create_user(
+			"advance-home-accounts-manager@example.com", ["Employee", "Accounts Manager"], "Advance Accounts Manager"
+		)
 		cls.department = get_or_create_department("Advance Home Tests")
 		cls.manager = get_or_create_employee(cls.manager_user, cls.department, "Advance Manager")
 		cls.employee = get_or_create_employee(cls.employee_user, cls.department, "Advance Employee")
@@ -181,6 +199,193 @@ class IntegrationTestAdvanceHome(IntegrationTestCase):
 		self.assertEqual(doc.workflow_state, "Pending Approval")
 		self.assertEqual(doc.pending_approver, self.manager_user)
 		self.assertEqual(doc.paid_amount, 0)
+
+	@patch("volunteering.volunteering.employee_bank_accounts.get_approved_bank_details")
+	def test_home_queue_and_decision_are_scoped_to_current_reviewer(self, bank):
+		bank.return_value = self.bank()
+		frappe.set_user(self.employee_user)
+		name = save_advance_request(self.payload(), 1)["name"]
+		self.assertEqual(get_advance_work_queue()["counts"]["approval"], 0)
+		with self.assertRaises(frappe.PermissionError):
+			get_advance_work_item(name)
+		with self.assertRaises(frappe.PermissionError):
+			decide_advance(name, "approve")
+		with self.assertRaises(frappe.PermissionError):
+			disburse_advance(name, {"amount": 500, "paid_from": "Cash - SF"})
+
+		frappe.set_user(self.other_user)
+		with self.assertRaises(frappe.PermissionError):
+			get_advance_work_item(name)
+
+		frappe.set_user(self.manager_user)
+		queue = get_advance_work_queue()
+		self.assertIn(name, [row["name"] for row in queue["queues"]["approval"]])
+		item = get_advance_work_item(name)
+		self.assertTrue(item["approval_flags"]["can_approve"])
+		self.assertEqual(item["approval_flags"]["approval_exposure"], 500)
+		self.assertNotIn("advance_account", item)
+		decide_advance(name, "approve", "Approved for project materials")
+		self.assertEqual(frappe.db.get_value("Employee Advance", name, "workflow_state"), "Approved")
+		self.assertEqual(frappe.db.get_value("Employee Advance", name, "paid_amount"), 0)
+
+	@patch("volunteering.volunteering.employee_bank_accounts.get_approved_bank_details")
+	def test_home_reviewer_uses_live_outstanding_and_cannot_skip_chain(self, bank):
+		bank.return_value = self.bank()
+		frappe.set_user(self.employee_user)
+		first = save_advance_request({**self.payload(), "amount": 1000}, 1)["name"]
+		save_advance_request({**self.payload(), "amount": 1500}, 1)
+		frappe.set_user(self.manager_user)
+		item = get_advance_work_item(first)
+		self.assertEqual(item["approval_flags"]["approval_exposure"], 2500)
+		self.assertFalse(item["approval_flags"]["can_approve"])
+		with self.assertRaisesRegex(frappe.ValidationError, "must be escalated"):
+			decide_advance(first, "approve")
+		decide_advance(first, "escalate", "Total outstanding exceeds my authority")
+		self.assertEqual(
+			frappe.db.get_value("Employee Advance", first, "pending_approver"),
+			self.approval_chain[1][0],
+		)
+		with self.assertRaises(frappe.PermissionError):
+			decide_advance(first, "reject", "Too late")
+
+	@patch("volunteering.volunteering.employee_bank_accounts.get_approved_bank_details")
+	def test_accounts_home_cash_disbursement_creates_real_payment_entry(self, bank):
+		bank.return_value = self.bank()
+		frappe.set_user(self.employee_user)
+		name = save_advance_request(self.payload(), 1)["name"]
+		frappe.set_user(self.manager_user)
+		decide_advance(name, "approve")
+		frappe.set_user(self.accounts_user)
+		queue = get_advance_work_queue()
+		self.assertIn(name, [row["name"] for row in queue["queues"]["disbursement"]])
+		item = get_advance_work_item(name)
+		cash = next((row for row in item["payment"]["accounts"] if row["type"] == "Cash"), None)
+		self.assertIsNotNone(cash)
+		with self.assertRaises(frappe.ValidationError):
+			disburse_advance(name, {"amount": 501, "paid_from": cash["value"]})
+		result = disburse_advance(
+			name,
+			{"amount": 500, "paid_from": cash["value"], "posting_date": nowdate()},
+		)
+		payment = frappe.get_doc("Payment Entry", result["payment_entry"])
+		self.assertEqual(payment.docstatus, 1)
+		self.assertEqual(payment.paid_from, cash["value"])
+		self.assertEqual(payment.party, self.employee)
+		self.assertEqual(payment.references[0].reference_doctype, "Employee Advance")
+		self.assertEqual(payment.references[0].reference_name, name)
+		self.assertEqual(frappe.db.get_value("Employee Advance", name, "paid_amount"), 500)
+		with self.assertRaises(frappe.ValidationError):
+			disburse_advance(name, {"amount": 500, "paid_from": cash["value"]})
+
+	@patch("volunteering.volunteering.employee_bank_accounts.get_approved_bank_details")
+	def test_accounts_home_records_partial_and_final_unused_advance_return(self, bank):
+		bank.return_value = self.bank()
+		frappe.set_user(self.employee_user)
+		name = save_advance_request(self.payload(), 1)["name"]
+		with self.assertRaises(frappe.PermissionError):
+			record_advance_return(name, {"amount": 100, "received_into": "Cash - SF"})
+		frappe.set_user(self.manager_user)
+		decide_advance(name, "approve")
+		frappe.set_user(self.accounts_user)
+		with self.assertRaises(frappe.ValidationError):
+			record_advance_return(name, {"amount": 100, "received_into": "Cash - SF"})
+		item = get_advance_work_item(name)
+		cash = next(row for row in item["payment"]["accounts"] if row["type"] == "Cash")
+		disburse_advance(name, {"amount": 500, "paid_from": cash["value"]})
+		self.assertIn(name, [row["name"] for row in get_advance_work_queue()["queues"]["return"]])
+		item = get_advance_work_item(name)
+		self.assertTrue(item["access"]["return"])
+		self.assertEqual(item["return_options"]["maximum"], 500)
+		with patch(
+			"volunteering.volunteering.advance_workflow_portal._pending_claim_names",
+			return_value=["HR-EXP-PENDING"],
+		):
+			with self.assertRaisesRegex(frappe.ValidationError, "Resolve claims"):
+				record_advance_return(name, {"amount": 100, "received_into": cash["value"]})
+		with self.assertRaises(frappe.ValidationError):
+			record_advance_return(name, {"amount": 501, "received_into": cash["value"]})
+		result = record_advance_return(name, {"amount": 300, "received_into": cash["value"]})
+		entry = frappe.get_doc("Journal Entry", result["journal_entry"])
+		self.assertEqual(entry.docstatus, 1)
+		self.assertEqual(entry.accounts[0].reference_name, name)
+		self.assertEqual(entry.accounts[1].account, cash["value"])
+		self.assertEqual(result["returned_amount"], 300)
+		self.assertEqual(result["residual_amount"], 200)
+		result = record_advance_return(name, {"amount": 200, "received_into": cash["value"]})
+		self.assertEqual(result["returned_amount"], 500)
+		self.assertEqual(result["residual_amount"], 0)
+		self.assertNotIn(name, [row["name"] for row in get_advance_work_queue()["queues"]["return"]])
+
+	@patch("volunteering.volunteering.employee_bank_accounts.get_approved_bank_details")
+	def test_accounts_home_bank_return_requires_receipt_reference(self, bank):
+		bank.return_value = self.bank()
+		frappe.set_user(self.employee_user)
+		name = save_advance_request(self.payload(), 1)["name"]
+		frappe.set_user(self.manager_user)
+		decide_advance(name, "approve")
+		frappe.set_user(self.accounts_user)
+		item = get_advance_work_item(name)
+		cash = next(row for row in item["payment"]["accounts"] if row["type"] == "Cash")
+		disburse_advance(name, {"amount": 500, "paid_from": cash["value"]})
+		bank_account = next(row for row in get_advance_work_item(name)["return_options"]["accounts"] if row["type"] == "Bank")
+		with self.assertRaisesRegex(frappe.ValidationError, "reference number"):
+			record_advance_return(name, {"amount": 100, "received_into": bank_account["value"]})
+		result = record_advance_return(
+			name,
+			{
+				"amount": 100,
+				"received_into": bank_account["value"],
+				"reference_no": "LOCAL-RETURN-TEST-001",
+				"reference_date": nowdate(),
+			},
+		)
+		entry = frappe.get_doc("Journal Entry", result["journal_entry"])
+		self.assertEqual(entry.docstatus, 1)
+		self.assertEqual(entry.voucher_type, "Bank Entry")
+		self.assertEqual(entry.cheque_no, "LOCAL-RETURN-TEST-001")
+		self.assertEqual(entry.accounts[1].account, bank_account["value"])
+		self.assertEqual(result["residual_amount"], 400)
+
+	def test_accounts_home_bank_disbursement_requires_approved_destination(self):
+		frappe.set_user(self.employee_user)
+		request = submit_bank_account_request(bank_request_details())
+		frappe.set_user(self.accounts_manager_user)
+		approved = review_bank_account_request(request["name"], "approve", request["modified"])
+		frappe.set_user(self.employee_user)
+		name = save_advance_request(self.payload(), 1)["name"]
+		frappe.set_user(self.manager_user)
+		decide_advance(name, "approve")
+		frappe.set_user(self.accounts_user)
+		item = get_advance_work_item(name)
+		bank = next((row for row in item["payment"]["accounts"] if row["type"] == "Bank"), None)
+		self.assertIsNotNone(bank)
+		self.assertTrue(item["payment"]["approved_bank"]["account_number_masked"].endswith("9012"))
+		self.assertNotIn("123456789012", str(item["payment"]["approved_bank"]))
+		with self.assertRaises(frappe.ValidationError):
+			disburse_advance(name, {"amount": 500, "paid_from": bank["value"]})
+		result = disburse_advance(
+			name,
+			{
+				"amount": 500,
+				"paid_from": bank["value"],
+				"reference_no": "LOCAL-ADVANCE-TEST-001",
+				"reference_date": nowdate(),
+			},
+		)
+		payment = frappe.get_doc("Payment Entry", result["payment_entry"])
+		self.assertEqual(payment.docstatus, 1)
+		self.assertEqual(payment.party_bank_account, approved["bank_account"])
+		self.assertEqual(payment.reference_no, "LOCAL-ADVANCE-TEST-001")
+		self.assertTrue(
+			frappe.db.exists(
+				"Comment",
+				{
+					"reference_doctype": "Payment Entry",
+					"reference_name": payment.name,
+					"owner": self.accounts_user,
+				},
+			)
+		)
 
 	def test_approved_bank_is_required_server_side(self):
 		frappe.set_user(self.employee_user)

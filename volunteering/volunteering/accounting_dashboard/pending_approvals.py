@@ -206,7 +206,13 @@ def _enrich_action(row, user, roles):
 			"modified": modified,
 			"modified_label": formatdate(modified),
 			"available_actions": available_actions,
-			"route": f"/desk/{frappe.scrub(row.reference_doctype)}/{row.reference_name}",
+			"route": (
+				f"/volunteering/advance-workflow?advance={row.reference_name}"
+				if row.reference_doctype == "Employee Advance"
+				else f"/volunteering/expense-claim-workflow?claim={row.reference_name}"
+				if row.reference_doctype == "Expense Claim"
+				else f"/desk/{frappe.scrub(row.reference_doctype)}/{row.reference_name}"
+			),
 		}
 	)
 	return row

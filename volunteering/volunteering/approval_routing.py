@@ -589,7 +589,13 @@ def notify_pending_approvers(doc):
 		return
 
 	subject = _("Approval required: {0} {1}").format(doc.doctype, doc.name)
-	link = frappe.utils.get_url_to_form(doc.doctype, doc.name)
+	link = (
+		frappe.utils.get_url(f"/volunteering/expense-claim-workflow?claim={doc.name}")
+		if doc.doctype == "Expense Claim"
+		else frappe.utils.get_url(f"/volunteering/advance-workflow?advance={doc.name}")
+		if doc.doctype == "Employee Advance"
+		else frappe.utils.get_url_to_form(doc.doctype, doc.name)
+	)
 	message = _('{0} <a href="{1}">{2}</a> is awaiting your approval at stage: {3}.').format(
 		doc.doctype, link, doc.name, doc.workflow_state
 	)

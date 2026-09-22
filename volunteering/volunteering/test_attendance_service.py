@@ -212,6 +212,9 @@ class IntegrationTestAttendanceService(IntegrationTestCase):
 
 	def test_approved_leave_marks_on_leave(self):
 		leave_date = self.attendance_date
+		leave_approver = (
+			frappe.db.get_value("Employee", self.employee, "leave_approver") or "Administrator"
+		)
 		leave_type = (
 			frappe.db.get_single_value("Leave Policy Settings", "default_leave_type")
 			or "Privilege Leave"
@@ -233,6 +236,7 @@ class IntegrationTestAttendanceService(IntegrationTestCase):
 				"employee": self.employee,
 				"leave_type": leave_type,
 				"leave_category": "Emergency",
+				"leave_approver": leave_approver,
 				"from_date": leave_date,
 				"to_date": leave_date,
 				"status": "Approved",
@@ -248,6 +252,9 @@ class IntegrationTestAttendanceService(IntegrationTestCase):
 
 	def test_leave_takes_priority_over_hours(self):
 		leave_date = self.attendance_date
+		leave_approver = (
+			frappe.db.get_value("Employee", self.employee, "leave_approver") or "Administrator"
+		)
 		leave_type = (
 			frappe.db.get_single_value("Leave Policy Settings", "default_leave_type")
 			or "Privilege Leave"
@@ -270,6 +277,7 @@ class IntegrationTestAttendanceService(IntegrationTestCase):
 				"employee": self.employee,
 				"leave_type": leave_type,
 				"leave_category": "Emergency",
+				"leave_approver": leave_approver,
 				"from_date": leave_date,
 				"to_date": leave_date,
 				"status": "Approved",

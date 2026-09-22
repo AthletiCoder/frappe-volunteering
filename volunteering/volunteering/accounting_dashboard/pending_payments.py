@@ -42,7 +42,7 @@ def get_pending_reimbursements():
 	for row in claims:
 		row.amount = flt(row.grand_total or row.total_claimed_amount)
 		row.modified_label = formatdate(row.modified)
-		row.route = f"/desk/expense-claim/{row.name}"
+		row.route = f"/volunteering/expense-claim-workflow?claim={row.name}"
 
 	return claims
 

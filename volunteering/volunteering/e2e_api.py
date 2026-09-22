@@ -499,11 +499,35 @@ def cleanup_leave_span(employee, from_date, to_date):
 
 @frappe.whitelist()
 def cleanup_employee_advances(employee):
-	"""Cancel and delete advances so leftover-unsettled cases start clean."""
+	"""Remove fictional advances and their accounting documents for isolated E2E runs."""
 	_guard_e2e()
 	names = frappe.get_all("Employee Advance", filters={"employee": employee}, pluck="name")
 	for name in names:
 		try:
+			# Cancel returns before disbursements so HRMS recomputes return/paid totals
+			# in a valid order. Force-deleting only the advance leaves submitted
+			# Advance Payment Ledger rows behind and can poison a reused test name.
+			journal_entries = frappe.get_all(
+				"Journal Entry Account",
+				filters={"reference_type": "Employee Advance", "reference_name": name},
+				pluck="parent",
+			)
+			payment_entries = frappe.get_all(
+				"Payment Entry Reference",
+				filters={"reference_doctype": "Employee Advance", "reference_name": name},
+				pluck="parent",
+			)
+			for doctype, linked_names in (
+				("Journal Entry", list(dict.fromkeys(journal_entries))),
+				("Payment Entry", list(dict.fromkeys(payment_entries))),
+			):
+				for linked_name in linked_names:
+					linked = frappe.get_doc(doctype, linked_name)
+					if linked.docstatus == 1:
+						linked.flags.ignore_permissions = True
+						with _skip_doc_perm_checks():
+							linked.cancel()
+					frappe.delete_doc(doctype, linked_name, force=1, ignore_permissions=True)
 			doc = frappe.get_doc("Employee Advance", name)
 			if doc.docstatus == 1:
 				doc.flags.ignore_permissions = True

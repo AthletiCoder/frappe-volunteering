@@ -24,6 +24,11 @@ from volunteering.volunteering.accounting_test_utils import (
 	set_employee_grade,
 )
 from volunteering.volunteering.approval_routing import PENDING_APPROVAL, escalate_document
+from volunteering.volunteering.expense_claim_workflow_portal import (
+	decide_expense_claim,
+	get_expense_claim_work_item,
+	get_expense_claim_work_queue,
+)
 from volunteering.volunteering.receipt_review import (
 	CHECKLIST_ITEMS,
 	PENDING_RECEIPT_REVIEW,
@@ -62,15 +67,9 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 		ensure_workflow_actions()
 
 		cls.project = get_or_create_project_with_cost_center()
-		cls.employee_email = get_or_create_user(
-			"employee-acct@example.com", ["Employee"], "Employee User"
-		)
-		cls.manager_email = get_or_create_user(
-			"manager-acct@example.com", ["Employee"], "Manager User"
-		)
-		cls.director_email = get_or_create_user(
-			"director-acct@example.com", ["Employee"], "Director User"
-		)
+		cls.employee_email = get_or_create_user("employee-acct@example.com", ["Employee"], "Employee User")
+		cls.manager_email = get_or_create_user("manager-acct@example.com", ["Employee"], "Manager User")
+		cls.director_email = get_or_create_user("director-acct@example.com", ["Employee"], "Director User")
 		cls.reviewer_email = get_or_create_user(
 			"receipt-reviewer-acct@example.com",
 			["Expense Receipt Reviewer"],
@@ -84,9 +83,7 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 		)
 		cls.department = get_or_create_department("Operations", cls.manager_email)
 		cls.employee = get_or_create_employee(cls.employee_email, cls.department)
-		cls.manager_employee = get_or_create_employee(
-			cls.manager_email, cls.department, "Manager Employee"
-		)
+		cls.manager_employee = get_or_create_employee(cls.manager_email, cls.department, "Manager Employee")
 		cls.director_employee = get_or_create_employee(
 			cls.director_email, cls.department, "Director Employee"
 		)
@@ -143,9 +140,7 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 		)
 		return frappe.get_doc("Expense Claim", claim.name)
 
-	def _submit_claim_as(
-		self, user, amount=1500, employee=None, vendor_reason=None, review=True
-	):
+	def _submit_claim_as(self, user, amount=1500, employee=None, vendor_reason=None, review=True):
 		employee = employee or self.employee
 		frappe.set_user(user)
 		claim = make_expense_claim(employee, self.project, amount=amount, owner=user)
@@ -180,6 +175,36 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 		self.assertEqual(approved.workflow_state, "Approved")
 		self.assertEqual(approved.docstatus, 1)
 
+	def test_home_queue_and_partial_sanction_use_the_real_workflow(self):
+		claim = self._submit_claim_as(self.employee_email, amount=1500, review=False)
+		frappe.set_user(self.reviewer_email)
+		queue = get_expense_claim_work_queue()
+		self.assertIn(claim.name, [row["name"] for row in queue["queues"]["receipt_review"]])
+
+		claim = self._review_claim(claim)
+		frappe.set_user(self.manager_email)
+		queue = get_expense_claim_work_queue()
+		self.assertIn(claim.name, [row["name"] for row in queue["queues"]["approval"]])
+		item = get_expense_claim_work_item(claim.name)
+		self.assertTrue(item["access"]["approval"])
+		self.assertTrue(item["approval_flags"]["can_approve"])
+		decide_expense_claim(
+			claim.name,
+			"approve",
+			{item["expenses"][0]["name"]: 1200},
+			"Partial sanction from Home.",
+		)
+		claim.reload()
+		self.assertEqual(claim.workflow_state, "Approved")
+		self.assertEqual(claim.docstatus, 1)
+		self.assertEqual(claim.total_sanctioned_amount, 1200)
+
+	def test_home_work_item_rejects_unrelated_employee(self):
+		claim = self._submit_claim_as(self.employee_email, amount=1500, review=False)
+		frappe.set_user(self.director_email)
+		with self.assertRaises(frappe.PermissionError):
+			get_expense_claim_work_item(claim.name)
+
 	def test_reviewer_cannot_edit_claim_and_incomplete_checklist_is_rejected(self):
 		claim = self._submit_claim_as(self.employee_email, amount=1500, review=False)
 		frappe.set_user(self.reviewer_email)
@@ -194,9 +219,7 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 
 	def test_reviewer_role_has_no_accounts_or_payment_access(self):
 		self.assertFalse(frappe.has_permission("Account", "read", user=self.reviewer_email))
-		self.assertFalse(
-			frappe.has_permission("Payment Entry", "create", user=self.reviewer_email)
-		)
+		self.assertFalse(frappe.has_permission("Payment Entry", "create", user=self.reviewer_email))
 
 	def test_receipt_correction_and_resubmission_clear_prior_review(self):
 		claim = self._submit_claim_as(self.employee_email, amount=1500, review=False)
@@ -275,9 +298,7 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 
 	def test_own_claim_skips_self_approval(self):
 		# Manager's own claim must not route to themselves.
-		claim = self._submit_claim_as(
-			self.manager_email, amount=500, employee=self.manager_employee
-		)
+		claim = self._submit_claim_as(self.manager_email, amount=500, employee=self.manager_employee)
 		self.assertEqual(claim.workflow_state, PENDING_APPROVAL)
 		self.assertEqual(claim.pending_approver, self.director_email)
 

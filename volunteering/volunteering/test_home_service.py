@@ -12,7 +12,7 @@ from volunteering.volunteering.home_access import (
 	require_logged_in_or_redirect,
 )
 from volunteering.volunteering.home_service import (
-	_bank_review_actions,
+	_accounts_actions,
 	_compose_todos,
 	_employee_draft_todos,
 	_money_actions,
@@ -137,9 +137,11 @@ class UnitTestHomePayload(UnitTestCase):
 		return_value=["Accounts User", "Accounts Manager"],
 	)
 	def test_accounts_manager_home_includes_project_label_mapping(self, _roles):
-		actions = _bank_review_actions("accounts@example.com")
+		actions = _accounts_actions("accounts@example.com")
 		mapping = next(row for row in actions if row["id"] == "project_account_mapping")
 		self.assertEqual(mapping["route"], "/volunteering/project-account-mapping")
+		returns = next(row for row in actions if row["id"] == "advance_returns")
+		self.assertEqual(returns["route"], "/volunteering/advance-workflow?view=return")
 
 	@patch("volunteering.volunteering.home_service.get_grade_for_user", return_value=None)
 	@patch("volunteering.volunteering.home_service.get_employee_for_user", return_value=None)

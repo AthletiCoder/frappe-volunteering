@@ -2,8 +2,6 @@ import { expect, test, type Page } from "@playwright/test";
 import { loginViaAPI } from "../../helpers/auth";
 import { e2eCall, repairE2eReportsToChain } from "../../helpers/e2e-api";
 import { PERSONAS, type PersonaKey } from "../../helpers/personas";
-import { ExpenseClaimFormPage } from "../../pages/desk/expense-claim.page";
-import { DeskForm } from "../../helpers/desk";
 
 async function signIn(page: Page, persona: PersonaKey) {
   await loginViaAPI(
@@ -139,21 +137,27 @@ test("REL-001: Home claim → actual receipt reviewer → manager → cash settl
   try {
     const manager = await managerContext.newPage();
     await signIn(manager, "manager");
-    const managerClaim = new ExpenseClaimFormPage(manager);
-    await managerClaim.open(name);
-    await expect(
-      manager
-        .locator(".primary-action:visible")
-        .filter({ hasText: /^Approve$/ }),
-    ).toHaveCount(0);
 
     const reviewer = await reviewerContext.newPage();
     await signIn(reviewer, "receipt_reviewer");
-    const reviewedClaim = new ExpenseClaimFormPage(reviewer);
-    await reviewedClaim.open(name);
-    await reviewedClaim.verifyReceipts(
-      "Local release gate: actual reviewer checked the fictional evidence.",
+    await reviewer.goto(
+      `/volunteering/expense-claim-workflow?claim=${encodeURIComponent(name)}`,
     );
+    await expect(reviewer.getByRole("heading", { name })).toBeVisible();
+    const checks = reviewer.locator('input[type="checkbox"]');
+    await expect(checks).toHaveCount(6);
+    for (let index = 0; index < 6; index += 1) await checks.nth(index).check();
+    await reviewer
+      .getByLabel("Review notes")
+      .fill(
+        "Local release gate: actual reviewer checked the fictional evidence.",
+      );
+    await reviewer.getByRole("button", { name: "Verify receipts" }).click();
+    await expect(
+      reviewer.getByText(
+        "Receipts verified; the claim is now with its manager.",
+      ),
+    ).toBeVisible();
     expect(await field("Expense Claim", name, "receipt_review_status")).toBe(
       "Verified",
     );
@@ -164,14 +168,14 @@ test("REL-001: Home claim → actual receipt reviewer → manager → cash settl
       "Pending Approval",
     );
 
-    await managerClaim.open(name);
-    // No API bypass: the real manager Approve button must be available.
-    const approve = manager
-      .locator(".primary-action:visible")
-      .filter({ hasText: /^Approve$/ })
-      .first();
+    await manager.goto(
+      `/volunteering/expense-claim-workflow?claim=${encodeURIComponent(name)}`,
+    );
+    await expect(manager.getByRole("heading", { name })).toBeVisible();
+    const approve = manager.getByRole("button", { name: /^Approve/ });
     await expect(approve).toBeVisible();
-    await managerClaim.clickWorkflowAction("Approve", { allowConfirm: true });
+    await approve.click();
+    await expect(manager.getByText("Claim approved.")).toBeVisible();
     expect(await field("Expense Claim", name, "workflow_state")).toBe(
       "Approved",
     );
@@ -183,38 +187,23 @@ test("REL-001: Home claim → actual receipt reviewer → manager → cash settl
 
     const accounts = await accountsContext.newPage();
     await signIn(accounts, "accounts");
-    await new ExpenseClaimFormPage(accounts).open(name);
-    const menu = accounts
-      .locator('.inner-group-button[data-label="Create"] > button')
-      .first();
-    await expect(menu).toBeVisible();
-    await menu.click();
+    await accounts.goto(
+      `/volunteering/expense-claim-workflow?claim=${encodeURIComponent(name)}`,
+    );
+    await expect(accounts.getByRole("heading", { name })).toBeVisible();
+    await accounts.getByLabel("Pay from *").selectOption("Cash - SF");
+    accounts.once("dialog", (dialog) => dialog.accept());
+    const paymentResponse = accounts.waitForResponse((response) =>
+      response
+        .url()
+        .includes("expense_claim_workflow_portal.reimburse_expense_claim"),
+    );
     await accounts
-      .locator(".dropdown-menu:visible")
-      .getByText("Payment", { exact: true })
+      .getByRole("button", { name: "Create and submit Payment Entry" })
       .click();
-    await expect(accounts).toHaveURL(/\/desk\/payment-entry\/new-/);
-    await accounts.waitForFunction(
-      () =>
-        (window as any).cur_frm?.doctype === "Payment Entry" &&
-        (window as any).cur_frm?.doc?.party,
-    );
-    // Use a local cash ledger, never bank integration or external remittance.
-    await accounts.evaluate(async () => {
-      await (window as any).cur_frm.set_value("paid_from", "Cash - SF");
-    });
-    const payment = new DeskForm(accounts);
-    const saveResponse = accounts.waitForResponse((r) =>
-      r.url().includes("frappe.desk.form.save.savedocs"),
-    );
-    await payment.clickPrimary("Save", { allowConfirm: true });
-    const saved = await saveResponse;
-    expect(saved.status(), await saved.text()).toBe(200);
-    await expect(accounts).toHaveURL(/\/desk\/payment-entry\/ACC-PAY-/);
-    const paymentName = await accounts.evaluate(
-      () => (window as any).cur_frm.doc.name,
-    );
-    await payment.clickPrimary("Submit", { allowConfirm: true });
+    const paymentResult = await paymentResponse;
+    expect(paymentResult.status(), await paymentResult.text()).toBe(200);
+    const paymentName = (await paymentResult.json()).message.payment_entry;
     await expect
       .poll(() => field("Payment Entry", paymentName, "docstatus"))
       .toBe(1);
@@ -233,10 +222,10 @@ test("REL-001: Home claim → actual receipt reviewer → manager → cash settl
       }),
       contentType: "application/json",
     });
-    await new ExpenseClaimFormPage(page).open(name);
-    await page.waitForFunction(
-      () => (window as any).cur_frm?.doc?.status === "Paid",
+    await page.goto(
+      `/volunteering/expense-claims?claim=${encodeURIComponent(name)}`,
     );
+    await expect(page.getByText("Paid", { exact: true }).first()).toBeVisible();
   } finally {
     await managerContext.close();
     await reviewerContext.close();

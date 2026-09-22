@@ -244,6 +244,10 @@ def get_my_expense_claim(name: str):
 	projects = _project_names([doc.project])
 	labels = _expense_labels(doc.project)
 	summary = _claim_summary(doc, projects)
+	can_correct = doc.docstatus == 0 and doc.workflow_state in (
+		"Receipt Correction Required",
+		"Rejected",
+	)
 	summary.update(
 		{
 			"source": _claim_source(doc),
@@ -258,8 +262,14 @@ def get_my_expense_claim(name: str):
 			"clearance_date": doc.get("clearance_date"),
 			"is_emergency": cint(doc.get("is_emergency")),
 			"emergency_reason": doc.get("emergency_reason") or "",
+			"can_correct": can_correct,
+			"account_options": _account_options(frappe.get_doc("Project", doc.project))
+			if can_correct
+			else [],
 			"expenses": [
 				{
+					"name": row.name,
+					"account": row.get("project_expense_account") or "",
 					"expense_date": row.expense_date,
 					"category": labels.get(row.get("project_expense_account")) or _("Project expense"),
 					"supplier_name": row.get("supplier_name") or "",
@@ -425,6 +435,133 @@ def submit_expense_claim(payload):
 		"total": flt(doc.total_claimed_amount),
 		"warnings": warnings,
 	}
+
+
+@frappe.whitelist(methods=["POST"])
+def resubmit_expense_claim(name: str, payload):
+	"""Correct an employee's returned/rejected claim and re-enter receipt review.
+
+	Project, employee and reimbursement source stay server-controlled.  Employees
+	may correct the item facts, amount/category and replace any receipt evidence.
+	"""
+	employee = _require_employee()
+	doc = frappe.get_doc("Expense Claim", cstr(name).strip())
+	if doc.employee != employee:
+		frappe.throw(_("You can only correct your own expense claims."), frappe.PermissionError)
+	if doc.docstatus != 0 or doc.workflow_state not in ("Receipt Correction Required", "Rejected"):
+		frappe.throw(_("This expense claim is not available for correction."))
+	data = frappe.parse_json(payload)
+	if not isinstance(data, dict) or set(data) - {"expenses", "correction_note"}:
+		frappe.throw(_("The corrected expense claim contains unsupported fields."))
+	items = data.get("expenses")
+	if not isinstance(items, list) or len(items) != len(doc.expenses):
+		frappe.throw(_("Correct every existing expense item; items cannot be added or removed here."))
+
+	project = frappe.get_doc("Project", doc.project)
+	if not any(row.user == frappe.session.user for row in project.get("project_participants") or []):
+		frappe.throw(_("You must still be a listed member of this Project."), frappe.PermissionError)
+	if project.company != doc.company:
+		frappe.throw(_("The claim Project belongs to a different Company."))
+	allowed_accounts = {row["value"] for row in _account_options(project)}
+	current = {row.name: row for row in doc.expenses}
+	replacements = []
+	total = 0.0
+	for index, item in enumerate(items):
+		if not isinstance(item, dict):
+			frappe.throw(_("Corrected expense item {0} is invalid.").format(index + 1))
+		allowed = {
+			"name",
+			"expense_date",
+			"account",
+			"supplier_name",
+			"invoice_number",
+			"description",
+			"amount",
+			"receipt_filename",
+			"receipt_content",
+		}
+		if set(item) - allowed:
+			frappe.throw(_("Corrected expense item {0} contains unsupported fields.").format(index + 1))
+		row = current.get(cstr(item.get("name")))
+		if not row:
+			frappe.throw(_("The corrected expense items do not match this claim."))
+		account = cstr(item.get("account")).strip()
+		if account not in allowed_accounts:
+			frappe.throw(
+				_("Expense item {0} uses a category that is not available for this Project.").format(
+					index + 1
+				),
+				frappe.PermissionError,
+			)
+		expense_date = getdate(item.get("expense_date") or row.expense_date)
+		if expense_date > getdate(nowdate()):
+			frappe.throw(_("Expense item {0} cannot use a future date.").format(index + 1))
+		amount = flt(item.get("amount"), 2)
+		if not math.isfinite(amount) or amount <= 0 or amount > 999_999_999:
+			frappe.throw(_("Enter a valid positive amount for expense item {0}.").format(index + 1))
+
+		row.expense_date = expense_date
+		row.project_expense_account = account
+		row.description = _text(item.get("description"), _("Description"), 1000, required=True)
+		row.supplier_name = _text(item.get("supplier_name"), _("Supplier / payee"), 160)
+		row.supplier_invoice_number = _text(item.get("invoice_number"), _("Receipt / invoice number"), 100)
+		row.amount = amount
+		row.sanctioned_amount = amount
+		total += amount
+		if item.get("receipt_filename") or item.get("receipt_content"):
+			replacements.append((index, row, _receipt(item, index + 1), row.get("receipt_attachment")))
+		elif not _receipt_file_exists(doc.name, row.get("receipt_attachment")):
+			frappe.throw(_("Attach receipt evidence for expense item {0}.").format(index + 1))
+
+	doc.remark = " · ".join(dict.fromkeys(row.description for row in doc.expenses))[:500]
+	if doc.get("advances"):
+		advance_name = doc.advances[0].employee_advance
+		doc.set("advances", [])
+		_attach_own_advance(doc, advance_name, employee, flt(total, 2))
+	doc.save()
+
+	for index, row, file_data, old_url in replacements:
+		file_doc = _attach_receipt(doc.name, index, file_data)
+		frappe.db.set_value(row.doctype, row.name, "receipt_attachment", file_doc.file_url)
+		old_file = frappe.db.get_value(
+			"File",
+			{
+				"file_url": old_url,
+				"attached_to_doctype": "Expense Claim",
+				"attached_to_name": doc.name,
+			},
+			"name",
+		)
+		if old_file:
+			frappe.delete_doc("File", old_file, ignore_permissions=True)
+	doc.reload()
+	if doc.workflow_state in ("Receipt Correction Required", "Rejected"):
+		apply_workflow(doc, "Re-submit")
+		doc.reload()
+	note = _text(data.get("correction_note"), _("Correction note"), 500)
+	if note:
+		doc.add_comment("Comment", _("Employee correction: {0}").format(note))
+	return {
+		"name": doc.name,
+		"workflow_state": doc.workflow_state,
+		"receipt_review_status": doc.get("receipt_review_status"),
+		"total": flt(doc.total_claimed_amount, 2),
+	}
+
+
+def _receipt_file_exists(claim_name: str, file_url: str | None) -> bool:
+	return bool(
+		file_url
+		and frappe.db.exists(
+			"File",
+			{
+				"file_url": file_url,
+				"attached_to_doctype": "Expense Claim",
+				"attached_to_name": claim_name,
+				"is_private": 1,
+			},
+		)
+	)
 
 
 def _require_employee() -> str:

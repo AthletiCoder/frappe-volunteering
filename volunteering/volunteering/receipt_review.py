@@ -38,6 +38,7 @@ CHECKLIST_ITEMS = (
 	("tax_details", "Tax/GST details were checked where applicable"),
 )
 
+
 def _receipt_files(claim_name: str) -> list[frappe._dict]:
 	return frappe.get_all(
 		"File",
@@ -66,15 +67,11 @@ def _validate_receipt_files(claim_name: str) -> list[frappe._dict]:
 
 	if invalid:
 		frappe.throw(
-			_("Receipts must be PDF, PNG, JPG, or JPEG files. Unsupported: {0}").format(
-				", ".join(invalid)
-			)
+			_("Receipts must be PDF, PNG, JPG, or JPEG files. Unsupported: {0}").format(", ".join(invalid))
 		)
 	if public:
 		frappe.throw(
-			_("Receipts must be uploaded as private files. Public files: {0}").format(
-				", ".join(public)
-			)
+			_("Receipts must be uploaded as private files. Public files: {0}").format(", ".join(public))
 		)
 	return files
 
@@ -106,8 +103,7 @@ def _parse_checklist(checklist) -> dict[str, bool]:
 
 def _checklist_text(checklist: dict[str, bool]) -> str:
 	return "\n".join(
-		f"{'Verified' if checklist.get(key) else 'Not verified'}: {label}"
-		for key, label in CHECKLIST_ITEMS
+		f"{'Verified' if checklist.get(key) else 'Not verified'}: {label}" for key, label in CHECKLIST_ITEMS
 	)
 
 
@@ -148,9 +144,7 @@ def prepare_receipt_review_on_save(doc, method=None):
 		doc.pending_approver = None
 		doc.expense_approver = None
 
-	if previous_state == PENDING_RECEIPT_REVIEW and not getattr(
-		doc.flags, "receipt_review_action", False
-	):
+	if previous_state == PENDING_RECEIPT_REVIEW and not getattr(doc.flags, "receipt_review_action", False):
 		frappe.throw(
 			_(
 				"This claim is awaiting receipt review and cannot be edited. "
@@ -169,9 +163,7 @@ def validate_verified_receipts(doc, method=None):
 		frappe.throw(_("Receipt review must be Verified before manager approval."))
 	files = _validate_receipt_files(doc.name)
 	if doc.get("reviewed_attachments") != _attachment_snapshot(files):
-		frappe.throw(
-			_("Receipts changed after verification. Send the claim through receipt review again.")
-		)
+		frappe.throw(_("Receipts changed after verification. Send the claim through receipt review again."))
 
 
 def _manager_routing_values(doc) -> dict:
@@ -232,15 +224,11 @@ def review_receipts(name: str, decision: str, notes: str = "", checklist=None):
 		missing = [label for key, label in CHECKLIST_ITEMS if not parsed_checklist.get(key)]
 		if missing:
 			frappe.throw(
-				_("Complete every receipt review check before verification: {0}").format(
-					", ".join(missing)
-				)
+				_("Complete every receipt review check before verification: {0}").format(", ".join(missing))
 			)
 		values["receipt_review_status"] = REVIEW_STATUS_VERIFIED
 		if legacy_approved:
-			comment = _("Legacy approved claim receipts retrospectively verified by {0}.").format(
-				user
-			)
+			comment = _("Legacy approved claim receipts retrospectively verified by {0}.").format(user)
 		else:
 			values.update(_manager_routing_values(doc))
 			values["workflow_state"] = "Pending Approval"
@@ -285,13 +273,13 @@ def _notify_employee_correction(doc, notes: str):
 	recipient = get_requester_user(doc)
 	if not recipient or recipient in ("Guest", "Administrator"):
 		return
-	link = frappe.utils.get_url_to_form(doc.doctype, doc.name)
+	link = frappe.utils.get_url(f"/volunteering/expense-claim?correct={doc.name}")
 	frappe.sendmail(
 		recipients=[recipient],
 		subject=_("Receipt correction required: Expense Claim {0}").format(doc.name),
-		message=_(
-			'Your expense claim <a href="{0}">{1}</a> needs receipt correction.<br><br>{2}'
-		).format(link, doc.name, frappe.utils.escape_html(notes)),
+		message=_('Your expense claim <a href="{0}">{1}</a> needs receipt correction.<br><br>{2}').format(
+			link, doc.name, frappe.utils.escape_html(notes)
+		),
 		reference_doctype=doc.doctype,
 		reference_name=doc.name,
 	)
@@ -308,18 +296,14 @@ def notify_receipt_reviewers(doc):
 		},
 		pluck="parent",
 	)
-	recipients = [
-		user for user in sorted(set(recipients)) if frappe.db.get_value("User", user, "enabled")
-	]
+	recipients = [user for user in sorted(set(recipients)) if frappe.db.get_value("User", user, "enabled")]
 	if not recipients:
 		return
-	link = frappe.utils.get_url_to_form(doc.doctype, doc.name)
+	link = frappe.utils.get_url(f"/volunteering/expense-claim-workflow?claim={doc.name}")
 	frappe.sendmail(
 		recipients=recipients,
 		subject=_("Receipt review required: Expense Claim {0}").format(doc.name),
-		message=_(
-			'Expense Claim <a href="{0}">{1}</a> is awaiting receipt review.'
-		).format(link, doc.name),
+		message=_('Expense Claim <a href="{0}">{1}</a> is awaiting receipt review.').format(link, doc.name),
 		reference_doctype=doc.doctype,
 		reference_name=doc.name,
 	)
@@ -327,9 +311,7 @@ def notify_receipt_reviewers(doc):
 
 def validate_receipt_file_change(file_doc, method=None):
 	"""Approved claims retain immutable audit evidence."""
-	if file_doc.get("attached_to_doctype") != "Expense Claim" or not file_doc.get(
-		"attached_to_name"
-	):
+	if file_doc.get("attached_to_doctype") != "Expense Claim" or not file_doc.get("attached_to_name"):
 		return
 	claim = frappe.db.get_value(
 		"Expense Claim",
@@ -348,9 +330,7 @@ def validate_receipt_file_change(file_doc, method=None):
 
 def reset_review_after_file_change(file_doc, method=None):
 	"""Any attachment mutation before approval invalidates prior verification."""
-	if file_doc.get("attached_to_doctype") != "Expense Claim" or not file_doc.get(
-		"attached_to_name"
-	):
+	if file_doc.get("attached_to_doctype") != "Expense Claim" or not file_doc.get("attached_to_name"):
 		return
 	name = file_doc.attached_to_name
 	claim = frappe.db.get_value(
@@ -396,17 +376,14 @@ def get_receipt_review_action_flags(name: str):
 		and doc.get("receipt_review_status") != REVIEW_STATUS_VERIFIED
 	)
 	can_review = (
-		user == "Administrator" or RECEIPT_REVIEWER_ROLE in roles
-	) and (
-		(doc.docstatus == 0 and doc.workflow_state == PENDING_RECEIPT_REVIEW)
-		or legacy_approved
-	) and user != _requester_user(doc)
+		(user == "Administrator" or RECEIPT_REVIEWER_ROLE in roles)
+		and ((doc.docstatus == 0 and doc.workflow_state == PENDING_RECEIPT_REVIEW) or legacy_approved)
+		and user != _requester_user(doc)
+	)
 	return {
 		"can_review": can_review,
 		"can_request_correction": can_review and not legacy_approved,
-		"checklist": [
-			{"fieldname": key, "label": label} for key, label in CHECKLIST_ITEMS
-		],
+		"checklist": [{"fieldname": key, "label": label} for key, label in CHECKLIST_ITEMS],
 	}
 
 

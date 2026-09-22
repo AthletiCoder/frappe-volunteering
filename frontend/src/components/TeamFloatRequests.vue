@@ -1,26 +1,39 @@
 <template>
-	<section v-if="requests.length || fundable.length" class="rounded-2xl border border-line bg-surface shadow-soft p-4 mb-6">
+	<section
+		v-if="requests.length || fundable.length"
+		class="rounded-2xl border border-line bg-surface shadow-soft p-4 mb-6"
+	>
 		<div class="flex justify-between gap-3 flex-wrap items-start">
 			<div>
 				<h2 class="text-lg font-semibold text-ink">Team reimbursement requests</h2>
 				<p class="text-sm text-muted mt-1">
-					Reportees asked to settle from your paid advance. Approve when you have residual; otherwise Escalate.
+					Reportees asked to settle from your paid advance. Approve when you have
+					residual; otherwise Escalate.
 				</p>
 			</div>
 			<span v-if="fundable.length" class="text-sm text-muted">
-				Your advances: {{ formatMoney(totalResidual) }} across {{ fundable.length }} advance(s)
+				Your advances: {{ formatMoney(totalResidual) }} across
+				{{ fundable.length }} advance(s)
 			</span>
 		</div>
 
 		<div v-if="error" class="text-bad text-sm mt-3">{{ error }}</div>
 		<div v-else-if="loading" class="text-muted text-sm mt-3">Loading team requests…</div>
 
-		<div v-else-if="!requests.length" class="text-muted text-sm mt-3">No pending manager's-advance claims from your team.</div>
+		<div v-else-if="!requests.length" class="text-muted text-sm mt-3">
+			No pending manager's-advance claims from your team.
+		</div>
 
-		<div v-for="req in requests" :key="req.name" class="mt-4 rounded-xl border border-line p-3">
+		<div
+			v-for="req in requests"
+			:key="req.name"
+			class="mt-4 rounded-xl border border-line p-3"
+		>
 			<div class="flex justify-between gap-3 flex-wrap">
 				<div>
-					<a class="font-semibold text-accent hover:underline" :href="req.route">{{ req.name }}</a>
+					<a class="font-semibold text-accent hover:underline" :href="req.route">{{
+						req.name
+					}}</a>
 					<div class="text-sm text-muted">
 						{{ req.employee_name || req.employee }} · {{ formatMoney(req.amount) }}
 						<span v-if="req.project"> · {{ req.project }}</span>
@@ -34,7 +47,7 @@
 				</span>
 			</div>
 			<p class="text-sm text-muted mt-2">{{ req.funding_message }}</p>
-			<a class="btn-primary text-sm mt-2 inline-flex" :href="req.route">Review in Desk</a>
+			<a class="btn-primary text-sm mt-2 inline-flex" :href="req.route">Review in Home</a>
 		</div>
 	</section>
 </template>
@@ -57,7 +70,9 @@ async function load() {
 	loading.value = true;
 	error.value = "";
 	try {
-		const data = await call("volunteering.volunteering.manager_float_service.get_team_manager_float_requests");
+		const data = await call(
+			"volunteering.volunteering.manager_float_service.get_team_manager_float_requests",
+		);
 		requests.value = (data && data.requests) || [];
 		fundable.value = (data && data.fundable_advances) || [];
 	} catch (e) {

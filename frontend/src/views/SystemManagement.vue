@@ -26,10 +26,24 @@
 						}}
 					</p>
 				</div>
-				<button type="button" class="btn-secondary" @click="cancelEdit">
-					Back to users
-				</button>
+				<div class="flex flex-wrap gap-2">
+					<button
+						v-if="form.name"
+						type="button"
+						class="btn-secondary"
+						:disabled="!form.enabled || resetting"
+						@click="resetPassword"
+					>
+						{{ resetting ? "Sending…" : "Reset password" }}
+					</button>
+					<button type="button" class="btn-secondary" @click="cancelEdit">
+						Back to users
+					</button>
+				</div>
 			</div>
+			<p v-if="form.name && !form.enabled" class="form-hint">
+				Enable and save this account before sending a password reset link.
+			</p>
 			<form class="space-y-5" @submit.prevent="save">
 				<div class="form-grid">
 					<label v-if="!form.name" class="field-label sm:col-span-2"
@@ -247,6 +261,7 @@ import { call } from "../lib/frappe";
 const API = "volunteering.volunteering.people_management.";
 const loading = ref(true),
 	saving = ref(false),
+	resetting = ref(false),
 	editing = ref(false);
 const error = ref(""),
 	success = ref(""),
@@ -357,6 +372,21 @@ async function save() {
 		error.value = e.message || String(e);
 	} finally {
 		saving.value = false;
+	}
+}
+async function resetPassword() {
+	if (!form.name || !form.enabled || resetting.value) return;
+	if (!window.confirm(`Send a password reset link to ${form.name}?`)) return;
+	resetting.value = true;
+	error.value = "";
+	success.value = "";
+	try {
+		await call(`${API}send_managed_user_password_reset`, { name: form.name });
+		success.value = `A password reset link was sent to ${form.name}.`;
+	} catch (e) {
+		error.value = e.message || String(e);
+	} finally {
+		resetting.value = false;
 	}
 }
 onMounted(load);

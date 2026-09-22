@@ -7,14 +7,16 @@ from frappe.utils import add_days, nowdate
 
 from volunteering.volunteering.test_utils import get_or_create_test_employee, get_or_create_test_project
 
-IGNORE_TEST_RECORD_DEPENDENCIES = ["Employee", "Project"]
-
 IGNORE_TEST_RECORD_DEPENDENCIES = ["Employee", "Company", "Project"]
 
 
 class IntegrationTestDailyWorkLog(IntegrationTestCase):
 	def setUp(self):
 		super().setUp()
+		self._previous_backdate_limit = frappe.db.get_single_value(
+			"Daily Work Log Settings", "backdate_limit_days"
+		)
+		frappe.db.set_single_value("Daily Work Log Settings", "backdate_limit_days", 2)
 		self.employee = get_or_create_test_employee()
 		self.project = get_or_create_test_project(self.employee)
 		frappe.db.delete("Daily Work Log", {"employee": self.employee})
@@ -138,5 +140,10 @@ class IntegrationTestDailyWorkLog(IntegrationTestCase):
 			{
 				"employee": self.employee,
 			},
+		)
+		frappe.db.set_single_value(
+			"Daily Work Log Settings",
+			"backdate_limit_days",
+			self._previous_backdate_limit,
 		)
 		super().tearDown()

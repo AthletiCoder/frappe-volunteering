@@ -28,8 +28,10 @@ from volunteering.volunteering.expense_claim_portal import (
 	get_my_expense_claim,
 	get_my_expense_claims,
 	get_project_accounts,
+	resubmit_expense_claim,
 	submit_expense_claim,
 )
+from volunteering.volunteering.receipt_review import review_receipts
 
 
 class IntegrationTestExpenseClaimPortal(IntegrationTestCase):
@@ -140,6 +142,29 @@ class IntegrationTestExpenseClaimPortal(IntegrationTestCase):
 		)
 		self.assertEqual(file_row.is_private, 1)
 		self.assertEqual(file_row.file_url, claim.expenses[0].receipt_attachment)
+
+	def test_employee_can_correct_and_resubmit_from_home(self):
+		frappe.set_user(self.user)
+		result = submit_expense_claim(self._payload())
+		frappe.set_user("Administrator")
+		review_receipts(result["name"], "request_correction", "Clarify the supplier name.", {})
+
+		frappe.set_user(self.user)
+		detail = get_my_expense_claim(result["name"])
+		self.assertTrue(detail["can_correct"])
+		item = detail["expenses"][0]
+		item["supplier_name"] = "Corrected supplier"
+		item.pop("category")
+		item.pop("sanctioned_amount")
+		item.pop("receipt_attachment")
+		corrected = resubmit_expense_claim(
+			result["name"],
+			{"expenses": [item], "correction_note": "Supplier name corrected."},
+		)
+		self.assertEqual(corrected["workflow_state"], "Pending Receipt Review")
+		claim = frappe.get_doc("Expense Claim", result["name"])
+		self.assertEqual(claim.expenses[0].supplier_name, "Corrected supplier")
+		self.assertEqual(claim.receipt_review_status, "Pending Review")
 
 	def test_employee_history_lists_and_opens_only_their_claim(self):
 		frappe.set_user(self.user)

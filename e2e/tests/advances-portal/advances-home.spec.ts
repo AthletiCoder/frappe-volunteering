@@ -114,6 +114,11 @@ test.beforeEach(async ({ page, request, baseURL }) => {
   await signIn(page, "employee");
 });
 
+test.afterEach(async ({ request }) => {
+  const cast = await getCast(request);
+  await cleanupEmployeeAdvances(request, cast.employee.employee!);
+});
+
 test("AP-001: Home request form exposes scoped projects and masked bank details, not ledger fields", async ({
   page,
 }) => {
@@ -222,6 +227,197 @@ test("AP-003: Multiple portal requests are accepted and assigned first to the im
   } finally {
     await cleanupEmployeeAdvances(request, employee);
   }
+});
+
+test("AP-006: manager decides in Home and Accounts sees the approved advance to disburse", async ({
+  page,
+  request,
+}) => {
+  const cast = await getCast(request);
+  const employee = cast.employee.employee!;
+  await cleanupEmployeeAdvances(request, employee);
+  try {
+    await fillRequest(page, 500, "Home approval and disbursement queue test");
+    await page.getByLabel(/Estimate \/ quotation \(optional\)/).setInputFiles({
+      name: "advance-estimate.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZlVAAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    });
+    const advance = await saveRequest(page, true);
+
+    await signIn(page, "manager");
+    await page.goto(`/volunteering/advance-workflow?advance=${advance.name}`);
+    await expect(
+      page.getByRole("heading", { name: advance.name }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Approval decision" }),
+    ).toBeVisible();
+    const estimate = page.getByRole("link", {
+      name: "Open private estimate / quotation",
+    });
+    await expect(estimate).toHaveAttribute("href", /^\/private\/files\//);
+    expect(
+      (await page.request.get((await estimate.getAttribute("href"))!)).status(),
+    ).toBe(200);
+    await page.getByRole("button", { name: "Approve advance" }).click();
+    await expect(
+      page.getByRole("status").filter({ hasText: "Advance approved" }),
+    ).toContainText("Advance approved and sent to Accounts");
+
+    await signIn(page, "accounts");
+    await page.goto("/volunteering/advance-workflow?view=disbursement");
+    await expect(
+      page.getByRole("button", { name: /Accounts disbursement/ }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: new RegExp(advance.name) }).click();
+    await expect(
+      page.getByRole("heading", { name: "Accounts disbursement" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("spinbutton", { name: "Amount to pay *" }),
+    ).toHaveValue("500");
+    await expect(
+      page.getByRole("button", { name: "Create and submit Payment Entry" }),
+    ).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(
+      page.getByRole("heading", { name: "Accounts disbursement" }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+  } finally {
+    await cleanupEmployeeAdvances(request, employee);
+  }
+});
+
+test("AP-007: Accounts disburses and records partial then full unused-advance returns in Home", async ({
+  page,
+  request,
+}, testInfo) => {
+  const cast = await getCast(request);
+  const employee = cast.employee.employee!;
+  await cleanupEmployeeAdvances(request, employee);
+
+  await fillRequest(page, 500, "E2E Home advance return lifecycle");
+  const advance = await saveRequest(page, true);
+  await testInfo.attach("created-local-advance", {
+    body: advance.name,
+    contentType: "text/plain",
+  });
+
+  await signIn(page, "manager");
+  await page.goto(`/volunteering/advance-workflow?advance=${advance.name}`);
+  await page.getByRole("button", { name: "Approve advance" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Advance approved" }),
+  ).toContainText("Advance approved");
+
+  await signIn(page, "accounts");
+  await page.goto(`/volunteering/advance-workflow?advance=${advance.name}`);
+  await expect(
+    page.getByRole("heading", { name: "Accounts disbursement" }),
+  ).toBeVisible();
+  await page.getByLabel("Pay from *").selectOption("Cash - SF");
+  const sidBeforePayment = (await page.context().cookies()).find(
+    (cookie) => cookie.name === "sid",
+  )?.value;
+  page.once("dialog", (dialog) => dialog.accept());
+  const disbursement = page.waitForResponse((response) =>
+    response.url().includes("advance_workflow_portal.disburse_advance"),
+  );
+  await page
+    .getByRole("button", { name: "Create and submit Payment Entry" })
+    .click();
+  const disbursementResult = await disbursement;
+  expect(disbursementResult.status(), await disbursementResult.text()).toBe(
+    200,
+  );
+  const paymentName = (await disbursementResult.json()).message.payment_entry;
+  const sidAfterPayment = (await page.context().cookies()).find(
+    (cookie) => cookie.name === "sid",
+  )?.value;
+  expect(sidAfterPayment === sidBeforePayment).toBe(true);
+  const queueAfterPayment = await api(
+    page,
+    "volunteering.volunteering.advance_workflow_portal.get_advance_work_queue",
+  );
+  expect(queueAfterPayment.status).toBe(200);
+  expect(
+    queueAfterPayment.data.message.queues.return.some(
+      (item: any) => item.name === advance.name,
+    ),
+  ).toBe(true);
+  expect(
+    await e2eCall(request, "get_doc_field", {
+      doctype: "Payment Entry",
+      name: paymentName,
+      field: "docstatus",
+    }),
+  ).toBe(1);
+
+  await page.goto("/volunteering/advance-workflow?view=return");
+  await expect(
+    page.getByRole("button", { name: new RegExp(advance.name) }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: new RegExp(advance.name) }).click();
+  await expect(
+    page.getByRole("heading", { name: "Record unused advance returned" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("spinbutton", { name: "Amount received *" }),
+  ).toHaveValue("500");
+  await page.getByRole("spinbutton", { name: "Amount received *" }).fill("300");
+  await page.getByLabel("Received into *").selectOption("Cash - SF");
+  page.once("dialog", (dialog) => dialog.accept());
+  const firstReturn = page.waitForResponse((response) =>
+    response.url().includes("advance_workflow_portal.record_advance_return"),
+  );
+  await page
+    .getByRole("button", { name: "Confirm receipt and submit Journal Entry" })
+    .click();
+  const firstReturnResult = await firstReturn;
+  expect(firstReturnResult.status(), await firstReturnResult.text()).toBe(200);
+  const first = (await firstReturnResult.json()).message;
+  expect(first.returned_amount).toBe(300);
+  expect(first.residual_amount).toBe(200);
+  expect(
+    await e2eCall(request, "get_doc_field", {
+      doctype: "Journal Entry",
+      name: first.journal_entry,
+      field: "docstatus",
+    }),
+  ).toBe(1);
+
+  await page.goto(`/volunteering/advance-workflow?advance=${advance.name}`);
+  await expect(
+    page.getByRole("spinbutton", { name: "Amount received *" }),
+  ).toHaveValue("200");
+  await page.getByLabel("Received into *").selectOption("Cash - SF");
+  page.once("dialog", (dialog) => dialog.accept());
+  const finalReturn = page.waitForResponse((response) =>
+    response.url().includes("advance_workflow_portal.record_advance_return"),
+  );
+  await page
+    .getByRole("button", { name: "Confirm receipt and submit Journal Entry" })
+    .click();
+  const finalReturnResult = await finalReturn;
+  expect(finalReturnResult.status(), await finalReturnResult.text()).toBe(200);
+  const final = (await finalReturnResult.json()).message;
+  expect(final.returned_amount).toBe(500);
+  expect(final.residual_amount).toBe(0);
+  await expect(
+    page.getByRole("status").filter({ hasText: "Advance return recorded" }),
+  ).toContainText("Advance return recorded");
+  await expect(
+    page.getByRole("button", { name: new RegExp(advance.name) }),
+  ).toHaveCount(0);
 });
 
 test("AP-004: Direct manager freezes/unfreezes through My team; employee cannot bypass freeze or view another team", async ({

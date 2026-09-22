@@ -1,6 +1,7 @@
 """Role-separated employee and login administration in the Home portal."""
 
 import frappe
+from unittest.mock import patch
 from frappe.tests import IntegrationTestCase
 from frappe.utils import add_days, nowdate
 
@@ -15,6 +16,7 @@ from volunteering.volunteering.people_management import (
 	get_system_management_workspace,
 	save_managed_employee,
 	save_managed_user,
+	send_managed_user_password_reset,
 )
 
 
@@ -176,6 +178,39 @@ class IntegrationTestPeopleManagement(IntegrationTestCase):
 		)["user"]
 		self.assertFalse(updated["enabled"])
 		self.assertFalse(frappe.db.get_value("User", created["name"], "enabled"))
+
+	def test_password_reset_is_role_scoped_and_never_returns_the_link(self):
+		frappe.set_user(self.system)
+		created = save_managed_user(self._new_user())["user"]
+		with patch(
+			"frappe.core.doctype.user.user.User._reset_password",
+			return_value="https://example.com/private-reset-link",
+		) as reset:
+			result = send_managed_user_password_reset(created["name"])
+			self.assertEqual(result, {"user": created["name"]})
+			reset.assert_called_once_with(send_email=True)
+
+			for user in (self.employee, self.hr):
+				frappe.set_user(user)
+				with self.assertRaises(frappe.PermissionError):
+					send_managed_user_password_reset(created["name"])
+			frappe.set_user(self.system)
+			with self.assertRaises(frappe.PermissionError):
+				send_managed_user_password_reset("Administrator")
+			reset.assert_called_once()
+
+	def test_disabled_user_cannot_receive_reset_link(self):
+		frappe.set_user(self.system)
+		details = self._new_user()
+		created = save_managed_user(details)["user"]
+		details["enabled"] = False
+		save_managed_user(
+			details, name=created["name"], expected_modified=created["modified"]
+		)
+		with patch("frappe.core.doctype.user.user.User._reset_password") as reset:
+			with self.assertRaisesRegex(frappe.ValidationError, "Enable this user"):
+				send_managed_user_password_reset(created["name"])
+			reset.assert_not_called()
 
 	def test_role_profile_assignment_uses_frappes_effective_roles(self):
 		frappe.set_user("Administrator")

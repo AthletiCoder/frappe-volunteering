@@ -194,6 +194,24 @@ test("expense claim and invoice preparation forms", async ({
     );
     await auditMobileLayout(page, testInfo, "expense-claim");
   });
+  await test.step("expense-claim-history", async () => {
+    await openRoute(
+      page,
+      PERSONAS.employee,
+      "/volunteering/expense-claims",
+      "My reimbursement claims",
+    );
+    await auditMobileLayout(page, testInfo, "expense-claim-history");
+  });
+  await test.step("expense-claim-workflow", async () => {
+    await openRoute(
+      page,
+      PERSONAS.receipt_reviewer,
+      "/volunteering/expense-claim-workflow",
+      "Expense claim work",
+    );
+    await auditMobileLayout(page, testInfo, "expense-claim-workflow");
+  });
   await test.step("invoice-generator", async () => {
     await openRoute(
       page,
@@ -274,6 +292,35 @@ test("HR and System Management workspaces", async ({ page }, testInfo) => {
     await page.getByRole("button", { name: "Add user" }).click();
     await expect(page.getByRole("heading", { name: "Add user" })).toBeVisible();
     await auditMobileLayout(page, testInfo, "system-user-form");
+    await page.getByRole("button", { name: "Back to users" }).click();
+    await page
+      .locator(".directory-card")
+      .filter({ hasText: "Enabled" })
+      .first()
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Reset password" }),
+    ).toBeVisible();
+    await auditMobileLayout(page, testInfo, "system-user-password-reset");
+
+    let resetRequests = 0;
+    await page.route(
+      "**/api/method/volunteering.volunteering.people_management.send_managed_user_password_reset",
+      async (route) => {
+        resetRequests += 1;
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ message: { user: "local-demo@example.com" } }),
+        });
+      },
+    );
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Reset password" }).click();
+    await expect.poll(() => resetRequests).toBe(1);
+    await expect(
+      page.getByText(/A password reset link was sent to/),
+    ).toBeVisible();
   });
 });
 

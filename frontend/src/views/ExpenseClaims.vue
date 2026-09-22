@@ -10,6 +10,12 @@
 			"
 		>
 			<template #actions>
+				<RouterLink
+					v-if="selected?.can_correct"
+					:to="{ path: '/expense-claim', query: { correct: selected.name } }"
+					class="btn-primary"
+					>Correct and resubmit</RouterLink
+				>
 				<button v-if="selected" type="button" class="btn-secondary" @click="closeDetail">
 					Back to claims
 				</button>

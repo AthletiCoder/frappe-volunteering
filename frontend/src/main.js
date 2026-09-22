@@ -7,9 +7,11 @@ import Home from "./views/Home.vue";
 import Todos from "./views/Todos.vue";
 import BudgetHealth from "./views/BudgetHealth.vue";
 import Advances from "./views/Advances.vue";
+import AdvanceWorkflow from "./views/AdvanceWorkflow.vue";
 import InvoiceGenerator from "./views/InvoiceGenerator.vue";
 import ExpenseClaim from "./views/ExpenseClaim.vue";
 import ExpenseClaims from "./views/ExpenseClaims.vue";
+import ExpenseClaimWorkflow from "./views/ExpenseClaimWorkflow.vue";
 import Projects from "./views/Projects.vue";
 import BankAccounts from "./views/BankAccounts.vue";
 import OfficeAddresses from "./views/OfficeAddresses.vue";
@@ -31,6 +33,7 @@ const router = createRouter({
 		{ path: "/budget-health", component: BudgetHealth, name: "BudgetHealth" },
 		{ path: "/advances", component: Advances, name: "Advances" },
 		{ path: "/advances/:name", component: Advances, name: "AdvanceDetail" },
+		{ path: "/advance-workflow", component: AdvanceWorkflow, name: "AdvanceWorkflow" },
 		{ path: "/team", component: Team, name: "Team" },
 		{ path: "/hr-management", component: HRManagement, name: "HRManagement" },
 		{
@@ -41,6 +44,11 @@ const router = createRouter({
 		{ path: "/invoice-generator", component: InvoiceGenerator, name: "InvoiceGenerator" },
 		{ path: "/expense-claim", component: ExpenseClaim, name: "ExpenseClaim" },
 		{ path: "/expense-claims", component: ExpenseClaims, name: "ExpenseClaims" },
+		{
+			path: "/expense-claim-workflow",
+			component: ExpenseClaimWorkflow,
+			name: "ExpenseClaimWorkflow",
+		},
 		{ path: "/bank-account", component: BankAccounts, name: "BankAccounts" },
 		{ path: "/office-addresses", component: OfficeAddresses, name: "OfficeAddresses" },
 		{ path: "/projects", component: Projects, name: "Projects" },
