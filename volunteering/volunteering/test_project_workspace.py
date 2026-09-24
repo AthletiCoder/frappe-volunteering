@@ -52,6 +52,8 @@ class UnitTestProjectHome(UnitTestCase):
 				"review_project_proposals",
 			},
 		)
+		review = next(row for row in actions if row["id"] == "review_project_proposals")
+		self.assertEqual(review["route"], "/volunteering/project-proposals/review")
 
 
 class IntegrationTestProjectGovernance(IntegrationTestCase):

@@ -333,6 +333,7 @@ class IntegrationTestGeneratedInvoiceNumbers(IntegrationTestCase):
 		stack = ExitStack()
 		stack.enter_context(patch.object(invoices, "nowdate", return_value="2098-12-31"))
 		stack.enter_context(patch.object(invoices, "_require_employee", return_value="Test Employee"))
+		stack.enter_context(patch.object(invoices, "_remember_vendor_address", return_value={}))
 		stack.enter_context(
 			patch.object(
 				invoices,

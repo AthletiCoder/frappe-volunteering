@@ -13,6 +13,7 @@ import ExpenseClaim from "./views/ExpenseClaim.vue";
 import ExpenseClaims from "./views/ExpenseClaims.vue";
 import ExpenseClaimWorkflow from "./views/ExpenseClaimWorkflow.vue";
 import Projects from "./views/Projects.vue";
+import ProjectProposalReviews from "./views/ProjectProposalReviews.vue";
 import BankAccounts from "./views/BankAccounts.vue";
 import OfficeAddresses from "./views/OfficeAddresses.vue";
 import Profile from "./views/Profile.vue";
@@ -20,6 +21,7 @@ import ProjectAccountMapping from "./views/ProjectAccountMapping.vue";
 import Team from "./views/Team.vue";
 import HRManagement from "./views/HRManagement.vue";
 import SystemManagement from "./views/SystemManagement.vue";
+import ChartOfAccounts from "./views/ChartOfAccounts.vue";
 
 initTheme();
 
@@ -41,6 +43,11 @@ const router = createRouter({
 			component: SystemManagement,
 			name: "SystemManagement",
 		},
+		{
+			path: "/chart-of-accounts",
+			component: ChartOfAccounts,
+			name: "ChartOfAccounts",
+		},
 		{ path: "/invoice-generator", component: InvoiceGenerator, name: "InvoiceGenerator" },
 		{ path: "/expense-claim", component: ExpenseClaim, name: "ExpenseClaim" },
 		{ path: "/expense-claims", component: ExpenseClaims, name: "ExpenseClaims" },
@@ -52,6 +59,11 @@ const router = createRouter({
 		{ path: "/bank-account", component: BankAccounts, name: "BankAccounts" },
 		{ path: "/office-addresses", component: OfficeAddresses, name: "OfficeAddresses" },
 		{ path: "/projects", component: Projects, name: "Projects" },
+		{
+			path: "/project-proposals/review",
+			component: ProjectProposalReviews,
+			name: "ProjectProposalReviews",
+		},
 		{
 			path: "/project-account-mapping",
 			component: ProjectAccountMapping,

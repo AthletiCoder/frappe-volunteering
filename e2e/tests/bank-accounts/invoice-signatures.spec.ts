@@ -75,6 +75,16 @@ test("supplier and volunteer signing generate distinct GST/non-GST documents", a
   ).toHaveCount(0);
   await page.getByLabel("Rate (INR) *", { exact: true }).fill("500");
 
+  const sectionOrder = await page
+    .locator("section.form-card h2.form-title")
+    .allTextContents();
+  expect(sectionOrder.indexOf("Signature")).toBeGreaterThan(
+    sectionOrder.indexOf("Items"),
+  );
+  expect(sectionOrder.indexOf("Signature")).toBeGreaterThan(
+    sectionOrder.indexOf("Approved reimbursement remittance details"),
+  );
+
   const numbers = new Set<string>();
   for (const signer of ["SUPPLIER", "VOLUNTEER"]) {
     await page

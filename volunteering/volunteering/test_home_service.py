@@ -138,6 +138,8 @@ class UnitTestHomePayload(UnitTestCase):
 	)
 	def test_accounts_manager_home_includes_project_label_mapping(self, _roles):
 		actions = _accounts_actions("accounts@example.com")
+		chart = next(row for row in actions if row["id"] == "chart_of_accounts")
+		self.assertEqual(chart["route"], "/volunteering/chart-of-accounts")
 		mapping = next(row for row in actions if row["id"] == "project_account_mapping")
 		self.assertEqual(mapping["route"], "/volunteering/project-account-mapping")
 		returns = next(row for row in actions if row["id"] == "advance_returns")

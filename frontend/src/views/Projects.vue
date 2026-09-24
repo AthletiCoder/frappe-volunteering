@@ -7,7 +7,7 @@
 					Propose a project
 				</button>
 				<button v-if="editing" class="btn-secondary" @click="back">
-					Back to projects
+					{{ backLabel }}
 				</button>
 				<button
 					v-if="saved && !requestMode && caps.can_propose_changes"
@@ -58,9 +58,9 @@
 				>
 				<RouterLink
 					v-if="caps.can_manage"
-					:to="{ path: '/projects', query: { view: 'review' } }"
-					:class="listView === 'review' ? 'btn-primary' : 'btn-secondary'"
-					>Review project proposals</RouterLink
+					to="/project-proposals/review"
+					class="btn-secondary"
+					>Review pending proposals</RouterLink
 				>
 			</nav>
 
@@ -1091,6 +1091,11 @@ const showFinance = computed(() =>
 		: caps.value.can_view_financials,
 );
 const budgetEditable = computed(() => detailEditable.value && showFinance.value);
+const backLabel = computed(() =>
+	route.query.returnTo === "pending-proposals"
+		? "Back to pending proposals"
+		: "Back to projects",
+);
 const busy = computed(() => saving.value || uploading.value);
 const attachments = computed(() => [
 	...(saved.value?.attachments || []),
@@ -1352,6 +1357,10 @@ function proposeChange() {
 	populate(saved.value);
 }
 function back() {
+	if (route.query.returnTo === "pending-proposals") {
+		router.push("/project-proposals/review");
+		return;
+	}
 	router.push({ path: "/projects", query: { view: "approved" } });
 }
 
@@ -1591,8 +1600,15 @@ function revisionText(value) {
 		`Financially ${data.financial_closed ? "closed" : "open"}`,
 	].join("\n");
 }
-watch(() => route.fullPath, load);
-onMounted(load);
+async function handleRoute() {
+	if (route.query.view === "review") {
+		await router.replace("/project-proposals/review");
+		return;
+	}
+	await load();
+}
+watch(() => route.fullPath, handleRoute);
+onMounted(handleRoute);
 </script>
 
 <style scoped>

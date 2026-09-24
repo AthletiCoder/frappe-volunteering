@@ -44,12 +44,25 @@ async function api(page: Page, method: string, args = {}) {
       const response = await fetch(`/api/method/${method}`, {
         method: "POST",
         headers: {
+          Accept: "application/json",
           "Content-Type": "application/json",
           "X-Frappe-CSRF-Token": (window as any).csrf_token || "",
         },
         body: JSON.stringify(args),
       });
-      return { status: response.status, data: await response.json() };
+      const body = await response.text();
+      let data = null;
+      try {
+        data = JSON.parse(body);
+      } catch {
+        // Frappe may render permission failures as HTML. These security tests
+        // assert the HTTP status and must not hide it behind a JSON parse error.
+      }
+      return {
+        status: response.status,
+        data,
+        body: data ? "" : body.slice(0, 1000),
+      };
     },
     { method, args },
   );
@@ -71,6 +84,23 @@ test.describe.serial("Employee bank approval @bank-accounts @ui", () => {
     page,
   }) => {
     await signIn(page, employee);
+    const existingWorkspace = (
+      await api(page, API + "get_bank_account_workspace")
+    ).data.message;
+    const stalePending = existingWorkspace.requests.find(
+      (row: any) => row.request_status === "Pending Approval",
+    );
+    if (stalePending) {
+      await signIn(page, manager);
+      const cleanup = await api(page, API + "review_bank_account_request", {
+        request: stalePending.name,
+        action: "reject",
+        modified: stalePending.modified,
+        comments: "Superseded by a fresh local browser-test request.",
+      });
+      expect(cleanup.status, cleanup.body).toBe(200);
+      await signIn(page, employee);
+    }
     await page
       .getByRole("link", { name: /My reimbursement bank account/ })
       .click();
@@ -142,7 +172,7 @@ test.describe.serial("Employee bank approval @bank-accounts @ui", () => {
       action: "approve",
       modified: request.modified,
     });
-    expect(denied.status).toBe(403);
+    expect(denied.status, denied.body).toBe(403);
     expect((await page.request.get(request.proof_url)).status()).toBe(403);
   });
 

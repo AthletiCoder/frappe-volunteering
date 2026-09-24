@@ -331,6 +331,26 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
   test("manager has separate approved, own-request and review views", async ({
     page,
   }) => {
+    await signIn(page, proposer);
+    const pendingDraft = (
+      await api(page, proposalService + "save_proposal", {
+        project: projectId,
+        data: {
+          project_outcomes:
+            "Pending change created to verify the manager review queue.",
+        },
+        reason: "Verify the standalone pending-proposal review queue.",
+        assigned_approver: manager,
+      })
+    ).data.message;
+    const pendingRequest = (
+      await api(page, proposalService + "submit_proposal", {
+        proposal: pendingDraft.name,
+        modified: pendingDraft.modified,
+      })
+    ).data.message;
+    expect(pendingRequest.proposal_status).toBe("Pending Approval");
+
     await signIn(page, manager);
 
     await page.goto("/volunteering/projects?view=mine");
@@ -349,10 +369,10 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
         }),
     ).toBeVisible();
 
-    await page.goto("/volunteering/projects?view=review");
+    await page.goto("/volunteering/project-proposals/review");
     await expect(
       page.getByRole("heading", {
-        name: "Review project proposals",
+        name: "Review pending proposals",
         exact: true,
       }),
     ).toBeVisible();
@@ -361,7 +381,7 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
         .locator("button.project-tile")
         .filter({ hasText: projectName })
         .filter({
-          hasText: new RegExp(`New Project · Proposed by ${proposer}`),
+          hasText: new RegExp(`Project Change · Proposed by ${proposer}`),
         }),
     ).toBeVisible();
     await expect(
@@ -369,9 +389,13 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
         .locator("button.project-tile")
         .filter({ hasText: projectName })
         .filter({
-          hasText: "Project Change",
+          hasText: new RegExp(`Project Change · Proposed by ${manager}`),
         }),
     ).toHaveCount(0);
+    await expect(
+      page.getByText("Pending Approval", { exact: true }).first(),
+    ).toBeVisible();
+    await expect(page.getByText("Approved", { exact: true })).toHaveCount(0);
 
     await page.goto("/volunteering/home");
     await expect(
@@ -384,7 +408,7 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
       page.getByRole("link", { name: /Your proposals and change requests/ }),
     ).toBeVisible();
     await expect(
-      page.getByRole("link", { name: /Review project proposals/ }),
+      page.getByRole("link", { name: /Review pending proposals/ }),
     ).toBeVisible();
   });
 

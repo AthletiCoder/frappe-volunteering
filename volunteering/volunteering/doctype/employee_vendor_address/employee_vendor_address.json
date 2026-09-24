@@ -1,0 +1,132 @@
+{
+ "actions": [],
+ "autoname": "field:address_key",
+ "doctype": "DocType",
+ "document_type": "Document",
+ "engine": "InnoDB",
+ "field_order": [
+  "employee",
+  "employee_name",
+  "vendor_name",
+  "address",
+  "state",
+  "pin_code",
+  "gstin",
+  "pan",
+  "usage_section",
+  "use_count",
+  "last_used_on",
+  "last_invoice_number",
+  "address_key"
+ ],
+ "fields": [
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Employee",
+   "options": "Employee",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fetch_from": "employee.employee_name",
+   "fieldname": "employee_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Employee Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "vendor_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Vendor Name",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "address",
+   "fieldtype": "Small Text",
+   "label": "Address",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "state",
+   "fieldtype": "Data",
+   "label": "State",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "pin_code",
+   "fieldtype": "Data",
+   "label": "PIN Code",
+   "read_only": 1
+  },
+  {
+   "fieldname": "gstin",
+   "fieldtype": "Data",
+   "label": "GSTIN",
+   "read_only": 1
+  },
+  {
+   "fieldname": "pan",
+   "fieldtype": "Data",
+   "label": "PAN",
+   "read_only": 1
+  },
+  {
+   "fieldname": "usage_section",
+   "fieldtype": "Section Break",
+   "label": "Usage"
+  },
+  {
+   "default": "1",
+   "fieldname": "use_count",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Times Used",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_used_on",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Last Used On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_invoice_number",
+   "fieldtype": "Data",
+   "label": "Last Invoice Number",
+   "read_only": 1
+  },
+  {
+   "fieldname": "address_key",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Address Key",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "Volunteering",
+ "name": "Employee Vendor Address",
+ "naming_rule": "By fieldname",
+ "permissions": [
+  {
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  }
+ ],
+ "sort_field": "last_used_on",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

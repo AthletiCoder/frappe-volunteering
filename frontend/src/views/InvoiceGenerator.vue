@@ -101,70 +101,31 @@
 			</details>
 
 			<section class="form-card">
-				<h2 class="form-title">Signature</h2>
-				<div class="form-grid">
-					<label class="field-label"
-						>Who will sign? *<select
-							aria-label="Who will sign? *"
-							v-model="form.signer_type"
-							required
-							class="field-input"
-						>
-							<option value="SUPPLIER">Supplier / authorised representative</option>
-							<option value="VOLUNTEER">Volunteer (me)</option>
-						</select></label
-					>
-					<label v-if="!isVolunteer" class="field-label"
-						>Supplier signatory name<input
-							v-model.trim="form.authorised_signatory"
-							maxlength="120"
-							class="field-input"
-					/></label>
-					<label v-else class="field-label"
-						>Volunteer name<input
-							:value="form.volunteer.name"
-							readonly
-							class="field-input"
-					/></label>
-				</div>
-				<div class="mt-4 rounded-xl border border-line bg-bg p-3">
-					<div class="flex flex-wrap items-center justify-between gap-3">
-						<div>
-							<p class="font-medium text-ink">On-screen signature</p>
-							<p class="text-xs text-muted">
-								Optional. The selected supplier representative or volunteer can
-								sign on this device, and the signature will be placed in the
-								downloaded document.
-							</p>
-						</div>
-						<div class="flex gap-2">
-							<button type="button" class="btn-secondary" @click="openSignature">
-								{{ form.signature_data ? "Replace signature" : "Sign on screen" }}
-							</button>
-							<button
-								v-if="form.signature_data"
-								type="button"
-								class="btn-secondary text-bad"
-								@click="clearSavedSignature"
-							>
-								Clear
-							</button>
-						</div>
-					</div>
-					<img
-						v-if="form.signature_data"
-						:src="form.signature_data"
-						alt="Captured signature preview"
-						class="signature-preview mt-3"
-					/>
-				</div>
-			</section>
-
-			<section class="form-card">
 				<h2 class="form-title">Supplier</h2>
 				<p class="form-hint">
 					Enter the supplier’s legal details, not the employee’s details.
 				</p>
+				<label v-if="vendorAddresses.length" class="field-label block mb-3"
+					>Frequent vendor address<select
+						v-model="selectedVendorAddress"
+						aria-label="Frequent vendor address"
+						class="field-input"
+						@change="applyVendorAddress"
+					>
+						<option value="">Enter a new vendor address</option>
+						<option
+							v-for="vendor in vendorAddresses"
+							:key="vendor.name"
+							:value="vendor.name"
+						>
+							{{ vendor.label }}
+						</option>
+					</select>
+					<span class="block text-xs text-muted mt-1"
+						>Addresses you use when generating invoices are saved privately for your
+						next invoice.</span
+					></label
+				>
 				<div class="form-grid">
 					<label class="field-label sm:col-span-2"
 						>Legal name *<input
@@ -398,6 +359,66 @@
 				>
 			</section>
 
+			<section class="form-card">
+				<h2 class="form-title">Signature</h2>
+				<div class="form-grid">
+					<label class="field-label"
+						>Who will sign? *<select
+							aria-label="Who will sign? *"
+							v-model="form.signer_type"
+							required
+							class="field-input"
+						>
+							<option value="SUPPLIER">Supplier / authorised representative</option>
+							<option value="VOLUNTEER">Volunteer (me)</option>
+						</select></label
+					>
+					<label v-if="!isVolunteer" class="field-label"
+						>Supplier signatory name<input
+							v-model.trim="form.authorised_signatory"
+							maxlength="120"
+							class="field-input"
+					/></label>
+					<label v-else class="field-label"
+						>Volunteer name<input
+							:value="form.volunteer.name"
+							readonly
+							class="field-input"
+					/></label>
+				</div>
+				<div class="mt-4 rounded-xl border border-line bg-bg p-3">
+					<div class="flex flex-wrap items-center justify-between gap-3">
+						<div>
+							<p class="font-medium text-ink">On-screen signature</p>
+							<p class="text-xs text-muted">
+								Optional. The selected supplier representative or volunteer can
+								sign on this device, and the signature will be placed in the
+								downloaded document.
+							</p>
+						</div>
+						<div class="flex gap-2">
+							<button type="button" class="btn-secondary" @click="openSignature">
+								{{ form.signature_data ? "Replace signature" : "Sign on screen" }}
+							</button>
+							<button
+								v-if="form.signature_data"
+								type="button"
+								class="btn-secondary text-bad"
+								@click="clearSavedSignature"
+							>
+								Clear
+							</button>
+						</div>
+					</div>
+					<img
+						v-if="form.signature_data"
+						:src="form.signature_data"
+						alt="Captured signature preview"
+						class="signature-preview mt-3"
+					/>
+				</div>
+			</section>
+
 			<div
 				v-if="error"
 				class="rounded-xl border border-bad bg-bad-soft p-3 text-sm text-bad"
@@ -541,6 +562,8 @@ const error = ref("");
 const result = ref(null);
 const approvedBank = ref(null);
 const officeAddresses = ref([]);
+const vendorAddresses = ref([]);
+const selectedVendorAddress = ref("");
 const signatureOpen = ref(false);
 const signatureCanvas = ref(null);
 const signatureError = ref("");
@@ -579,6 +602,25 @@ function applyOfficeAddress() {
 	);
 	if (!selected) return;
 	Object.assign(form.consignee, selected.party);
+}
+
+function applyVendorAddress() {
+	if (!selectedVendorAddress.value) {
+		Object.assign(form.supplier, blankParty());
+		return;
+	}
+	const selected = vendorAddresses.value.find(
+		(vendor) => vendor.name === selectedVendorAddress.value,
+	);
+	if (selected) Object.assign(form.supplier, blankParty(), selected.party);
+}
+
+function rememberGeneratedVendor(vendor) {
+	if (!vendor?.name) return;
+	const index = vendorAddresses.value.findIndex((row) => row.name === vendor.name);
+	if (index === -1) vendorAddresses.value.unshift(vendor);
+	else vendorAddresses.value.splice(index, 1, vendor);
+	selectedVendorAddress.value = vendor.name;
 }
 
 function canvasPoint(event) {
@@ -658,6 +700,7 @@ onMounted(async () => {
 		);
 		approvedBank.value = defaults.remittance_bank || null;
 		officeAddresses.value = defaults.office_addresses || [];
+		vendorAddresses.value = defaults.vendor_addresses || [];
 		Object.assign(form.volunteer, defaults.volunteer || {});
 		form.invoice_date = defaults.invoice_date || "";
 		form.consignee_address_name = defaults.default_office_address || "";
@@ -692,6 +735,7 @@ async function generate(event) {
 				: generated;
 		generationReference.value = generated.generation_reference;
 		generatedSnapshot.value = snapshot;
+		rememberGeneratedVendor(generated.vendor_address);
 		download(generated[outputFormat]);
 		window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
 	} catch (e) {

@@ -24,6 +24,39 @@ test.describe("SPA shell @smoke @volunteering", () => {
       ).toBeVisible();
     });
 
+    test("Home tiles use meaningful icons and semantic colour grades", async ({
+      page,
+    }) => {
+      const home = new HomePage(page);
+      await home.goto();
+      await home.expectLoaded();
+
+      const expectedVisuals = {
+        approved_projects: ["folder-check", "green"],
+        office_addresses: ["map-pin", "cyan"],
+        log_work: ["clock", "blue"],
+        wfh: ["home", "green"],
+        leave: ["calendar-away", "violet"],
+        fix_attendance: ["calendar-check", "amber"],
+        advance: ["coins", "blue"],
+        claim: ["receipt", "amber"],
+        invoice_generator: ["invoice", "cyan"],
+      };
+
+      for (const [actionId, [icon, tone]] of Object.entries(expectedVisuals)) {
+        const tile = page.locator(`[data-action-id="${actionId}"]`);
+        await expect(tile).toBeVisible();
+        await expect(tile.locator("[data-icon-name]")).toHaveAttribute(
+          "data-icon-name",
+          icon,
+        );
+        await expect(tile.locator("[data-icon-tone]")).toHaveAttribute(
+          "data-icon-tone",
+          tone,
+        );
+      }
+    });
+
     test("Previous leave pill count matches get_home_payload", async ({
       page,
       request,

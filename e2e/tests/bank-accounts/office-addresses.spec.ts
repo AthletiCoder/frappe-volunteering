@@ -18,12 +18,25 @@ async function api(page: Page, method: string, args = {}) {
       const response = await fetch(`/api/method/${method}`, {
         method: "POST",
         headers: {
+          Accept: "application/json",
           "Content-Type": "application/json",
           "X-Frappe-CSRF-Token": (window as any).csrf_token || "",
         },
         body: JSON.stringify(args),
       });
-      return { status: response.status, data: await response.json() };
+      const body = await response.text();
+      let data = null;
+      try {
+        data = JSON.parse(body);
+      } catch {
+        // Permission failures can be HTML responses. Preserve the status so
+        // the authorization assertion remains the source of truth.
+      }
+      return {
+        status: response.status,
+        data,
+        body: data ? "" : body.slice(0, 1000),
+      };
     },
     { method, args },
   );
@@ -97,7 +110,7 @@ test("employees view office addresses while Accounts Manager administers them", 
         country: "India",
       },
     });
-    expect(denied.status).toBe(403);
+    expect(denied.status, denied.body).toBe(403);
   } finally {
     if (addressName) {
       await signIn(page, "accounts");

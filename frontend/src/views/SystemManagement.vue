@@ -17,9 +17,11 @@
 
 		<section v-if="!loading && editing" class="form-card">
 			<div class="flex flex-wrap items-start justify-between gap-3 mb-5">
-				<div>
-					<h2 class="form-title mb-0">{{ form.name ? form.full_name : "Add user" }}</h2>
-					<p class="form-hint mb-0">
+				<div class="min-w-0 flex-1">
+					<h2 class="form-title mb-0 break-words">
+						{{ form.name ? form.full_name : "Add user" }}
+					</h2>
+					<p class="form-hint mb-0 break-all">
 						{{
 							form.name ||
 							"Create a login identity. HR links it to an Employee separately."

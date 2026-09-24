@@ -60,13 +60,11 @@
 			/>
 
 			<TodoList
+				v-if="waitingCount"
 				title="Waiting on you"
 				:items="waitingPreview"
 				:total-count="waitingCount"
 				:see-all-to="waitingCount > HOME_WAITING_CAP ? '/todos' : ''"
-				:show-empty="true"
-				empty-title="You’re clear"
-				:empty-hint="clearHint"
 			/>
 
 			<ActionGrid
@@ -120,6 +118,15 @@
 					/>
 				</div>
 			</details>
+
+			<TodoList
+				v-if="!waitingCount"
+				title="Waiting on you"
+				:items="[]"
+				:show-empty="true"
+				empty-title="You’re clear"
+				:empty-hint="clearHint"
+			/>
 		</div>
 	</div>
 </template>

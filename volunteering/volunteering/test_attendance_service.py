@@ -196,8 +196,9 @@ class IntegrationTestAttendanceService(IntegrationTestCase):
 			"Attendance Request", {"employee": self.employee, "from_date": today}
 		)
 		# Neutralize holidays so the test is deterministic even on weekly-off days
-		with patch(
-			"volunteering.volunteering.attendance_service.get_holiday_info", return_value=None
+		with (
+			patch("volunteering.volunteering.attendance_service.get_holiday_info", return_value=None),
+			patch("volunteering.volunteering.attendance_service.is_org_weekly_off", return_value=False),
 		):
 			action = process_employee_attendance(self.employee, today)
 		self.assertTrue(is_grace_period_open(today))
@@ -302,8 +303,9 @@ class IntegrationTestAttendanceService(IntegrationTestCase):
 
 	def test_org_weekly_off_marks_holiday_without_holiday_list(self):
 		"""Wednesday stays Holiday even if get_holiday_info finds nothing."""
-		from volunteering.volunteering.leave_setup import WEEKLY_OFF_DAY
 		from unittest.mock import patch
+
+		from volunteering.volunteering.leave_setup import WEEKLY_OFF_DAY
 
 		day = getdate(nowdate())
 		wednesday = add_days(day, (WEEKLY_OFF_DAY - day.weekday()) % 7)

@@ -4,7 +4,12 @@ import { defineConfig, devices } from "@playwright/test";
 process.env.E2E_PROJECT_DEMOS = "1";
 export default defineConfig({
   testDir: "./e2e/tests/projects",
-  testMatch: ["workspace.spec.ts", "layout.spec.ts", "account-mapping.spec.ts"],
+  testMatch: [
+    "workspace.spec.ts",
+    "layout.spec.ts",
+    "account-mapping.spec.ts",
+    "chart-of-accounts.spec.ts",
+  ],
   outputDir: "./test-results/project-workspace",
   workers: 1,
   reporter: "line",

@@ -324,7 +324,7 @@ test("HR and System Management workspaces", async ({ page }, testInfo) => {
   });
 });
 
-test("Budget Health and project-account mapping", async ({
+test("Budget Health, Chart of Accounts and project-account mapping", async ({
   page,
 }, testInfo) => {
   await test.step("budget-health", async () => {
@@ -354,6 +354,20 @@ test("Budget Health and project-account mapping", async ({
       ).toBeVisible();
     }
     await auditMobileLayout(page, testInfo, "project-account-mapping");
+  });
+  await test.step("chart-of-accounts", async () => {
+    await openRoute(
+      page,
+      PERSONAS.accounts,
+      "/volunteering/chart-of-accounts",
+      "Chart of Accounts",
+    );
+    await auditMobileLayout(page, testInfo, "chart-of-accounts");
+    await page.getByRole("button", { name: "Add account" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Add account" }),
+    ).toBeVisible();
+    await auditMobileLayout(page, testInfo, "chart-of-accounts-form");
   });
 });
 
@@ -388,8 +402,8 @@ test("project list, proposal form, approved detail and manager queue", async ({
     await openRoute(
       page,
       projectManager,
-      "/volunteering/projects?queue=1",
-      "Projects",
+      "/volunteering/project-proposals/review",
+      "Review pending proposals",
     );
     await auditMobileLayout(page, testInfo, "project-manager-queue");
   });

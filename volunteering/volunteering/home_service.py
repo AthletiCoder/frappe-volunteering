@@ -198,7 +198,8 @@ def _team_actions():
 
 def _accounts_actions(user):
 	roles = set(frappe.get_roles(user))
-	if "Accounts Manager" not in roles and "Accounts User" not in roles and user != "Administrator":
+	is_manager = user == "Administrator" or "Accounts Manager" in roles
+	if not is_manager and "Accounts User" not in roles:
 		return []
 	links = [
 		{
@@ -214,9 +215,16 @@ def _accounts_actions(user):
 			"route": "/volunteering/advance-workflow?view=return",
 		},
 	]
-	if "Accounts Manager" not in roles:
+	if not is_manager:
 		return links
-	return links + [
+	return [
+		*links,
+		{
+			"id": "chart_of_accounts",
+			"label": _("Chart of Accounts"),
+			"hint": _("Create, organise, rename, disable or remove ledger accounts and groups."),
+			"route": "/volunteering/chart-of-accounts",
+		},
 		{
 			"id": "bank_account",
 			"label": _("Review reimbursement bank accounts"),
@@ -263,9 +271,9 @@ def _project_actions(flags):
 		links.append(
 			{
 				"id": "review_project_proposals",
-				"label": _("Review project proposals"),
-				"hint": _("View proposals from others; decide those assigned to you."),
-				"route": "/volunteering/projects?view=review",
+				"label": _("Review pending proposals"),
+				"hint": _("Open the dedicated queue of project requests awaiting review."),
+				"route": "/volunteering/project-proposals/review",
 			}
 		)
 	return links
@@ -617,7 +625,7 @@ def _leave_inbox(user, employee):
 				"id": f"Leave Application::{row.name}",
 				"kind": "Leave",
 				"title": row.employee_name or row.name,
-				"subtitle": f"{row.leave_type or ''} · {formatdate(row.from_date)} – {formatdate(row.to_date)}",
+				"subtitle": f"{row.leave_type or ''} · {formatdate(row.from_date)} - {formatdate(row.to_date)}",
 				"route": f"/desk/leave-application/{row.name}",
 				"modified": str(row.modified or ""),
 			}
@@ -645,7 +653,7 @@ def _wfh_inbox(employee):
 				"id": f"Attendance Request::{row.name}",
 				"kind": "WFH",
 				"title": row.employee_name or row.name,
-				"subtitle": f"{formatdate(row.from_date)} – {formatdate(row.to_date)}",
+				"subtitle": f"{formatdate(row.from_date)} - {formatdate(row.to_date)}",
 				"route": f"/desk/attendance-request/{row.name}",
 				"modified": str(row.modified or ""),
 			}

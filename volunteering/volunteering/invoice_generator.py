@@ -21,7 +21,7 @@ from io import BytesIO
 import frappe
 from frappe import _
 from frappe.model.naming import getseries
-from frappe.utils import formatdate, getdate, money_in_words, nowdate
+from frappe.utils import formatdate, getdate, money_in_words, now_datetime, nowdate
 from frappe.utils.password import decrypt, encrypt
 from markupsafe import escape
 
@@ -29,6 +29,7 @@ from volunteering.volunteering.authority import get_employee_for_user
 
 MAX_ITEMS = 20
 MAX_SIGNATURE_BYTES = 500_000
+VENDOR_ADDRESS_DOCTYPE = "Employee Vendor Address"
 MONEY_PLACES = Decimal("0.01")
 MAX_MONEY = Decimal("999999999999.99")
 MAX_QUANTITY = Decimal("999999999")
@@ -63,6 +64,7 @@ def get_invoice_generator_defaults():
 		"office_addresses": address_choices,
 		"default_office_address": default_choice["name"] if default_choice else "",
 		"consignee": address,
+		"vendor_addresses": _vendor_address_choices(employee),
 	}
 
 
@@ -127,6 +129,11 @@ def _generate_invoice_documents(payload, output_format="both", generation_refere
 			"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 			_build_docx(data),
 		)
+	# Remember only a successfully rendered invoice. PDF and Word generated from
+	# the same opaque reference share one invoice number and count as one use.
+	result["vendor_address"] = _remember_vendor_address(
+		employee, data["supplier"], data["invoice_number"]
+	)
 	# An authenticated, opaque reference permits the other format for exactly
 	# this employee and content, without trusting client-supplied invoice numbers.
 	# Issue it only after the requested document(s) succeed.
@@ -141,6 +148,98 @@ def _generate_invoice_documents(payload, output_format="both", generation_refere
 		)
 	)
 	return result
+
+
+def _vendor_address_key(employee, party):
+	identity = "\n".join(
+		[
+			_text(employee, 140).casefold(),
+			_text(party.get("name"), 160).casefold(),
+			_text(party.get("address"), 600).casefold(),
+			_text(party.get("state"), 100).casefold(),
+			_text(party.get("pin_code"), 12).casefold(),
+		]
+	)
+	return hashlib.sha256(identity.encode()).hexdigest()
+
+
+def _vendor_address_row(row):
+	party = {
+		"name": row.vendor_name,
+		"address": row.address,
+		"state": row.state,
+		"pin_code": row.pin_code or "",
+		"gstin": row.gstin or "",
+		"pan": row.pan or "",
+	}
+	location = ", ".join(part for part in (party["address"], party["state"], party["pin_code"]) if part)
+	return {
+		"name": row.name,
+		"label": f"{party['name']} — {location}",
+		"party": party,
+		"use_count": row.use_count or 0,
+		"last_used_on": row.last_used_on,
+	}
+
+
+def _vendor_address_choices(employee):
+	rows = frappe.get_all(
+		VENDOR_ADDRESS_DOCTYPE,
+		filters={"employee": employee},
+		fields=[
+			"name",
+			"vendor_name",
+			"address",
+			"state",
+			"pin_code",
+			"gstin",
+			"pan",
+			"use_count",
+			"last_used_on",
+		],
+		order_by="use_count desc, last_used_on desc, modified desc",
+		limit=100,
+	)
+	return [_vendor_address_row(row) for row in rows]
+
+
+def _remember_vendor_address(employee, party, invoice_number):
+	key = _vendor_address_key(employee, party)
+	doc = frappe.db.exists(VENDOR_ADDRESS_DOCTYPE, key)
+	if doc:
+		doc = frappe.get_doc(VENDOR_ADDRESS_DOCTYPE, doc)
+		if doc.employee != employee:
+			frappe.throw(_("The saved vendor address belongs to another employee."), frappe.PermissionError)
+		doc.vendor_name = party["name"]
+		doc.address = party["address"]
+		doc.state = party["state"]
+		doc.pin_code = party.get("pin_code") or ""
+		doc.gstin = party.get("gstin") or ""
+		doc.pan = party.get("pan") or ""
+		if doc.last_invoice_number != invoice_number:
+			doc.use_count = (doc.use_count or 0) + 1
+	else:
+		doc = frappe.get_doc(
+			{
+				"doctype": VENDOR_ADDRESS_DOCTYPE,
+				"address_key": key,
+				"employee": employee,
+				"vendor_name": party["name"],
+				"address": party["address"],
+				"state": party["state"],
+				"pin_code": party.get("pin_code") or "",
+				"gstin": party.get("gstin") or "",
+				"pan": party.get("pan") or "",
+				"use_count": 1,
+			}
+		)
+	doc.last_invoice_number = invoice_number
+	doc.last_used_on = now_datetime()
+	if doc.is_new():
+		doc.insert(ignore_permissions=True)
+	else:
+		doc.save(ignore_permissions=True)
+	return _vendor_address_row(doc)
 
 
 def _number_for_generation(employee, fingerprint, reference):

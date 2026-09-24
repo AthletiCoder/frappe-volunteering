@@ -71,6 +71,7 @@ class UnitTestEmployeeBankDetails(UnitTestCase):
 				[
 					"advance_disbursement",
 					"advance_returns",
+					"chart_of_accounts",
 					"bank_account",
 					"project_account_mapping",
 				],
@@ -310,6 +311,34 @@ class IntegrationTestEmployeeBankAccounts(IntegrationTestCase):
 			self.assertIn("Remittance Details", content)
 			self.assertNotIn("999999999999", content)
 			self.assertNotIn("Forged Bank", content)
+
+	def test_generated_invoice_remembers_vendor_only_for_current_employee(self):
+		self.approve()
+		frappe.set_user(self.employee_user)
+		payload = _payload("NON_GST")
+		with patch.object(
+			invoices, "_build_pdf", side_effect=lambda data: invoices._render_pdf_html(data).encode()
+		):
+			generated = invoices.generate_invoice_documents(payload, output_format="pdf")
+			again = invoices.generate_invoice_documents(
+				payload,
+				output_format="docx",
+				generation_reference=generated["generation_reference"],
+			)
+		self.assertEqual(generated["vendor_address"]["name"], again["vendor_address"]["name"])
+		self.assertEqual(generated["invoice_number"], again["invoice_number"])
+		self.assertEqual(again["vendor_address"]["use_count"], 1)
+		with patch.object(
+			invoices, "_build_pdf", side_effect=lambda data: invoices._render_pdf_html(data).encode()
+		):
+			new_invoice = invoices.generate_invoice_documents(payload, output_format="pdf")
+		self.assertNotEqual(generated["invoice_number"], new_invoice["invoice_number"])
+		self.assertEqual(new_invoice["vendor_address"]["use_count"], 2)
+		choices = invoices.get_invoice_generator_defaults()["vendor_addresses"]
+		self.assertEqual(len(choices), 1)
+		self.assertEqual(choices[0]["party"], payload["supplier"])
+		frappe.set_user(self.other_user)
+		self.assertEqual(invoices._vendor_address_choices(self.other_employee), [])
 
 	def payment(self, destination=None):
 		return frappe._dict(
