@@ -41,6 +41,7 @@ test.describe("SPA shell @smoke @volunteering", () => {
         advance: ["coins", "blue"],
         claim: ["receipt", "amber"],
         invoice_generator: ["invoice", "cyan"],
+        invoice_expense_claim: ["invoice-claim", "green"],
       };
 
       for (const [actionId, [icon, tone]] of Object.entries(expectedVisuals)) {

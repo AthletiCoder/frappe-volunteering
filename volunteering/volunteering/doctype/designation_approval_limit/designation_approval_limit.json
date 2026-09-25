@@ -7,6 +7,7 @@
  "field_order": [
   "designation",
   "max_approve_amount",
+  "max_expense_claim_amount",
   "max_advance_amount"
  ],
  "fields": [
@@ -20,11 +21,20 @@
    "reqd": 1
   },
   {
-   "description": "Largest amount this grade can approve for OTHERS (approval routing up reports_to).",
+   "description": "Largest advance exposure and general accounting amount this grade can approve for others.",
    "fieldname": "max_approve_amount",
    "fieldtype": "Currency",
    "in_list_view": 1,
-   "label": "Max Approval Authority (for others)",
+   "label": "Advance / General Approval Limit",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "Largest single Expense Claim this grade can approve. Claims visit each linked reporting manager in sequence.",
+   "fieldname": "max_expense_claim_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Expense Claim Approval Limit",
    "reqd": 1
   },
   {

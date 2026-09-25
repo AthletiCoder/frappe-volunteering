@@ -204,9 +204,10 @@
 					{{ request?.proposal_status || "Unsaved draft" }}
 				</h2>
 				<p class="form-hint">
-					This is a proposal, not the effective project. Save it, then submit for
-					approval. Submitted requests are locked for the proposer until returned for
-					correction.
+					This is a proposal, not the effective project. Drafts may be saved with
+					incomplete planning information; fields marked * become mandatory when you
+					submit for approval. Submitted requests are locked for the proposer until
+					returned for correction.
 				</p>
 				<p v-if="request?.stale" class="text-bad text-sm mb-3" role="alert">
 					The approved project has changed. A manager must review the current baseline
@@ -218,111 +219,8 @@
 						class="field-input"
 						rows="2"
 						:disabled="!detailEditable"
-						:required="Boolean(saved)"
 					/>
 				</label>
-				<label class="field-label mt-4"
-					>Assigned Projects Manager *<select
-						v-model="assignedApprover"
-						required
-						class="field-input"
-						:disabled="Boolean(request) && !request.can_submit"
-					>
-						<option value="">Choose one manager</option>
-						<option
-							v-for="manager in managerOptions"
-							:key="manager.name"
-							:value="manager.name"
-						>
-							{{ manager.full_name }} · {{ manager.name }}
-						</option>
-					</select>
-					<span class="field-help"
-						>All Projects Managers can view the proposal. Only this manager can edit it
-						while pending or approve, return or reject it.</span
-					></label
-				>
-				<div v-if="request?.can_review" class="mt-4 space-y-3">
-					<details>
-						<summary class="cursor-pointer font-semibold">
-							Compare approved details with requested changes
-						</summary>
-						<div class="form-grid mt-3">
-							<pre class="revision-values">
-Approved: {{ JSON.stringify(request.current, null, 2) }}</pre>
-							<pre class="revision-values">
-Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
-						</div>
-					</details>
-					<label class="field-label"
-						>Review comments<textarea
-							v-model.trim="comments"
-							class="field-input"
-							rows="2"
-							placeholder="Required for return, rejection or refreshing a stale baseline"
-						/>
-					</label>
-					<div class="flex flex-wrap gap-2">
-						<button
-							type="button"
-							class="btn-primary"
-							:disabled="busy || request.stale"
-							@click="decide('approve')"
-						>
-							{{ changed ? "Approve with my edits" : "Approve proposal" }}</button
-						><button
-							type="button"
-							class="btn-secondary"
-							:disabled="busy"
-							@click="decide('return')"
-						>
-							Return for correction</button
-						><button
-							type="button"
-							class="btn-secondary text-bad"
-							:disabled="busy"
-							@click="decide('reject')"
-						>
-							Reject proposal</button
-						><button
-							v-if="request.stale"
-							type="button"
-							class="btn-secondary"
-							:disabled="busy"
-							@click="decide('rebase')"
-						>
-							Refresh approved baseline
-						</button>
-					</div>
-				</div>
-				<div
-					v-else-if="request?.can_submit || request?.can_withdraw"
-					class="flex flex-wrap gap-2 mt-4"
-				>
-					<button
-						v-if="request?.can_submit"
-						type="button"
-						class="btn-primary"
-						:disabled="busy"
-						@click="submitRequest"
-					>
-						Submit for project approval</button
-					><button
-						type="button"
-						class="btn-secondary"
-						:disabled="busy"
-						@click="withdraw"
-						v-if="request?.can_withdraw"
-					>
-						Withdraw draft
-					</button>
-				</div>
-				<RouterLink
-					v-if="request?.proposal_status === 'Approved'"
-					:to="{ path: '/projects', query: { project: request.project } }"
-					class="text-accent underline inline-block mt-4"
-					>Open approved project</RouterLink
-				>
 			</div>
 			<p v-else class="text-sm text-muted">
 				Approved details are read-only. Use Propose changes to request an update.
@@ -439,14 +337,12 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 					<label class="field-label"
 						>Project name *<input
 							v-model.trim="form.project_name"
-							required
 							maxlength="140"
 							class="field-input"
 					/></label>
 					<label class="field-label sm:col-span-2"
 						>Purpose / scope *<textarea
 							v-model.trim="form.project_purpose"
-							required
 							rows="3"
 							maxlength="4000"
 							class="field-input"
@@ -492,7 +388,6 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 				<label class="field-label"
 					>Project owner *<select
 						v-model="form.project_owner"
-						required
 						class="field-input"
 						:disabled="!detailEditable"
 					>
@@ -585,7 +480,6 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 					<label class="field-label sm:col-span-2"
 						>Default cost centre *<select
 							v-model="form.cost_center"
-							required
 							class="field-input"
 						>
 							<option value="">Choose a cost centre</option>
@@ -615,7 +509,6 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 							type="number"
 							min="0"
 							step="0.01"
-							:required="form.project_budget_control !== 'No Control'"
 							class="field-input"
 					/></label>
 					<label class="field-label sm:col-span-2"
@@ -675,7 +568,6 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 							<label class="field-label"
 								>Expense break-up label *<input
 									v-model.trim="row.employee_label"
-									required
 									maxlength="140"
 									class="field-input"
 									list="approved-expense-breakup-labels"
@@ -694,7 +586,6 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 									type="number"
 									min="0"
 									step="0.01"
-									:required="form.account_budget_control !== 'No Control'"
 									class="field-input"
 								/><span class="field-help"
 									>Optional when break-up control is No Control.</span
@@ -776,16 +667,23 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 							rel="noopener"
 							class="text-accent underline"
 							>{{ file.file_name }}</a
-						><span class="text-xs text-muted ml-2">Private</span>
+						><span class="document-access-badge ml-2">
+							{{
+								file.project_visibility
+									? `${file.project_visibility} access`
+									: "Access not recorded"
+							}}
+						</span>
+						<span class="text-xs text-muted ml-2">Private file</span>
 					</li>
 				</ul>
-				<label v-if="request && detailEditable" class="field-label"
+				<label v-if="requestMode && detailEditable" class="field-label"
 					>Document visibility<select v-model="documentVisibility" class="field-input">
 						<option>Basic</option>
 						<option>Financial</option>
 					</select></label
 				>
-				<label v-if="request && detailEditable" class="field-label"
+				<label v-if="requestMode && detailEditable" class="field-label"
 					>Add a supporting document<input
 						type="file"
 						class="field-input"
@@ -793,12 +691,10 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 						@change="upload"
 					/><span class="field-help"
 						>Private evidence on this request; published to the project only after
-						approval, up to 10 MB.</span
+						approval, up to 10 MB. Selecting the first file automatically saves the
+						draft.</span
 					></label
 				>
-				<p v-if="requestMode && !request" class="text-sm text-muted">
-					Save the draft first, then attach its supporting documents here.
-				</p>
 			</section>
 
 			<section class="rounded-2xl border border-line bg-accent-soft p-5">
@@ -957,6 +853,116 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 					{{ saving ? "Saving…" : "Save draft / edits" }}
 				</button>
 			</div>
+
+			<section v-if="requestMode" class="form-card" aria-labelledby="proposal-action-title">
+				<h2 id="proposal-action-title" class="form-title">{{ proposalActionTitle }}</h2>
+				<p class="form-hint">
+					Review the complete proposal above before choosing its reviewer, submitting it,
+					or recording a decision.
+				</p>
+				<label class="field-label"
+					>Assigned Projects Manager *<select
+						v-model="assignedApprover"
+						class="field-input"
+						:disabled="Boolean(request) && !request.can_submit"
+					>
+						<option value="">Choose one manager</option>
+						<option
+							v-for="manager in managerOptions"
+							:key="manager.name"
+							:value="manager.name"
+						>
+							{{ manager.full_name }} · {{ manager.name }}
+						</option>
+					</select>
+					<span class="field-help"
+						>All Projects Managers can view the proposal. Only this manager can edit it
+						while pending or approve, return or reject it.</span
+					></label
+				>
+
+				<div v-if="request?.can_review" class="mt-5 space-y-4">
+					<details>
+						<summary class="cursor-pointer font-semibold">
+							Compare approved details with requested changes
+						</summary>
+						<div class="form-grid mt-3">
+							<pre class="revision-values">
+Approved: {{ JSON.stringify(request.current, null, 2) }}</pre>
+							<pre class="revision-values">
+Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
+						</div>
+					</details>
+					<label class="field-label"
+						>Review comments<textarea
+							v-model.trim="comments"
+							class="field-input"
+							rows="2"
+							placeholder="Required for return, rejection or refreshing a stale baseline"
+						/>
+					</label>
+					<div class="flex flex-wrap gap-2">
+						<button
+							type="button"
+							class="btn-primary"
+							:disabled="busy || request.stale"
+							@click="decide('approve')"
+						>
+							{{ changed ? "Approve with my edits" : "Approve proposal" }}</button
+						><button
+							type="button"
+							class="btn-secondary"
+							:disabled="busy"
+							@click="decide('return')"
+						>
+							Return for correction</button
+						><button
+							type="button"
+							class="btn-secondary text-bad"
+							:disabled="busy"
+							@click="decide('reject')"
+						>
+							Reject proposal</button
+						><button
+							v-if="request.stale"
+							type="button"
+							class="btn-secondary"
+							:disabled="busy"
+							@click="decide('rebase')"
+						>
+							Refresh approved baseline
+						</button>
+					</div>
+				</div>
+				<div
+					v-else-if="request?.can_submit || request?.can_withdraw"
+					class="flex flex-wrap gap-2 mt-5"
+				>
+					<button
+						v-if="request?.can_submit"
+						type="button"
+						class="btn-primary"
+						:disabled="busy"
+						@click="submitRequest"
+					>
+						Submit for project approval</button
+					><button
+						v-if="request?.can_withdraw"
+						type="button"
+						class="btn-secondary"
+						:disabled="busy"
+						@click="withdraw"
+					>
+						Withdraw draft
+					</button>
+				</div>
+				<RouterLink
+					v-if="request?.proposal_status === 'Approved'"
+					:to="{ path: '/projects', query: { project: request.project } }"
+					class="text-accent underline inline-block mt-4"
+					>Open approved project</RouterLink
+				>
+			</section>
 		</form>
 	</div>
 </template>
@@ -1079,6 +1085,11 @@ const pageEyebrow = computed(() => {
 	if (saved.value && !requestMode.value) return "Project";
 	if (requestMode.value) return "Project proposal";
 	return "Projects";
+});
+const proposalActionTitle = computed(() => {
+	if (request.value?.can_review) return "Project approval decision";
+	if (!request.value || request.value.can_submit) return "Submit the proposal";
+	return "Proposal routing and status";
 });
 const detailEditable = computed(
 	() => requestMode.value && (!request.value || request.value.can_edit),
@@ -1364,17 +1375,13 @@ function back() {
 	router.push({ path: "/projects", query: { view: "approved" } });
 }
 
-async function save() {
-	if (uploading.value) {
+async function save(options = {}) {
+	if (uploading.value && !options.allowDuringUpload) {
 		error.value = "Wait for the supporting document upload to finish.";
 		return;
 	}
 	if (breakupOverBy.value > 0) {
 		error.value = "Expense break up cannot exceed the total project budget.";
-		return;
-	}
-	if (!assignedApprover.value) {
-		error.value = "Choose the Projects Manager who should review this proposal.";
 		return;
 	}
 	error.value = "";
@@ -1390,7 +1397,7 @@ async function save() {
 			assigned_approver: assignedApprover.value,
 		});
 		request.value = result;
-		if (route.query.proposal !== result.name)
+		if (!options.skipNavigation && route.query.proposal !== result.name)
 			await router.replace({ path: "/projects", query: { proposal: result.name } });
 		notice.value = `Request saved. The approved project has not changed.`;
 		return result;
@@ -1564,6 +1571,11 @@ async function upload(event) {
 	uploading.value = true;
 	try {
 		if (file.size > 10 * 1024 * 1024) throw new Error("Choose a document smaller than 10 MB.");
+		let draft = request.value;
+		if (!draft) {
+			draft = await save({ allowDuringUpload: true, skipNavigation: true });
+			if (!draft) throw new Error(error.value || "The draft could not be saved.");
+		}
 		const content = await new Promise((resolve, reject) => {
 			const reader = new FileReader();
 			reader.onerror = reject;
@@ -1571,12 +1583,14 @@ async function upload(event) {
 			reader.readAsDataURL(file);
 		});
 		request.value = await call(proposalMethod + "upload_proposal_document", {
-			proposal: request.value.name,
-			modified: request.value.modified,
+			proposal: draft.name,
+			modified: draft.modified,
 			visibility: documentVisibility.value,
 			filename: file.name,
 			content,
 		});
+		if (route.query.proposal !== request.value.name)
+			await router.replace({ path: "/projects", query: { proposal: request.value.name } });
 		notice.value = "Supporting document attached privately.";
 	} catch (e) {
 		error.value = e.message || String(e);
@@ -1657,6 +1671,9 @@ onMounted(handleRoute);
 }
 .revision-values {
 	@apply text-xs font-sans text-muted whitespace-pre-wrap break-words mt-2 leading-relaxed;
+}
+.document-access-badge {
+	@apply inline-flex rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent;
 }
 fieldset:disabled {
 	opacity: 0.75;

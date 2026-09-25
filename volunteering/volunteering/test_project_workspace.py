@@ -142,6 +142,24 @@ class IntegrationTestProjectGovernance(IntegrationTestCase):
 		)
 		return self.request
 
+	def test_incomplete_planning_draft_saves_but_cannot_be_submitted(self):
+		draft = save_proposal({})
+		self.assertEqual(draft["proposal_status"], "Draft")
+		self.assertEqual(draft["title"], "Untitled project proposal")
+		self.assertFalse(draft["assigned_approver"])
+
+		with self.assertRaisesRegex(frappe.ValidationError, "Choose the Projects Manager"):
+			submit_proposal(draft["name"], draft["modified"])
+
+		draft = save_proposal(
+			{},
+			proposal=draft["name"],
+			modified=draft["modified"],
+			assigned_approver=self.manager,
+		)
+		with self.assertRaisesRegex(frappe.ValidationError, "Project Name"):
+			submit_proposal(draft["name"], draft["modified"])
+
 	def test_new_proposal_waits_for_assigned_manager_but_all_managers_can_view(self):
 		self.assertFalse(self.request["project"])
 		self.assertFalse(frappe.db.exists("Project", {"project_name": self.data["project_name"]}))

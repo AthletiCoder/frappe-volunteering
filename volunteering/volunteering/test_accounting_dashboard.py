@@ -36,7 +36,7 @@ from volunteering.volunteering.expense_claim_permissions import (
 	get_permission_query_conditions,
 	has_permission,
 )
-from volunteering.volunteering.receipt_review import CHECKLIST_ITEMS, review_receipts
+from volunteering.volunteering.receipt_review import review_receipts
 
 
 class IntegrationTestAccountingDashboard(IntegrationTestCase):
@@ -59,15 +59,11 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 		ensure_accounting_pages()
 
 		cls.project = get_or_create_project_with_cost_center()
-		cls.dept_head_email = get_or_create_user(
-			"dept-head-acct@example.com", ["Employee"], "Dept Head"
-		)
+		cls.dept_head_email = get_or_create_user("dept-head-acct@example.com", ["Employee"], "Dept Head")
 		cls.other_dept_head_email = get_or_create_user(
 			"other-dept-head-acct@example.com", ["Employee"], "Other Head"
 		)
-		cls.employee_email = get_or_create_user(
-			"employee-acct@example.com", ["Employee"], "Employee User"
-		)
+		cls.employee_email = get_or_create_user("employee-acct@example.com", ["Employee"], "Employee User")
 		cls.accounts_email = get_or_create_user(
 			"accounts-acct@example.com", ["Employee", "Accounts User"], "Accounts User"
 		)
@@ -119,8 +115,7 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 		review_receipts(
 			claim.name,
 			"verify",
-			"Receipts meet the test audit checklist.",
-			{key: True for key, _label in CHECKLIST_ITEMS},
+			"Receipt reviewed in the accounting dashboard test.",
 		)
 		return frappe.get_doc("Expense Claim", claim.name)
 
@@ -134,9 +129,7 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 	def test_permission_hooks_are_importable(self):
 		from volunteering import hooks
 
-		self.assertTrue(
-			callable(frappe.get_attr(hooks.permission_query_conditions["Expense Claim"]))
-		)
+		self.assertTrue(callable(frappe.get_attr(hooks.permission_query_conditions["Expense Claim"])))
 		self.assertTrue(callable(frappe.get_attr(hooks.has_permission["Expense Claim"])))
 
 	def test_dept_head_permission_query_scopes_to_department(self):
@@ -151,9 +144,7 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 		self.assertNotEqual(condition, "")
 
 	def test_regular_employee_cannot_read_other_claim(self):
-		claim = self._submit_claim_as(
-			self.other_employee_email, amount=1500, employee=self.other_employee
-		)
+		claim = self._submit_claim_as(self.other_employee_email, amount=1500, employee=self.other_employee)
 		doc = frappe.get_doc("Expense Claim", claim.name)
 		self.assertFalse(has_permission(doc, "read", self.employee_email))
 
@@ -180,9 +171,7 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 		validate_expense_claim_employee_self_only(doc)
 
 	def test_dept_head_cannot_read_other_department_claim(self):
-		claim = self._submit_claim_as(
-			self.other_employee_email, amount=1500, employee=self.other_employee
-		)
+		claim = self._submit_claim_as(self.other_employee_email, amount=1500, employee=self.other_employee)
 		doc = frappe.get_doc("Expense Claim", claim.name)
 		self.assertFalse(has_permission(doc, "read", self.dept_head_email))
 

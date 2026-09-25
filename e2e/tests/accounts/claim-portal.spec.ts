@@ -161,6 +161,59 @@ test.describe("Employee expense portal @ui @expense-portal", () => {
     ).toBeVisible();
   });
 
+  test("combined invoice and claim is a separate flow with both evidence paths", async ({
+    page,
+  }) => {
+    await page.goto("/volunteering/home");
+    await expect(
+      page.getByRole("link", { name: /Submit an Expense/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: /^Prepare an invoice/ }),
+    ).toBeVisible();
+    await page
+      .getByRole("link", { name: /Prepare invoice and submit expense/ })
+      .click();
+    await expect(page).toHaveURL(/\/volunteering\/invoice-expense-claim$/);
+    await expect(
+      page.getByRole("heading", {
+        name: "Prepare invoice and submit expense",
+        exact: true,
+      }),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: /^Yes, I have an invoice/ }).click();
+    await expect(
+      page.getByLabel("Receipt evidence *", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Invoice type", exact: true }),
+    ).toHaveCount(0);
+
+    await page.getByRole("button", { name: /^No, prepare one now/ }).click();
+    await expect(
+      page.getByLabel("Receipt evidence *", { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("heading", { name: "Invoice type", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Sign on screen", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Generate PDF", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Generate Word", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", {
+        name: "Sign and submit for receipt review",
+        exact: true,
+      }),
+    ).toBeVisible();
+  });
+
   test("browser submission attaches the item receipt and enters receipt review", async ({
     page,
   }) => {

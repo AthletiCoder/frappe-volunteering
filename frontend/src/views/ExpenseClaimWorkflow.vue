@@ -116,15 +116,7 @@
 
 			<section v-if="selected.access.receipt_review" class="form-card mb-5">
 				<h2 class="form-title">Receipt review</h2>
-				<p class="form-hint">
-					Open every receipt and complete each audit check before verifying.
-				</p>
-				<div class="space-y-3">
-					<label v-for="item in selected.checklist" :key="item.key" class="check-row">
-						<input v-model="review.checklist[item.key]" type="checkbox" />
-						<span>{{ item.label }}</span>
-					</label>
-				</div>
+				<p class="form-hint">Open the attached receipts before recording your decision.</p>
 				<label class="field-label mt-4"
 					>Review notes<textarea
 						v-model.trim="review.notes"
@@ -322,7 +314,7 @@ const success = ref("");
 const queuePayload = ref({ queues: {}, counts: {} });
 const selected = ref(null);
 const tab = ref(String(route.query.view || "receipt_review"));
-const review = reactive({ notes: "", checklist: {} });
+const review = reactive({ notes: "" });
 const sanctioned = reactive({});
 const decisionReason = ref("");
 const payment = reactive({
@@ -392,8 +384,6 @@ async function load() {
 
 async function loadDetail(name) {
 	selected.value = await call(`${API}get_expense_claim_work_item`, { name });
-	Object.keys(review.checklist).forEach((key) => delete review.checklist[key]);
-	selected.value.checklist.forEach((item) => (review.checklist[item.key] = false));
 	review.notes = "";
 	Object.keys(sanctioned).forEach((key) => delete sanctioned[key]);
 	selected.value.expenses.forEach((item) => (sanctioned[item.name] = Number(item.amount || 0)));
@@ -437,7 +427,6 @@ function verifyReceipts() {
 				name: selected.value.name,
 				decision: "verify",
 				notes: review.notes,
-				checklist: review.checklist,
 			}),
 		"Receipts verified; the claim is now with its manager.",
 	);
@@ -453,7 +442,6 @@ function requestCorrection() {
 				name: selected.value.name,
 				decision: "request_correction",
 				notes: review.notes,
-				checklist: review.checklist,
 			}),
 		"The claim was returned to the employee for correction.",
 	);
@@ -542,9 +530,6 @@ onMounted(load);
 }
 .expense-row {
 	@apply border-t border-line py-4 first:border-t-0 first:pt-0 last:pb-0;
-}
-.check-row {
-	@apply flex items-start gap-3 rounded-xl border border-line bg-bg p-3 text-sm;
 }
 .sanction-row {
 	@apply grid gap-3 rounded-xl border border-line bg-bg p-3 sm:grid-cols-[minmax(0,1fr)_10rem] sm:items-center;

@@ -30,7 +30,6 @@ from volunteering.volunteering.expense_claim_workflow_portal import (
 	get_expense_claim_work_queue,
 )
 from volunteering.volunteering.receipt_review import (
-	CHECKLIST_ITEMS,
 	PENDING_RECEIPT_REVIEW,
 	RECEIPT_CORRECTION_REQUIRED,
 	REVIEW_STATUS_PENDING,
@@ -96,7 +95,11 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 
 		set_employee_grade(cls.employee, "Associate", reports_to=cls.manager_employee)
 		set_employee_grade(cls.manager_employee, "Manager", reports_to=cls.director_employee)
-		set_employee_grade(cls.director_employee, "Director", reports_to=None)
+		set_employee_grade(
+			cls.director_employee,
+			"Director",
+			reports_to=cls.board_chair_employee,
+		)
 		set_employee_grade(cls.board_chair_employee, "Board of Directors")
 		set_employee_grade(cls.reviewer_employee, "Associate", reports_to=cls.director_employee)
 
@@ -135,8 +138,7 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 		review_receipts(
 			claim.name,
 			"verify",
-			"Receipts meet the test audit checklist.",
-			{key: True for key, _label in CHECKLIST_ITEMS},
+			"Receipt reviewed in the approval test.",
 		)
 		return frappe.get_doc("Expense Claim", claim.name)
 
@@ -205,17 +207,15 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 		with self.assertRaises(frappe.PermissionError):
 			get_expense_claim_work_item(claim.name)
 
-	def test_reviewer_cannot_edit_claim_and_incomplete_checklist_is_rejected(self):
+	def test_reviewer_cannot_edit_claim_and_can_verify_with_notes_only(self):
 		claim = self._submit_claim_as(self.employee_email, amount=1500, review=False)
 		frappe.set_user(self.reviewer_email)
 		self.assertFalse(frappe.get_doc("Expense Claim", claim.name).has_permission("write"))
-		with self.assertRaises(frappe.ValidationError):
-			review_receipts(
-				claim.name,
-				"verify",
-				"One check omitted.",
-				{key: key != CHECKLIST_ITEMS[0][0] for key, _label in CHECKLIST_ITEMS},
-			)
+		review_receipts(claim.name, "verify", "Receipt reviewed; no checklist is required.")
+		claim.reload()
+		self.assertEqual(claim.receipt_review_status, REVIEW_STATUS_VERIFIED)
+		self.assertEqual(claim.workflow_state, PENDING_APPROVAL)
+		self.assertFalse(claim.receipt_review_checklist)
 
 	def test_reviewer_role_has_no_accounts_or_payment_access(self):
 		self.assertFalse(frappe.has_permission("Account", "read", user=self.reviewer_email))
@@ -224,7 +224,7 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 	def test_receipt_correction_and_resubmission_clear_prior_review(self):
 		claim = self._submit_claim_as(self.employee_email, amount=1500, review=False)
 		frappe.set_user(self.reviewer_email)
-		review_receipts(claim.name, "request_correction", "Upload a legible full receipt.", {})
+		review_receipts(claim.name, "request_correction", "Upload a legible full receipt.")
 		claim.reload()
 		self.assertEqual(claim.workflow_state, RECEIPT_CORRECTION_REQUIRED)
 		self.assertEqual(claim.receipt_review_status, "Correction Required")
@@ -276,14 +276,25 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 				claim.name,
 				"verify",
 				"Self review attempt.",
-				{key: True for key, _label in CHECKLIST_ITEMS},
 			)
 
-	def test_mid_value_claim_routes_past_manager_to_director(self):
-		# 5000 exceeds Manager's 2000 approval authority; Director (25000) can.
+	def test_mid_value_claim_visits_manager_then_escalates_to_director(self):
+		# The manager must review first even though the claim exceeds their limit.
 		claim = self._submit_claim_as(self.employee_email, amount=5000)
 		self.assertEqual(claim.workflow_state, PENDING_APPROVAL)
+		self.assertEqual(claim.pending_approver, self.manager_email)
+
+		frappe.set_user(self.manager_email)
+		item = get_expense_claim_work_item(claim.name)
+		self.assertFalse(item["approval_flags"]["can_approve"])
+		self.assertTrue(item["approval_flags"]["can_escalate"])
+		escalate_document("Expense Claim", claim.name, "Claim exceeds the Manager limit")
+		claim.reload()
 		self.assertEqual(claim.pending_approver, self.director_email)
+
+		frappe.set_user(self.director_email)
+		item = get_expense_claim_work_item(claim.name)
+		self.assertTrue(item["approval_flags"]["can_approve"])
 
 	def test_high_value_claim_lands_with_first_manager(self):
 		# 30000 exceeds everyone in the chain; the immediate manager receives
@@ -328,6 +339,11 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 		claim.reload()
 		self.assertEqual(claim.workflow_state, PENDING_APPROVAL)
 		self.assertEqual(claim.pending_approver, self.director_email)
+
+		frappe.set_user(self.director_email)
+		escalate_document("Expense Claim", claim.name, "Amount above the Director limit")
+		claim.reload()
+		self.assertEqual(claim.pending_approver, self.board_chair_email)
 
 	def test_rejected_claim_stays_rejected_until_resubmit(self):
 		claim = self._submit_claim_as(self.employee_email, amount=1500)

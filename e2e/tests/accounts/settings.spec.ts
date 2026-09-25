@@ -13,24 +13,29 @@ test.describe("Accounting settings @accounts @ui", () => {
   test.describe("as accounts", () => {
     test.use({ storageState: personaStorage("accounts") });
 
-    test("AC-SET-001 @regression @critical: Accounts Manager edits Approval & Advance Limits", async ({
+    test("AC-SET-001 @regression @critical: Accounts Manager edits Expense Claim limits from Home", async ({
       page,
     }) => {
-      const limits = new ApprovalLimitsPage(page);
-      await limits.open();
+      await page.goto("/volunteering/home");
       await expect(
-        page.locator('[data-fieldname="designation_limits"]'),
+        page.getByRole("link", { name: /Expense Claim approval limits/ }),
       ).toBeVisible();
+      await page
+        .getByRole("link", { name: /Expense Claim approval limits/ })
+        .click();
       await expect(
-        page.getByText(
-          "Every eligible employee may request any advance amount",
-        ),
+        page.getByRole("heading", { name: "Expense Claim approval limits" }),
       ).toBeVisible();
-      await expect(
-        page
-          .locator('.primary-action, button[data-label="Save"]')
-          .filter({ hasText: "Save" }),
-      ).toBeVisible();
+      const managerLimit = page.getByLabel("Manager Expense Claim limit");
+      await expect(managerLimit).toBeVisible();
+      const existing = await managerLimit.inputValue();
+      await managerLimit.fill(existing || "2000");
+      await page
+        .getByRole("button", { name: "Save Expense Claim limits" })
+        .click();
+      await expect(page.getByRole("status")).toContainText(
+        "Expense Claim approval limits saved",
+      );
     });
 
     test("AC-SET-003 @regression: Edit Vendor Payment Threshold and Cash Payment Limit", async ({
@@ -127,7 +132,7 @@ test.describe("Accounting settings @accounts @ui", () => {
       ).toBeVisible();
       await expect(
         page.getByText(
-          "Every eligible employee may request any advance amount",
+          "Advance requests and verified Expense Claims start with the immediate reporting manager",
         ),
       ).toBeVisible();
       await limits.expectReadOnly();

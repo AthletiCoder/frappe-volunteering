@@ -144,9 +144,7 @@ test("REL-001: Home claim → actual receipt reviewer → manager → cash settl
       `/volunteering/expense-claim-workflow?claim=${encodeURIComponent(name)}`,
     );
     await expect(reviewer.getByRole("heading", { name })).toBeVisible();
-    const checks = reviewer.locator('input[type="checkbox"]');
-    await expect(checks).toHaveCount(6);
-    for (let index = 0; index < 6; index += 1) await checks.nth(index).check();
+    await expect(reviewer.locator(".check-row")).toHaveCount(0);
     await reviewer
       .getByLabel("Review notes")
       .fill(

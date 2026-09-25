@@ -415,7 +415,11 @@ def save_proposal(data, proposal=None, project=None, modified=None, reason="", a
 				"proposal_status": "Draft",
 			}
 		)
-		doc.assigned_approver = _validate_assigned_approver(assigned_approver)
+		# A planning draft may be saved before the proposer knows who should
+		# review it. Submission remains strict in ``submit_proposal``.
+		doc.assigned_approver = (
+			_validate_assigned_approver(assigned_approver) if cstr(assigned_approver).strip() else None
+		)
 	elif assigned_approver and assigned_approver != doc.assigned_approver:
 		if doc.proposed_by != frappe.session.user or doc.proposal_status not in EDITABLE:
 			frappe.throw(
@@ -501,6 +505,8 @@ def _validate_candidate(doc):
 	from volunteering.volunteering.budget_service import validate_project_department_budgets
 
 	project = _candidate(doc)
+	if not cstr(project.get("project_name")).strip():
+		frappe.throw(_("Enter a Project Name before submitting this proposal."))
 	_normalise_expense_breakup(project)
 	# Validation only: bypass approval enforcement through a distinct validator parameter,
 	# never a client-supplied Document flag. Permission/decision checks are not performed here.

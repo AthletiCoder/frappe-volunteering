@@ -67,6 +67,39 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
     }
   });
 
+  test("first attachment automatically saves an incomplete planning draft", async ({
+    page,
+  }) => {
+    await signIn(page, proposer);
+    await page.getByRole("button", { name: "Propose a project" }).click();
+
+    await page.getByLabel("Add a supporting document").setInputFiles({
+      name: `early-planning-note-${Date.now()}.txt`,
+      mimeType: "text/plain",
+      buffer: Buffer.from(
+        "Early planning note; the proposal is intentionally incomplete.",
+      ),
+    });
+
+    await expect(page).toHaveURL(/proposal=/);
+    await expect(
+      page
+        .getByRole("status")
+        .filter({ hasText: "Supporting document attached privately" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: /early-planning-note-/ }),
+    ).toBeVisible();
+
+    const draftId = new URL(page.url()).searchParams.get("proposal")!;
+    const draft = (
+      await api(page, proposalService + "get_proposal", { proposal: draftId })
+    ).data.message;
+    expect(draft.proposal_status).toBe("Draft");
+    expect(draft.assigned_approver).toBeFalsy();
+    expect(draft.title).toBe("Untitled project proposal");
+  });
+
   test("proposer saves evidence and submits without creating an effective project", async ({
     page,
   }) => {
@@ -75,6 +108,8 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
     await expect(
       page.getByRole("heading", { name: "What are we doing?" }),
     ).toBeVisible();
+    const proposalHeadings = await page.locator("form h2").allTextContents();
+    expect(proposalHeadings.at(-1)?.trim()).toBe("Submit the proposal");
 
     const options = (await api(page, workspaceService + "get_setup_options"))
       .data.message;
@@ -129,6 +164,7 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
     await expect(
       page.getByRole("link", { name: /local-project-plan/ }),
     ).toBeVisible();
+    await expect(page.getByText("Basic access", { exact: true })).toBeVisible();
     await page.getByLabel("Document visibility").selectOption("Financial");
     await page.getByLabel("Add a supporting document").setInputFiles({
       name: "local-approved-budget.txt",
@@ -137,6 +173,9 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
     });
     await expect(
       page.getByRole("link", { name: /local-approved-budget/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Financial access", { exact: true }),
     ).toBeVisible();
     await page
       .getByRole("button", { name: "Submit for project approval" })
@@ -170,6 +209,8 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
         exact: true,
       }),
     ).toBeVisible();
+    const approvalHeadings = await page.locator("form h2").allTextContents();
+    expect(approvalHeadings.at(-1)?.trim()).toBe("Project approval decision");
     await page
       .getByLabel("Purpose / scope *", { exact: true })
       .fill("Manager-reviewed governed programme scope.");

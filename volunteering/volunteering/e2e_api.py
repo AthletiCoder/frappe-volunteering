@@ -918,7 +918,7 @@ def get_approver_flags(doctype, name):
 def seed_receipt_review(name, decision="verify", notes="E2E receipt review"):
 	"""Exercise the real receipt-review service as the dedicated E2E reviewer."""
 	_guard_e2e()
-	from volunteering.volunteering.receipt_review import CHECKLIST_ITEMS, review_receipts
+	from volunteering.volunteering.receipt_review import review_receipts
 
 	previous_user = frappe.session.user
 	try:
@@ -927,7 +927,6 @@ def seed_receipt_review(name, decision="verify", notes="E2E receipt review"):
 			name,
 			decision,
 			notes,
-			{key: True for key, _label in CHECKLIST_ITEMS},
 		)
 	finally:
 		frappe.set_user(previous_user)

@@ -438,6 +438,52 @@ def submit_expense_claim(payload):
 
 
 @frappe.whitelist(methods=["POST"])
+def submit_generated_invoice_expense_claim(claim_payload, invoice_payload):
+	"""Generate one signed invoice and submit it as a one-item Expense Claim.
+
+	The generated PDF never leaves the server in this combined workflow. It is
+	attached privately to the claim and enters the same receipt-review workflow as
+	an employee-uploaded invoice. Invoice numbering, vendor memory and claim
+	creation share the request transaction, so a failed claim does not consume a
+	number or remember a vendor.
+	"""
+	claim = frappe.parse_json(claim_payload)
+	invoice = frappe.parse_json(invoice_payload)
+	if not isinstance(claim, dict) or not isinstance(invoice, dict):
+		frappe.throw(_("Claim and invoice details must be valid objects."))
+	expenses = claim.get("expenses")
+	if not isinstance(expenses, list) or len(expenses) != 1 or not isinstance(expenses[0], dict):
+		frappe.throw(_("A generated invoice must be submitted against exactly one expense item."))
+	if not cstr(invoice.get("signature_data")).strip():
+		frappe.throw(_("Sign the generated invoice on screen before submitting it."))
+
+	from volunteering.volunteering.invoice_generator import generate_invoice_documents
+
+	generated = generate_invoice_documents(invoice, output_format="pdf")
+	expense = dict(expenses[0])
+	claimed_amount = flt(expense.get("amount"), 2)
+	invoice_amount = flt(generated.get("grand_total"), 2)
+	if abs(claimed_amount - invoice_amount) >= 0.01:
+		frappe.throw(
+			_("The generated invoice total ({0}) must equal the expense amount ({1}).").format(
+				invoice_amount, claimed_amount
+			)
+		)
+	pdf = generated.get("pdf") or {}
+	if not pdf.get("filename") or not pdf.get("content_base64"):
+		frappe.throw(_("The signed invoice PDF could not be generated. Please try again."))
+
+	expense["supplier_name"] = generated.get("supplier_name") or ""
+	expense["invoice_number"] = generated["invoice_number"]
+	expense["receipt_filename"] = pdf["filename"]
+	expense["receipt_content"] = pdf["content_base64"]
+	claim["expenses"] = [expense]
+	result = submit_expense_claim(claim)
+	result["generated_invoice_number"] = generated["invoice_number"]
+	return result
+
+
+@frappe.whitelist(methods=["POST"])
 def resubmit_expense_claim(name: str, payload):
 	"""Correct an employee's returned/rejected claim and re-enter receipt review.
 

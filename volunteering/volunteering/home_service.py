@@ -220,6 +220,12 @@ def _accounts_actions(user):
 	return [
 		*links,
 		{
+			"id": "expense_approval_limits",
+			"label": _("Expense Claim approval limits"),
+			"hint": _("Set the individual-claim authority for every employee grade."),
+			"route": "/volunteering/expense-approval-limits",
+		},
+		{
 			"id": "chart_of_accounts",
 			"label": _("Chart of Accounts"),
 			"hint": _("Create, organise, rename, disable or remove ledger accounts and groups."),
@@ -520,6 +526,12 @@ def _money_actions(pending=None):
 			"label": _("Prepare an invoice"),
 			"hint": _("Prepare a GST or non-GST document for supplier or volunteer signature"),
 			"route": "/volunteering/invoice-generator",
+		},
+		{
+			"id": "invoice_expense_claim",
+			"label": _("Prepare invoice and submit expense"),
+			"hint": _("Create or attach an invoice and send the expense for review in one flow"),
+			"route": "/volunteering/invoice-expense-claim",
 		},
 		{
 			"id": "bank_account",

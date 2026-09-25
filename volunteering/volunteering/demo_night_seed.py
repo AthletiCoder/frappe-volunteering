@@ -170,9 +170,7 @@ def _ensure_role(name: str):
 
 def _ensure_designation(name: str):
 	if not frappe.db.exists("Designation", name):
-		frappe.get_doc({"doctype": "Designation", "designation_name": name}).insert(
-			ignore_permissions=True
-		)
+		frappe.get_doc({"doctype": "Designation", "designation_name": name}).insert(ignore_permissions=True)
 
 
 def _ensure_user(spec: dict, password: str) -> str:
@@ -208,13 +206,17 @@ def _ensure_department(manager_email: str) -> str:
 		"Department", {"department_name": "Tonight Demo Operations", "company": COMPANY}, "name"
 	)
 	if not name:
-		name = frappe.get_doc(
-			{
-				"doctype": "Department",
-				"department_name": "Tonight Demo Operations",
-				"company": COMPANY,
-			}
-		).insert(ignore_permissions=True).name
+		name = (
+			frappe.get_doc(
+				{
+					"doctype": "Department",
+					"department_name": "Tonight Demo Operations",
+					"company": COMPANY,
+				}
+			)
+			.insert(ignore_permissions=True)
+			.name
+		)
 	frappe.db.set_value("Department", name, "department_head", manager_email)
 	return name
 
@@ -224,21 +226,25 @@ def _ensure_employee(spec: dict, department: str) -> str:
 	ensure_employee_grade(spec["grade"])
 	name = frappe.db.get_value("Employee", {"user_id": spec["email"]}, "name")
 	if not name:
-		name = frappe.get_doc(
-			{
-				"doctype": "Employee",
-				"first_name": spec["name"],
-				"employee_name": spec["name"],
-				"company": COMPANY,
-				"department": department,
-				"user_id": spec["email"],
-				"company_email": spec["email"],
-				"status": "Active",
-				"date_of_birth": add_days(nowdate(), -10000),
-				"date_of_joining": add_days(nowdate(), -120),
-				"gender": "Male",
-			}
-		).insert(ignore_permissions=True).name
+		name = (
+			frappe.get_doc(
+				{
+					"doctype": "Employee",
+					"first_name": spec["name"],
+					"employee_name": spec["name"],
+					"company": COMPANY,
+					"department": department,
+					"user_id": spec["email"],
+					"company_email": spec["email"],
+					"status": "Active",
+					"date_of_birth": add_days(nowdate(), -10000),
+					"date_of_joining": add_days(nowdate(), -120),
+					"gender": "Male",
+				}
+			)
+			.insert(ignore_permissions=True)
+			.name
+		)
 	frappe.db.set_value(
 		"Employee",
 		name,
@@ -313,9 +319,7 @@ def _configure_reporting(employees: dict[str, str]):
 
 
 def _leaf_cost_center() -> str:
-	name = frappe.db.get_value(
-		"Cost Center", {"company": COMPANY, "is_group": 0, "disabled": 0}, "name"
-	)
+	name = frappe.db.get_value("Cost Center", {"company": COMPANY, "is_group": 0, "disabled": 0}, "name")
 	if not name:
 		frappe.throw("Create one non-group Sevamrita Foundation Cost Center before seeding the demo.")
 	return name
@@ -540,7 +544,7 @@ def _claim_payload(project: str, label: str, amount: float, sequence: int):
 def _ensure_claims(project: str) -> dict[str, str]:
 	from volunteering.volunteering.expense_claim_portal import submit_expense_claim
 	from volunteering.volunteering.expense_claim_workflow_portal import decide_expense_claim
-	from volunteering.volunteering.receipt_review import CHECKLIST_ITEMS, review_receipts
+	from volunteering.volunteering.receipt_review import review_receipts
 
 	employee = frappe.db.get_value("Employee", {"user_id": PERSONAS["employee"]["email"]}, "name")
 	results = {}
@@ -557,14 +561,12 @@ def _ensure_claims(project: str) -> dict[str, str]:
 							name,
 							"request_correction",
 							"Please upload a clearer receipt showing the supplier and total.",
-							{},
 						)
 					else:
 						review_receipts(
 							name,
 							"verify",
-							"Receipt meets the demonstration audit checklist.",
-							{key: True for key, _ in CHECKLIST_ITEMS},
+							"Receipt reviewed for the demonstration.",
 						)
 			if stage == "approved":
 				with _as_user(PERSONAS["manager"]["email"]):
@@ -604,9 +606,9 @@ def _ensure_advances(project: str) -> dict[str, str]:
 		name = frappe.db.get_value("Employee Advance", {"employee": employee, "purpose": purpose}, "name")
 		if not name:
 			with _as_user(PERSONAS[persona]["email"]):
-				name = save_advance_request(
-					_advance_payload(project, label, amount), int(stage != "draft")
-				)["name"]
+				name = save_advance_request(_advance_payload(project, label, amount), int(stage != "draft"))[
+					"name"
+				]
 			if stage in {"director", "board"}:
 				with _as_user(PERSONAS["manager"]["email"]):
 					decide_advance(name, "escalate", "Amount exceeds the Manager approval authority.")
@@ -691,7 +693,9 @@ def _summary(password: str) -> dict:
 	)
 	vendor_addresses = frappe.get_all(
 		"Employee Vendor Address",
-		filters={"employee": frappe.db.get_value("Employee", {"user_id": PERSONAS["employee"]["email"]}, "name")},
+		filters={
+			"employee": frappe.db.get_value("Employee", {"user_id": PERSONAS["employee"]["email"]}, "name")
+		},
 		fields=["vendor_name", "address", "state", "pin_code", "gstin", "pan", "use_count"],
 		order_by="vendor_name asc",
 	)
@@ -718,9 +722,12 @@ def seed_tonight_demo(password: str | None = None) -> dict:
 	previous_user = frappe.session.user
 	try:
 		frappe.flags.mute_emails = True
-		with patch("frappe.sendmail"), patch(
-			"frappe.workflow.doctype.workflow_action.workflow_action.send_workflow_action_email",
-			lambda *args, **kwargs: None,
+		with (
+			patch("frappe.sendmail"),
+			patch(
+				"frappe.workflow.doctype.workflow_action.workflow_action.send_workflow_action_email",
+				lambda *args, **kwargs: None,
+			),
 		):
 			frappe.set_user("Administrator")
 			for spec in PERSONAS.values():
@@ -862,20 +869,12 @@ def validate_tonight_demo() -> dict:
 	with _as_user(PERSONAS["accounts"]["email"]):
 		claim_queue = get_expense_claim_work_queue()["queues"]
 		advance_queue = get_advance_work_queue()["queues"]
-		checks["accounts_reimbursement_queue"] = reimbursement_claim in names(
-			claim_queue["reimbursement"]
-		)
-		checks["accounts_disbursement_queue"] = disbursement_advance in names(
-			advance_queue["disbursement"]
-		)
+		checks["accounts_reimbursement_queue"] = reimbursement_claim in names(claim_queue["reimbursement"])
+		checks["accounts_disbursement_queue"] = disbursement_advance in names(advance_queue["disbursement"])
 		checks["accounts_return_queue"] = return_advance in names(advance_queue["return"])
 
-	employee = frappe.db.get_value(
-		"Employee", {"user_id": PERSONAS["employee"]["email"]}, "name"
-	)
-	checks["employee_bank_account_approved"] = bool(
-		get_approved_bank_details(employee, reveal=False)
-	)
+	employee = frappe.db.get_value("Employee", {"user_id": PERSONAS["employee"]["email"]}, "name")
+	checks["employee_bank_account_approved"] = bool(get_approved_bank_details(employee, reveal=False))
 	active_project = next(
 		(row for row in summary["projects"] if row["project_name"] == f"{PREFIX} Approved active project"),
 		None,

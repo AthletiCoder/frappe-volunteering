@@ -26,7 +26,7 @@ If the live total exceeds that person's authority, they must review and Escalate
 
 Default approval thresholds for others are: Associate 0, Manager INR 2,000, Vice President INR 5,000, President INR 10,000, Director INR 25,000, CEO INR 50,000, Executive Board INR 100,000, Board of Directors unlimited. Saved authority configuration still takes precedence. When the reporting chain ends, the existing Board fallback applies. Reporting chains must link each person who should review; an absent grade does not create a fictional reviewer.
 
-Legacy self-advance values are retained for old database compatibility but hidden and ignored. Expense Claim and Purchase Order routing is unchanged.
+Legacy self-advance values are retained for old database compatibility but hidden and ignored. Expense Claims use a separate, Accounts Manager-configurable authority limit by Employee Grade. They follow the same person-by-person Reports To chain, but test only the individual claim amount rather than total outstanding exposure. Purchase Order routing is unchanged.
 
 ## Supervisor dashboard and freeze
 

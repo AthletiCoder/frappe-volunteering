@@ -116,6 +116,7 @@ def _generate_invoice_documents(payload, output_format="both", generation_refere
 	stem = _safe_filename(data["invoice_number"])
 	result = {
 		"invoice_number": data["invoice_number"],
+		"supplier_name": data["supplier"]["name"],
 		"grand_total": float(data["grand_total"]),
 		"amount_in_words": data["amount_in_words"],
 		"signer_type": data["signer_type"],

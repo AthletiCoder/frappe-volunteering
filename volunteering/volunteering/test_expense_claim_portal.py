@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 
 import base64
+from io import BytesIO
 from unittest.mock import patch
 
 import frappe
@@ -30,8 +31,19 @@ from volunteering.volunteering.expense_claim_portal import (
 	get_project_accounts,
 	resubmit_expense_claim,
 	submit_expense_claim,
+	submit_generated_invoice_expense_claim,
 )
 from volunteering.volunteering.receipt_review import review_receipts
+
+
+def _valid_pdf():
+	from pypdf import PdfWriter
+
+	buffer = BytesIO()
+	writer = PdfWriter()
+	writer.add_blank_page(width=72, height=72)
+	writer.write(buffer)
+	return buffer.getvalue()
 
 
 class IntegrationTestExpenseClaimPortal(IntegrationTestCase):
@@ -143,11 +155,65 @@ class IntegrationTestExpenseClaimPortal(IntegrationTestCase):
 		self.assertEqual(file_row.is_private, 1)
 		self.assertEqual(file_row.file_url, claim.expenses[0].receipt_attachment)
 
+	@patch("volunteering.volunteering.invoice_generator.generate_invoice_documents")
+	def test_signed_generated_invoice_is_privately_attached_and_submitted(self, generate):
+		generate.return_value = {
+			"invoice_number": "INV-2026-000321",
+			"supplier_name": "Generated supplier",
+			"grand_total": 125,
+			"pdf": {
+				"filename": "invoice-INV-2026-000321.pdf",
+				"content_base64": base64.b64encode(_valid_pdf()).decode(),
+			},
+		}
+		payload = self._payload()
+		payload["expenses"][0].pop("receipt_filename")
+		payload["expenses"][0].pop("receipt_content")
+		frappe.set_user(self.user)
+		result = submit_generated_invoice_expense_claim(
+			payload,
+			{"signature_data": "data:image/png;base64,signed"},
+		)
+		claim = frappe.get_doc("Expense Claim", result["name"])
+		self.assertEqual(result["generated_invoice_number"], "INV-2026-000321")
+		self.assertEqual(claim.workflow_state, "Pending Receipt Review")
+		self.assertEqual(claim.expenses[0].supplier_name, "Generated supplier")
+		self.assertEqual(claim.expenses[0].supplier_invoice_number, "INV-2026-000321")
+		self.assertTrue(claim.expenses[0].receipt_attachment.startswith("/private/files/"))
+		generate.assert_called_once_with(
+			{"signature_data": "data:image/png;base64,signed"}, output_format="pdf"
+		)
+
+	@patch("volunteering.volunteering.invoice_generator.generate_invoice_documents")
+	def test_generated_invoice_requires_signature_and_matching_total(self, generate):
+		payload = self._payload()
+		payload["expenses"][0].pop("receipt_filename")
+		payload["expenses"][0].pop("receipt_content")
+		frappe.set_user(self.user)
+		with self.assertRaisesRegex(frappe.ValidationError, "Sign the generated invoice"):
+			submit_generated_invoice_expense_claim(payload, {"signature_data": ""})
+		generate.assert_not_called()
+
+		generate.return_value = {
+			"invoice_number": "INV-2026-000322",
+			"supplier_name": "Generated supplier",
+			"grand_total": 124,
+			"pdf": {
+				"filename": "invoice.pdf",
+				"content_base64": base64.b64encode(_valid_pdf()).decode(),
+			},
+		}
+		with self.assertRaisesRegex(frappe.ValidationError, "must equal the expense amount"):
+			submit_generated_invoice_expense_claim(
+				payload, {"signature_data": "data:image/png;base64,signed"}
+			)
+		self.assertFalse(frappe.db.exists("Expense Claim", {"employee": self.employee}))
+
 	def test_employee_can_correct_and_resubmit_from_home(self):
 		frappe.set_user(self.user)
 		result = submit_expense_claim(self._payload())
 		frappe.set_user("Administrator")
-		review_receipts(result["name"], "request_correction", "Clarify the supplier name.", {})
+		review_receipts(result["name"], "request_correction", "Clarify the supplier name.")
 
 		frappe.set_user(self.user)
 		detail = get_my_expense_claim(result["name"])

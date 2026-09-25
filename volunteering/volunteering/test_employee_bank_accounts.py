@@ -71,6 +71,7 @@ class UnitTestEmployeeBankDetails(UnitTestCase):
 				[
 					"advance_disbursement",
 					"advance_returns",
+					"expense_approval_limits",
 					"chart_of_accounts",
 					"bank_account",
 					"project_account_mapping",

@@ -12,6 +12,7 @@ from volunteering.volunteering.approval_routing import (
 from volunteering.volunteering.doctype.volunteering_accounting_settings.volunteering_accounting_settings import (
 	grade_advance_limit,
 	grade_can_approve,
+	grade_can_approve_expense_claim,
 )
 from volunteering.volunteering.payout_provider import ManualPayoutProvider, get_payout_provider
 
@@ -23,22 +24,41 @@ def _settings_with_limits():
 		tier_1_limit=2000,
 		tier_2_limit=10000,
 		designation_limits=[
-			frappe._dict(designation="Manager", max_approve_amount=2000, max_advance_amount=5000),
-			frappe._dict(designation="CEO", max_approve_amount=50000, max_advance_amount=50000),
-			frappe._dict(designation="Board of Directors", max_approve_amount=0, max_advance_amount=0),
+			frappe._dict(
+				designation="Manager",
+				max_approve_amount=2000,
+				max_expense_claim_amount=3000,
+				max_advance_amount=5000,
+			),
+			frappe._dict(
+				designation="CEO",
+				max_approve_amount=50000,
+				max_expense_claim_amount=60000,
+				max_advance_amount=50000,
+			),
+			frappe._dict(
+				designation="Board of Directors",
+				max_approve_amount=0,
+				max_expense_claim_amount=0,
+				max_advance_amount=0,
+			),
 		],
 	)
 
 
 class TestGradeApproval(UnitTestCase):
-	@patch(
-		"volunteering.volunteering.doctype.volunteering_accounting_settings.volunteering_accounting_settings.get_accounting_settings"
-	)
-	def test_grade_can_approve_respects_limit(self, mock_settings):
-		mock_settings.return_value = _settings_with_limits()
-		self.assertTrue(grade_can_approve("Manager", 1500))
-		self.assertFalse(grade_can_approve("Manager", 5000))
-		self.assertTrue(grade_can_approve("Board of Directors", 999999))
+	def test_grade_can_approve_respects_limit(self):
+		settings = _settings_with_limits()
+		self.assertTrue(grade_can_approve("Manager", 1500, settings))
+		self.assertFalse(grade_can_approve("Manager", 5000, settings))
+		self.assertTrue(grade_can_approve("Board of Directors", 999999, settings))
+
+	def test_expense_claim_limit_is_independent(self):
+		settings = _settings_with_limits()
+		self.assertFalse(grade_can_approve("Manager", 2500, settings))
+		self.assertTrue(grade_can_approve_expense_claim("Manager", 2500, settings))
+		self.assertFalse(grade_can_approve_expense_claim("Manager", 3500, settings))
+		self.assertTrue(grade_can_approve_expense_claim("Board of Directors", 999999, settings))
 
 	@patch("volunteering.volunteering.approval_routing.get_accounting_settings")
 	@patch("volunteering.volunteering.approval_routing.frappe.db.get_value")
@@ -103,7 +123,7 @@ class TestApproverActionFlags(UnitTestCase):
 	def test_live_transition_filter_preserves_other_doctypes(self, transitions):
 		from volunteering.volunteering.approval_routing import get_live_workflow_transitions
 
-		for doctype in ("Expense Claim", "Purchase Order", "Project"):
+		for doctype in ("Purchase Order", "Project"):
 			payload = {"doctype": doctype, "name": "TEST-1"}
 			transitions.return_value = [frappe._dict(action="Approve")]
 			self.assertEqual(get_live_workflow_transitions(payload), transitions.return_value)

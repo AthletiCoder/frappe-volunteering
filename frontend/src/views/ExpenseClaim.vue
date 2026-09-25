@@ -1,11 +1,19 @@
 <template>
 	<div class="max-w-5xl mx-auto">
 		<PageHeader
-			:title="isCorrection ? `Correct ${correctionName}` : 'Submit an expense'"
+			:title="
+				isCorrection
+					? `Correct ${correctionName}`
+					: isIntegrated
+						? 'Prepare invoice and submit expense'
+						: 'Submit an expense'
+			"
 			:subtitle="
 				isCorrection
 					? 'Correct the returned details or receipts, then send the claim through receipt review again.'
-					: 'Record project expenses, attach the bills, and send them for independent receipt review.'
+					: isIntegrated
+						? 'Use an existing invoice or prepare and sign one here, then submit the expense for review.'
+						: 'Record project expenses, attach the bills, and send them for independent receipt review.'
 			"
 			eyebrow="Expenses"
 		>
@@ -34,6 +42,11 @@
 				<p class="text-sm text-muted mt-1">
 					A receipt reviewer checks the evidence first. The claim moves to
 					reporting-manager approval only after that review is verified.
+				</p>
+				<p v-if="result.generated_invoice_number" class="text-sm text-muted mt-1">
+					Signed invoice
+					<strong class="text-ink">{{ result.generated_invoice_number }}</strong>
+					was attached privately to the claim.
 				</p>
 				<div v-if="result.warnings?.length" class="warning-box mt-4 text-left">
 					<p class="font-semibold mb-2">Advisories for review</p>
@@ -166,7 +179,40 @@
 				</p>
 			</section>
 
-			<section v-if="!isCorrection" class="form-card">
+			<section v-if="isIntegrated && !isCorrection" class="form-card">
+				<h2 class="form-title">Do you already have a proper invoice?</h2>
+				<div class="grid sm:grid-cols-2 gap-3">
+					<button
+						type="button"
+						:class="[
+							'choice-card',
+							invoicePath === 'EXISTING' ? 'choice-card-active' : '',
+						]"
+						@click="invoicePath = 'EXISTING'"
+					>
+						<span class="font-semibold">Yes, I have an invoice</span>
+						<span class="text-sm text-muted"
+							>Attach it and continue through the normal expense-claim flow.</span
+						>
+					</button>
+					<button
+						type="button"
+						:class="[
+							'choice-card',
+							invoicePath === 'GENERATE' ? 'choice-card-active' : '',
+						]"
+						@click="invoicePath = 'GENERATE'"
+					>
+						<span class="font-semibold">No, prepare one now</span>
+						<span class="text-sm text-muted"
+							>Complete and sign an invoice on this device; it will be attached
+							privately.</span
+						>
+					</button>
+				</div>
+			</section>
+
+			<section v-if="!isCorrection && (!isIntegrated || invoicePath)" class="form-card">
 				<label class="flex items-start gap-3 cursor-pointer">
 					<input v-model="form.is_emergency" type="checkbox" class="mt-1" />
 					<span>
@@ -199,17 +245,23 @@
 				</div>
 			</section>
 
-			<section class="space-y-3">
+			<section v-if="!isIntegrated || invoicePath" class="space-y-3">
 				<div class="flex flex-wrap items-end justify-between gap-2">
 					<div>
 						<h2 class="text-xl font-semibold text-ink">Expense items</h2>
 						<p class="text-sm text-muted mt-1">
-							Attach the bill to the specific item it supports. PDF, PNG or JPEG;
-							maximum 5 MB each.
+							<template v-if="generatesInvoice">
+								Enter the project category and business purpose. The signed invoice
+								below supplies the amount and receipt evidence.
+							</template>
+							<template v-else>
+								Attach the bill to the specific item it supports. PDF, PNG or JPEG;
+								maximum 5 MB each.
+							</template>
 						</p>
 					</div>
 					<button
-						v-if="!isCorrection"
+						v-if="!isCorrection && !generatesInvoice"
 						type="button"
 						class="btn-secondary"
 						:disabled="form.expenses.length >= 10"
@@ -223,7 +275,7 @@
 					<div class="flex items-center justify-between gap-3 mb-4">
 						<h3 class="font-semibold text-ink">Expense item {{ index + 1 }}</h3>
 						<button
-							v-if="!isCorrection && form.expenses.length > 1"
+							v-if="!isCorrection && !generatesInvoice && form.expenses.length > 1"
 							type="button"
 							class="text-sm font-medium text-bad"
 							@click="removeExpense(index)"
@@ -248,13 +300,13 @@
 							placeholder="Type to find an approved expense category"
 							required
 						/>
-						<label class="field-label"
+						<label v-if="!generatesInvoice" class="field-label"
 							>Supplier / payee<input
 								v-model.trim="item.supplier_name"
 								maxlength="160"
 								class="field-input"
 						/></label>
-						<label class="field-label"
+						<label v-if="!generatesInvoice" class="field-label"
 							>Receipt / invoice number<input
 								v-model.trim="item.invoice_number"
 								maxlength="100"
@@ -269,7 +321,7 @@
 								class="field-input"
 							></textarea>
 						</label>
-						<label class="field-label"
+						<label v-if="!generatesInvoice" class="field-label"
 							>Amount ({{ defaults.currency }}) *<input
 								v-model.number="item.amount"
 								type="number"
@@ -279,7 +331,13 @@
 								required
 								class="field-input"
 						/></label>
-						<label class="field-label"
+						<label v-else class="field-label"
+							>Generated invoice total<input
+								:value="money(form.expenses[0].amount)"
+								readonly
+								class="field-input"
+						/></label>
+						<label v-if="!generatesInvoice" class="field-label"
 							>Receipt evidence *<input
 								type="file"
 								accept=".pdf,.png,.jpg,.jpeg"
@@ -289,6 +347,10 @@
 								@change="chooseReceipt($event, item)"
 						/></label>
 					</div>
+					<p v-if="generatesInvoice" class="form-hint mt-3 mb-0">
+						The signed invoice prepared below will be used as this item's private
+						receipt evidence. Its grand total becomes the expense amount.
+					</p>
 					<p v-if="item.receipt_filename" class="text-xs text-muted mt-2">
 						Ready to upload privately: {{ item.receipt_filename }}
 					</p>
@@ -301,6 +363,22 @@
 						>Keep current receipt, or choose a replacement above</a
 					>
 				</article>
+			</section>
+
+			<section v-if="generatesInvoice" aria-label="Invoice generation">
+				<div class="mb-3">
+					<h2 class="text-xl font-semibold text-ink">Prepare and sign the invoice</h2>
+					<p class="text-sm text-muted mt-1">
+						No file download is created in this flow. The signed PDF is attached
+						directly to your claim when you submit it.
+					</p>
+				</div>
+				<InvoiceGenerator
+					ref="invoiceGenerator"
+					embedded
+					:seed="invoiceSeed"
+					@total-change="setGeneratedInvoiceTotal"
+				/>
 			</section>
 
 			<section v-if="isCorrection" class="form-card">
@@ -338,6 +416,8 @@
 							submitting ||
 							readingFiles ||
 							(!isCorrection && !defaults.projects.length) ||
+							(isIntegrated && !invoicePath) ||
+							(generatesInvoice && total <= 0) ||
 							managerFundingShortfall
 						"
 					>
@@ -346,7 +426,9 @@
 								? "Submitting…"
 								: isCorrection
 									? "Resubmit for receipt review"
-									: "Submit for receipt review"
+									: generatesInvoice
+										? "Sign and submit for receipt review"
+										: "Submit for receipt review"
 						}}
 					</button>
 				</div>
@@ -360,13 +442,17 @@ import { computed, onMounted, reactive, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import PageHeader from "../components/PageHeader.vue";
 import SearchSelect from "../components/SearchSelect.vue";
+import InvoiceGenerator from "./InvoiceGenerator.vue";
 import { call } from "../lib/frappe";
 
 const API = "volunteering.volunteering.expense_claim_portal.";
 const route = useRoute();
+const isIntegrated = computed(() => route.name === "InvoiceExpenseClaim");
 const correctionName = computed(() => String(route.query.correct || "").trim());
 const isCorrection = computed(() => Boolean(correctionName.value));
 const correctionDetail = ref(null);
+const invoicePath = ref("");
+const invoiceGenerator = ref(null);
 let itemKey = 1;
 let accountRequest = 0;
 const defaults = ref({
@@ -410,6 +496,13 @@ const result = ref(null);
 const total = computed(() =>
 	form.expenses.reduce((sum, item) => sum + Number(item.amount || 0), 0),
 );
+const generatesInvoice = computed(
+	() => isIntegrated.value && invoicePath.value === "GENERATE" && !isCorrection.value,
+);
+const invoiceSeed = computed(() => ({
+	expense_date: form.expenses[0]?.expense_date || "",
+	description: form.expenses[0]?.description || "",
+}));
 const selectedAdvance = computed(() =>
 	form.reimbursement_source === "OWN_ADVANCE"
 		? defaults.value.own_advances.find((advance) => advance.name === form.employee_advance)
@@ -452,6 +545,16 @@ watch(
 		if (source !== "OWN_ADVANCE") form.employee_advance = "";
 	},
 );
+watch(invoicePath, (path) => {
+	if (path !== "GENERATE") return;
+	form.expenses.splice(1);
+	const item = form.expenses[0];
+	item.supplier_name = "";
+	item.invoice_number = "";
+	item.receipt_filename = "";
+	item.receipt_content = "";
+	item.receipt_attachment = "";
+});
 
 async function loadDefaults() {
 	loading.value = true;
@@ -582,7 +685,14 @@ function fileBase64(file) {
 async function submitClaim() {
 	if (submitting.value || readingFiles.value) return;
 	error.value = "";
-	if (form.expenses.some((item) => !item.receipt_content && !item.receipt_attachment)) {
+	if (isIntegrated.value && !invoicePath.value) {
+		error.value = "Choose whether you already have an invoice or need to prepare one.";
+		return;
+	}
+	if (
+		!generatesInvoice.value &&
+		form.expenses.some((item) => !item.receipt_content && !item.receipt_attachment)
+	) {
 		error.value = "Attach receipt evidence to every expense item.";
 		return;
 	}
@@ -594,6 +704,14 @@ async function submitClaim() {
 			result.value = await call(`${API}resubmit_expense_claim`, {
 				name: correctionName.value,
 				payload: { expenses, correction_note: form.correction_note },
+			});
+		} else if (generatesInvoice.value) {
+			const invoicePayload = invoiceGenerator.value?.getSubmissionPayload();
+			const payload = { ...form, expenses };
+			delete payload.correction_note;
+			result.value = await call(`${API}submit_generated_invoice_expense_claim`, {
+				claim_payload: payload,
+				invoice_payload: invoicePayload,
 			});
 		} else {
 			const payload = { ...form, expenses };
@@ -618,11 +736,17 @@ function startAnother() {
 	form.emergency_reason = "";
 	form.emergency_date = defaults.value.expense_date;
 	form.expenses = [blankExpense()];
+	invoicePath.value = "";
 	accountOptions.value = [];
 	if (defaults.value.projects.length === 1) {
 		form.project = defaults.value.projects[0].value;
 		projectChanged();
 	}
+}
+
+function setGeneratedInvoiceTotal(value) {
+	if (!form.expenses[0]) return;
+	form.expenses[0].amount = Number(value || 0);
 }
 
 function money(value) {

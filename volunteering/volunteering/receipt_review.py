@@ -29,15 +29,6 @@ REVIEW_STATUS_CORRECTION_REQUIRED = "Correction Required"
 
 ALLOWED_RECEIPT_EXTENSIONS = frozenset({".pdf", ".png", ".jpg", ".jpeg"})
 
-CHECKLIST_ITEMS = (
-	("legible", "Receipt is complete and legible"),
-	("vendor_and_date", "Vendor/payee and transaction date are present"),
-	("amount_matches", "Receipt amount matches the claimed amount"),
-	("business_purpose", "Expense description supports the stated organisational purpose"),
-	("duplicate_checked", "Receipt was checked for duplicate submission"),
-	("tax_details", "Tax/GST details were checked where applicable"),
-)
-
 
 def _receipt_files(claim_name: str) -> list[frappe._dict]:
 	return frappe.get_all(
@@ -88,23 +79,6 @@ def _attachment_snapshot(files: list[frappe._dict]) -> str:
 		for row in files
 	]
 	return json.dumps(rows, sort_keys=True, separators=(",", ":"))
-
-
-def _parse_checklist(checklist) -> dict[str, bool]:
-	if isinstance(checklist, str):
-		try:
-			checklist = frappe.parse_json(checklist)
-		except Exception:
-			frappe.throw(_("The receipt review checklist is invalid."))
-	if not isinstance(checklist, dict):
-		checklist = {}
-	return {key: bool(checklist.get(key)) for key, _label in CHECKLIST_ITEMS}
-
-
-def _checklist_text(checklist: dict[str, bool]) -> str:
-	return "\n".join(
-		f"{'Verified' if checklist.get(key) else 'Not verified'}: {label}" for key, label in CHECKLIST_ITEMS
-	)
 
 
 def _assert_reviewer(user: str):
@@ -193,7 +167,12 @@ def _manager_routing_values(doc) -> dict:
 
 @frappe.whitelist(methods=["POST"])
 def review_receipts(name: str, decision: str, notes: str = "", checklist=None):
-	"""Verify attached receipts or send the draft back to its employee."""
+	"""Verify attached receipts or send the draft back to its employee.
+
+	``checklist`` is an ignored compatibility argument for older clients. The
+	review decision, notes, reviewer, timestamp and attachment snapshot form the
+	receipt-review audit record.
+	"""
 	user = frappe.session.user
 	_assert_reviewer(user)
 	doc = frappe.get_doc("Expense Claim", name)
@@ -209,23 +188,17 @@ def review_receipts(name: str, decision: str, notes: str = "", checklist=None):
 
 	decision = (decision or "").strip().lower()
 	notes = (notes or "").strip()
-	parsed_checklist = _parse_checklist(checklist)
 	files = _validate_receipt_files(doc.name)
 	now = now_datetime()
 	values = {
 		"receipt_reviewed_by": user,
 		"receipt_reviewed_on": now,
 		"receipt_review_notes": notes,
-		"receipt_review_checklist": _checklist_text(parsed_checklist),
+		"receipt_review_checklist": None,
 		"reviewed_attachments": _attachment_snapshot(files),
 	}
 
 	if decision == "verify":
-		missing = [label for key, label in CHECKLIST_ITEMS if not parsed_checklist.get(key)]
-		if missing:
-			frappe.throw(
-				_("Complete every receipt review check before verification: {0}").format(", ".join(missing))
-			)
 		values["receipt_review_status"] = REVIEW_STATUS_VERIFIED
 		if legacy_approved:
 			comment = _("Legacy approved claim receipts retrospectively verified by {0}.").format(user)
@@ -383,7 +356,6 @@ def get_receipt_review_action_flags(name: str):
 	return {
 		"can_review": can_review,
 		"can_request_correction": can_review and not legacy_approved,
-		"checklist": [{"fieldname": key, "label": label} for key, label in CHECKLIST_ITEMS],
 	}
 
 

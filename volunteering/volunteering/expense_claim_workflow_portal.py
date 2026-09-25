@@ -26,7 +26,6 @@ from volunteering.volunteering.approval_routing import (
 from volunteering.volunteering.employee_bank_accounts import get_approved_bank_details
 from volunteering.volunteering.expense_claim_portal import _claim_source, _expense_labels, _project_names
 from volunteering.volunteering.receipt_review import (
-	CHECKLIST_ITEMS,
 	PENDING_RECEIPT_REVIEW,
 	RECEIPT_REVIEWER_ROLE,
 	REVIEW_STATUS_VERIFIED,
@@ -246,7 +245,6 @@ def get_expense_claim_work_item(name: str):
 		"reimbursed_amount": flt(doc.total_amount_reimbursed, 2),
 		"access": access,
 		"approval_flags": flags,
-		"checklist": [{"key": key, "label": label} for key, label in CHECKLIST_ITEMS],
 		"payment": _payment_options(doc),
 		"expenses": [
 			{
@@ -271,7 +269,7 @@ def review_expense_claim_receipts(name: str, decision: str, notes: str = "", che
 	doc = frappe.get_doc("Expense Claim", cstr(name).strip())
 	if not _can_receipt_review(doc, frappe.session.user):
 		frappe.throw(_("This expense claim is not awaiting your receipt review."), frappe.PermissionError)
-	review_receipts(doc.name, decision, notes, checklist)
+	review_receipts(doc.name, decision, notes)
 	return {"name": doc.name, "decision": decision}
 
 

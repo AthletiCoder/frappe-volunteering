@@ -31,7 +31,7 @@ from volunteering.volunteering.budget_service import (
 	get_budget_health,
 	get_consumed_amount,
 )
-from volunteering.volunteering.receipt_review import CHECKLIST_ITEMS, review_receipts
+from volunteering.volunteering.receipt_review import review_receipts
 
 
 class UnitTestBudgetCommitmentBreakdown(UnitTestCase):
@@ -136,8 +136,7 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 		review_receipts(
 			claim.name,
 			"verify",
-			"Receipts meet the test audit checklist.",
-			{key: True for key, _label in CHECKLIST_ITEMS},
+			"Receipt reviewed in the accounting budget test.",
 		)
 		return frappe.get_doc("Expense Claim", claim.name)
 

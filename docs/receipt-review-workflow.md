@@ -10,12 +10,14 @@ make a payment.
    JPEG receipt, and selects **Submit**.
 2. The claim enters **Pending Receipt Review**. No manager is assigned yet.
 3. A user with the **Expense Receipt Reviewer** role opens the claim and either:
-   - completes the checklist and selects **Verify Receipts**, moving the claim to
+   - adds review notes and selects **Verify Receipts**, moving the claim to
      **Pending Approval**; or
    - selects **Request Correction**, adds required notes, and returns the claim
      to the employee as **Receipt Correction Required**.
-4. After verification, the existing grade and Reports To routing assigns the
-   manager or higher approver. Manager approval submits the claim as **Approved**.
+4. After verification, the claim starts with the immediate reporting manager.
+   Each linked manager may approve when their Expense Claim limit covers this
+   individual claim, reject it, or escalate it one step up Reports To when the
+   claim exceeds their limit. Linked managers are not skipped.
 5. Accounts creates and submits the Payment Entry. The normal Expense Claim
    status becomes **Paid** when it is fully settled.
 
@@ -26,7 +28,7 @@ attachments. The role has no permission to edit claim amounts, approve spending,
 read the Chart of Accounts, create Payment Entries, or settle reimbursements. A
 reviewer cannot review their own claim.
 
-Verification records the reviewer, timestamp, notes, checklist result, and an
+Verification records the reviewer, timestamp, notes, and an
 attachment snapshot containing file identifiers and content hashes. Changing any
 attachment before manager approval invalidates verification and sends the claim
 back to **Pending Receipt Review**. Attachments are locked after approval; cancel

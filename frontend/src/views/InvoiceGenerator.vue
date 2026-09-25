@@ -1,6 +1,7 @@
 <template>
-	<div class="max-w-5xl mx-auto">
+	<div :class="embedded ? '' : 'max-w-5xl mx-auto'">
 		<PageHeader
+			v-if="!embedded"
 			title="Prepare an invoice"
 			subtitle="Prepare GST or non-GST documents for supplier or volunteer signature."
 			eyebrow="Expenses"
@@ -11,7 +12,12 @@
 		</PageHeader>
 
 		<div v-if="loading" class="text-muted">Loading company details…</div>
-		<form v-else class="space-y-5" @submit.prevent="generate">
+		<component
+			:is="embedded ? 'div' : 'form'"
+			v-else
+			class="space-y-5"
+			@submit.prevent="generate"
+		>
 			<section class="form-card">
 				<h2 class="form-title">Invoice type</h2>
 				<div class="grid sm:grid-cols-2 gap-3">
@@ -327,8 +333,15 @@
 				<h2 class="form-title">Approved reimbursement remittance details</h2>
 				<p class="form-hint">
 					These are your employee reimbursement details—not the supplier's bank account.
-					The full approved account number is included in the downloaded PDF and Word
-					document. Bank details cannot be changed here.
+					<template v-if="embedded">
+						The full approved account number is included in the signed PDF attached to
+						your claim.
+					</template>
+					<template v-else>
+						The full approved account number is included in the downloaded PDF and Word
+						document.
+					</template>
+					Bank details cannot be changed here.
 				</p>
 				<div v-if="approvedBank" class="grid sm:grid-cols-2 gap-3 text-sm">
 					<p>
@@ -391,9 +404,15 @@
 						<div>
 							<p class="font-medium text-ink">On-screen signature</p>
 							<p class="text-xs text-muted">
-								Optional. The selected supplier representative or volunteer can
-								sign on this device, and the signature will be placed in the
-								downloaded document.
+								<template v-if="embedded">
+									Required. Sign on this device; the signed invoice will be
+									attached privately to the expense claim.
+								</template>
+								<template v-else>
+									Optional. The selected supplier representative or volunteer can
+									sign on this device, and the signature will be placed in the
+									downloaded document.
+								</template>
 							</p>
 						</div>
 						<div class="flex gap-2">
@@ -425,7 +444,7 @@
 			>
 				{{ error }}
 			</div>
-			<div v-if="result" class="rounded-2xl border border-ok bg-ok-soft p-4">
+			<div v-if="result && !embedded" class="rounded-2xl border border-ok bg-ok-soft p-4">
 				<p class="font-semibold text-ink">Document files are ready</p>
 				<p class="text-sm text-ink mt-1">
 					Invoice number: <strong>{{ result.invoice_number }}</strong>
@@ -451,7 +470,7 @@
 				</div>
 			</div>
 
-			<div class="flex flex-wrap gap-3 justify-end pb-4">
+			<div v-if="!embedded" class="flex flex-wrap gap-3 justify-end pb-4">
 				<button
 					type="submit"
 					name="output_format"
@@ -471,7 +490,7 @@
 					{{ generating === "docx" ? "Generating Word…" : "Generate Word" }}
 				</button>
 			</div>
-		</form>
+		</component>
 		<div
 			v-if="signatureOpen"
 			class="signature-modal"
@@ -515,6 +534,13 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import PageHeader from "../components/PageHeader.vue";
 import { call } from "../lib/frappe";
+
+const props = defineProps({
+	embedded: { type: Boolean, default: false },
+	seed: { type: Object, default: null },
+});
+const emit = defineEmits(["total-change"]);
+const embedded = computed(() => props.embedded);
 
 const invoiceTypes = [
 	{
@@ -569,6 +595,7 @@ const signatureCanvas = ref(null);
 const signatureError = ref("");
 let signing = false;
 let signatureHasInk = false;
+let signedInvoiceSnapshot = "";
 const isGst = computed(() => form.invoice_type === "GST");
 const isVolunteer = computed(() => form.signer_type === "VOLUNTEER");
 const itemsTotal = computed(() => form.items.reduce((sum, item) => sum + itemAmount(item), 0));
@@ -580,6 +607,8 @@ const taxableTotal = computed(
 );
 const gstAmount = computed(() => (isGst.value ? Number(form.gst_amount || 0) : 0));
 const grandTotal = computed(() => taxableTotal.value + gstAmount.value);
+
+watch(grandTotal, (value) => emit("total-change", Number(value || 0)), { immediate: true });
 
 function itemAmount(item) {
 	return Number(item.quantity || 0) * Number(item.rate || 0);
@@ -683,6 +712,7 @@ function saveSignature() {
 		return;
 	}
 	form.signature_data = signatureCanvas.value.toDataURL("image/png");
+	signedInvoiceSnapshot = invoiceContentSnapshot();
 	signatureOpen.value = false;
 }
 function closeSignature() {
@@ -691,6 +721,13 @@ function closeSignature() {
 }
 function clearSavedSignature() {
 	form.signature_data = "";
+	signedInvoiceSnapshot = "";
+}
+
+function invoiceContentSnapshot() {
+	const values = JSON.parse(JSON.stringify(form));
+	delete values.signature_data;
+	return JSON.stringify(values);
 }
 
 onMounted(async () => {
@@ -705,6 +742,7 @@ onMounted(async () => {
 		form.invoice_date = defaults.invoice_date || "";
 		form.consignee_address_name = defaults.default_office_address || "";
 		Object.assign(form.consignee, defaults.consignee || {});
+		applySeed(props.seed);
 	} catch (e) {
 		error.value = e.message || String(e);
 	} finally {
@@ -713,9 +751,57 @@ onMounted(async () => {
 });
 
 watch(
+	() => props.seed,
+	(seed) => {
+		if (!loading.value) applySeed(seed);
+	},
+	{ deep: true },
+);
+
+watch(
 	() => form.signer_type,
 	() => clearSavedSignature(),
 );
+
+watch(
+	() => invoiceContentSnapshot(),
+	(snapshot) => {
+		if (
+			props.embedded &&
+			form.signature_data &&
+			signedInvoiceSnapshot &&
+			snapshot !== signedInvoiceSnapshot
+		) {
+			clearSavedSignature();
+		}
+	},
+);
+
+function applySeed(seed) {
+	if (!seed) return;
+	if (seed.expense_date && !form.invoice_date) form.invoice_date = seed.expense_date;
+	if (seed.description && !form.items[0]?.description) {
+		form.items[0].description = seed.description;
+	}
+}
+
+function getSubmissionPayload() {
+	if (loading.value) throw new Error("Invoice details are still loading.");
+	if (!approvedBank.value) {
+		throw new Error(
+			"An Accounts Manager must approve your reimbursement bank account before you can generate an invoice.",
+		);
+	}
+	if (!officeAddresses.value.length) {
+		throw new Error("A Sevamrita office address is required before submitting this invoice.");
+	}
+	if (!form.signature_data) {
+		throw new Error("Sign the generated invoice on screen before submitting it.");
+	}
+	return JSON.parse(JSON.stringify(form));
+}
+
+defineExpose({ getSubmissionPayload });
 
 async function generate(event) {
 	if (generating.value) return;

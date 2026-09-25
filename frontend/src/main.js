@@ -22,6 +22,7 @@ import Team from "./views/Team.vue";
 import HRManagement from "./views/HRManagement.vue";
 import SystemManagement from "./views/SystemManagement.vue";
 import ChartOfAccounts from "./views/ChartOfAccounts.vue";
+import ExpenseApprovalLimits from "./views/ExpenseApprovalLimits.vue";
 
 initTheme();
 
@@ -48,7 +49,17 @@ const router = createRouter({
 			component: ChartOfAccounts,
 			name: "ChartOfAccounts",
 		},
+		{
+			path: "/expense-approval-limits",
+			component: ExpenseApprovalLimits,
+			name: "ExpenseApprovalLimits",
+		},
 		{ path: "/invoice-generator", component: InvoiceGenerator, name: "InvoiceGenerator" },
+		{
+			path: "/invoice-expense-claim",
+			component: ExpenseClaim,
+			name: "InvoiceExpenseClaim",
+		},
 		{ path: "/expense-claim", component: ExpenseClaim, name: "ExpenseClaim" },
 		{ path: "/expense-claims", component: ExpenseClaims, name: "ExpenseClaims" },
 		{

@@ -194,6 +194,19 @@ test("expense claim and invoice preparation forms", async ({
     );
     await auditMobileLayout(page, testInfo, "expense-claim");
   });
+  await test.step("invoice-expense-claim", async () => {
+    await openRoute(
+      page,
+      PERSONAS.employee,
+      "/volunteering/invoice-expense-claim",
+      "Prepare invoice and submit expense",
+    );
+    await page.getByRole("button", { name: /^No, prepare one now/ }).click();
+    await expect(
+      page.getByRole("heading", { name: "Invoice type", exact: true }),
+    ).toBeVisible();
+    await auditMobileLayout(page, testInfo, "invoice-expense-claim");
+  });
   await test.step("expense-claim-history", async () => {
     await openRoute(
       page,

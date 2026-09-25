@@ -72,7 +72,12 @@ test.describe('Approval routing @accounts @ui', () => {
 		await cleanupExpenseClaimsForProject(request, project);
 		const masters = await getE2eMasters(request);
 
-		await e2eCall(request, 'set_employee_reports_to', { employee: directorEmp, reports_to: '' }, 'admin');
+		await e2eCall(
+			request,
+			'set_employee_reports_to',
+			{ employee: directorEmp, reports_to: '' },
+			'admin',
+		);
 		try {
 			let claimName = '';
 			await withPersona(browser, 'employee', async (page) => {
@@ -127,7 +132,9 @@ test.describe('Approval routing @accounts @ui', () => {
 			await claim.open(claimName);
 			const canApprove = await claim.workflowActionVisible('Approve');
 			expect(canApprove).toBe(false);
-			const primaryApprove = page.locator('.primary-action').filter({ hasText: /^Approve$/ });
+			const primaryApprove = page
+				.locator('.primary-action')
+				.filter({ hasText: /^Approve$/ });
 			await expect(primaryApprove).toHaveCount(0);
 		});
 	});
@@ -161,13 +168,28 @@ test.describe('Approval routing @accounts @ui', () => {
 			{ doctype: 'Expense Claim', name: claimName, field: 'pending_approver' },
 			'admin',
 		);
-		expect(pendingApprover).toBe(PERSONAS.chair.email);
+		expect(pendingApprover).toBe(PERSONAS.manager.email);
+
+		const escalatedToDirector = await seedEscalateExpenseClaim(
+			request,
+			claimName,
+			'Claim exceeds the Manager Expense Claim limit',
+		);
+		expect(escalatedToDirector.pending_approver).toBe(PERSONAS.director.email);
+
+		const escalatedToChair = await seedEscalateExpenseClaim(
+			request,
+			claimName,
+			'Claim exceeds the Director Expense Claim limit',
+		);
+		expect(escalatedToChair.pending_approver).toBe(PERSONAS.chair.email);
 
 		await withPersona(browser, 'chair', async (page) => {
 			const claim = new ExpenseClaimFormPage(page);
 			await claim.open(claimName);
 			await claim.approve({
-				budgetOverrideReason: 'E2E board approval for high-value vendor reimbursement.',
+				budgetOverrideReason:
+					'E2E board approval for high-value vendor reimbursement.',
 			});
 		});
 
@@ -223,71 +245,60 @@ test.describe('Approval routing @accounts @ui', () => {
 		request,
 	}) => {
 		test.setTimeout(360_000);
-		const cast = await getCast(request, 'employee');
-		const directorEmp = cast.director.employee!;
-		const chairEmp = cast.chair.employee!;
+		await repairE2eReportsToChain(request);
 		const project = await getE2eProject(request);
 		await cleanupExpenseClaimsForProject(request, project);
 		const masters = await getE2eMasters(request);
 
-		await e2eCall(request, 'set_employee_reports_to', { employee: directorEmp, reports_to: '' }, 'admin');
-		try {
-			let claimName = '';
-			await withPersona(browser, 'employee', async (page) => {
-				const claim = new ExpenseClaimFormPage(page);
-				await claim.openNew();
-				await claim.fillClaim({
-					project,
-					amount: 30000,
-					expenseAccount: masters.expense_account,
-					vendorOverrideReason: 'Vendor does not accept POs',
-				});
-				claimName = await claim.saveAndSubmit(request);
+		let claimName = '';
+		await withPersona(browser, 'employee', async (page) => {
+			const claim = new ExpenseClaimFormPage(page);
+			await claim.openNew();
+			await claim.fillClaim({
+				project,
+				amount: 30000,
+				expenseAccount: masters.expense_account,
+				vendorOverrideReason: 'Vendor does not accept POs',
 			});
+			claimName = await claim.saveAndSubmit(request);
+		});
 
-			await withPersona(browser, 'manager', async (page) => {
-				const claim = new ExpenseClaimFormPage(page);
-				await claim.open(claimName);
-				await claim.expectApproveNotVisible();
+		await withPersona(browser, 'manager', async (page) => {
+			const claim = new ExpenseClaimFormPage(page);
+			await claim.open(claimName);
+			await claim.expectApproveNotVisible();
+		});
+
+		const escalatedToDirector = await seedEscalateExpenseClaim(
+			request,
+			claimName,
+			'Above manager authority',
+		);
+		expect(escalatedToDirector.pending_approver).toBe(PERSONAS.director.email);
+
+		const escalatedToChair = await seedEscalateExpenseClaim(
+			request,
+			claimName,
+			'Director limit also exceeded',
+		);
+		expect(escalatedToChair.pending_approver).toBe(PERSONAS.chair.email);
+
+		await withPersona(browser, 'chair', async (page) => {
+			const claim = new ExpenseClaimFormPage(page);
+			await claim.open(claimName);
+			await claim.approve({
+				budgetOverrideReason:
+					'E2E final board approval after escalation chain.',
 			});
+		});
 
-			const escalatedToDirector = await seedEscalateExpenseClaim(
-				request,
-				claimName,
-				'Above manager authority',
-			);
-			expect(escalatedToDirector.pending_approver).toBe(PERSONAS.director.email);
-
-			const escalatedToChair = await seedEscalateExpenseClaim(
-				request,
-				claimName,
-				'Director limit also exceeded',
-			);
-			expect(escalatedToChair.pending_approver).toBe(PERSONAS.chair.email);
-
-			await withPersona(browser, 'chair', async (page) => {
-				const claim = new ExpenseClaimFormPage(page);
-				await claim.open(claimName);
-				await claim.approve({
-					budgetOverrideReason: 'E2E final board approval after escalation chain.',
-				});
-			});
-
-			const workflowState = await e2eCall<string>(
-				request,
-				'get_doc_field',
-				{ doctype: 'Expense Claim', name: claimName, field: 'workflow_state' },
-				'admin',
-			);
-			expect(workflowState).toBe('Approved');
-		} finally {
-			await e2eCall(
-				request,
-				'set_employee_reports_to',
-				{ employee: directorEmp, reports_to: chairEmp },
-				'admin',
-			);
-		}
+		const workflowState = await e2eCall<string>(
+			request,
+			'get_doc_field',
+			{ doctype: 'Expense Claim', name: claimName, field: 'workflow_state' },
+			'admin',
+		);
+		expect(workflowState).toBe('Approved');
 	});
 
 	test('AC-APR-007 @regression: Approval Authority toggle Off uses simple tiers', async ({

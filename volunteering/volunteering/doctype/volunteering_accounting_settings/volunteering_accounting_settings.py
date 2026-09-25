@@ -71,7 +71,7 @@ def get_limit_rows(settings=None):
 
 
 def get_grade_limit_map(settings=None):
-	"""Return {grade_name: {max_approve_amount, max_advance_amount, unlimited}}.
+	"""Return grade authority limits used by advances and Expense Claims.
 
 	Starts from DEFAULT_GRADE_LIMITS, then overlays saved rows from the
 	Approval and Advance Limits page.
@@ -80,14 +80,19 @@ def get_grade_limit_map(settings=None):
 	for grade, max_approve, max_advance in DEFAULT_GRADE_LIMITS:
 		limits[grade] = {
 			"max_approve_amount": flt(max_approve),
+			"max_expense_claim_amount": flt(max_approve),
 			"max_advance_amount": flt(max_advance),
 			"unlimited": grade in UNLIMITED_GRADES,
 		}
 	for row in get_limit_rows(settings):
 		if not row.designation:
 			continue
+		expense_limit = row.get("max_expense_claim_amount")
 		limits[row.designation] = {
 			"max_approve_amount": flt(row.max_approve_amount),
+			"max_expense_claim_amount": flt(
+				row.max_approve_amount if expense_limit is None else expense_limit
+			),
 			"max_advance_amount": flt(row.max_advance_amount),
 			"unlimited": row.designation in UNLIMITED_GRADES,
 		}
@@ -102,6 +107,17 @@ def grade_can_approve(grade, amount, settings=None):
 	if row.get("unlimited"):
 		return True
 	return flt(amount) <= flt(row.get("max_approve_amount"))
+
+
+def grade_can_approve_expense_claim(grade, amount, settings=None):
+	"""Whether this grade may approve one Expense Claim of ``amount``."""
+	limits = get_grade_limit_map(settings)
+	if not grade or grade not in limits:
+		return False
+	row = limits[grade]
+	if row.get("unlimited"):
+		return True
+	return flt(amount) <= flt(row.get("max_expense_claim_amount"))
 
 
 def grade_advance_limit(grade, settings=None):

@@ -53,6 +53,10 @@
 			v-else-if="name === 'invoice'"
 			d="M7 3h10a2 2 0 0 1 2 2v16l-3-2-4 2-4-2-3 2V5a2 2 0 0 1 2-2zM8 8h8M8 12h8M8 16h5"
 		/>
+		<path
+			v-else-if="name === 'invoice-claim'"
+			d="M6 3h9l4 4v14H6zM15 3v5h4M9 12h6M9 16h3M15 15l1.5 1.5L20 13"
+		/>
 		<path v-else-if="name === 'book'" d="M5 5h11a2 2 0 0 1 2 2v12H7a2 2 0 0 0-2 2z" />
 		<path
 			v-else-if="name === 'folder'"

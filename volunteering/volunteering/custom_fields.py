@@ -279,10 +279,11 @@ ACCOUNTING_CUSTOM_FIELDS = {
 		},
 		{
 			"fieldname": "receipt_review_checklist",
-			"label": "Audit Checklist Result",
+			"label": "Legacy Audit Checklist Result",
 			"fieldtype": "Small Text",
 			"insert_after": "receipt_review_notes",
 			"read_only": 1,
+			"hidden": 1,
 		},
 		{
 			"fieldname": "reviewed_attachments",

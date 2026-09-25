@@ -21,6 +21,8 @@ class ApprovalandAdvanceLimits(Document):
 
 			if flt(row.max_approve_amount) < 0:
 				frappe.throw(_("Row {0}: Approval authority cannot be negative.").format(row.idx))
+			if flt(row.max_expense_claim_amount) < 0:
+				frappe.throw(_("Row {0}: Expense Claim limit cannot be negative.").format(row.idx))
 
 	def on_update(self):
 		frappe.clear_cache(doctype="Approval and Advance Limits")
@@ -48,6 +50,7 @@ def reset_to_defaults():
 			{
 				"designation": grade,
 				"max_approve_amount": max_approve,
+				"max_expense_claim_amount": max_approve,
 				"max_advance_amount": max_advance,
 			},
 		)

@@ -26,6 +26,7 @@ from volunteering.volunteering.authority import (
 from volunteering.volunteering.doctype.volunteering_accounting_settings.volunteering_accounting_settings import (
 	get_accounting_settings,
 	grade_can_approve,
+	grade_can_approve_expense_claim,
 )
 
 ROLE_BOARD_CHAIR = LEGACY_ROLE_BOARD_CHAIR
@@ -61,6 +62,7 @@ ESCALATION_TRANSITIONS = {
 }
 
 ACCOUNTING_WORKFLOW_DOCTYPES = ("Expense Claim", "Purchase Order", "Employee Advance")
+SEQUENTIAL_APPROVAL_DOCTYPES = frozenset({"Expense Claim", "Employee Advance"})
 
 AMOUNT_FIELDS = {
 	"Expense Claim": "total_claimed_amount",
@@ -186,7 +188,7 @@ def walk_approval_chain(employee, amount, start_after_employee=None):
 
 
 def find_first_approver(employee, amount, start_after_employee=None, require_authority=True):
-	"""Return a reporting manager; advances must visit each manager without skips."""
+	"""Return a reporting manager; sequential workflows pass ``require_authority=False``."""
 	first = None
 	for user, _emp, _grade, can_approve in walk_approval_chain(
 		employee, amount, start_after_employee=start_after_employee
@@ -206,12 +208,15 @@ def get_fallback_board_approver():
 	return _authority_fallback_board_approver()
 
 
-def user_can_approve_amount(user, amount):
+def user_can_approve_amount(user, amount, doctype=None):
 	if not user:
 		return False
 	if user_has_board_of_directors(user):
 		return True
-	return grade_can_approve(get_approval_band_for_user(user), amount)
+	grade = get_approval_band_for_user(user)
+	if doctype == "Expense Claim":
+		return grade_can_approve_expense_claim(grade, amount)
+	return grade_can_approve(grade, amount)
 
 
 def assign_pending_approver(doc):
@@ -224,7 +229,7 @@ def assign_pending_approver(doc):
 		doc.pending_approver = get_fallback_board_approver()
 		return
 
-	require_authority = doc.doctype != "Employee Advance"
+	require_authority = doc.doctype not in SEQUENTIAL_APPROVAL_DOCTYPES
 	approver = find_first_approver(employee, amount, require_authority=require_authority)
 	if approver and approver == requester:
 		# Skip self — escalate one more hop
@@ -251,7 +256,7 @@ def escalate_to_next_approver(doc):
 		requester_emp,
 		amount,
 		start_after_employee=current_emp,
-		require_authority=doc.doctype != "Employee Advance",
+		require_authority=doc.doctype not in SEQUENTIAL_APPROVAL_DOCTYPES,
 	)
 	if not next_approver or next_approver == current_user:
 		next_approver = get_fallback_board_approver()
@@ -372,7 +377,7 @@ def validate_approver_authority(doc):
 	user = frappe.session.user
 	if user != (doc.get("pending_approver") or previous.get("pending_approver")):
 		# Board chair override path still allowed if they have unlimited
-		if not user_can_approve_amount(user, amount):
+		if not user_can_approve_amount(user, amount, doc.doctype):
 			frappe.throw(
 				_("Only the assigned approver ({0}) may approve this document.").format(
 					previous.get("pending_approver") or _("unknown")
@@ -380,7 +385,7 @@ def validate_approver_authority(doc):
 			)
 		return
 
-	if not user_can_approve_amount(user, amount):
+	if not user_can_approve_amount(user, amount, doc.doctype):
 		frappe.throw(
 			_("Your grade approval limit is below {0}. Reject or Escalate to a higher authority.").format(
 				frappe.format_value(amount, "Currency")
@@ -432,6 +437,39 @@ def validate_advance_review_assignment(doc):
 			frappe.throw(
 				_(
 					"Escalate the advance to the next linked reviewer; intermediate reviewers cannot be skipped."
+				)
+			)
+
+
+def validate_expense_claim_review_assignment(doc):
+	"""Expense Claims must visit each linked reviewer without chain bypasses."""
+	if doc.doctype != "Expense Claim":
+		return
+	previous = doc.get_doc_before_save()
+	if not previous or previous.workflow_state != PENDING_APPROVAL:
+		return
+
+	assigned = previous.get("pending_approver")
+	routing_changed = doc.get("pending_approver") != assigned
+	if doc.workflow_state in ("Approved", "Rejected") or routing_changed:
+		if frappe.session.user != assigned:
+			frappe.throw(
+				_("Only the currently assigned Expense Claim reviewer may approve, reject or escalate.")
+			)
+
+	if routing_changed and doc.workflow_state == PENDING_APPROVAL:
+		next_user = find_first_approver(
+			get_requester_employee(doc),
+			get_document_amount(doc),
+			start_after_employee=get_employee_for_user(assigned),
+			require_authority=False,
+		)
+		if not next_user or next_user == assigned:
+			next_user = get_fallback_board_approver()
+		if doc.pending_approver != next_user:
+			frappe.throw(
+				_(
+					"Escalate the Expense Claim to the next linked reviewer; intermediate reviewers cannot be skipped."
 				)
 			)
 
@@ -496,6 +534,7 @@ def before_accounting_document_save(doc, method=None):
 	if doc.doctype not in ACCOUNTING_WORKFLOW_DOCTYPES:
 		return
 	validate_advance_review_assignment(doc)
+	validate_expense_claim_review_assignment(doc)
 
 	# Advance requests are available to every eligible employee, including board
 	# grades. EC/PO retain their existing board-request rule; self-approval is blocked.
@@ -547,6 +586,7 @@ def before_accounting_document_submit(doc, method=None):
 	if doc.doctype not in ACCOUNTING_WORKFLOW_DOCTYPES:
 		return
 	validate_advance_review_assignment(doc)
+	validate_expense_claim_review_assignment(doc)
 	validate_no_self_approval(doc)
 	validate_approver_authority(doc)
 	if doc.doctype == "Expense Claim":
@@ -710,16 +750,17 @@ def _remove_stale_approver_share(doc):
 
 @frappe.whitelist()
 def get_live_workflow_transitions(doc, workflow=None, raise_exception=False):
-	"""Keep Desk's native advance actions in sync with live approval authority.
+	"""Keep Desk approval actions in sync with live approval authority.
 
-	Other DocTypes use Frappe's unchanged implementation. The actual approval
-	continues to be independently checked by validate_approver_authority.
+	Advances use total outstanding exposure; Expense Claims use only that
+	claim's amount. Other DocTypes use Frappe's unchanged implementation. The
+	actual approval is independently checked by validate_approver_authority.
 	"""
 	from frappe.model.document import Document
 	from frappe.model.workflow import get_transitions
 
 	payload = doc if isinstance(doc, Document) else frappe.parse_json(doc)
-	if payload.get("doctype") != "Employee Advance":
+	if payload.get("doctype") not in SEQUENTIAL_APPROVAL_DOCTYPES:
 		return get_transitions(doc, workflow, raise_exception)
 
 	advance = payload if isinstance(payload, Document) else frappe.get_doc(payload)
@@ -768,7 +809,7 @@ def get_approver_action_flags(doctype, name):
 	amount = exposure["total_outstanding"] if exposure else get_document_approval_amount(doc)
 	can_approve = True
 	if use_grade_approval():
-		can_approve = user_can_approve_amount(frappe.session.user, amount)
+		can_approve = user_can_approve_amount(frappe.session.user, amount, doc.doctype)
 	strict_budget_messages = []
 	strict_budget_blocked = False
 	if can_approve and doc.doctype in ("Expense Claim", "Purchase Order"):

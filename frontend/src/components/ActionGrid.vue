@@ -68,6 +68,7 @@ const actionVisuals = {
 	advance: { icon: "coins", tone: "blue" },
 	claim: { icon: "receipt", tone: "amber" },
 	invoice_generator: { icon: "invoice", tone: "cyan" },
+	invoice_expense_claim: { icon: "invoice-claim", tone: "green" },
 	bank_account: { icon: "bank", tone: "green" },
 	office_addresses: { icon: "map-pin", tone: "cyan" },
 	how_to_spend: { icon: "guide", tone: "slate" },

@@ -881,7 +881,13 @@ def ensure_designation_limits():
 			"parenttype": "Volunteering Accounting Settings",
 			"parentfield": "designation_limits",
 		},
-		fields=["name", "designation", "max_approve_amount", "max_advance_amount"],
+		fields=[
+			"name",
+			"designation",
+			"max_approve_amount",
+			"max_expense_claim_amount",
+			"max_advance_amount",
+		],
 		order_by="idx asc",
 	)
 	if legacy_rows and not doc.get("designation_limits"):
@@ -891,6 +897,11 @@ def ensure_designation_limits():
 				{
 					"designation": row.designation,
 					"max_approve_amount": row.max_approve_amount,
+					"max_expense_claim_amount": (
+						row.max_expense_claim_amount
+						if row.max_expense_claim_amount is not None
+						else row.max_approve_amount
+					),
 					"max_advance_amount": row.max_advance_amount,
 				},
 			)
@@ -910,6 +921,7 @@ def ensure_designation_limits():
 			{
 				"designation": grade,
 				"max_approve_amount": max_approve,
+				"max_expense_claim_amount": max_approve,
 				"max_advance_amount": max_advance,
 			},
 		)
