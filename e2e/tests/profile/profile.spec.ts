@@ -117,7 +117,7 @@ test("A second employee sees their own record, not the first employee's", async 
   ).toHaveCount(0);
 });
 
-test("Home and profile fit mobile and dark theme", async ({ page }) => {
+test("Home and profile fit mobile and enforce light theme", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(
     page.getByRole("link", { name: "Profile", exact: true }),
@@ -139,7 +139,12 @@ test("Home and profile fit mobile and dark theme", async ({ page }) => {
   ).toHaveCount(0);
   await page.evaluate(() => localStorage.setItem("volunteering.theme", "dark"));
   await page.reload();
-  await expect(page.locator("html")).toHaveClass(/dark/);
+  await expect(page.locator("html")).not.toHaveClass(/dark/);
+  await expect
+    .poll(() =>
+      page.evaluate(() => localStorage.getItem("volunteering.theme")),
+    )
+    .toBe("light");
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,

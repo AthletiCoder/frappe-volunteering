@@ -5,17 +5,14 @@ export function isDark() {
 }
 
 export function initTheme() {
-	const stored = localStorage.getItem(STORAGE_KEY);
-	const dark =
-		stored === "dark" ||
-		(stored !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-	document.documentElement.classList.toggle("dark", dark);
-	return dark;
+	document.documentElement.classList.remove("dark");
+	document.documentElement.style.colorScheme = "light";
+	localStorage.setItem(STORAGE_KEY, "light");
+	return false;
 }
 
 export function toggleTheme() {
-	const next = !isDark();
-	document.documentElement.classList.toggle("dark", next);
-	localStorage.setItem(STORAGE_KEY, next ? "dark" : "light");
-	return next;
+	// Keep the theme API available for future use, but the employee portal is
+	// intentionally locked to light mode for now.
+	return initTheme();
 }

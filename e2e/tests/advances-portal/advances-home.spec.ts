@@ -524,7 +524,7 @@ test("AP-004: Direct manager freezes/unfreezes through My team; employee cannot 
   }
 });
 
-test("AP-005: Advance request and team dashboard fit mobile and dark theme", async ({
+test("AP-005: Advance request and team dashboard fit mobile in enforced light theme", async ({
   page,
   browser,
 }) => {
@@ -535,7 +535,12 @@ test("AP-005: Advance request and team dashboard fit mobile and dark theme", asy
   ).toHaveCount(0);
   await page.evaluate(() => localStorage.setItem("volunteering.theme", "dark"));
   await page.reload();
-  await expect(page.locator("html")).toHaveClass(/dark/);
+  await expect(page.locator("html")).not.toHaveClass(/dark/);
+  await expect
+    .poll(() =>
+      page.evaluate(() => localStorage.getItem("volunteering.theme")),
+    )
+    .toBe("light");
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,

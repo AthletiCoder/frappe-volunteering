@@ -124,7 +124,7 @@ test.describe("Employee expense portal @ui @expense-portal", () => {
     });
   });
 
-  test("the form fits a mobile viewport and supports dark theme", async ({
+  test("the form fits a mobile viewport and enforces light theme", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
@@ -143,14 +143,12 @@ test.describe("Employee expense portal @ui @expense-portal", () => {
       localStorage.setItem("volunteering.theme", "dark"),
     );
     await page.reload();
-    await expect(page.locator("html")).toHaveClass(/dark/);
+    await expect(page.locator("html")).not.toHaveClass(/dark/);
     await expect
       .poll(() =>
-        page
-          .getByRole("button", { name: /^Against manager/ })
-          .evaluate((button) => getComputedStyle(button).backgroundColor),
+        page.evaluate(() => localStorage.getItem("volunteering.theme")),
       )
-      .toBe("rgb(18, 17, 16)");
+      .toBe("light");
     await expect(page.locator(".form-grid")).toHaveCount(0);
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({

@@ -10,11 +10,9 @@
 <script>
 	(function () {
 		try {
-			var stored = localStorage.getItem("volunteering.theme");
-			var dark =
-				stored === "dark" ||
-				(stored !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-			document.documentElement.classList.toggle("dark", dark);
+			document.documentElement.classList.remove("dark");
+			document.documentElement.style.colorScheme = "light";
+			localStorage.setItem("volunteering.theme", "light");
 		} catch (e) {}
 	})();
 </script>

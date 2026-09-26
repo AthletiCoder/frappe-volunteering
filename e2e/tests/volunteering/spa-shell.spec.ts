@@ -115,7 +115,7 @@ test.describe("SPA shell @smoke @volunteering", () => {
       await expect(page.getByRole("button", { name: /All/i })).toBeVisible();
     });
 
-    test("theme switch is hidden while stored preferences still apply", async ({
+    test("theme switch is hidden and stored dark preferences are reset", async ({
       page,
     }) => {
       const home = new HomePage(page);
@@ -128,12 +128,12 @@ test.describe("SPA shell @smoke @volunteering", () => {
         localStorage.setItem("volunteering.theme", "dark"),
       );
       await page.reload();
-      await expect(page.locator("html")).toHaveClass(/dark/);
-      await page.evaluate(() =>
-        localStorage.setItem("volunteering.theme", "light"),
-      );
-      await page.reload();
       await expect(page.locator("html")).not.toHaveClass(/dark/);
+      await expect
+        .poll(() =>
+          page.evaluate(() => localStorage.getItem("volunteering.theme")),
+        )
+        .toBe("light");
     });
   });
 
