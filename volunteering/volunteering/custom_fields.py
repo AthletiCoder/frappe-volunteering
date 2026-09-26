@@ -294,6 +294,58 @@ ACCOUNTING_CUSTOM_FIELDS = {
 			"hidden": 1,
 			"description": "Immutable names and hashes of the files covered by the review.",
 		},
+		{
+			"fieldname": "account_classification_section",
+			"fieldtype": "Section Break",
+			"label": "Accounts Classification",
+			"insert_after": "reviewed_attachments",
+			"hidden": 1,
+		},
+		{
+			"fieldname": "account_classification_status",
+			"label": "Account Classification Status",
+			"fieldtype": "Select",
+			"options": "Not Started\nPending\nComplete",
+			"default": "Not Started",
+			"insert_after": "account_classification_section",
+			"read_only": 1,
+			"hidden": 1,
+		},
+		{
+			"fieldname": "account_classified_by",
+			"label": "Classified By",
+			"fieldtype": "Link",
+			"options": "User",
+			"insert_after": "account_classification_status",
+			"read_only": 1,
+			"hidden": 1,
+			"ignore_user_permissions": 1,
+		},
+		{
+			"fieldname": "account_classified_on",
+			"label": "Classified On",
+			"fieldtype": "Datetime",
+			"insert_after": "account_classified_by",
+			"read_only": 1,
+			"hidden": 1,
+		},
+		{
+			"fieldname": "account_classification_note",
+			"label": "Accounts Note",
+			"fieldtype": "Small Text",
+			"insert_after": "account_classified_on",
+			"read_only": 1,
+			"hidden": 1,
+		},
+		{
+			"fieldname": "account_allocations",
+			"label": "Account Allocations",
+			"fieldtype": "Table",
+			"options": "Expense Claim Account Allocation",
+			"insert_after": "account_classification_note",
+			"read_only": 1,
+			"hidden": 1,
+		},
 	],
 	"Expense Claim Detail": [
 		{
@@ -505,6 +557,14 @@ ACCOUNTING_CUSTOM_FIELDS = {
 				"Define the project's plain-language expense break up and the budget for each label. "
 				"Accounts Managers map approved labels to ledger accounts separately."
 			),
+		},
+		{
+			"fieldname": "expense_account_mappings",
+			"label": "Expense Account Suggestions",
+			"fieldtype": "Table",
+			"options": "Project Expense Account Mapping",
+			"insert_after": "account_budgets",
+			"hidden": 1,
 		},
 		{
 			"fieldname": "department_budgets_section",

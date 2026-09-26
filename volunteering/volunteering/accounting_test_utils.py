@@ -247,13 +247,21 @@ def get_or_create_expense_claim_type():
 
 
 def attach_test_receipt(doc):
+	from io import BytesIO
+
+	from pypdf import PdfWriter
+
+	content = BytesIO()
+	writer = PdfWriter()
+	writer.add_blank_page(width=72, height=72)
+	writer.write(content)
 	frappe.get_doc(
 		{
 			"doctype": "File",
 			"file_name": f"receipt-{doc.name}.pdf",
 			"attached_to_doctype": doc.doctype,
 			"attached_to_name": doc.name,
-			"content": "test receipt",
+			"content": content.getvalue(),
 			"is_private": 1,
 		}
 	).insert(ignore_permissions=True)
@@ -271,8 +279,9 @@ def make_expense_claim(
 	expense_type = get_or_create_expense_claim_type()
 	company = frappe.db.get_value("Employee", employee, "company")
 	expense_account = None
+	project_budget_key = None
 	if project:
-		expense_account = frappe.db.get_value(
+		budget_row = frappe.db.get_value(
 			"Project Account Budget",
 			{
 				"parent": project,
@@ -280,13 +289,23 @@ def make_expense_claim(
 				"parentfield": "account_budgets",
 				"is_active": 1,
 			},
-			"expense_account",
+			["budget_key", "expense_account"],
 			order_by="idx asc",
+			as_dict=True,
 		)
+		if budget_row:
+			project_budget_key = budget_row.budget_key
+			expense_account = budget_row.expense_account
 	if not expense_account:
 		expense_account = get_or_create_expense_account(company)
 		if project and ensure_project_account:
 			allow_project_expense_account(project, expense_account)
+			project_budget_key = frappe.db.get_value(
+				"Project Account Budget",
+				{"parent": project, "expense_account": expense_account, "is_active": 1},
+				"budget_key",
+				order_by="idx desc",
+			)
 	payable_account = get_or_create_payable_account(company)
 	cost_center = frappe.db.get_value("Project", project, "cost_center") if project else None
 	department = frappe.db.get_value("Employee", employee, "department")
@@ -303,11 +322,7 @@ def make_expense_claim(
 			"expenses": [
 				{
 					"expense_type": expense_type,
-					"project_expense_account": frappe.db.get_value(
-						"Project Account Budget",
-						{"parent": project, "expense_account": expense_account},
-						"budget_key",
-					),
+					"project_expense_account": project_budget_key,
 					"description": "Test expense",
 					"amount": amount,
 					"sanctioned_amount": amount,
@@ -333,13 +348,23 @@ def allow_project_expense_account(project, account, label=None, approved_amount=
 	if not project or not account:
 		return
 	project_doc = frappe.get_doc("Project", project)
-	for row in project_doc.get("account_budgets") or []:
-		if row.expense_account == account:
-			if label:
-				row.employee_label = label
-			row.is_active = active
-			save_test_project(project_doc)
-			return
+	rows = project_doc.get("account_budgets") or []
+	# Labels and ledger suggestions are now independent: one account may be
+	# suggested for several labels, so never rename an arbitrary account match.
+	if label:
+		matched = next(
+			(row for row in rows if (row.employee_label or "").strip().casefold() == label.strip().casefold()),
+			None,
+		)
+	else:
+		matched = next((row for row in rows if row.expense_account == account), None)
+	if matched:
+		matched.expense_account = account
+		matched.is_active = active
+		if approved_amount:
+			matched.approved_amount = approved_amount
+		save_test_project(project_doc)
+		return
 	project_doc.append(
 		"account_budgets",
 		{

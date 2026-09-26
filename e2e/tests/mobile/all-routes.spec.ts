@@ -233,7 +233,7 @@ test("expense claim and invoice preparation forms", async ({
       "Prepare an invoice",
     );
     await auditMobileLayout(page, testInfo, "invoice-generator");
-    await page.getByRole("button", { name: "Sign on screen" }).click();
+    await page.getByRole("button", { name: "Sign freshly" }).click();
     await expect(page.locator("canvas.signature-canvas")).toBeVisible();
     await auditMobileLayout(page, testInfo, "invoice-signature-dialog");
   });

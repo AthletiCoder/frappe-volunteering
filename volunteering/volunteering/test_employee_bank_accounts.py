@@ -282,23 +282,31 @@ class IntegrationTestEmployeeBankAccounts(IntegrationTestCase):
 		with self.assertRaises(frappe.PermissionError):
 			frappe.delete_doc("Bank Account", approved["bank_account"], ignore_permissions=True)
 
-	def test_invoice_requires_approval_and_defaults_are_masked(self):
-		with self.assertRaises(frappe.ValidationError):
-			invoices.generate_invoice_documents(_payload())
-		self.approve()
+	def test_invoice_does_not_require_employee_bank_approval(self):
 		frappe.set_user(self.employee_user)
 		defaults = invoices.get_invoice_generator_defaults()
-		self.assertTrue(defaults["has_approved_bank"])
-		self.assertEqual(defaults["remittance_bank"]["account_number"], "••••••9012")
+		self.assertNotIn("has_approved_bank", defaults)
+		self.assertNotIn("remittance_bank", defaults)
 		self.assertNotIn(details()["account_number"], str(defaults))
+		with patch.object(
+			invoices, "_build_pdf", side_effect=lambda data: invoices._render_pdf_html(data).encode()
+		):
+			generated = invoices.generate_invoice_documents(_payload(), output_format="pdf")
+		html = base64.b64decode(generated["pdf"]["content_base64"]).decode()
+		self.assertNotIn("Remittance Details", html)
 
-	def test_pdf_and_word_ignore_forged_remittance_and_use_approved_record(self):
+	def test_pdf_and_word_use_supplier_bank_not_approved_employee_bank(self):
 		from docx import Document
 
 		self.approve()
 		frappe.set_user(self.employee_user)
 		payload = _payload("NON_GST")
-		payload["bank"] = {"account_number": "999999999999", "bank_name": "Forged Bank"}
+		payload["bank"] = {
+			"account_name": "Example Kitchen Supplies",
+			"account_number": "999999999999",
+			"bank_name": "Supplier Bank",
+			"ifsc": "SUPP0123456",
+		}
 		with patch.object(
 			invoices, "_build_pdf", side_effect=lambda data: invoices._render_pdf_html(data).encode()
 		):
@@ -307,16 +315,21 @@ class IntegrationTestEmployeeBankAccounts(IntegrationTestCase):
 		word = Document(BytesIO(base64.b64decode(generated["docx"]["content_base64"])))
 		text = "\n".join(cell.text for table in word.tables for row in table.rows for cell in row.cells)
 		for content in (html, text):
-			self.assertIn(details()["account_number"], content)
-			self.assertIn("Test Reimbursement Bank", content)
-			self.assertIn("Remittance Details", content)
-			self.assertNotIn("999999999999", content)
-			self.assertNotIn("Forged Bank", content)
+			self.assertIn("999999999999", content)
+			self.assertIn("Supplier Bank", content)
+			self.assertIn("Supplier Remittance Details", content)
+			self.assertNotIn(details()["account_number"], content)
+			self.assertNotIn("Test Reimbursement Bank", content)
 
 	def test_generated_invoice_remembers_vendor_only_for_current_employee(self):
-		self.approve()
 		frappe.set_user(self.employee_user)
 		payload = _payload("NON_GST")
+		payload["bank"] = {
+			"account_name": "Example Kitchen Supplies",
+			"bank_name": "Remembered Supplier Bank",
+			"account_number": "998877665544",
+			"ifsc": "MEMO0123456",
+		}
 		with patch.object(
 			invoices, "_build_pdf", side_effect=lambda data: invoices._render_pdf_html(data).encode()
 		):
@@ -328,16 +341,20 @@ class IntegrationTestEmployeeBankAccounts(IntegrationTestCase):
 			)
 		self.assertEqual(generated["vendor_address"]["name"], again["vendor_address"]["name"])
 		self.assertEqual(generated["invoice_number"], again["invoice_number"])
+		self.assertEqual(generated["invoice_style"], again["invoice_style"])
 		self.assertEqual(again["vendor_address"]["use_count"], 1)
 		with patch.object(
 			invoices, "_build_pdf", side_effect=lambda data: invoices._render_pdf_html(data).encode()
 		):
 			new_invoice = invoices.generate_invoice_documents(payload, output_format="pdf")
 		self.assertNotEqual(generated["invoice_number"], new_invoice["invoice_number"])
+		self.assertEqual(generated["invoice_style"], new_invoice["invoice_style"])
 		self.assertEqual(new_invoice["vendor_address"]["use_count"], 2)
 		choices = invoices.get_invoice_generator_defaults()["vendor_addresses"]
 		self.assertEqual(len(choices), 1)
 		self.assertEqual(choices[0]["party"], payload["supplier"])
+		self.assertEqual(choices[0]["bank"], invoices._bank(payload["bank"]))
+		self.assertEqual(choices[0]["invoice_style"], generated["invoice_style"])
 		frappe.set_user(self.other_user)
 		self.assertEqual(invoices._vendor_address_choices(self.other_employee), [])
 

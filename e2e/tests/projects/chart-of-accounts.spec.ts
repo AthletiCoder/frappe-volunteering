@@ -20,7 +20,33 @@ test("Accounts Manager opens Home Chart of Accounts and an account detail", asyn
   ).toBeVisible();
   await expect(page.getByText(/of .* accounts/)).toBeVisible();
   await expect(page.getByRole("alert")).toHaveCount(0);
-  await page.locator(".account-row").first().click();
+
+  const rows = page.locator(".account-row");
+  await expect(rows.first()).toBeVisible();
+  expect(await rows.count()).toBeGreaterThan(0);
+  for (const row of await rows.all()) {
+    await expect(row).toHaveAttribute("data-account-depth", "0");
+  }
+
+  const firstGroup = page
+    .locator('.account-row[data-account-depth="0"]:has(.account-toggle)')
+    .first();
+  await expect(firstGroup).toBeVisible();
+  const toggle = firstGroup.locator(".account-toggle");
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(
+    page.locator('.account-row[data-account-depth="1"]').first(),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add account" })).toBeVisible();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    page.locator('.account-row[data-account-depth="1"]'),
+  ).toHaveCount(0);
+
+  await firstGroup.locator(".account-open").click();
   await expect(
     page.getByText("ERPNext protects root accounts from editing or deletion."),
   ).toBeVisible();

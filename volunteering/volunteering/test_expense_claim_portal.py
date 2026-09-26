@@ -170,9 +170,18 @@ class IntegrationTestExpenseClaimPortal(IntegrationTestCase):
 		payload["expenses"][0].pop("receipt_filename")
 		payload["expenses"][0].pop("receipt_content")
 		frappe.set_user(self.user)
+		invoice_payload = {
+			"volunteer_signature_data": "data:image/png;base64,signed",
+			"bank": {
+				"account_name": "Generated supplier",
+				"bank_name": "Supplier Bank",
+				"account_number": "998877665544",
+				"ifsc": "SUPP0123456",
+			},
+		}
 		result = submit_generated_invoice_expense_claim(
 			payload,
-			{"signature_data": "data:image/png;base64,signed"},
+			invoice_payload,
 		)
 		claim = frappe.get_doc("Expense Claim", result["name"])
 		self.assertEqual(result["generated_invoice_number"], "INV-2026-000321")
@@ -180,9 +189,7 @@ class IntegrationTestExpenseClaimPortal(IntegrationTestCase):
 		self.assertEqual(claim.expenses[0].supplier_name, "Generated supplier")
 		self.assertEqual(claim.expenses[0].supplier_invoice_number, "INV-2026-000321")
 		self.assertTrue(claim.expenses[0].receipt_attachment.startswith("/private/files/"))
-		generate.assert_called_once_with(
-			{"signature_data": "data:image/png;base64,signed"}, output_format="pdf"
-		)
+		generate.assert_called_once_with(invoice_payload, output_format="pdf")
 
 	@patch("volunteering.volunteering.invoice_generator.generate_invoice_documents")
 	def test_generated_invoice_requires_signature_and_matching_total(self, generate):
@@ -190,8 +197,8 @@ class IntegrationTestExpenseClaimPortal(IntegrationTestCase):
 		payload["expenses"][0].pop("receipt_filename")
 		payload["expenses"][0].pop("receipt_content")
 		frappe.set_user(self.user)
-		with self.assertRaisesRegex(frappe.ValidationError, "Sign the generated invoice"):
-			submit_generated_invoice_expense_claim(payload, {"signature_data": ""})
+		with self.assertRaisesRegex(frappe.ValidationError, "volunteer signature"):
+			submit_generated_invoice_expense_claim(payload, {"volunteer_signature_data": ""})
 		generate.assert_not_called()
 
 		generate.return_value = {
@@ -205,7 +212,7 @@ class IntegrationTestExpenseClaimPortal(IntegrationTestCase):
 		}
 		with self.assertRaisesRegex(frappe.ValidationError, "must equal the expense amount"):
 			submit_generated_invoice_expense_claim(
-				payload, {"signature_data": "data:image/png;base64,signed"}
+				payload, {"volunteer_signature_data": "data:image/png;base64,signed"}
 			)
 		self.assertFalse(frappe.db.exists("Expense Claim", {"employee": self.employee}))
 

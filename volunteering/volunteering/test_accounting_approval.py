@@ -24,7 +24,12 @@ from volunteering.volunteering.accounting_test_utils import (
 	set_employee_grade,
 )
 from volunteering.volunteering.approval_routing import PENDING_APPROVAL, escalate_document
+from volunteering.volunteering.expense_account_classification import (
+	CLASSIFICATION_COMPLETE,
+	PENDING_ACCOUNTS_CLASSIFICATION,
+)
 from volunteering.volunteering.expense_claim_workflow_portal import (
+	classify_expense_claim_accounts,
 	decide_expense_claim,
 	get_expense_claim_work_item,
 	get_expense_claim_work_queue,
@@ -74,6 +79,11 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 			["Expense Receipt Reviewer"],
 			"Receipt Reviewer",
 		)
+		cls.accounts_email = get_or_create_user(
+			"accounts-manager-acct@example.com",
+			["Accounts Manager"],
+			"Accounts Manager",
+		)
 		# Authority comes from the grade below, not from a board role.
 		cls.board_chair_email = get_or_create_user(
 			"board-chair-acct@example.com",
@@ -92,6 +102,9 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 		cls.reviewer_employee = get_or_create_employee(
 			cls.reviewer_email, cls.department, "Receipt Reviewer Employee"
 		)
+		cls.accounts_employee = get_or_create_employee(
+			cls.accounts_email, cls.department, "Accounts Manager Employee"
+		)
 
 		set_employee_grade(cls.employee, "Associate", reports_to=cls.manager_employee)
 		set_employee_grade(cls.manager_employee, "Manager", reports_to=cls.director_employee)
@@ -102,6 +115,21 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 		)
 		set_employee_grade(cls.board_chair_employee, "Board of Directors")
 		set_employee_grade(cls.reviewer_employee, "Associate", reports_to=cls.director_employee)
+		set_employee_grade(cls.accounts_employee, "Associate", reports_to=cls.director_employee)
+		cls.expense_accounts = frappe.get_all(
+			"Account",
+			filters={
+				"company": frappe.db.get_value("Project", cls.project, "company"),
+				"root_type": "Expense",
+				"is_group": 0,
+				"disabled": 0,
+			},
+			pluck="name",
+			order_by="name asc",
+			limit=2,
+		)
+		if len(cls.expense_accounts) < 2:
+			frappe.throw("Accounting approval tests require two leaf Expense accounts.")
 
 	@classmethod
 	def tearDownClass(cls):
@@ -154,6 +182,22 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 		claim = frappe.get_doc("Expense Claim", claim.name)
 		return self._review_claim(claim) if review else claim
 
+	def _classify_claim(self, claim, allocations=None):
+		frappe.set_user(self.accounts_email)
+		claim.reload()
+		allocations = allocations or [
+			{
+				"expense_detail": row.name,
+				"allocations": [
+					{"expense_account": self.expense_accounts[0], "amount": row.sanctioned_amount}
+				],
+			}
+			for row in claim.expenses
+		]
+		classify_expense_claim_accounts(claim.name, allocations, "Final Accounts classification.")
+		claim.reload()
+		return claim
+
 	def test_low_value_claim_routes_to_manager(self):
 		claim = self._submit_claim_as(self.employee_email, amount=1500, review=False)
 		self.assertEqual(claim.workflow_state, PENDING_RECEIPT_REVIEW)
@@ -174,8 +218,12 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 		approved = frappe.get_doc("Expense Claim", claim.name)
 		apply_workflow(approved, "Approve")
 		approved.reload()
+		self.assertEqual(approved.workflow_state, PENDING_ACCOUNTS_CLASSIFICATION)
+		self.assertEqual(approved.docstatus, 0)
+		approved = self._classify_claim(approved)
 		self.assertEqual(approved.workflow_state, "Approved")
 		self.assertEqual(approved.docstatus, 1)
+		self.assertEqual(approved.account_classification_status, CLASSIFICATION_COMPLETE)
 
 	def test_home_queue_and_partial_sanction_use_the_real_workflow(self):
 		claim = self._submit_claim_as(self.employee_email, amount=1500, review=False)
@@ -197,9 +245,41 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 			"Partial sanction from Home.",
 		)
 		claim.reload()
+		self.assertEqual(claim.workflow_state, PENDING_ACCOUNTS_CLASSIFICATION)
+		self.assertEqual(claim.docstatus, 0)
+		self.assertEqual(claim.total_sanctioned_amount, 1200)
+
+		frappe.set_user(self.accounts_email)
+		queue = get_expense_claim_work_queue()
+		self.assertIn(claim.name, [row["name"] for row in queue["queues"]["classification"]])
+		item = get_expense_claim_work_item(claim.name)
+		self.assertTrue(item["access"]["classification"])
+		self.assertFalse(item["access"]["reimbursement"])
+		self.assertGreaterEqual(len(item["classification"]["accounts"]), 2)
+		claim = self._classify_claim(
+			claim,
+			[
+				{
+					"expense_detail": claim.expenses[0].name,
+					"allocations": [
+						{"expense_account": self.expense_accounts[0], "amount": 700},
+						{"expense_account": self.expense_accounts[1], "amount": 500},
+					],
+				}
+			],
+		)
 		self.assertEqual(claim.workflow_state, "Approved")
 		self.assertEqual(claim.docstatus, 1)
-		self.assertEqual(claim.total_sanctioned_amount, 1200)
+		gl_amounts = {
+			row.account: row.debit
+			for row in frappe.get_all(
+				"GL Entry",
+				filters={"voucher_type": "Expense Claim", "voucher_no": claim.name, "debit": [">", 0]},
+				fields=["account", "debit"],
+			)
+		}
+		self.assertEqual(gl_amounts[self.expense_accounts[0]], 700)
+		self.assertEqual(gl_amounts[self.expense_accounts[1]], 500)
 
 	def test_home_work_item_rejects_unrelated_employee(self):
 		claim = self._submit_claim_as(self.employee_email, amount=1500, review=False)

@@ -302,39 +302,65 @@
 						<span class="text-sm text-muted">{{ group.rows.length }}</span>
 					</div>
 					<div class="account-list">
-						<button
+						<div
 							v-for="account in group.rows"
 							:key="account.name"
-							type="button"
 							class="account-row"
 							:style="{ '--account-depth': Math.min(account.depth, 6) }"
-							@click="openAccount(account)"
+							:data-account-name="account.name"
+							:data-parent-account="account.parent_account"
+							:data-account-depth="account.depth"
 						>
-							<span class="account-name">
-								<span aria-hidden="true">{{ account.is_group ? "▸" : "•" }}</span>
-								<span>
-									<strong
-										>{{
-											account.account_number
-												? `${account.account_number} · `
-												: ""
-										}}{{ account.account_name }}</strong
-									>
-									<small
-										>{{
-											account.is_group
-												? "Group"
-												: account.account_type || "Ledger"
-										}}
-										· {{ account.name }}</small
-									>
-								</span>
-							</span>
-							<span
-								:class="['status-pill', account.disabled && 'status-disabled']"
-								>{{ account.disabled ? "Disabled" : "Active" }}</span
+							<button
+								v-if="account.is_group && account.has_children"
+								type="button"
+								class="account-toggle"
+								:aria-label="`${isExpanded(account) ? 'Collapse' : 'Expand'} ${account.account_name}`"
+								:aria-expanded="isExpanded(account)"
+								@click="toggleAccount(account)"
 							>
-						</button>
+								<svg
+									aria-hidden="true"
+									viewBox="0 0 20 20"
+									:class="[
+										'account-chevron',
+										isExpanded(account) && 'account-chevron-open',
+									]"
+								>
+									<path d="m7 4 6 6-6 6" />
+								</svg>
+							</button>
+							<span v-else class="account-leaf" aria-hidden="true">•</span>
+							<button
+								type="button"
+								class="account-open"
+								@click="openAccount(account)"
+							>
+								<span class="account-name">
+									<span>
+										<strong
+											>{{
+												account.account_number
+													? `${account.account_number} · `
+													: ""
+											}}{{ account.account_name }}</strong
+										>
+										<small
+											>{{
+												account.is_group
+													? "Group"
+													: account.account_type || "Ledger"
+											}}
+											· {{ account.name }}</small
+										>
+									</span>
+								</span>
+								<span
+									:class="['status-pill', account.disabled && 'status-disabled']"
+									>{{ account.disabled ? "Disabled" : "Active" }}</span
+								>
+							</button>
+						</div>
 					</div>
 				</section>
 			</template>
@@ -367,6 +393,7 @@ const rootFilter = ref("All");
 const kindFilter = ref("All");
 const error = ref("");
 const message = ref("");
+const expandedAccounts = ref(new Set());
 
 const blankForm = () => ({
 	name: "",
@@ -421,8 +448,19 @@ function openAccount(account) {
 }
 function closeForm() {
 	showForm.value = false;
+	expandedAccounts.value = new Set();
 	resetForm();
 	error.value = "";
+}
+function toggleAccount(account) {
+	if (!account.is_group || !account.has_children) return;
+	const expanded = new Set(expandedAccounts.value);
+	if (expanded.has(account.name)) expanded.delete(account.name);
+	else expanded.add(account.name);
+	expandedAccounts.value = expanded;
+}
+function isExpanded(account) {
+	return expandedAccounts.value.has(account.name);
 }
 
 const formHeading = computed(() =>
@@ -440,21 +478,48 @@ const parentOptions = computed(() =>
 const rootTypes = computed(() => [
 	...new Set(workspace.accounts.map((row) => row.root_type).filter(Boolean)),
 ]);
-const visibleAccounts = computed(() => {
+function matchesFilters(row) {
 	const query = search.value.toLowerCase();
+	if (rootFilter.value !== "All" && row.root_type !== rootFilter.value) return false;
+	if (kindFilter.value === "Groups" && !row.is_group) return false;
+	if (kindFilter.value === "Ledgers" && row.is_group) return false;
+	if (kindFilter.value === "Disabled" && !row.disabled) return false;
+	return (
+		!query ||
+		[row.account_name, row.account_number, row.name, row.account_type].some((value) =>
+			String(value || "")
+				.toLowerCase()
+				.includes(query),
+		)
+	);
+}
+const filterTree = computed(() => Boolean(search.value || kindFilter.value !== "All"));
+const matchedAccounts = computed(() => workspace.accounts.filter(matchesFilters));
+const relevantAccountNames = computed(() => {
+	if (!filterTree.value) return new Set(workspace.accounts.map((row) => row.name));
+	const byName = new Map(workspace.accounts.map((row) => [row.name, row]));
+	const relevant = new Set(matchedAccounts.value.map((row) => row.name));
+	for (const row of matchedAccounts.value) {
+		let parent = row.parent_account;
+		while (parent && byName.has(parent)) {
+			relevant.add(parent);
+			parent = byName.get(parent).parent_account;
+		}
+	}
+	return relevant;
+});
+const visibleAccounts = computed(() => {
+	const byName = new Map(workspace.accounts.map((row) => [row.name, row]));
 	return workspace.accounts.filter((row) => {
 		if (rootFilter.value !== "All" && row.root_type !== rootFilter.value) return false;
-		if (kindFilter.value === "Groups" && !row.is_group) return false;
-		if (kindFilter.value === "Ledgers" && row.is_group) return false;
-		if (kindFilter.value === "Disabled" && !row.disabled) return false;
-		return (
-			!query ||
-			[row.account_name, row.account_number, row.name, row.account_type].some((value) =>
-				String(value || "")
-					.toLowerCase()
-					.includes(query),
-			)
-		);
+		if (!relevantAccountNames.value.has(row.name)) return false;
+		if (!filterTree.value && !matchesFilters(row)) return false;
+		let parent = row.parent_account;
+		while (parent && byName.has(parent)) {
+			if (!expandedAccounts.value.has(parent)) return false;
+			parent = byName.get(parent).parent_account;
+		}
+		return true;
 	});
 });
 const groupedAccounts = computed(() =>
@@ -472,6 +537,22 @@ watch(
 		if (!form.is_root) form.root_type = parentRoot(parent);
 	},
 );
+watch([search, rootFilter, kindFilter], () => {
+	if (!filterTree.value) {
+		expandedAccounts.value = new Set();
+		return;
+	}
+	const byName = new Map(workspace.accounts.map((row) => [row.name, row]));
+	const expanded = new Set();
+	for (const row of matchedAccounts.value) {
+		let parent = row.parent_account;
+		while (parent && byName.has(parent)) {
+			expanded.add(parent);
+			parent = byName.get(parent).parent_account;
+		}
+	}
+	expandedAccounts.value = expanded;
+});
 
 async function save() {
 	saving.value = true;
@@ -601,17 +682,62 @@ button:disabled {
 	min-height: 3.5rem;
 	width: 100%;
 	align-items: center;
-	justify-content: space-between;
+	justify-content: flex-start;
 	gap: 0.75rem;
 	border: 1px solid var(--line);
 	border-radius: 0.75rem;
 	background: var(--surface);
 	padding: 0.65rem 0.75rem 0.65rem calc(0.75rem + var(--account-depth) * 1rem);
+}
+.account-row:hover {
+	background: var(--accent-soft);
+}
+.account-toggle,
+.account-leaf {
+	display: inline-flex;
+	height: 2rem;
+	width: 2rem;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	border-radius: 0.5rem;
+}
+.account-toggle:hover,
+.account-toggle:focus-visible {
+	background: var(--surface);
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+.account-chevron {
+	height: 1rem;
+	width: 1rem;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	transition: transform 150ms ease;
+}
+.account-chevron-open {
+	transform: rotate(90deg);
+}
+.account-leaf {
+	font-size: 1rem;
+}
+.account-open {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	border-radius: 0.5rem;
+	padding: 0.15rem;
 	text-align: left;
 }
-.account-row:hover,
-.account-row:focus-visible {
-	background: var(--accent-soft);
+.account-open:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
 }
 .account-name {
 	display: flex;

@@ -454,8 +454,8 @@
 				<p class="form-hint">
 					Enter the project's expense break up in plain language. Project and break-up
 					budget controls are independent. After project approval, an Accounts Manager
-					maps each label to a ledger account. Employees see labels, not ledger accounts
-					or balances.
+					may suggest one or more ledger accounts for each label. Employees see labels,
+					not ledger accounts or balances.
 				</p>
 				<p
 					v-if="saved && !budgetEditable"
@@ -466,14 +466,14 @@
 				<div v-if="saved && !request" class="rounded-xl bg-soft text-sm px-3 py-2 mb-4">
 					{{
 						saved.mapping_ready
-							? "Active expense labels have ledger mappings."
-							: "Awaiting Accounts Manager mapping before new claims can be raised."
+							? "All active expense labels have account suggestions."
+							: "Some labels have no account suggestion; claims can still be raised and Accounts will classify them before posting."
 					}}
 					<RouterLink
 						v-if="saved.can_map_accounts"
 						:to="{ path: '/project-account-mapping', query: { project: saved.name } }"
 						class="underline ml-2"
-						>Map expense labels</RouterLink
+						>Manage account suggestions</RouterLink
 					>
 				</div>
 				<fieldset :disabled="!budgetEditable" class="form-grid">
@@ -648,7 +648,7 @@
 				>
 					{{ row.employee_label
 					}}<span v-if="!row.mapped" class="text-muted">
-						· Awaiting Accounts Manager mapping</span
+						· Account will be selected before posting</span
 					>
 				</p>
 			</section>

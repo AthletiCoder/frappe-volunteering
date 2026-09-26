@@ -133,7 +133,9 @@ CLAIM_SPECS = (
 	("Receipt review pending", 480, "receipt_review"),
 	("Receipt correction required", 650, "correction"),
 	("Manager approval pending", 900, "approval"),
-	("Approved awaiting reimbursement", 1100, "approved"),
+	("Accounts classification pending", 1100, "classification"),
+	("Approved awaiting reimbursement", 1400, "approved"),
+	("Paid reimbursement history", 1250, "paid"),
 )
 
 ADVANCE_SPECS = (
@@ -325,14 +327,32 @@ def _leaf_cost_center() -> str:
 	return name
 
 
-def _expense_account() -> str:
+def _expense_accounts(limit: int = 2) -> list[str]:
+	names = frappe.get_all(
+		"Account",
+		filters={"company": COMPANY, "root_type": "Expense", "is_group": 0, "disabled": 0},
+		fields=["name", "account_name"],
+		order_by="account_name asc",
+		limit_page_length=0,
+	)
+	names = [
+		row.name
+		for row in names
+		if not (row.account_name or "").startswith("Unclassified Employee Expenses")
+	][:limit]
+	if not names:
+		frappe.throw("Create one active expense ledger before seeding the demo.")
+	return names
+
+
+def _cash_account() -> str:
 	name = frappe.db.get_value(
 		"Account",
-		{"company": COMPANY, "root_type": "Expense", "is_group": 0, "disabled": 0},
+		{"company": COMPANY, "account_type": "Cash", "is_group": 0, "disabled": 0},
 		"name",
 	)
 	if not name:
-		frappe.throw("Create one active expense ledger before seeding the demo.")
+		frappe.throw("Create an active company Cash account before seeding payment examples.")
 	return name
 
 
@@ -412,16 +432,27 @@ def _map_active_project(project: str):
 	from volunteering.volunteering.project_account_mapping import save_account_mapping
 
 	doc = frappe.get_doc("Project", project)
-	account = _expense_account()
+	accounts = _expense_accounts()
+	existing = {
+		(row.budget_key, row.expense_account)
+		for row in doc.get("expense_account_mappings") or []
+		if row.expense_account
+	}
+	active_keys = [row.budget_key for row in doc.account_budgets if row.is_active]
+	if active_keys and all(
+		any(key == mapped_key for mapped_key, _account in existing) for key in active_keys
+	):
+		return
 	mappings = [
 		{
 			"budget_key": row.budget_key,
-			"expense_account": account if row.is_active else (row.expense_account or ""),
+			# The first active label deliberately demonstrates a split-capable list.
+			"expense_accounts": (
+				accounts if row.is_active and row.idx == 1 else accounts[:1] if row.is_active else []
+			),
 		}
 		for row in doc.account_budgets
 	]
-	if all((not row.is_active) or row.expense_account for row in doc.account_budgets):
-		return
 	with _as_user(PERSONAS["accounts"]["email"]):
 		save_account_mapping(doc.name, str(doc.modified), mappings)
 
@@ -432,6 +463,71 @@ def _bank_proof() -> str:
 			"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZlVAAAAAASUVORK5CYII="
 		)
 	).decode()
+
+
+def _demo_receipt(label: str, amount: float, invoice_number: str) -> str:
+	"""Create a readable fictional one-page PDF without a system PDF binary."""
+
+	def pdf_text(value) -> str:
+		return (
+			str(value)
+			.encode("ascii", errors="replace")
+			.decode("ascii")
+			.replace("\\", "\\\\")
+			.replace("(", "\\(")
+			.replace(")", "\\)")
+		)
+
+	lines = [
+		("DEMO SUPPLIER INVOICE", 20, 50, 780),
+		("Sunrise Stationery and Print House", 14, 50, 742),
+		("Fictional receipt for Sevamrita local workflow testing", 10, 50, 724),
+		(f"Invoice number: {invoice_number}", 11, 50, 690),
+		(f"Invoice date: {nowdate()}", 11, 50, 672),
+		("Bill to: Sevamrita Foundation", 11, 50, 654),
+		("DESCRIPTION", 11, 60, 596),
+		("QTY", 11, 390, 596),
+		("AMOUNT (INR)", 11, 455, 596),
+		(f"{PREFIX} - {label}", 11, 60, 566),
+		("1", 11, 400, 566),
+		(f"{amount:,.2f}", 11, 465, 566),
+		(f"TOTAL: INR {amount:,.2f}", 15, 345, 512),
+		("Authorised supplier signature: ____________________", 11, 50, 440),
+		("DEMO ONLY - no goods were supplied and no payment is due.", 10, 50, 402),
+	]
+	commands = ["0.75 w", "45 540 505 80 re S", "45 494 505 32 re S"]
+	for text, size, x, y in lines:
+		commands.append(f"BT /F1 {size} Tf {x} {y} Td ({pdf_text(text)}) Tj ET")
+	stream = "\n".join(commands).encode("ascii")
+	objects = [
+		b"<< /Type /Catalog /Pages 2 0 R >>",
+		b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		(
+			b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] "
+			b"/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>"
+		),
+		b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+		b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"\nendstream",
+	]
+	pdf = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+	offsets = [0]
+	for index, obj in enumerate(objects, 1):
+		offsets.append(len(pdf))
+		pdf.extend(f"{index} 0 obj\n".encode())
+		pdf.extend(obj)
+		pdf.extend(b"\nendobj\n")
+	xref = len(pdf)
+	pdf.extend(f"xref\n0 {len(objects) + 1}\n".encode())
+	pdf.extend(b"0000000000 65535 f \n")
+	for offset in offsets[1:]:
+		pdf.extend(f"{offset:010d} 00000 n \n".encode())
+	pdf.extend(
+		(
+			f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
+			f"startxref\n{xref}\n%%EOF\n"
+		).encode()
+	)
+	return base64.b64encode(bytes(pdf)).decode()
 
 
 def _ensure_approved_bank(key: str, index: int):
@@ -476,9 +572,7 @@ def _ensure_approved_bank(key: str, index: int):
 
 def _ensure_vendor_addresses(employee: str):
 	from volunteering.volunteering.invoice_generator import (
-		VENDOR_ADDRESS_DOCTYPE,
 		_remember_vendor_address,
-		_vendor_address_key,
 	)
 
 	vendors = (
@@ -489,6 +583,14 @@ def _ensure_vendor_addresses(employee: str):
 			"pin_code": "411005",
 			"gstin": "27ABCDE1234F1Z5",
 			"pan": "ABCDE1234F",
+			"bank": {
+				"account_name": "Sunrise Stationery and Print House",
+				"bank_name": "Demo Maharashtra Bank",
+				"branch": "Shivajinagar",
+				"account_number": "551100220033",
+				"ifsc": "DEMO0123456",
+				"upi_id": "sunrise.stationery@example",
+			},
 		},
 		{
 			"name": "Annapurna Catering Services",
@@ -497,6 +599,13 @@ def _ensure_vendor_addresses(employee: str):
 			"pin_code": "400014",
 			"gstin": "",
 			"pan": "BCDEF2345G",
+			"bank": {
+				"account_name": "Annapurna Catering Services",
+				"bank_name": "Demo Cooperative Bank",
+				"branch": "Dadar East",
+				"account_number": "664400110022",
+				"ifsc": "DEMO0654321",
+			},
 		},
 		{
 			"name": "GreenLeaf Event Supplies",
@@ -505,20 +614,26 @@ def _ensure_vendor_addresses(employee: str):
 			"pin_code": "500084",
 			"gstin": "36ABCDE1234F1Z2",
 			"pan": "ABCDE1234F",
+			"bank": {},
 		},
 	)
 	for index, vendor in enumerate(vendors, 1):
-		if not frappe.db.exists(VENDOR_ADDRESS_DOCTYPE, _vendor_address_key(employee, vendor)):
-			_remember_vendor_address(employee, vendor, f"DEMO-VENDOR-{index}")
+		_remember_vendor_address(
+			employee,
+			vendor,
+			f"DEMO-VENDOR-{index}",
+			bank=vendor.get("bank"),
+		)
 
 
 def _claim_payload(project: str, label: str, amount: float, sequence: int):
 	key = frappe.db.get_value(
 		"Project Account Budget",
-		{"parent": project, "is_active": 1, "expense_account": ["is", "set"]},
+		{"parent": project, "is_active": 1},
 		"budget_key",
 		order_by="idx asc",
 	)
+	invoice_number = f"DEMO-EXP-{sequence:02d}"
 	return {
 		"project": project,
 		"reimbursement_source": "PERSONAL",
@@ -531,11 +646,11 @@ def _claim_payload(project: str, label: str, amount: float, sequence: int):
 				"expense_date": nowdate(),
 				"account": key,
 				"supplier_name": "Tonight Demo Supplier",
-				"invoice_number": f"DEMO-EXP-{sequence:02d}",
+				"invoice_number": invoice_number,
 				"description": f"{PREFIX} {label}",
 				"amount": amount,
-				"receipt_filename": f"demo-receipt-{sequence:02d}.png",
-				"receipt_content": _bank_proof(),
+				"receipt_filename": f"demo-supplier-invoice-{sequence:02d}.pdf",
+				"receipt_content": _demo_receipt(label, amount, invoice_number),
 			}
 		],
 	}
@@ -543,7 +658,11 @@ def _claim_payload(project: str, label: str, amount: float, sequence: int):
 
 def _ensure_claims(project: str) -> dict[str, str]:
 	from volunteering.volunteering.expense_claim_portal import submit_expense_claim
-	from volunteering.volunteering.expense_claim_workflow_portal import decide_expense_claim
+	from volunteering.volunteering.expense_claim_workflow_portal import (
+		classify_expense_claim_accounts,
+		decide_expense_claim,
+		reimburse_expense_claim,
+	)
 	from volunteering.volunteering.receipt_review import review_receipts
 
 	employee = frappe.db.get_value("Employee", {"user_id": PERSONAS["employee"]["email"]}, "name")
@@ -554,7 +673,7 @@ def _ensure_claims(project: str) -> dict[str, str]:
 		if not name:
 			with _as_user(PERSONAS["employee"]["email"]):
 				name = submit_expense_claim(_claim_payload(project, label, amount, sequence))["name"]
-			if stage in {"correction", "approval", "approved"}:
+			if stage in {"correction", "approval", "classification", "approved", "paid"}:
 				with _as_user(PERSONAS["receipt_reviewer"]["email"]):
 					if stage == "correction":
 						review_receipts(
@@ -568,7 +687,7 @@ def _ensure_claims(project: str) -> dict[str, str]:
 							"verify",
 							"Receipt reviewed for the demonstration.",
 						)
-			if stage == "approved":
+			if stage in {"classification", "approved", "paid"}:
 				with _as_user(PERSONAS["manager"]["email"]):
 					doc = frappe.get_doc("Expense Claim", name)
 					decide_expense_claim(
@@ -576,6 +695,33 @@ def _ensure_claims(project: str) -> dict[str, str]:
 						"approve",
 						{row.name: row.amount for row in doc.expenses},
 						"Approved during demo preparation.",
+					)
+			if stage in {"approved", "paid"}:
+				with _as_user(PERSONAS["accounts"]["email"]):
+					doc = frappe.get_doc("Expense Claim", name)
+					accounts = _expense_accounts()
+					allocations = []
+					for row in doc.expenses:
+						amount_to_allocate = float(row.sanctioned_amount)
+						if len(accounts) > 1:
+							first = round(amount_to_allocate * 0.6, 2)
+							parts = [
+								{"expense_account": accounts[0], "amount": first},
+								{"expense_account": accounts[1], "amount": round(amount_to_allocate - first, 2)},
+							]
+						else:
+							parts = [{"expense_account": accounts[0], "amount": amount_to_allocate}]
+						allocations.append({"expense_detail": row.name, "allocations": parts})
+					classify_expense_claim_accounts(
+						name,
+						allocations,
+						"Final ledger split prepared for the local demonstration.",
+					)
+			if stage == "paid":
+				with _as_user(PERSONAS["accounts"]["email"]):
+					reimburse_expense_claim(
+						name,
+						{"paid_from": _cash_account(), "posting_date": nowdate()},
 					)
 		results[label] = name
 	return results
@@ -620,19 +766,10 @@ def _ensure_advances(project: str) -> dict[str, str]:
 					decide_advance(name, "approve", "Approved for the demonstration project.")
 			if stage == "paid":
 				with _as_user(PERSONAS["accounts"]["email"]):
-					cash = frappe.db.get_value(
-						"Account",
-						{
-							"company": COMPANY,
-							"account_type": "Cash",
-							"is_group": 0,
-							"disabled": 0,
-						},
-						"name",
+					disburse_advance(
+						name,
+						{"amount": amount, "paid_from": _cash_account(), "posting_date": nowdate()},
 					)
-					if not cash:
-						frappe.throw("Create an active company Cash account before seeding the paid advance.")
-					disburse_advance(name, {"amount": amount, "paid_from": cash, "posting_date": nowdate()})
 		results[label] = name
 	return results
 
@@ -670,6 +807,7 @@ def _summary(password: str) -> dict:
 			"remark",
 			"workflow_state",
 			"receipt_review_status",
+			"account_classification_status",
 			"approval_status",
 			"status",
 			"pending_approver",
@@ -712,6 +850,203 @@ def _summary(password: str) -> dict:
 	}
 
 
+def _delete_documents(doctype: str, *, filters=None, names=None, forced_counts=None) -> int:
+	"""Cancel and permanently remove local transaction records through DocType hooks."""
+	if not frappe.db.exists("DocType", doctype):
+		return 0
+	if names is None:
+		names = frappe.get_all(
+			doctype,
+			filters=filters or {},
+			pluck="name",
+			order_by="creation desc",
+			limit_page_length=0,
+		)
+	from volunteering.volunteering.e2e_api import _skip_doc_perm_checks
+
+	deleted = 0
+	for name in list(dict.fromkeys(names or [])):
+		if not frappe.db.exists(doctype, name):
+			continue
+		savepoint = f"demo_delete_{frappe.generate_hash(length=8)}"
+		frappe.db.savepoint(savepoint)
+		try:
+			doc = frappe.get_doc(doctype, name)
+			if doc.docstatus == 1:
+				doc.flags.ignore_permissions = True
+				with _skip_doc_perm_checks():
+					doc.cancel()
+			frappe.delete_doc(
+				doctype,
+				name,
+				force=1,
+				ignore_permissions=True,
+				delete_permanently=True,
+			)
+		except Exception as exc:
+			# Some old demo vouchers are already inconsistent (for example a submitted
+			# payment can reference an advance which an earlier test deleted). Such a
+			# voucher cannot run ERPNext's normal cancellation hooks. Roll back any
+			# partial cancellation work and remove only this backed-up local record,
+			# including its child rows and attachments. Ledger orphans are cleared below.
+			frappe.db.rollback(save_point=savepoint)
+			try:
+				# Project evidence has an intentional audit guard on ordinary File
+				# deletion. The records are disposable local fixtures covered by the
+				# full backup, so remove their attachments through the same hook-free
+				# path used by migrations before removing the parent fixture.
+				for file_name in frappe.get_all(
+					"File",
+					filters={"attached_to_doctype": doctype, "attached_to_name": name},
+					pluck="name",
+					limit_page_length=0,
+				):
+					frappe.delete_doc(
+						"File",
+						file_name,
+						force=1,
+						for_reload=True,
+						ignore_permissions=True,
+						ignore_on_trash=True,
+						delete_permanently=True,
+					)
+				frappe.delete_doc(
+					doctype,
+					name,
+					force=1,
+					for_reload=True,
+					ignore_permissions=True,
+					ignore_on_trash=True,
+					delete_permanently=True,
+				)
+			except Exception as hard_delete_exc:
+				frappe.throw(
+					f"Could not remove obsolete {doctype} {name}: {exc}; "
+					f"backed-up legacy removal also failed: {hard_delete_exc}"
+				)
+			if forced_counts is not None:
+				forced_counts[doctype] = forced_counts.get(doctype, 0) + 1
+		deleted += 1
+	return deleted
+
+
+def _remove_obsolete_local_transactions() -> dict[str, int]:
+	"""Clear disposable local workflow data while retaining people and masters."""
+	advance_names = frappe.get_all("Employee Advance", pluck="name", limit_page_length=0)
+	journal_entries = []
+	if advance_names:
+		journal_entries = frappe.get_all(
+			"Journal Entry Account",
+			filters={
+				"reference_type": "Employee Advance",
+				"reference_name": ["in", advance_names],
+			},
+			pluck="parent",
+			limit_page_length=0,
+		)
+
+	counts = {}
+	forced_counts = {}
+	# Delete dependent accounting documents before the claims/advances they settle.
+	counts["Payment Entry"] = _delete_documents("Payment Entry", forced_counts=forced_counts)
+	counts["Journal Entry"] = _delete_documents(
+		"Journal Entry", names=journal_entries, forced_counts=forced_counts
+	)
+	counts["Purchase Invoice"] = _delete_documents(
+		"Purchase Invoice", forced_counts=forced_counts
+	)
+	counts["Purchase Receipt"] = _delete_documents(
+		"Purchase Receipt", forced_counts=forced_counts
+	)
+	counts["Purchase Order"] = _delete_documents("Purchase Order", forced_counts=forced_counts)
+	counts["Expense Claim"] = _delete_documents("Expense Claim", forced_counts=forced_counts)
+	counts["Employee Advance"] = _delete_documents(
+		"Employee Advance", forced_counts=forced_counts
+	)
+
+	# Project history must be removed before its effective Project records.
+	counts["Project Proposal"] = _delete_documents(
+		"Project Proposal", forced_counts=forced_counts
+	)
+	counts["Project Budget Revision"] = _delete_documents(
+		"Project Budget Revision", forced_counts=forced_counts
+	)
+	counts["Project"] = _delete_documents("Project", forced_counts=forced_counts)
+
+	# Recreate clean employee banking and frequent-vendor examples for the demo cast.
+	counts["Employee Bank Account Request"] = _delete_documents(
+		"Employee Bank Account Request", forced_counts=forced_counts
+	)
+	counts["Employee Bank Account"] = _delete_documents(
+		"Bank Account", filters={"party_type": "Employee"}, forced_counts=forced_counts
+	)
+	counts["Employee Vendor Address"] = _delete_documents(
+		"Employee Vendor Address", forced_counts=forced_counts
+	)
+	if frappe.db.exists("DocType", "Vendor Invoice Style"):
+		counts["Vendor Invoice Style"] = _delete_documents(
+			"Vendor Invoice Style", forced_counts=forced_counts
+		)
+
+	# These queues contain only pointers to workflow records; none are people/master data.
+	for doctype in ("Workflow Action", "ToDo", "Notification Log"):
+		counts[doctype] = frappe.db.count(doctype)
+		frappe.db.delete(doctype)
+
+	# Cancellation normally clears ledgers. Remove any orphaned rows left by very old
+	# test fixtures so reports cannot show transactions whose vouchers no longer exist.
+	voucher_types = (
+		"Payment Entry",
+		"Journal Entry",
+		"Purchase Invoice",
+		"Purchase Receipt",
+		"Purchase Order",
+		"Expense Claim",
+		"Employee Advance",
+	)
+	for doctype in ("GL Entry", "Payment Ledger Entry", "Advance Payment Ledger Entry"):
+		if not frappe.db.exists("DocType", doctype):
+			continue
+		frappe.db.delete(doctype, {"voucher_type": ["in", voucher_types]})
+		frappe.db.delete(doctype, {"against_voucher_type": ["in", voucher_types]})
+
+	# Start presentation identifiers from one after the corresponding tables are empty.
+	for pattern in ("HR-EXP-%", "HR-EAD-%", "PROJ-%", "ACC-PAY-%"):
+		frappe.db.sql("DELETE FROM `tabSeries` WHERE name LIKE %s", (pattern,))
+	counts["Forced legacy deletes"] = forced_counts
+	return counts
+
+
+def refresh_tonight_demo(password: str | None = None) -> dict:
+	"""Backed-up local reset: preserve users/masters, replace disposable demo data."""
+	_require_local_site()
+	password = password or os.environ.get("DEMO_PASSWORD") or DEFAULT_PASSWORD
+	previous_user = frappe.session.user
+	previous_mute = frappe.flags.mute_emails
+	try:
+		frappe.flags.mute_emails = True
+		with (
+			patch("frappe.sendmail"),
+			patch("frappe.enqueue", lambda *args, **kwargs: None),
+			patch(
+				"frappe.workflow.doctype.workflow_action.workflow_action.send_workflow_action_email",
+				lambda *args, **kwargs: None,
+			),
+		):
+			frappe.set_user("Administrator")
+			removed = _remove_obsolete_local_transactions()
+			frappe.db.commit()
+			result = seed_tonight_demo(password)
+			result["removed"] = removed
+			return result
+	except Exception:
+		frappe.db.rollback()
+		raise
+	finally:
+		frappe.set_user(previous_user)
+		frappe.flags.mute_emails = previous_mute
+
+
 def seed_tonight_demo(password: str | None = None) -> dict:
 	"""Create/update the local demo cast and seed real workflow states."""
 	_require_local_site()
@@ -724,6 +1059,7 @@ def seed_tonight_demo(password: str | None = None) -> dict:
 		frappe.flags.mute_emails = True
 		with (
 			patch("frappe.sendmail"),
+			patch("frappe.enqueue", lambda *args, **kwargs: None),
 			patch(
 				"frappe.workflow.doctype.workflow_action.workflow_action.send_workflow_action_email",
 				lambda *args, **kwargs: None,
@@ -812,10 +1148,20 @@ def validate_tonight_demo() -> dict:
 		f"{PREFIX} Manager approval pending",
 		"manager-approval claim",
 	)
+	classification_claim = required(
+		claim_by_remark,
+		f"{PREFIX} Accounts classification pending",
+		"accounts-classification claim",
+	)
 	reimbursement_claim = required(
 		claim_by_remark,
 		f"{PREFIX} Approved awaiting reimbursement",
 		"reimbursement claim",
+	)
+	paid_claim = required(
+		claim_by_remark,
+		f"{PREFIX} Paid reimbursement history",
+		"paid reimbursement claim",
 	)
 	manager_advance = required(
 		advance_by_purpose,
@@ -869,6 +1215,9 @@ def validate_tonight_demo() -> dict:
 	with _as_user(PERSONAS["accounts"]["email"]):
 		claim_queue = get_expense_claim_work_queue()["queues"]
 		advance_queue = get_advance_work_queue()["queues"]
+		checks["accounts_classification_queue"] = classification_claim in names(
+			claim_queue["classification"]
+		)
 		checks["accounts_reimbursement_queue"] = reimbursement_claim in names(claim_queue["reimbursement"])
 		checks["accounts_disbursement_queue"] = disbursement_advance in names(advance_queue["disbursement"])
 		checks["accounts_return_queue"] = return_advance in names(advance_queue["return"])
@@ -882,14 +1231,19 @@ def validate_tonight_demo() -> dict:
 	checks["active_project_available"] = bool(active_project)
 	checks["active_project_accounts_mapped"] = bool(
 		active_project
-		and not frappe.db.exists(
-			"Project Account Budget",
-			{
-				"parent": active_project["name"],
-				"is_active": 1,
-				"expense_account": ["in", ["", None]],
-			},
+		and frappe.db.exists(
+			"Project Expense Account Mapping", {"parent": active_project["name"]}
 		)
+	)
+	checks["classified_claim_has_split"] = (
+		frappe.db.count(
+			"Expense Claim Account Allocation",
+			{"parent": reimbursement_claim},
+		)
+		>= 2
+	)
+	checks["paid_claim_complete"] = bool(
+		frappe.db.exists("Expense Claim", {"name": paid_claim, "status": "Paid"})
 	)
 
 	failed = [label for label, passed in checks.items() if not passed]

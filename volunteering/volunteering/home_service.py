@@ -730,6 +730,18 @@ def _pending_approver_inbox(doctype, kind, user):
 def _accounts_queues():
 	queues = []
 	if "Accounts Manager" in frappe.get_roles():
+		classification = _safe_count(
+			"Expense Claim", {"docstatus": 0, "workflow_state": "Pending Accounts Classification"}
+		)
+		if classification:
+			queues.append(
+				{
+					"id": "claim_classification",
+					"label": _("Claims awaiting account classification"),
+					"count": classification,
+					"route": "/volunteering/expense-claim-workflow?view=classification",
+				}
+			)
 		bank_requests = _safe_count("Employee Bank Account Request", {"request_status": "Pending Approval"})
 		if bank_requests:
 			queues.append(

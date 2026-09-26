@@ -1,0 +1,14 @@
+{
+ "doctype": "DocType",
+ "name": "Project Expense Account Mapping",
+ "module": "Volunteering",
+ "istable": 1,
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["budget_key", "expense_account"],
+ "fields": [
+  {"fieldname": "budget_key", "label": "Expense Break-up ID", "fieldtype": "Data", "reqd": 1, "hidden": 1},
+  {"fieldname": "expense_account", "label": "Suggested Expense Account", "fieldtype": "Link", "options": "Account", "reqd": 1, "in_list_view": 1}
+ ],
+ "permissions": []
+}

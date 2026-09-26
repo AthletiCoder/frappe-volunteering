@@ -669,8 +669,11 @@ export class ExpenseClaimFormPage extends DeskForm {
 
 		const dialog = modal(this.page);
 		await expect(dialog).toBeVisible({ timeout: 15000 });
-		for (let index = 0; index < 6; index += 1) {
-			await dialog.locator('input[type="checkbox"]:not(:disabled):not(:checked)').first().check();
+		const uncheckedReviewItems = dialog.locator(
+			'input[type="checkbox"]:not(:disabled):not(:checked)',
+		);
+		while ((await uncheckedReviewItems.count()) > 0) {
+			await uncheckedReviewItems.first().check();
 		}
 		const noteField = dialog.locator('textarea').first();
 		if (await noteField.isVisible().catch(() => false)) {

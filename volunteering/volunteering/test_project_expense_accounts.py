@@ -68,7 +68,7 @@ class IntegrationTestProjectExpenseAccounts(IntegrationTestCase):
 			10000,
 			project_control="No Control",
 			account_control="No Control",
-			account_budgets=[(self.allowed_account, 0)],
+			account_budgets=[],
 		)
 		allow_project_expense_account(self.project, self.allowed_account, label="Employee-friendly expense")
 		project = frappe.get_doc("Project", self.project)
@@ -95,7 +95,11 @@ class IntegrationTestProjectExpenseAccounts(IntegrationTestCase):
 			[
 				frappe.db.get_value(
 					"Project Account Budget",
-					{"parent": self.project, "expense_account": self.allowed_account},
+					{
+						"parent": self.project,
+						"employee_label": "Employee-friendly expense",
+						"is_active": 1,
+					},
 					"budget_key",
 				)
 			],
@@ -135,7 +139,9 @@ class IntegrationTestProjectExpenseAccounts(IntegrationTestCase):
 	def test_inactive_project_account_is_not_offered_or_accepted(self):
 		frappe.set_user("Administrator")
 		project = frappe.get_doc("Project", self.project)
-		row = next(row for row in project.account_budgets if row.expense_account == self.allowed_account)
+		row = next(
+			row for row in project.account_budgets if row.employee_label == "Employee-friendly expense"
+		)
 		row.is_active = 0
 		save_test_project(project)
 

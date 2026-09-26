@@ -51,8 +51,9 @@ def _payload(invoice_type="GST"):
 		"transportation_charges": 10,
 		"other_charges": 0,
 		"gst_amount": 37.80,
-		"authorised_signatory": "Asha Vendor",
-		"signer_type": "SUPPLIER",
+		"volunteer": {"name": "Test Volunteer", "employee": "HR-EMP-TEST"},
+		"volunteer_signature_data": _signature_data(),
+		"vendor_will_sign": False,
 	}
 
 
@@ -117,19 +118,25 @@ class UnitTestInvoiceGenerator(UnitTestCase):
 		self.assertEqual(data["buyer"], data["consignee"])
 		self.assertNotEqual(data["buyer"]["name"], "Forged Buyer")
 
-	def test_on_screen_signature_is_validated_and_embedded_in_pdf_and_word(self):
+	def test_mandatory_volunteer_signature_is_validated_and_embedded_in_pdf_and_word(self):
 		from docx import Document
 
-		payload = _payload()
-		payload["signature_data"] = _signature_data()
-		data = _normalise_payload(payload)
-		self.assertTrue(data["signature_png"].startswith(b"\x89PNG"))
+		data = _normalise_payload(_payload())
+		self.assertTrue(data["volunteer_signature_png"].startswith(b"\x89PNG"))
 		self.assertIn("data:image/png;base64,", _render_pdf_html(data))
 		document = Document(BytesIO(_build_docx(data)))
 		self.assertEqual(len(document.inline_shapes), 1)
+		word_text = "\n".join(
+			cell.text for table in document.tables for row in table.rows for cell in row.cells
+		)
+		for text in (_render_pdf_html(data), word_text):
+			self.assertIn("Volunteer reimbursement declaration", text)
+			self.assertIn("I confirm that I paid the amount shown above", text)
+			self.assertIn("request reimbursement to my bank account", text)
 
-	def test_blank_or_non_png_on_screen_signature_is_rejected(self):
+	def test_missing_blank_or_non_png_volunteer_signature_is_rejected(self):
 		for signature in (
+			"",
 			_signature_data(blank=True),
 			_signature_data(blank=True, transparent=True),
 			"data:image/png;base64,Zm9yZ2Vk",
@@ -137,17 +144,17 @@ class UnitTestInvoiceGenerator(UnitTestCase):
 		):
 			with self.subTest(signature=signature[:30]):
 				payload = _payload()
-				payload["signature_data"] = signature
+				payload["volunteer_signature_data"] = signature
 				with self.assertRaises(frappe.ValidationError):
 					_normalise_payload(payload)
 
-	def test_supplier_non_gst_has_no_tax_and_has_registration_declaration(self):
+	def test_non_gst_without_vendor_signature_has_no_vendor_declaration(self):
 		payload = _payload("NON_GST")
 		data = _normalise_payload(payload)
 		self.assertEqual(data["gst_amount"], Decimal("0.00"))
-		self.assertIn("not registered", data["declaration"])
-		self.assertIn("Example Kitchen Supplies", data["declaration"])
-		self.assertEqual(data["declaration_title"], "Declaration")
+		self.assertFalse(data["vendor_will_sign"])
+		self.assertEqual(data["vendor_declaration"], "")
+		self.assertNotIn("Vendor confirmation", _render_pdf_html(data))
 
 	def test_non_gst_pan_is_optional_but_checked_when_supplied(self):
 		payload = _payload("NON_GST")
@@ -157,64 +164,34 @@ class UnitTestInvoiceGenerator(UnitTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			_normalise_payload(payload)
 
-	def test_signer_acknowledgment_is_not_required_for_either_signer(self):
-		for signer in ("SUPPLIER", "VOLUNTEER"):
-			for confirmation in (None, False, "false"):
-				with self.subTest(signer=signer, confirmation=confirmation):
-					payload = _payload()
-					payload["signer_type"] = signer
-					if confirmation is not None:
-						# Ignore old form acknowledgment values; they are no longer required.
-						payload["signature_confirmation_required"] = confirmation
-					data = _normalise_payload(
-						payload, volunteer_override={"name": "Test Volunteer", "employee": "HR-EMP-TEST"}
-					)
-					self.assertEqual(data["signer_type"], signer)
-
-	def test_legacy_client_without_signer_defaults_to_supplier(self):
-		payload = _payload()
-		payload.pop("signer_type")
-		payload["supplier_confirmation_required"] = False
-		self.assertEqual(_normalise_payload(payload)["signer_type"], "SUPPLIER")
-
-	def test_hsn_sac_is_optional_for_both_invoice_types_and_signers(self):
+	def test_hsn_sac_is_optional_for_both_invoice_types(self):
 		for invoice_type in ("NON_GST", "GST"):
-			for signer in ("SUPPLIER", "VOLUNTEER"):
-				for code in (None, "", "   ", "7323"):
-					with self.subTest(invoice_type=invoice_type, signer=signer, code=code):
-						payload = _payload(invoice_type)
-						payload["signer_type"] = signer
-						if code is None:
-							payload["items"][0].pop("hsn_sac")
-						else:
-							payload["items"][0]["hsn_sac"] = code
-						data = _normalise_payload(
-							payload,
-							volunteer_override={"name": "Test Volunteer", "employee": "HR-EMP-TEST"},
-						)
-						self.assertEqual(data["items"][0]["hsn_sac"], "7323" if code == "7323" else "")
+			for code in (None, "", "   ", "7323"):
+				with self.subTest(invoice_type=invoice_type, code=code):
+					payload = _payload(invoice_type)
+					if code is None:
+						payload["items"][0].pop("hsn_sac")
+					else:
+						payload["items"][0]["hsn_sac"] = code
+					data = _normalise_payload(payload)
+					self.assertEqual(data["items"][0]["hsn_sac"], "7323" if code == "7323" else "")
 
-	def test_invalid_signer_or_missing_volunteer_identity_is_rejected(self):
+	def test_missing_volunteer_identity_is_rejected(self):
 		payload = _payload()
-		payload["signer_type"] = "ANYONE"
-		with self.assertRaises(frappe.ValidationError):
-			_normalise_payload(payload)
-		payload["signer_type"] = "VOLUNTEER"
+		payload.pop("volunteer")
 		with self.assertRaises(frappe.ValidationError):
 			_normalise_payload(payload)
 
-	def test_volunteer_signing_never_makes_supplier_declarations_in_either_document(self):
+	def test_server_volunteer_identity_overrides_browser_and_vendor_is_absent_by_default(self):
 		from docx import Document
 
 		for invoice_type in ("NON_GST", "GST"):
 			with self.subTest(invoice_type=invoice_type):
 				payload = _payload(invoice_type)
-				payload["signer_type"] = "VOLUNTEER"
 				payload["volunteer"] = {"name": "Forged Volunteer", "employee": "Forged Employee"}
 				data = _normalise_payload(
 					payload, volunteer_override={"name": "Test Volunteer", "employee": "HR-EMP-TEST"}
 				)
-				self.assertEqual(data["authorised_signatory"], "")
 				self.assertEqual(data["title"], "TAX INVOICE" if invoice_type == "GST" else "INVOICE")
 				document = Document(BytesIO(_build_docx(data)))
 				word_text = "\n".join(
@@ -222,25 +199,27 @@ class UnitTestInvoiceGenerator(UnitTestCase):
 					+ [cell.text for table in document.tables for row in table.rows for cell in row.cells]
 				)
 				for text in (_render_pdf_html(data), word_text):
-					self.assertIn("Volunteer Signatory", text)
-					self.assertIn("Signature", text)
+					self.assertIn("Volunteer reimbursement declaration", text)
+					self.assertIn("Volunteer Signature", text)
 					self.assertIn("Test Volunteer", text)
 					self.assertIn("HR-EMP-TEST", text)
 					self.assertNotIn("Forged", text)
-					self.assertNotIn("Asha Vendor", text)
+					self.assertNotIn("Vendor confirmation", text)
 					self.assertNotIn("not registered", text)
 					self.assertNotIn("Non-GST declaration", text)
 					self.assertNotIn("Authorised signatory and supplier signature", text)
 					self.assertNotIn("EXPENSE STATEMENT", text)
 					self.assertNotIn("Prepared for volunteer", text)
 
-	def test_supplier_non_gst_declaration_is_conditional_in_both_documents(self):
+	def test_vendor_signature_and_non_gst_declaration_are_conditional_in_both_documents(self):
 		from docx import Document
 
 		for invoice_type in ("NON_GST", "GST"):
 			for signatory in ("Asha Vendor", ""):
 				with self.subTest(invoice_type=invoice_type, signatory=signatory):
 					payload = _payload(invoice_type)
+					payload["vendor_will_sign"] = True
+					payload["vendor_signature_data"] = _signature_data()
 					payload["authorised_signatory"] = signatory
 					data = _normalise_payload(payload)
 					doc = Document(BytesIO(_build_docx(data)))
@@ -249,8 +228,8 @@ class UnitTestInvoiceGenerator(UnitTestCase):
 						+ [cell.text for table in doc.tables for row in table.rows for cell in row.cells]
 					)
 					for text in (_render_pdf_html(data), word_text):
+						self.assertIn("Vendor confirmation", text)
 						if invoice_type == "NON_GST":
-							self.assertIn("Declaration", text)
 							self.assertIn("not registered", text)
 							self.assertIn("does not have a GSTIN", text)
 							self.assertIn(signatory or "the undersigned", text)
@@ -258,7 +237,14 @@ class UnitTestInvoiceGenerator(UnitTestCase):
 							self.assertNotIn("Non-GST declaration", text)
 							self.assertNotIn("not registered", text)
 						self.assertIn("Authorised Signatory", text)
-						self.assertNotIn("Volunteer declaration", text)
+						self.assertIn("Volunteer reimbursement declaration", text)
+					self.assertEqual(len(doc.inline_shapes), 2)
+
+	def test_vendor_signing_requires_a_vendor_signature(self):
+		payload = _payload()
+		payload["vendor_will_sign"] = True
+		with self.assertRaisesRegex(frappe.ValidationError, "vendor to sign"):
+			_normalise_payload(payload)
 
 	def test_gst_invoice_number_is_limited_to_sixteen_characters(self):
 		payload = _payload()
@@ -303,9 +289,93 @@ class UnitTestInvoiceGenerator(UnitTestCase):
 		self.assertIn("TAX INVOICE", text)
 		self.assertIn("INV/2026/001", text)
 		self.assertIn("247.80", text)
-		self.assertIn("Remittance Details", text)
+		self.assertNotIn("Remittance Details", text)
 		self.assertNotIn("expense reimbursement", text.lower())
 		self.assertNotIn("Receipt review", text)
+
+	def test_supplier_bank_is_optional_and_omitted_from_pdf_and_word_when_blank(self):
+		from docx import Document
+
+		data = _normalise_payload(_payload())
+		self.assertFalse(invoices._has_bank(data["bank"]))
+		self.assertNotIn("Remittance Details", _render_pdf_html(data))
+		document = Document(BytesIO(_build_docx(data)))
+		word_text = "\n".join(
+			cell.text for table in document.tables for row in table.rows for cell in row.cells
+		)
+		self.assertNotIn("Remittance Details", word_text)
+
+	def test_supplier_bank_is_rendered_without_employee_reimbursement_language(self):
+		from docx import Document
+
+		payload = _payload()
+		payload["bank"] = {
+			"account_name": "Example Kitchen Supplies",
+			"bank_name": "Vendor Cooperative Bank",
+			"account_number": "123456789012",
+			"ifsc": "VEND0123456",
+			"branch": "Market Road",
+			"swift": "VENDINBB",
+			"upi_id": "example.vendor@upi",
+		}
+		data = _normalise_payload(payload)
+		html = _render_pdf_html(data)
+		document = Document(BytesIO(_build_docx(data)))
+		word_text = "\n".join(
+			cell.text for table in document.tables for row in table.rows for cell in row.cells
+		)
+		for content in (html, word_text):
+			self.assertIn("Supplier Remittance Details", content)
+			self.assertIn("Vendor Cooperative Bank", content)
+			self.assertIn("123456789012", content)
+			self.assertIn("example.vendor@upi", content)
+			self.assertNotIn("employee reimbursement", content.lower())
+
+	def test_twenty_styles_are_used_before_repeating(self):
+		assignments = []
+		chosen = []
+		for index in range(21):
+			style = invoices._choose_invoice_style(assignments)
+			chosen.append(style)
+			assignments.append({"vendor_key": f"vendor-{index}", "invoice_style": style})
+		self.assertEqual(len(invoices.INVOICE_STYLES), 20)
+		self.assertEqual(len(set(chosen[:20])), 20)
+		self.assertEqual(chosen[20], invoices.INVOICE_STYLES[0]["id"])
+		self.assertEqual(len({style["name"] for style in invoices.INVOICE_STYLES}), 20)
+		self.assertEqual(
+			invoices._choose_invoice_style(
+				[
+					{"vendor_name": "Same Vendor", "invoice_style": "style-01"},
+					{"vendor_name": "same-vendor", "invoice_style": "style-02"},
+				]
+			),
+			"style-02",
+		)
+
+	def test_twenty_styles_render_distinct_documents(self):
+		data = _normalise_payload(_payload())
+		rendered = set()
+		for style in invoices.INVOICE_STYLES:
+			data["invoice_style"] = style["id"]
+			rendered.add(_render_pdf_html(data))
+		self.assertEqual(len(rendered), 20)
+
+	def test_vendor_style_identity_survives_address_gstin_and_bank_changes(self):
+		first = {
+			"name": " Example Kitchen Supplies Pvt. Ltd. ",
+			"address": "First address",
+			"state": "Maharashtra",
+			"pin_code": "411001",
+			"gstin": "",
+		}
+		changed = {
+			"name": "example kitchen supplies pvt ltd",
+			"address": "A completely new address",
+			"state": "Telangana",
+			"pin_code": "500001",
+			"gstin": "36ABCDE1234F1Z2",
+		}
+		self.assertEqual(invoices._vendor_identity_key(first), invoices._vendor_identity_key(changed))
 
 	def test_safe_filename_removes_path_characters(self):
 		self.assertEqual(_safe_filename("../../INV 001"), "invoice-INV-001")
@@ -334,21 +404,15 @@ class IntegrationTestGeneratedInvoiceNumbers(IntegrationTestCase):
 		stack.enter_context(patch.object(invoices, "nowdate", return_value="2098-12-31"))
 		stack.enter_context(patch.object(invoices, "_require_employee", return_value="Test Employee"))
 		stack.enter_context(patch.object(invoices, "_remember_vendor_address", return_value={}))
+		stack.enter_context(patch.object(invoices, "_save_employee_signature"))
+		stack.enter_context(
+			patch.object(invoices, "_vendor_invoice_style", return_value=("vendor-key", "style-01"))
+		)
 		stack.enter_context(
 			patch.object(
 				invoices,
 				"_employee_signer",
 				side_effect=lambda employee: {"employee": employee, "name": "Test Volunteer"},
-			)
-		)
-		stack.enter_context(
-			patch(
-				"volunteering.volunteering.employee_bank_accounts.get_approved_bank_details",
-				return_value={
-					"bank_name": "Test Bank",
-					"account_number": "1234567890",
-					"ifsc": "TEST0123456",
-				},
 			)
 		)
 		stack.enter_context(
@@ -402,28 +466,30 @@ class IntegrationTestGeneratedInvoiceNumbers(IntegrationTestCase):
 		self.assertIn("docx", word)
 		self.assertNotIn("pdf", word)
 
-	def test_volunteer_identity_is_server_assigned_and_signer_change_gets_new_number(self):
+	def test_volunteer_identity_is_server_assigned_and_adding_vendor_signature_gets_new_number(self):
 		payload = _payload("NON_GST")
 		with self.generation_context():
-			supplier = invoices.generate_invoice_documents(payload, output_format="pdf")
-			payload["signer_type"] = "VOLUNTEER"
+			volunteer_only = invoices.generate_invoice_documents(payload, output_format="pdf")
 			payload["volunteer"] = {"name": "Forged Volunteer", "employee": "Forged Employee"}
-			volunteer = invoices.generate_invoice_documents(
-				payload, output_format="pdf", generation_reference=supplier["generation_reference"]
+			payload["vendor_will_sign"] = True
+			payload["vendor_signature_data"] = _signature_data()
+			payload["authorised_signatory"] = "Asha Vendor"
+			with_vendor = invoices.generate_invoice_documents(
+				payload, output_format="pdf", generation_reference=volunteer_only["generation_reference"]
 			)
 			word = invoices.generate_invoice_documents(
-				payload, output_format="docx", generation_reference=volunteer["generation_reference"]
+				payload, output_format="docx", generation_reference=with_vendor["generation_reference"]
 			)
-		self.assertEqual(supplier["invoice_number"], "INV-2098-000001")
-		self.assertEqual(volunteer["invoice_number"], "INV-2098-000002")
-		self.assertEqual(word["invoice_number"], volunteer["invoice_number"])
-		html = base64.b64decode(volunteer["pdf"]["content_base64"]).decode()
+		self.assertEqual(volunteer_only["invoice_number"], "INV-2098-000001")
+		self.assertEqual(with_vendor["invoice_number"], "INV-2098-000002")
+		self.assertEqual(word["invoice_number"], with_vendor["invoice_number"])
+		html = base64.b64decode(with_vendor["pdf"]["content_base64"]).decode()
 		self.assertIn("Test Volunteer", html)
 		self.assertIn("Test Employee", html)
 		self.assertNotIn("Forged", html)
-		self.assertNotIn("not registered", html)
-		self.assertEqual(volunteer["signer_type"], "VOLUNTEER")
-		self.assertEqual(volunteer["notice"], "")
+		self.assertIn("not registered", html)
+		self.assertTrue(with_vendor["vendor_signed"])
+		self.assertEqual(with_vendor["notice"], "")
 
 	def test_changed_content_gets_new_number_not_reference_number(self):
 		payload = _payload()

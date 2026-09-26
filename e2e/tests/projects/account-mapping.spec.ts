@@ -20,11 +20,35 @@ test("Accounts Manager opens the approved project-label mapping interface", asyn
   await expect(page.getByRole("alert")).toHaveCount(0);
   const project = page.locator("section.form-card button").first();
   await expect(project).toBeVisible();
+  const projectId = await project.getAttribute("data-project-name");
+  expect(projectId).toBeTruthy();
   await project.click();
-  await expect(page.getByText(/Approved allocation:/).first()).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`project=${projectId}`));
   await expect(
-    page.getByRole("combobox", { name: /Ledger account for/ }).first(),
+    page.getByText("Approved projects", { exact: true }),
+  ).toHaveCount(0);
+  const mappingForm = page.locator("form.form-card");
+  await expect(mappingForm).toBeVisible();
+  await expect(mappingForm).toBeInViewport();
+  await expect(page.getByText(/Approved allocation:/).first()).toBeVisible();
+  await expect(page.getByText(/A label may suggest several ledger accounts/)).toBeVisible();
+  if (!(await page.getByRole("combobox", { name: /Suggested account/ }).count())) {
+    await page.getByRole("button", { name: "+ Suggest an account" }).first().click();
+  }
+  await expect(
+    page.getByRole("combobox", { name: /Suggested account/ }).first(),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Choose another project" }).click();
+  await expect(
+    page.getByText("Approved projects", { exact: true }),
+  ).toBeVisible();
+  await expect(page).not.toHaveURL(/project=/);
+
+  await page.goto(
+    `/volunteering/project-account-mapping?project=${encodeURIComponent(projectId)}`,
+  );
+  await expect(page.locator("form.form-card")).toBeVisible();
+  await expect(page.getByText(/Approved allocation:/).first()).toBeVisible();
 });
 
 test("non-Accounts Manager cannot access project account mapping", async ({

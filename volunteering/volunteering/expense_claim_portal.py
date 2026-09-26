@@ -49,6 +49,8 @@ def _claim_stage(row) -> str:
 		return "Needs correction"
 	if workflow_state == "Pending Approval":
 		return "Manager approval"
+	if workflow_state == "Pending Accounts Classification":
+		return "Accounts classification"
 	if workflow_state == "Rejected" or row.get("approval_status") == "Rejected":
 		return "Rejected"
 	if workflow_state == "Approved" or row.get("approval_status") == "Approved":
@@ -63,6 +65,7 @@ def _next_claim_action(row) -> str:
 		"Needs correction": _("Correct the receipts and resubmit"),
 		"Receipt review": _("Waiting for independent receipt review"),
 		"Manager approval": _("Waiting for manager approval"),
+		"Accounts classification": _("Manager approved; waiting for Accounts to classify and post it"),
 		"Approved / unpaid": _("Waiting for Accounts to reimburse or settle it"),
 		"Rejected": _("Review the decision before resubmitting"),
 		"Paid": _("Complete"),
@@ -454,8 +457,10 @@ def submit_generated_invoice_expense_claim(claim_payload, invoice_payload):
 	expenses = claim.get("expenses")
 	if not isinstance(expenses, list) or len(expenses) != 1 or not isinstance(expenses[0], dict):
 		frappe.throw(_("A generated invoice must be submitted against exactly one expense item."))
-	if not cstr(invoice.get("signature_data")).strip():
-		frappe.throw(_("Sign the generated invoice on screen before submitting it."))
+	if not cstr(invoice.get("volunteer_signature_data")).strip():
+		frappe.throw(_("Add the volunteer signature before submitting the generated invoice."))
+	if cint(invoice.get("vendor_will_sign")) and not cstr(invoice.get("vendor_signature_data")).strip():
+		frappe.throw(_("Ask the vendor to sign on screen, or turn off vendor signing."))
 
 	from volunteering.volunteering.invoice_generator import generate_invoice_documents
 

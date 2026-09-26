@@ -92,6 +92,15 @@
  {
   "docstatus": 0,
   "doctype": "Workflow State",
+  "icon": "briefcase",
+  "modified": "2026-09-25 12:00:00",
+  "name": "Pending Accounts Classification",
+  "style": "Warning",
+  "workflow_state_name": "Pending Accounts Classification"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
   "icon": "edit",
   "modified": "2026-09-15 12:00:00",
   "name": "Receipt Correction Required",

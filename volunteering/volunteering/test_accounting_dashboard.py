@@ -36,6 +36,9 @@ from volunteering.volunteering.expense_claim_permissions import (
 	get_permission_query_conditions,
 	has_permission,
 )
+from volunteering.volunteering.expense_claim_workflow_portal import (
+	classify_expense_claim_accounts,
+)
 from volunteering.volunteering.receipt_review import review_receipts
 
 
@@ -65,7 +68,9 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 		)
 		cls.employee_email = get_or_create_user("employee-acct@example.com", ["Employee"], "Employee User")
 		cls.accounts_email = get_or_create_user(
-			"accounts-acct@example.com", ["Employee", "Accounts User"], "Accounts User"
+			"accounts-acct@example.com",
+			["Employee", "Accounts User", "Accounts Manager"],
+			"Accounts User",
 		)
 		cls.reviewer_email = get_or_create_user(
 			"dashboard-receipt-reviewer@example.com",
@@ -197,10 +202,26 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 	def test_get_pending_reimbursements_lists_approved_unpaid_claims(self):
 		claim = self._submit_claim_as(self.employee_email, amount=1500)
 		approved = self._approve_claim(claim)
+		frappe.set_user(self.accounts_email)
+		classify_expense_claim_accounts(
+			approved.name,
+			[
+				{
+					"expense_detail": approved.expenses[0].name,
+					"allocations": [
+						{
+							"expense_account": approved.expenses[0].default_account,
+							"amount": approved.expenses[0].sanctioned_amount,
+						}
+					],
+				}
+			],
+			"Dashboard reimbursement test.",
+		)
+		approved.reload()
 		self.assertEqual(approved.approval_status, "Approved")
 		self.assertEqual(approved.status, "Unpaid")
 
-		frappe.set_user(self.accounts_email)
 		rows = get_pending_reimbursements()
 		names = {row.name for row in rows}
 		self.assertIn(approved.name, names)

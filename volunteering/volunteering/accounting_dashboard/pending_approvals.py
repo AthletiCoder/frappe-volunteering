@@ -121,7 +121,7 @@ def _can_user_act(row, user, roles):
 				continue
 			return True
 		return False
-	except frappe.PermissionError:
+	except (frappe.PermissionError, frappe.DoesNotExistError):
 		return False
 	finally:
 		frappe.set_user(previous_user)

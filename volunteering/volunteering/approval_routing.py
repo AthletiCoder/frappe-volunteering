@@ -353,10 +353,11 @@ def get_expense_approver_for_employee(employee: str) -> str:
 
 
 def validate_no_self_approval(doc):
-	if doc.workflow_state not in ("Approved",):
+	target = "Pending Accounts Classification" if doc.doctype == "Expense Claim" else "Approved"
+	if doc.workflow_state != target:
 		return
 	previous = doc.get_doc_before_save()
-	if not previous or previous.workflow_state == "Approved":
+	if not previous or previous.workflow_state == target:
 		return
 	requester = get_requester_user(doc)
 	if frappe.session.user == requester:
@@ -368,7 +369,8 @@ def validate_approver_authority(doc):
 	previous = doc.get_doc_before_save()
 	if not previous:
 		return
-	if doc.workflow_state != "Approved" or previous.workflow_state == "Approved":
+	target = "Pending Accounts Classification" if doc.doctype == "Expense Claim" else "Approved"
+	if doc.workflow_state != target or previous.workflow_state == target:
 		return
 	if not use_grade_approval():
 		return
@@ -451,7 +453,7 @@ def validate_expense_claim_review_assignment(doc):
 
 	assigned = previous.get("pending_approver")
 	routing_changed = doc.get("pending_approver") != assigned
-	if doc.workflow_state in ("Approved", "Rejected") or routing_changed:
+	if doc.workflow_state in ("Pending Accounts Classification", "Approved", "Rejected") or routing_changed:
 		if frappe.session.user != assigned:
 			frappe.throw(
 				_("Only the currently assigned Expense Claim reviewer may approve, reject or escalate.")

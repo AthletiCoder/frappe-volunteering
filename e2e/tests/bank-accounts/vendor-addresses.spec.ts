@@ -41,16 +41,45 @@ test("generated invoice saves and reuses the employee's vendor address", async (
     .getByLabel("PAN (optional)", { exact: true })
     .fill("ABCDE1234F");
   await page
+    .getByLabel("Account holder name", { exact: true })
+    .fill("E2E Frequent Vendor");
+  await page
+    .getByLabel("Bank name", { exact: true })
+    .fill("Reusable Vendor Bank");
+  await page
+    .getByLabel("Account number", { exact: true })
+    .fill("554433221100");
+  await page.getByLabel("IFSC", { exact: true }).fill("TEST0123456");
+  await page.getByLabel("UPI ID", { exact: true }).fill("vendor@example");
+  await page
     .getByLabel("Description *", { exact: true })
     .fill("Reusable vendor address test");
   await page.getByLabel("Rate (INR) *", { exact: true }).fill("100");
+
+  await page.getByRole("button", { name: "Sign freshly", exact: true }).click();
+  const signatureCanvas = page.locator("canvas.signature-canvas");
+  const signatureBox = await signatureCanvas.boundingBox();
+  expect(signatureBox).toBeTruthy();
+  await page.mouse.move(signatureBox!.x + 50, signatureBox!.y + 100);
+  await page.mouse.down();
+  await page.mouse.move(signatureBox!.x + 220, signatureBox!.y + 50, {
+    steps: 8,
+  });
+  await page.mouse.move(signatureBox!.x + 400, signatureBox!.y + 120, {
+    steps: 8,
+  });
+  await page.mouse.up();
+  await page
+    .getByRole("button", { name: "Use this signature", exact: true })
+    .click();
 
   const responsePromise = page.waitForResponse((response) =>
     response.url().includes("generate_invoice_documents"),
   );
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Generate PDF", exact: true }).click();
-  expect((await responsePromise).status()).toBe(200);
+  const generated = (await (await responsePromise).json()).message;
+  expect(generated.invoice_style).toMatch(/^style-(0[1-9]|1[0-9]|20)$/);
   await downloadPromise;
   await expect(frequent).toBeVisible();
   await expect(frequent).toHaveValue(/.+/);
@@ -74,6 +103,21 @@ test("generated invoice saves and reuses the employee's vendor address", async (
   );
   await expect(supplier.getByLabel("State *", { exact: true })).toHaveValue(
     "Maharashtra",
+  );
+  await expect(
+    page.getByLabel("Account holder name", { exact: true }),
+  ).toHaveValue("E2E Frequent Vendor");
+  await expect(page.getByLabel("Bank name", { exact: true })).toHaveValue(
+    "Reusable Vendor Bank",
+  );
+  await expect(page.getByLabel("Account number", { exact: true })).toHaveValue(
+    "554433221100",
+  );
+  await expect(page.getByLabel("IFSC", { exact: true })).toHaveValue(
+    "TEST0123456",
+  );
+  await expect(page.getByLabel("UPI ID", { exact: true })).toHaveValue(
+    "vendor@example",
   );
 
   await page.setViewportSize({ width: 390, height: 844 });

@@ -1,0 +1,16 @@
+{
+ "doctype": "DocType",
+ "name": "Expense Claim Account Allocation",
+ "module": "Volunteering",
+ "istable": 1,
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["expense_detail", "expense_label", "expense_account", "allocated_amount"],
+ "fields": [
+  {"fieldname": "expense_detail", "label": "Expense Item ID", "fieldtype": "Data", "reqd": 1, "hidden": 1},
+  {"fieldname": "expense_label", "label": "Expense Break-up", "fieldtype": "Data", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "expense_account", "label": "Expense Account", "fieldtype": "Link", "options": "Account", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "allocated_amount", "label": "Allocated Amount", "fieldtype": "Currency", "reqd": 1, "non_negative": 1, "in_list_view": 1}
+ ],
+ "permissions": []
+}

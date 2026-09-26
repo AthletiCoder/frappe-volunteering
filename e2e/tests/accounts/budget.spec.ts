@@ -7,6 +7,7 @@ import {
 } from '../../helpers/e2e-api';
 import { withPersona } from '../../helpers/persona-context';
 import { PERSONAS } from '../../helpers/personas';
+import { seedEscalateExpenseClaim } from '../../helpers/manager-float-fixtures';
 import { getE2eMasters, getE2eProject } from '../../helpers/ui-fixtures';
 import { ExpenseClaimFormPage } from '../../pages/desk/expense-claim.page';
 
@@ -93,7 +94,14 @@ test.describe('Budget controls @accounts @ui', () => {
 			{ doctype: 'Expense Claim', name: claimName, field: 'pending_approver' },
 			'admin',
 		);
-		expect(pendingApprover).toBe(PERSONAS.director.email);
+		expect(pendingApprover).toBe(PERSONAS.manager.email);
+
+		const escalated = await seedEscalateExpenseClaim(
+			request,
+			claimName,
+			'Claim exceeds the Manager Expense Claim limit',
+		);
+		expect(escalated.pending_approver).toBe(PERSONAS.director.email);
 
 		await withPersona(browser, 'director', async (page) => {
 			const claim = new ExpenseClaimFormPage(page);
@@ -109,6 +117,8 @@ test.describe('Budget controls @accounts @ui', () => {
 		const fixtures = await getFixtures(request, 'admin');
 		const project = await getE2eProject(request);
 		const masters = await getE2eMasters(request);
+		await repairE2eReportsToChain(request);
+		await cleanupExpenseClaimsForProject(request, project);
 
 		await e2eCall(
 			request,
@@ -135,6 +145,28 @@ test.describe('Budget controls @accounts @ui', () => {
 			});
 			claimName = await claim.saveAndSubmit(request);
 		});
+
+		const pendingApprover = await e2eCall<string>(
+			request,
+			'get_doc_field',
+			{ doctype: 'Expense Claim', name: claimName, field: 'pending_approver' },
+			'admin',
+		);
+		expect(pendingApprover).toBe(PERSONAS.manager.email);
+
+		const escalatedToDirector = await seedEscalateExpenseClaim(
+			request,
+			claimName,
+			'Claim exceeds the Manager Expense Claim limit',
+		);
+		expect(escalatedToDirector.pending_approver).toBe(PERSONAS.director.email);
+
+		const escalatedToChair = await seedEscalateExpenseClaim(
+			request,
+			claimName,
+			'Claim exceeds the Director Expense Claim limit',
+		);
+		expect(escalatedToChair.pending_approver).toBe(PERSONAS.chair.email);
 
 		await withPersona(browser, 'chair', async (page) => {
 			const claim = new ExpenseClaimFormPage(page);

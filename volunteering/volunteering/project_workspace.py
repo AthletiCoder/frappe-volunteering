@@ -573,12 +573,15 @@ def _serialize(doc):
 	capabilities = _capabilities(doc)
 	can_read_finance = can_view_finance(doc)
 	financial_status = get_budget_commitment_breakdown(doc.name) if can_read_finance else None
+	suggested_keys = {
+		row.budget_key for row in doc.get("expense_account_mappings") or [] if row.expense_account
+	}
 	result = {
 		"name": doc.name,
 		"modified": str(doc.modified),
 		"legacy": not cint(doc.get("project_setup_version")),
 		"mapping_ready": all(
-			row.expense_account for row in doc.get("account_budgets") or [] if cint(row.is_active)
+			row.budget_key in suggested_keys for row in doc.get("account_budgets") or [] if cint(row.is_active)
 		),
 		"can_map_accounts": frappe.session.user == "Administrator" or "Accounts Manager" in _roles(),
 		**{field: doc.get(field) or "" for field in DETAIL_FIELDS},
@@ -601,7 +604,7 @@ def _serialize(doc):
 			{
 				"budget_key": row.budget_key,
 				"employee_label": row.employee_label,
-				"mapped": bool(row.expense_account),
+				"mapped": row.budget_key in suggested_keys,
 			}
 			for row in doc.get("account_budgets") or []
 			if cint(row.is_active)

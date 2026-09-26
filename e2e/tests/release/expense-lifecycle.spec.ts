@@ -32,7 +32,7 @@ async function portalData(page: Page, method: string, args = {}) {
   );
 }
 
-test("REL-001: Home claim → actual receipt reviewer → manager → cash settlement → Paid", async ({
+test("REL-001: Home claim → receipt reviewer → manager → Accounts classification → cash settlement → Paid", async ({
   page,
   browser,
   request,
@@ -173,18 +173,76 @@ test("REL-001: Home claim → actual receipt reviewer → manager → cash settl
     const approve = manager.getByRole("button", { name: /^Approve/ });
     await expect(approve).toBeVisible();
     await approve.click();
-    await expect(manager.getByText("Claim approved.")).toBeVisible();
+    await expect(
+      manager.getByText(
+        "Claim approved by the manager and sent to Accounts for classification.",
+      ),
+    ).toBeVisible();
+    expect(await field("Expense Claim", name, "workflow_state")).toBe(
+      "Pending Accounts Classification",
+    );
+    expect(await field("Expense Claim", name, "docstatus")).toBe(0);
+    expect(await field("Expense Claim", name, "total_sanctioned_amount")).toBe(
+      1,
+    );
+
+    const accounts = await accountsContext.newPage();
+    await signIn(accounts, "accounts");
+    await accounts.goto(
+      `/volunteering/expense-claim-workflow?claim=${encodeURIComponent(name)}`,
+    );
+    await expect(accounts.getByRole("heading", { name })).toBeVisible();
+    await expect(
+      accounts.getByRole("heading", { name: "Accounts classification" }),
+    ).toBeVisible();
+    const classification = accounts
+      .getByRole("heading", { name: "Accounts classification" })
+      .locator("..");
+    const expenseAccount = accounts.getByRole("combobox", {
+      name: "Expense account 1",
+    });
+    if (!(await expenseAccount.inputValue())) {
+      await expenseAccount.click();
+      await accounts
+        .getByRole("listbox", { name: "Expense account 1" })
+        .getByRole("option")
+        .first()
+        .click();
+    }
+    await classification
+      .getByRole("button", { name: "+ Split to another account" })
+      .click();
+    const secondExpenseAccount = classification.getByRole("combobox", {
+      name: "Expense account 2",
+    });
+    await secondExpenseAccount.click();
+    await classification
+      .getByRole("listbox", { name: "Expense account 2" })
+      .getByRole("option")
+      .first()
+      .click();
+    const allocationAmounts = classification.getByLabel("Amount *");
+    await allocationAmounts.nth(0).fill("0.60");
+    await allocationAmounts.nth(1).fill("0.40");
+    await expect(classification.getByText(/Allocated ₹1\.00 of ₹1\.00/)).toBeVisible();
+    accounts.once("dialog", (dialog) => dialog.accept());
+    await accounts
+      .getByRole("button", { name: "Finalise accounts and submit claim" })
+      .click();
+    await expect(
+      accounts.getByText(
+        "Accounts classified and claim submitted. It is now ready for reimbursement.",
+      ),
+    ).toBeVisible();
     expect(await field("Expense Claim", name, "workflow_state")).toBe(
       "Approved",
     );
     expect(await field("Expense Claim", name, "docstatus")).toBe(1);
-    expect(await field("Expense Claim", name, "total_sanctioned_amount")).toBe(
-      1,
+    expect(await field("Expense Claim", name, "account_classification_status")).toBe(
+      "Complete",
     );
     expect(await field("Expense Claim", name, "status")).toBe("Unpaid");
 
-    const accounts = await accountsContext.newPage();
-    await signIn(accounts, "accounts");
     await accounts.goto(
       `/volunteering/expense-claim-workflow?claim=${encodeURIComponent(name)}`,
     );

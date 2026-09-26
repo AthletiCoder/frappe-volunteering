@@ -4,8 +4,8 @@
 """Employee-facing GST and non-GST invoice document generator.
 
 This module deliberately does not create an ERP accounting document. It returns
-an in-memory PDF and DOCX for supplier signature or the employee's own volunteer
-expense confirmation before attaching the signed document to an Expense Claim.
+an in-memory PDF and DOCX carrying the employee's mandatory reimbursement
+declaration and, when requested, an additional supplier declaration/signature.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from io import BytesIO
 import frappe
 from frappe import _
 from frappe.model.naming import getseries
-from frappe.utils import formatdate, getdate, money_in_words, now_datetime, nowdate
+from frappe.utils import cint, formatdate, getdate, money_in_words, now_datetime, nowdate
 from frappe.utils.password import decrypt, encrypt
 from markupsafe import escape
 
@@ -30,21 +30,206 @@ from volunteering.volunteering.authority import get_employee_for_user
 MAX_ITEMS = 20
 MAX_SIGNATURE_BYTES = 500_000
 VENDOR_ADDRESS_DOCTYPE = "Employee Vendor Address"
+VENDOR_STYLE_DOCTYPE = "Vendor Invoice Style"
+EMPLOYEE_SIGNATURE_DOCTYPE = "Employee Invoice Signature"
 MONEY_PLACES = Decimal("0.01")
 MAX_MONEY = Decimal("999999999999.99")
 MAX_QUANTITY = Decimal("999999999")
 ALLOWED_TYPES = {"GST", "NON_GST"}
-ALLOWED_SIGNERS = {"SUPPLIER", "VOLUNTEER"}
 ALLOWED_TAX_MODES = {"CGST_SGST", "IGST"}
 GSTIN_PATTERN = re.compile(r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$")
 PAN_PATTERN = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
+
+# Twenty restrained, print-friendly themes. A vendor receives one theme on its
+# first use and keeps it thereafter; see _vendor_invoice_style().
+INVOICE_STYLES = (
+	{
+		"id": "style-01",
+		"name": "Emerald Ledger",
+		"accent": "16745B",
+		"soft": "E7F4EF",
+		"font": "Arial",
+		"align": "center",
+		"frame": "line",
+	},
+	{
+		"id": "style-02",
+		"name": "Sapphire Header",
+		"accent": "245C9A",
+		"soft": "EAF1FA",
+		"font": "Arial",
+		"align": "left",
+		"frame": "line",
+	},
+	{
+		"id": "style-03",
+		"name": "Maroon Register",
+		"accent": "8A3342",
+		"soft": "F8ECEE",
+		"font": "Georgia",
+		"align": "center",
+		"frame": "line",
+	},
+	{
+		"id": "style-04",
+		"name": "Amber Statement",
+		"accent": "A45C09",
+		"soft": "FCF2E3",
+		"font": "Trebuchet MS",
+		"align": "right",
+		"frame": "line",
+	},
+	{
+		"id": "style-05",
+		"name": "Forest Band",
+		"accent": "285C3C",
+		"soft": "EAF2ED",
+		"font": "Arial",
+		"align": "left",
+		"frame": "band",
+	},
+	{
+		"id": "style-06",
+		"name": "Indigo Band",
+		"accent": "4B4E9B",
+		"soft": "EEEEF9",
+		"font": "Trebuchet MS",
+		"align": "center",
+		"frame": "band",
+	},
+	{
+		"id": "style-07",
+		"name": "Terracotta Band",
+		"accent": "A34F32",
+		"soft": "F8EDE8",
+		"font": "Georgia",
+		"align": "left",
+		"frame": "band",
+	},
+	{
+		"id": "style-08",
+		"name": "Slate Band",
+		"accent": "465867",
+		"soft": "EDF1F4",
+		"font": "Arial",
+		"align": "right",
+		"frame": "band",
+	},
+	{
+		"id": "style-09",
+		"name": "Teal Box",
+		"accent": "087D79",
+		"soft": "E5F5F4",
+		"font": "Trebuchet MS",
+		"align": "center",
+		"frame": "box",
+	},
+	{
+		"id": "style-10",
+		"name": "Royal Box",
+		"accent": "5A3E9B",
+		"soft": "F0ECFA",
+		"font": "Georgia",
+		"align": "left",
+		"frame": "box",
+	},
+	{
+		"id": "style-11",
+		"name": "Copper Box",
+		"accent": "97602E",
+		"soft": "F6EFE8",
+		"font": "Arial",
+		"align": "center",
+		"frame": "box",
+	},
+	{
+		"id": "style-12",
+		"name": "Navy Box",
+		"accent": "23466D",
+		"soft": "E9EFF5",
+		"font": "Trebuchet MS",
+		"align": "right",
+		"frame": "box",
+	},
+	{
+		"id": "style-13",
+		"name": "Olive Double",
+		"accent": "65712D",
+		"soft": "F1F3E6",
+		"font": "Georgia",
+		"align": "left",
+		"frame": "double",
+	},
+	{
+		"id": "style-14",
+		"name": "Plum Double",
+		"accent": "7B3F78",
+		"soft": "F5EBF4",
+		"font": "Arial",
+		"align": "center",
+		"frame": "double",
+	},
+	{
+		"id": "style-15",
+		"name": "Ocean Double",
+		"accent": "146B84",
+		"soft": "E7F3F6",
+		"font": "Trebuchet MS",
+		"align": "right",
+		"frame": "double",
+	},
+	{
+		"id": "style-16",
+		"name": "Brick Double",
+		"accent": "884237",
+		"soft": "F6ECEA",
+		"font": "Georgia",
+		"align": "center",
+		"frame": "double",
+	},
+	{
+		"id": "style-17",
+		"name": "Graphite Minimal",
+		"accent": "3F474E",
+		"soft": "F0F2F3",
+		"font": "Arial",
+		"align": "left",
+		"frame": "minimal",
+	},
+	{
+		"id": "style-18",
+		"name": "Blue Minimal",
+		"accent": "286AA6",
+		"soft": "EAF2F9",
+		"font": "Trebuchet MS",
+		"align": "center",
+		"frame": "minimal",
+	},
+	{
+		"id": "style-19",
+		"name": "Wine Minimal",
+		"accent": "883B59",
+		"soft": "F7EBF0",
+		"font": "Georgia",
+		"align": "right",
+		"frame": "minimal",
+	},
+	{
+		"id": "style-20",
+		"name": "Pine Minimal",
+		"accent": "2F6B57",
+		"soft": "EAF3EF",
+		"font": "Arial",
+		"align": "center",
+		"frame": "minimal",
+	},
+)
+INVOICE_STYLE_BY_ID = {style["id"]: style for style in INVOICE_STYLES}
 
 
 @frappe.whitelist(methods=["POST"])
 def get_invoice_generator_defaults():
 	employee = _require_employee()
-	from volunteering.volunteering.employee_bank_accounts import get_approved_bank_details
-
 	company = frappe.db.get_value("Employee", employee, "company")
 	company_doc = frappe.get_cached_doc("Company", company)
 	address_choices = _company_address_choices(company, company_doc)
@@ -53,18 +238,16 @@ def get_invoice_generator_defaults():
 		address_choices[0] if address_choices else None,
 	)
 	address = default_choice["party"] if default_choice else _company_party(company_doc, {})
-	approved_bank = get_approved_bank_details(employee, reveal=False)
 	return {
 		"employee": employee,
 		"volunteer": _employee_signer(employee),
 		"company": company,
 		"invoice_date": nowdate(),
-		"remittance_bank": approved_bank,
-		"has_approved_bank": bool(approved_bank),
 		"office_addresses": address_choices,
 		"default_office_address": default_choice["name"] if default_choice else "",
 		"consignee": address,
 		"vendor_addresses": _vendor_address_choices(employee),
+		"saved_volunteer_signature": _saved_employee_signature(employee),
 	}
 
 
@@ -73,7 +256,7 @@ def generate_invoice_documents(payload, output_format="both", generation_referen
 	"""Validate invoice data and return private, in-memory PDF and DOCX downloads."""
 	# MariaDB snapshot isolation may reject a counter updated by an overlapping
 	# request even after a row lock. Restart the whole generation transaction and
-	# re-check employee/bank approval rather than retrying with a stale snapshot.
+	# re-check employee access rather than retrying with a stale snapshot.
 	for attempt in range(3):
 		try:
 			return _generate_invoice_documents(payload, output_format, generation_reference)
@@ -89,25 +272,26 @@ def _generate_invoice_documents(payload, output_format="both", generation_refere
 	if output_format not in {"pdf", "docx", "both"}:
 		frappe.throw(_("Choose PDF or Word document."))
 	employee = _require_employee()
-	from volunteering.volunteering.employee_bank_accounts import get_approved_bank_details
-
-	approved_bank = get_approved_bank_details(employee, reveal=True)
-	if not approved_bank:
-		frappe.throw(
-			_(
-				"An Accounts Manager must approve your reimbursement bank account before you can generate an invoice."
-			)
-		)
 	# Validate first, without trusting or allocating a browser-supplied number.
 	data = _normalise_payload(
 		_apply_selected_office_addresses(payload, employee),
-		bank_override=approved_bank,
 		invoice_number_override="INV-AUTOMATIC",
 		volunteer_override=_employee_signer(employee),
 	)
-	fingerprint_data = {key: value for key, value in data.items() if key != "signature_png"}
-	fingerprint_data["signature_sha256"] = (
-		hashlib.sha256(data["signature_png"]).hexdigest() if data["signature_png"] else ""
+	vendor_identity_key, invoice_style = _vendor_invoice_style(employee, data["supplier"])
+	data["invoice_style"] = invoice_style
+	fingerprint_data = {
+		key: value
+		for key, value in data.items()
+		if key not in {"volunteer_signature_png", "vendor_signature_png"}
+	}
+	fingerprint_data["volunteer_signature_sha256"] = hashlib.sha256(
+		data["volunteer_signature_png"]
+	).hexdigest()
+	fingerprint_data["vendor_signature_sha256"] = (
+		hashlib.sha256(data["vendor_signature_png"]).hexdigest()
+		if data["vendor_signature_png"]
+		else ""
 	)
 	fingerprint = hashlib.sha256(
 		json.dumps(fingerprint_data, sort_keys=True, default=str, separators=(",", ":")).encode()
@@ -119,8 +303,9 @@ def _generate_invoice_documents(payload, output_format="both", generation_refere
 		"supplier_name": data["supplier"]["name"],
 		"grand_total": float(data["grand_total"]),
 		"amount_in_words": data["amount_in_words"],
-		"signer_type": data["signer_type"],
+		"vendor_signed": data["vendor_will_sign"],
 		"notice": data["notice"],
+		"invoice_style": data["invoice_style"],
 	}
 	if output_format in {"pdf", "both"}:
 		result["pdf"] = _download(f"{stem}.pdf", "application/pdf", _build_pdf(data))
@@ -130,10 +315,18 @@ def _generate_invoice_documents(payload, output_format="both", generation_refere
 			"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 			_build_docx(data),
 		)
+	# A successfully rendered invoice is the point at which a fresh volunteer
+	# signature becomes reusable. Failed generation never changes the saved copy.
+	_save_employee_signature(employee, data["volunteer_signature_png"])
 	# Remember only a successfully rendered invoice. PDF and Word generated from
 	# the same opaque reference share one invoice number and count as one use.
 	result["vendor_address"] = _remember_vendor_address(
-		employee, data["supplier"], data["invoice_number"]
+		employee,
+		data["supplier"],
+		data["invoice_number"],
+		bank=data["bank"],
+		invoice_style=data["invoice_style"],
+		vendor_identity_key=vendor_identity_key,
 	)
 	# An authenticated, opaque reference permits the other format for exactly
 	# this employee and content, without trusting client-supplied invoice numbers.
@@ -164,6 +357,81 @@ def _vendor_address_key(employee, party):
 	return hashlib.sha256(identity.encode()).hexdigest()
 
 
+def _normalised_vendor_identity(value):
+	return re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold()).strip()
+
+
+def _vendor_identity_key(party):
+	# The legal name is the stable identity employees select again. Addresses,
+	# registrations and remittance details may legitimately change without making
+	# the supplier a different visual identity.
+	identity = f"name:{_normalised_vendor_identity(party.get('name'))}"
+	return hashlib.sha256(identity.encode()).hexdigest()
+
+
+def _choose_invoice_style(assignments):
+	"""Choose the least-used style; ties preserve the published 1-20 order."""
+	counts = {style["id"]: 0 for style in INVOICE_STYLES}
+	seen = set()
+	for row in assignments:
+		key = _normalised_vendor_identity(row.get("vendor_name")) or row.get("vendor_key") or row.get("name")
+		style = row.get("invoice_style")
+		if key and key not in seen and style in counts:
+			seen.add(key)
+			counts[style] += 1
+	return min(INVOICE_STYLES, key=lambda style: (counts[style["id"]], style["id"]))["id"]
+
+
+def _vendor_invoice_style(employee, party):
+	"""Return the organisation-wide stable style assigned to this vendor identity."""
+	vendor_key = _vendor_identity_key(party)
+	style = frappe.db.get_value(VENDOR_STYLE_DOCTYPE, vendor_key, "invoice_style")
+	if style in INVOICE_STYLE_BY_ID:
+		return vendor_key, style
+	# Preserve the earliest assignment created by the first implementation, whose
+	# key could include an address or GSTIN. This also collapses such legacy
+	# duplicates to one effective vendor for future generation.
+	vendor_name = _normalised_vendor_identity(party.get("name"))
+	legacy_assignments = frappe.get_all(
+		VENDOR_STYLE_DOCTYPE,
+		fields=["name", "vendor_name", "invoice_style"],
+		order_by="assignment_sequence asc, creation asc",
+		limit_page_length=0,
+	)
+	for assignment in legacy_assignments:
+		if (
+			_normalised_vendor_identity(assignment.vendor_name) == vendor_name
+			and assignment.invoice_style in INVOICE_STYLE_BY_ID
+		):
+			return assignment.name, assignment.invoice_style
+
+	company = frappe.db.get_value("Employee", employee, "company")
+	if company:
+		# Serialise first-time assignments so two simultaneous new vendors cannot
+		# consume the same position before all twenty styles have been used.
+		frappe.db.sql("SELECT name FROM `tabCompany` WHERE name=%s FOR UPDATE", (company,))
+	style = frappe.db.get_value(VENDOR_STYLE_DOCTYPE, vendor_key, "invoice_style")
+	if style not in INVOICE_STYLE_BY_ID:
+		assignments = frappe.get_all(
+			VENDOR_STYLE_DOCTYPE,
+			fields=["vendor_key", "vendor_name", "invoice_style"],
+			order_by="assignment_sequence asc, creation asc",
+			limit_page_length=0,
+		)
+		style = _choose_invoice_style(assignments)
+		frappe.get_doc(
+			{
+				"doctype": VENDOR_STYLE_DOCTYPE,
+				"vendor_key": vendor_key,
+				"vendor_name": party["name"],
+				"vendor_gstin": party.get("gstin") or "",
+				"invoice_style": style,
+				"assignment_sequence": len({row.vendor_key for row in assignments}) + 1,
+			}
+		).insert(ignore_permissions=True)
+	return vendor_key, style
+
+
 def _vendor_address_row(row):
 	party = {
 		"name": row.vendor_name,
@@ -174,38 +442,68 @@ def _vendor_address_row(row):
 		"pan": row.pan or "",
 	}
 	location = ", ".join(part for part in (party["address"], party["state"], party["pin_code"]) if part)
+	account_number = row.get_password("account_number", raise_exception=False) or ""
+	bank = {
+		"bank_name": row.bank_name or "",
+		"branch": row.bank_branch or "",
+		"account_name": row.account_name or "",
+		"account_number": account_number,
+		"ifsc": row.ifsc or "",
+		"swift": row.swift or "",
+		"upi_id": row.upi_id or "",
+	}
 	return {
 		"name": row.name,
 		"label": f"{party['name']} — {location}",
 		"party": party,
+		"bank": bank,
+		"invoice_style": row.invoice_style or "",
 		"use_count": row.use_count or 0,
 		"last_used_on": row.last_used_on,
 	}
 
 
 def _vendor_address_choices(employee):
-	rows = frappe.get_all(
+	names = frappe.get_all(
 		VENDOR_ADDRESS_DOCTYPE,
 		filters={"employee": employee},
-		fields=[
-			"name",
-			"vendor_name",
-			"address",
-			"state",
-			"pin_code",
-			"gstin",
-			"pan",
-			"use_count",
-			"last_used_on",
-		],
+		pluck="name",
 		order_by="use_count desc, last_used_on desc, modified desc",
 		limit=100,
 	)
-	return [_vendor_address_row(row) for row in rows]
+	rows = []
+	for name in names:
+		doc = frappe.get_doc(VENDOR_ADDRESS_DOCTYPE, name)
+		vendor_key, style = _vendor_invoice_style(
+			employee,
+			{
+				"name": doc.vendor_name,
+				"address": doc.address,
+				"state": doc.state,
+				"pin_code": doc.pin_code,
+				"gstin": doc.gstin,
+			},
+		)
+		if doc.vendor_identity_key != vendor_key or doc.invoice_style != style:
+			doc.vendor_identity_key = vendor_key
+			doc.invoice_style = style
+			doc.save(ignore_permissions=True)
+		rows.append(_vendor_address_row(doc))
+	return rows
 
 
-def _remember_vendor_address(employee, party, invoice_number):
+def _remember_vendor_address(
+	employee,
+	party,
+	invoice_number,
+	bank=None,
+	invoice_style=None,
+	vendor_identity_key=None,
+):
 	key = _vendor_address_key(employee, party)
+	bank = _bank(bank)
+	if not vendor_identity_key or invoice_style not in INVOICE_STYLE_BY_ID:
+		vendor_identity_key, invoice_style = _vendor_invoice_style(employee, party)
 	doc = frappe.db.exists(VENDOR_ADDRESS_DOCTYPE, key)
 	if doc:
 		doc = frappe.get_doc(VENDOR_ADDRESS_DOCTYPE, doc)
@@ -217,6 +515,15 @@ def _remember_vendor_address(employee, party, invoice_number):
 		doc.pin_code = party.get("pin_code") or ""
 		doc.gstin = party.get("gstin") or ""
 		doc.pan = party.get("pan") or ""
+		doc.vendor_identity_key = vendor_identity_key
+		doc.invoice_style = invoice_style
+		doc.bank_name = bank["bank_name"]
+		doc.bank_branch = bank["branch"]
+		doc.account_name = bank["account_name"]
+		doc.account_number = bank["account_number"]
+		doc.ifsc = bank["ifsc"]
+		doc.swift = bank["swift"]
+		doc.upi_id = bank["upi_id"]
 		if doc.last_invoice_number != invoice_number:
 			doc.use_count = (doc.use_count or 0) + 1
 	else:
@@ -231,6 +538,15 @@ def _remember_vendor_address(employee, party, invoice_number):
 				"pin_code": party.get("pin_code") or "",
 				"gstin": party.get("gstin") or "",
 				"pan": party.get("pan") or "",
+				"vendor_identity_key": vendor_identity_key,
+				"invoice_style": invoice_style,
+				"bank_name": bank["bank_name"],
+				"bank_branch": bank["branch"],
+				"account_name": bank["account_name"],
+				"account_number": bank["account_number"],
+				"ifsc": bank["ifsc"],
+				"swift": bank["swift"],
+				"upi_id": bank["upi_id"],
 				"use_count": 1,
 			}
 		)
@@ -296,6 +612,45 @@ def _employee_signer(employee):
 	}
 
 
+def _saved_employee_signature(employee):
+	"""Return only the current employee's reusable signature as a data URL."""
+	if not frappe.db.exists("DocType", EMPLOYEE_SIGNATURE_DOCTYPE):
+		return ""
+	encoded = frappe.db.get_value(EMPLOYEE_SIGNATURE_DOCTYPE, employee, "signature_data") or ""
+	if not encoded:
+		return ""
+	value = f"data:image/png;base64,{encoded}"
+	try:
+		_signature_png(value)
+	except frappe.ValidationError:
+		return ""
+	return value
+
+
+def _save_employee_signature(employee, signature_png):
+	"""Privately retain the last valid volunteer signature for explicit reuse."""
+	if not signature_png:
+		return
+	encoded = base64.b64encode(signature_png).decode("ascii")
+	doc = frappe.db.exists(EMPLOYEE_SIGNATURE_DOCTYPE, employee)
+	if doc:
+		doc = frappe.get_doc(EMPLOYEE_SIGNATURE_DOCTYPE, doc)
+		doc.signature_data = encoded
+		doc.signature_sha256 = hashlib.sha256(signature_png).hexdigest()
+		doc.last_used_on = now_datetime()
+		doc.save(ignore_permissions=True)
+	else:
+		frappe.get_doc(
+			{
+				"doctype": EMPLOYEE_SIGNATURE_DOCTYPE,
+				"employee": employee,
+				"signature_data": encoded,
+				"signature_sha256": hashlib.sha256(signature_png).hexdigest(),
+				"last_used_on": now_datetime(),
+			}
+		).insert(ignore_permissions=True)
+
+
 def _company_address_choices(company, company_doc=None):
 	from volunteering.volunteering.office_addresses import invoice_address_choices
 
@@ -344,16 +699,26 @@ def _normalise_payload(payload, bank_override=None, invoice_number_override=None
 		frappe.throw(_("Invoice details must be a valid object."))
 
 	invoice_type = _required_choice(raw, "invoice_type", ALLOWED_TYPES, _("Invoice type"))
-	# Keep supplier signing as the default for older clients without a signer selector.
-	signer_type = _required_choice(
-		{"signer_type": raw.get("signer_type", "SUPPLIER")},
-		"signer_type",
-		ALLOWED_SIGNERS,
-		_("signer"),
+	volunteer = volunteer_override if volunteer_override is not None else raw.get("volunteer")
+	volunteer = volunteer if isinstance(volunteer, dict) else {}
+	vendor_will_sign = bool(cint(raw.get("vendor_will_sign")))
+	# During a rolling deployment, accept the former VOLUNTEER signature field as
+	# the mandatory volunteer signature. Supplier-only legacy payloads remain
+	# invalid because the reimbursement declaration must now always be signed.
+	legacy_volunteer_signature = (
+		raw.get("signature_data") if str(raw.get("signer_type") or "").upper() == "VOLUNTEER" else None
 	)
+	volunteer_signature_png = _signature_png(
+		raw.get("volunteer_signature_data") or legacy_volunteer_signature
+	)
+	if not volunteer_signature_png:
+		frappe.throw(_("The volunteer signature is required for reimbursement."))
+	vendor_signature_png = _signature_png(raw.get("vendor_signature_data")) if vendor_will_sign else b""
+	if vendor_will_sign and not vendor_signature_png:
+		frappe.throw(_("Ask the vendor to sign on screen, or turn off vendor signing."))
 	data = {
 		"invoice_type": invoice_type,
-		"signer_type": signer_type,
+		"vendor_will_sign": vendor_will_sign,
 		"copy_label": _("ORIGINAL FOR RECIPIENT"),
 		"title": "TAX INVOICE" if invoice_type == "GST" else "INVOICE",
 		"invoice_number": invoice_number_override
@@ -370,13 +735,15 @@ def _normalise_payload(payload, bank_override=None, invoice_number_override=None
 		"buyer_same_as_consignee": True,
 		"transportation_charges": _money(raw.get("transportation_charges"), _("Transportation charges")),
 		"other_charges": _money(raw.get("other_charges"), _("Other charges")),
-		# The public endpoint always supplies an approved server-side override. Keeping
-		# the fallback makes the pure rendering helpers independently testable.
+		# These are optional supplier remittance details. Employee reimbursement
+		# banking is deliberately separate and is never printed on a supplier invoice.
 		"bank": _bank(bank_override if bank_override is not None else raw.get("bank")),
+		"invoice_style": "style-01",
 		"authorised_signatory": _text(raw.get("authorised_signatory"), 120)
-		if signer_type == "SUPPLIER"
+		if vendor_will_sign
 		else "",
-		"signature_png": _signature_png(raw.get("signature_data")),
+		"volunteer_signature_png": volunteer_signature_png,
+		"vendor_signature_png": vendor_signature_png,
 	}
 	data["buyer"] = data["consignee"]
 
@@ -454,28 +821,18 @@ def _normalise_payload(payload, bank_override=None, invoice_number_override=None
 		frappe.throw(_("Invoice total is too large."))
 	data["grand_total"] = _quantise(grand_total)
 	data["amount_in_words"] = money_in_words(data["grand_total"], "INR")
-	data["declaration_title"] = ""
-	data["declaration"] = ""
-	data["signature_employee"] = ""
-	if signer_type == "VOLUNTEER":
-		volunteer = volunteer_override if volunteer_override is not None else raw.get("volunteer")
-		volunteer = volunteer if isinstance(volunteer, dict) else {}
-		data["signatory_name"] = _required_text(volunteer, "name", _("Volunteer name"), 160)
-		data["signature_employee"] = _required_text(volunteer, "employee", _("Volunteer employee"), 140)
-		data["signature_context"] = _("Volunteer Signatory")
-		data["signature_label"] = _("Signature")
-		data["notice"] = ""
-	else:
-		data["signatory_name"] = data["authorised_signatory"]
-		data["signature_context"] = _("For {0}").format(data["supplier"]["name"])
-		data["signature_label"] = _("Authorised Signatory")
-		if invoice_type == "NON_GST":
-			data["declaration_title"] = _("Declaration")
-			data["declaration"] = _(
-				"I, {0}, proprietor/authorised person of {1}, declare that this business is not registered "
-				"under the Goods and Services Tax (GST) Act and therefore does not have a GSTIN."
-			).format(data["authorised_signatory"] or _("the undersigned"), data["supplier"]["name"])
-		data["notice"] = ""
+	data["volunteer_name"] = _required_text(volunteer, "name", _("Volunteer name"), 160)
+	data["volunteer_employee"] = _required_text(volunteer, "employee", _("Volunteer employee"), 140)
+	data["volunteer_declaration"] = _(
+		"I confirm that I paid the amount shown above and request reimbursement to my bank account."
+	)
+	data["vendor_declaration"] = ""
+	if vendor_will_sign and invoice_type == "NON_GST":
+		data["vendor_declaration"] = _(
+			"I, {0}, proprietor/authorised person of {1}, declare that this business is not registered "
+			"under the Goods and Services Tax (GST) Act and therefore does not have a GSTIN."
+		).format(data["authorised_signatory"] or _("the undersigned"), data["supplier"]["name"])
+	data["notice"] = ""
 	return data
 
 
@@ -542,7 +899,31 @@ def _bank(value):
 		"account_number": _text(value.get("account_number"), 50),
 		"ifsc": _text(value.get("ifsc"), 20).upper(),
 		"swift": _text(value.get("swift"), 20).upper(),
+		"upi_id": _text(value.get("upi_id"), 100),
 	}
+
+
+def _has_bank(bank):
+	return any(
+		bank.get(key)
+		for key in ("bank_name", "branch", "account_name", "account_number", "ifsc", "swift", "upi_id")
+	)
+
+
+def _bank_lines(bank):
+	return [
+		(_("Bank Name"), bank["bank_name"]),
+		(_("Branch"), bank["branch"]),
+		(_("Account Name"), bank["account_name"]),
+		(_("Account No."), bank["account_number"]),
+		(_("IFSC Code"), bank["ifsc"]),
+		(_("Swift Code"), bank["swift"]),
+		(_("UPI ID"), bank["upi_id"]),
+	]
+
+
+def _invoice_style(data):
+	return INVOICE_STYLE_BY_ID.get(data.get("invoice_style"), INVOICE_STYLES[0])
 
 
 def _required_text(mapping, key, label, max_length):
@@ -656,6 +1037,17 @@ def _render_pdf_html(data):
 	def h(value):
 		return str(escape(str(value or "")))
 
+	theme = _invoice_style(data)
+	title_frame = {
+		"line": f"border-bottom:3px solid #{theme['accent']};padding-bottom:3mm",
+		"band": f"background:#{theme['accent']};color:#fff;padding:4mm",
+		"box": f"border:2px solid #{theme['accent']};padding:3mm",
+		"double": f"border-top:4px double #{theme['accent']};border-bottom:4px double #{theme['accent']};padding:3mm",
+		"minimal": f"color:#{theme['accent']};letter-spacing:1.5px;padding-bottom:2mm",
+	}[theme["frame"]]
+	header_fill = theme["accent"] if theme["frame"] == "band" else theme["soft"]
+	header_text = "#fff" if theme["frame"] == "band" else "#111"
+
 	items = "".join(
 		f"<tr><td>{item['number']}</td><td>{h(item['description'])}</td>"
 		f"<td>{h(item['hsn_sac'])}</td><td class='num'>{_quantity_text(item['quantity'])}</td>"
@@ -678,48 +1070,64 @@ def _render_pdf_html(data):
 		for label, value in summary
 	)
 	bank = data["bank"]
-	bank_lines = [
-		(_("Bank Name"), bank["bank_name"]),
-		(_("Branch"), bank["branch"]),
-		(_("Account Name"), bank["account_name"]),
-		(_("Account No."), bank["account_number"]),
-		(_("IFSC Code"), bank["ifsc"]),
-		(_("Swift Code"), bank["swift"]),
-	]
-	bank_html = "<br>".join(f"<b>{h(label)}:</b> {h(value)}" for label, value in bank_lines)
-	declaration = (
-		f"<div class='declaration'><b>{h(data['declaration_title'])}:</b> {h(data['declaration'])}</div>"
-		if data["declaration"]
+	bank_html = "<br>".join(f"<b>{h(label)}:</b> {h(value)}" for label, value in _bank_lines(bank) if value)
+	def signature_image(content):
+		return (
+			f'<img class="signature-image" src="data:image/png;base64,{base64.b64encode(content).decode("ascii")}">'
+			if content
+			else ""
+		)
+
+	bank_section = (
+		f'<table class="section"><tr><td><b>{h(_("Supplier Remittance Details"))}'
+		f"</b><br>{bank_html}</td></tr></table>"
+		if bank_html
 		else ""
 	)
-	signature_image = (
-		f'<img class="signature-image" src="data:image/png;base64,{base64.b64encode(data["signature_png"]).decode("ascii")}">'
-		if data["signature_png"]
-		else "<br><br><br>"
+	volunteer_section = (
+		f'<div class="signature-section"><b>{h(_("Volunteer reimbursement declaration"))}</b>'
+		f'<p>{h(data["volunteer_declaration"])}</p><div class="signature">'
+		f'{signature_image(data["volunteer_signature_png"])}{h(data["volunteer_name"])}'
+		f'<br>{h(data["volunteer_employee"])}<br>{h(_("Volunteer Signature"))}</div></div>'
 	)
+	vendor_section = ""
+	if data["vendor_will_sign"]:
+		vendor_statement = (
+			f'<p>{h(data["vendor_declaration"])}</p>' if data["vendor_declaration"] else ""
+		)
+		vendor_section = (
+			f'<div class="signature-section"><b>{h(_("Vendor confirmation"))}</b>{vendor_statement}'
+			f'<div class="signature">{signature_image(data["vendor_signature_png"])}'
+			f'{h(data["authorised_signatory"] or data["supplier"]["name"])}'
+			f'<br>{h(_("Authorised Signatory for {0}")).format(data["supplier"]["name"])}</div></div>'
+		)
+	footer_html = bank_section + volunteer_section + vendor_section
 	buyer = data["buyer"]
 	return f"""<!doctype html>
 <html><head><meta charset="utf-8"><style>
 @page {{ size: A4; margin: 8mm; }}
-body {{ font-family: Arial, sans-serif; color: #111; font-size: 9.5pt; line-height: 1.3; }}
-h1 {{ text-align: center; font-size: 17pt; margin: 0 0 3mm; letter-spacing: .5px; }}
+body {{ font-family: '{theme["font"]}', sans-serif; color: #111; font-size: 9.5pt; line-height: 1.3; }}
+h1 {{ text-align: {theme["align"]}; font-size: 17pt; margin: 0 0 3mm; {title_frame}; }}
 .copy {{ text-align: right; font-size: 8pt; margin-bottom: 2mm; }}
 table {{ width: 100%; border-collapse: collapse; }}
-td, th {{ border: 1px solid #555; padding: 4px 5px; vertical-align: top; }}
-th {{ background: #ececec; text-align: center; }}
+td, th {{ border: 1px solid #{theme["accent"]}; padding: 4px 5px; vertical-align: top; }}
+th {{ background: #{header_fill}; color: {header_text}; text-align: center; }}
 thead {{ display: table-header-group; }}
 tr {{ page-break-inside: avoid; }}
 .items {{ table-layout: fixed; }}
 .items td {{ overflow-wrap: break-word; }}
 .party {{ width: 50%; }}
-.label {{ color: #555; font-size: 8pt; text-transform: uppercase; }}
+.label {{ color: #{theme["accent"]}; font-size: 8pt; text-transform: uppercase; }}
 .value {{ font-weight: 600; margin-top: 1px; }}
 .num {{ text-align: right; white-space: nowrap; }}
 .summary-label {{ text-align: right; font-weight: 600; }}
-.grand td {{ font-size: 11pt; font-weight: 700; background: #f2f2f2; }}
+.grand td {{ font-size: 11pt; font-weight: 700; background: #{theme["soft"]}; }}
 .section {{ margin-top: 3mm; }}
-.declaration {{ border: 1px solid #555; padding: 5px; margin-top: 3mm; }}
+.declaration {{ border: 1px solid #{theme["accent"]}; border-left-width: 4px; padding: 5px; margin-top: 3mm; }}
+.signature-section {{ border: 1px solid #{theme["accent"]}; border-left-width: 4px; padding: 5px; margin-top: 3mm; page-break-inside: avoid; }}
+.signature-section p {{ margin: 2mm 0; }}
 .signature {{ min-height: 22mm; text-align: right; }}
+.signature-only {{ width: 100%; }}
 .signature-image {{ display: block; max-width: 58mm; max-height: 24mm; margin: 1mm 0 1mm auto; object-fit: contain; }}
 </style></head><body>
 <h1>{h(data["title"])}</h1><div class="copy">{h(data["copy_label"])}</div>
@@ -728,8 +1136,8 @@ tr {{ page-break-inside: avoid; }}
 <tr><td><div class="label">{h(_("Consignee's Details"))}</div><div class="value">{h(data["consignee"]["name"])}</div>{h(data["consignee"]["address"])}<br>{h(data["consignee"]["state"])} {h(data["consignee"]["pin_code"])}<br>{h(_("GSTIN / UID No."))}: {h(data["consignee"]["gstin"])}</td>
 <td><div class="label">{h(_("Buyer's Details (if other than Consignee)"))}</div><div class="value">{h(buyer["name"])}</div>{h(buyer["address"])}<br>{h(buyer["state"])} {h(buyer["pin_code"])}<br>{h(_("GSTIN / UID No."))}: {h(buyer["gstin"])}</td></tr></table>
 <table class="section items"><colgroup><col style="width:6%"><col style="width:42%"><col style="width:12%"><col style="width:8%"><col style="width:14%"><col style="width:18%"></colgroup><thead><tr><th>{h(_("Sr. No."))}</th><th>{h(_("Description"))}</th><th>{h(_("HSN / SAC"))}</th><th>{h(_("Qty."))}</th><th>{h(_("Rate"))}</th><th>{h(_("Amount (INR)"))}</th></tr></thead><tbody>{items}{summary_rows}<tr class="grand"><td colspan="5" class="summary-label">{h(_("Grand Total"))}</td><td class="num">{_money_text(data["grand_total"])}</td></tr></tbody></table>
-<div class="declaration"><b>{h(_("Amount in words"))}:</b> {h(data["amount_in_words"])}</div>{declaration}
-<table class="section"><tr><td class="party"><b>{h(_("Remittance Details"))}</b><br>{bank_html or h(_("Not provided"))}</td><td class="signature"><b>{h(data["signature_context"])}</b>{signature_image}{h(data["signatory_name"])}{f"<br>{h(data['signature_employee'])}" if data["signature_employee"] else ""}<br>{h(data["signature_label"])}</td></tr></table>
+<div class="declaration"><b>{h(_("Amount in words"))}:</b> {h(data["amount_in_words"])}</div>
+{footer_html}
 </body></html>"""
 
 
@@ -765,8 +1173,9 @@ def _build_docx(data):
 	from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_TABLE_ALIGNMENT
 	from docx.enum.text import WD_ALIGN_PARAGRAPH
 	from docx.oxml import OxmlElement
-	from docx.shared import Mm, Pt
+	from docx.shared import Mm, Pt, RGBColor
 
+	theme = _invoice_style(data)
 	doc = Document()
 	section = doc.sections[0]
 	section.page_width = Mm(210)
@@ -776,14 +1185,19 @@ def _build_docx(data):
 	section.left_margin = Mm(10)
 	section.right_margin = Mm(10)
 	styles = doc.styles
-	styles["Normal"].font.name = "Arial"
+	styles["Normal"].font.name = theme["font"]
 	styles["Normal"].font.size = Pt(9)
 
 	title = doc.add_paragraph()
-	title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+	title.alignment = {
+		"left": WD_ALIGN_PARAGRAPH.LEFT,
+		"center": WD_ALIGN_PARAGRAPH.CENTER,
+		"right": WD_ALIGN_PARAGRAPH.RIGHT,
+	}[theme["align"]]
 	run = title.add_run(data["title"])
 	run.bold = True
 	run.font.size = Pt(16)
+	run.font.color.rgb = RGBColor.from_string(theme["accent"])
 	copy = doc.add_paragraph(data["copy_label"])
 	copy.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 	copy.paragraph_format.space_after = Pt(3)
@@ -834,8 +1248,11 @@ def _build_docx(data):
 		strict=True,
 	):
 		cell.text = str(text)
+		_set_cell_shading(cell, theme["accent"] if theme["frame"] == "band" else theme["soft"])
 		for run in cell.paragraphs[0].runs:
 			run.bold = True
+			if theme["frame"] == "band":
+				run.font.color.rgb = RGBColor(255, 255, 255)
 	for item in data["items"]:
 		cells = table.add_row().cells
 		values = [
@@ -869,44 +1286,55 @@ def _build_docx(data):
 	p = doc.add_paragraph()
 	p.add_run(f"{_('Amount in words')}: ").bold = True
 	p.add_run(data["amount_in_words"])
-	if data["declaration"]:
-		p = doc.add_paragraph()
-		p.add_run(f"{data['declaration_title']}: ").bold = True
-		p.add_run(data["declaration"])
 
-	footer = doc.add_table(rows=1, cols=2)
-	footer.style = "Table Grid"
-	footer.alignment = WD_TABLE_ALIGNMENT.CENTER
-	_set_table_widths(footer, (95, 95))
-	bank_lines = [
-		(_("Bank Name"), data["bank"]["bank_name"]),
-		(_("Branch"), data["bank"]["branch"]),
-		(_("Account Name"), data["bank"]["account_name"]),
-		(_("Account No."), data["bank"]["account_number"]),
-		(_("IFSC Code"), data["bank"]["ifsc"]),
-		(_("Swift Code"), data["bank"]["swift"]),
-	]
-	footer.cell(0, 0).text = str(_("Remittance Details"))
-	footer.cell(0, 0).paragraphs[0].runs[0].bold = True
-	_add_lines(footer.cell(0, 0), bank_lines, include_empty=True)
-	sig = footer.cell(0, 1)
-	sig.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-	sig.paragraphs[0].add_run(data["signature_context"]).bold = True
-	if data["signature_png"]:
-		p = sig.add_paragraph()
+	footer_tables = []
+	if _has_bank(data["bank"]):
+		bank_table = doc.add_table(rows=1, cols=1)
+		bank_table.style = "Table Grid"
+		bank_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+		_set_table_widths(bank_table, (190,))
+		bank_cell = bank_table.cell(0, 0)
+		bank_cell.text = str(_("Supplier Remittance Details"))
+		bank_cell.paragraphs[0].runs[0].bold = True
+		_add_lines(bank_cell, _bank_lines(data["bank"]), include_empty=False)
+		footer_tables.append(bank_table)
+
+	def add_signature_section(title, statement, signature_png, name, secondary, label):
+		signature_table = doc.add_table(rows=1, cols=1)
+		signature_table.style = "Table Grid"
+		signature_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+		_set_table_widths(signature_table, (190,))
+		cell = signature_table.cell(0, 0)
+		cell.paragraphs[0].add_run(title).bold = True
+		if statement:
+			cell.add_paragraph(statement)
+		p = cell.add_paragraph()
 		p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-		p.add_run().add_picture(BytesIO(data["signature_png"]), width=Mm(55))
-	else:
-		for _index in range(3):
-			sig.add_paragraph()
-	p = sig.add_paragraph(data["signatory_name"])
-	p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-	if data["signature_employee"]:
-		p = sig.add_paragraph(data["signature_employee"])
-		p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-	p = sig.add_paragraph(data["signature_label"])
-	p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-	for current_table in (header, table, footer):
+		p.add_run().add_picture(BytesIO(signature_png), width=Mm(55))
+		for value in (name, secondary, label):
+			if value:
+				p = cell.add_paragraph(value)
+				p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+		footer_tables.append(signature_table)
+
+	add_signature_section(
+		_("Volunteer reimbursement declaration"),
+		data["volunteer_declaration"],
+		data["volunteer_signature_png"],
+		data["volunteer_name"],
+		data["volunteer_employee"],
+		_("Volunteer Signature"),
+	)
+	if data["vendor_will_sign"]:
+		add_signature_section(
+			_("Vendor confirmation"),
+			data["vendor_declaration"],
+			data["vendor_signature_png"],
+			data["authorised_signatory"] or data["supplier"]["name"],
+			_("For {0}").format(data["supplier"]["name"]),
+			_("Authorised Signatory"),
+		)
+	for current_table in (header, table, *footer_tables):
 		for row in current_table.rows:
 			no_split = OxmlElement("w:cantSplit")
 			row._tr.get_or_add_trPr().append(no_split)
@@ -925,6 +1353,14 @@ def _set_table_widths(table, widths_mm):
 	for row in table.rows:
 		for cell, width in zip(row.cells, widths_mm, strict=True):
 			cell.width = Mm(width)
+
+
+def _set_cell_shading(cell, fill):
+	from docx.oxml import OxmlElement
+
+	shading = OxmlElement("w:shd")
+	shading.set("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fill", fill)
+	cell._tc.get_or_add_tcPr().append(shading)
 
 
 def _add_party_cell(cell, heading, party, invoice_type):

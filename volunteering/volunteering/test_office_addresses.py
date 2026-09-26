@@ -44,6 +44,22 @@ class UnitTestOfficeAddresses(UnitTestCase):
 			with self.subTest(change=change), self.assertRaises(frappe.ValidationError):
 				offices._normalise({**address_details(), **change})
 
+	def test_deployable_sevamrita_addresses_match_the_approved_list(self):
+		addresses = {row["address_title"]: row for row in offices.SEVAMRITA_OFFICE_ADDRESSES}
+		self.assertEqual(
+			set(addresses),
+			{
+				"Registered Office - Kandi",
+				"Talegaon Floriculture Park Office",
+				"Balewadi Office - Pune",
+				"Powai Office - Mumbai",
+			},
+		)
+		self.assertEqual(addresses["Registered Office - Kandi"]["pincode"], "502285")
+		self.assertEqual(addresses["Talegaon Floriculture Park Office"]["pincode"], "410507")
+		self.assertEqual(addresses["Balewadi Office - Pune"]["pincode"], "411045")
+		self.assertEqual(addresses["Powai Office - Mumbai"]["pincode"], "400076")
+
 
 class IntegrationTestOfficeAddresses(IntegrationTestCase):
 	@classmethod
@@ -95,6 +111,23 @@ class IntegrationTestOfficeAddresses(IntegrationTestCase):
 		doc.address_line1 = "Attempted direct edit"
 		with self.assertRaises(frappe.PermissionError):
 			doc.save(ignore_permissions=True)
+
+	def test_deployment_seed_is_idempotent_and_company_linked(self):
+		frappe.set_user("Administrator")
+		first = offices.ensure_sevamrita_office_addresses()
+		second = offices.ensure_sevamrita_office_addresses()
+		self.assertEqual(first, second)
+		self.assertEqual(len(first), 4)
+
+		rows = {
+			row.address_title: row
+			for row in offices._address_rows(offices.SEVAMRITA_COMPANY, include_disabled=True)
+			if row.address_title in {item["address_title"] for item in offices.SEVAMRITA_OFFICE_ADDRESSES}
+		}
+		self.assertEqual(len(rows), 4)
+		self.assertEqual(rows["Registered Office - Kandi"].is_primary_address, 1)
+		self.assertEqual(rows["Registered Office - Kandi"].address_line1, "301, Plot No 6, Kandi")
+		self.assertEqual(rows["Powai Office - Mumbai"].pincode, "400076")
 
 	def test_invoice_form_lists_addresses_and_server_replaces_forged_party_details(self):
 		frappe.set_user(self.employee_user)

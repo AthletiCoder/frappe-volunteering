@@ -3,7 +3,7 @@
 		<PageHeader
 			v-if="!embedded"
 			title="Prepare an invoice"
-			subtitle="Prepare GST or non-GST documents for supplier or volunteer signature."
+			subtitle="Prepare GST or non-GST documents with a volunteer reimbursement declaration."
 			eyebrow="Expenses"
 		>
 			<template #actions>
@@ -128,8 +128,8 @@
 						</option>
 					</select>
 					<span class="block text-xs text-muted mt-1"
-						>Addresses you use when generating invoices are saved privately for your
-						next invoice.</span
+						>Supplier addresses and any bank details used with them are saved privately
+						for your next invoice.</span
 					></label
 				>
 				<div class="form-grid">
@@ -177,6 +177,60 @@
 							maxlength="10"
 							class="field-input uppercase"
 							placeholder="ABCDE1234F"
+					/></label>
+				</div>
+			</section>
+
+			<section class="form-card">
+				<h2 class="form-title">Supplier bank details (optional)</h2>
+				<p class="form-hint">
+					Use the supplier’s account—not the employee reimbursement account. Leave all
+					fields blank when remittance details are not needed; the invoice will omit this
+					section completely.
+				</p>
+				<div class="form-grid">
+					<label class="field-label"
+						>Account holder name<input
+							v-model.trim="form.bank.account_name"
+							maxlength="160"
+							class="field-input"
+					/></label>
+					<label class="field-label"
+						>Bank name<input
+							v-model.trim="form.bank.bank_name"
+							maxlength="140"
+							class="field-input"
+					/></label>
+					<label class="field-label"
+						>Account number<input
+							v-model.trim="form.bank.account_number"
+							maxlength="50"
+							inputmode="numeric"
+							class="field-input"
+					/></label>
+					<label class="field-label"
+						>IFSC<input
+							v-model.trim="form.bank.ifsc"
+							maxlength="20"
+							class="field-input uppercase"
+					/></label>
+					<label class="field-label"
+						>Branch<input
+							v-model.trim="form.bank.branch"
+							maxlength="140"
+							class="field-input"
+					/></label>
+					<label class="field-label"
+						>SWIFT code<input
+							v-model.trim="form.bank.swift"
+							maxlength="20"
+							class="field-input uppercase"
+					/></label>
+					<label class="field-label sm:col-span-2"
+						>UPI ID<input
+							v-model.trim="form.bank.upi_id"
+							maxlength="100"
+							class="field-input"
 					/></label>
 				</div>
 			</section>
@@ -330,69 +384,13 @@
 			</section>
 
 			<section class="form-card">
-				<h2 class="form-title">Approved reimbursement remittance details</h2>
+				<h2 class="form-title">Volunteer declaration and signature</h2>
 				<p class="form-hint">
-					These are your employee reimbursement details—not the supplier's bank account.
-					<template v-if="embedded">
-						The full approved account number is included in the signed PDF attached to
-						your claim.
-					</template>
-					<template v-else>
-						The full approved account number is included in the downloaded PDF and Word
-						document.
-					</template>
-					Bank details cannot be changed here.
+					I confirm that I paid the amount shown above and request reimbursement to my
+					bank account.
 				</p>
-				<div v-if="approvedBank" class="grid sm:grid-cols-2 gap-3 text-sm">
-					<p>
-						<span class="block text-muted">Account holder</span
-						><strong>{{ approvedBank.account_name }}</strong>
-					</p>
-					<p>
-						<span class="block text-muted">Bank</span
-						><strong>{{ approvedBank.bank_name }}</strong>
-					</p>
-					<p>
-						<span class="block text-muted">Account number</span
-						><strong>{{ approvedBank.account_number_masked }}</strong>
-					</p>
-					<p>
-						<span class="block text-muted">IFSC</span
-						><strong>{{ approvedBank.ifsc }}</strong>
-					</p>
-				</div>
-				<p v-else class="rounded-xl bg-warn-soft p-3 text-sm">
-					Submit your bank details and get Accounts Manager approval before generating an
-					invoice.
-				</p>
-				<RouterLink
-					to="/bank-account"
-					class="inline-block mt-3 text-sm font-semibold text-accent"
-					>Manage my reimbursement bank account</RouterLink
-				>
-			</section>
-
-			<section class="form-card">
-				<h2 class="form-title">Signature</h2>
 				<div class="form-grid">
 					<label class="field-label"
-						>Who will sign? *<select
-							aria-label="Who will sign? *"
-							v-model="form.signer_type"
-							required
-							class="field-input"
-						>
-							<option value="SUPPLIER">Supplier / authorised representative</option>
-							<option value="VOLUNTEER">Volunteer (me)</option>
-						</select></label
-					>
-					<label v-if="!isVolunteer" class="field-label"
-						>Supplier signatory name<input
-							v-model.trim="form.authorised_signatory"
-							maxlength="120"
-							class="field-input"
-					/></label>
-					<label v-else class="field-label"
 						>Volunteer name<input
 							:value="form.volunteer.name"
 							readonly
@@ -402,39 +400,77 @@
 				<div class="mt-4 rounded-xl border border-line bg-bg p-3">
 					<div class="flex flex-wrap items-center justify-between gap-3">
 						<div>
-							<p class="font-medium text-ink">On-screen signature</p>
+							<p class="font-medium text-ink">Volunteer signature *</p>
 							<p class="text-xs text-muted">
-								<template v-if="embedded">
-									Required. Sign on this device; the signed invoice will be
-									attached privately to the expense claim.
-								</template>
-								<template v-else>
-									Optional. The selected supplier representative or volunteer can
-									sign on this device, and the signature will be placed in the
-									downloaded document.
-								</template>
+								Required for every invoice. Reuse your saved signature or sign freshly.
+							</p>
+							<p v-if="savedVolunteerSignature" class="text-xs text-ok mt-1">
+								A saved signature is available for reuse.
 							</p>
 						</div>
-						<div class="flex gap-2">
-							<button type="button" class="btn-secondary" @click="openSignature">
-								{{ form.signature_data ? "Replace signature" : "Sign on screen" }}
+						<div class="flex flex-wrap gap-2">
+							<button
+								v-if="savedVolunteerSignature"
+								type="button"
+								class="btn-secondary"
+								@click="useSavedVolunteerSignature"
+							>
+								Use saved signature
 							</button>
 							<button
-								v-if="form.signature_data"
 								type="button"
-								class="btn-secondary text-bad"
-								@click="clearSavedSignature"
+								class="btn-secondary"
+								@click="openSignature('volunteer')"
 							>
-								Clear
+								Sign freshly
 							</button>
 						</div>
 					</div>
 					<img
-						v-if="form.signature_data"
-						:src="form.signature_data"
-						alt="Captured signature preview"
+						v-if="form.volunteer_signature_data"
+						:src="form.volunteer_signature_data"
+						alt="Volunteer signature preview"
 						class="signature-preview mt-3"
 					/>
+					<p v-if="volunteerSignatureSource" class="text-xs text-muted mt-2">
+						{{ volunteerSignatureSource === "saved" ? "Using saved signature" : "Using fresh signature" }}
+					</p>
+				</div>
+
+				<div class="mt-4 rounded-xl border border-line bg-bg p-3">
+					<label class="flex items-start gap-3 text-sm font-medium text-ink">
+						<input v-model="form.vendor_will_sign" type="checkbox" class="mt-1" />
+						<span>
+							Vendor will also sign this invoice
+							<span class="block text-xs font-normal text-muted"
+								>Optional. If left unchecked, no vendor declaration or signature block
+								will appear in the invoice.</span
+							>
+						</span>
+					</label>
+					<div v-if="form.vendor_will_sign" class="mt-4 space-y-3">
+						<label class="field-label"
+							>Vendor signatory name (optional)<input
+								v-model.trim="form.authorised_signatory"
+								maxlength="120"
+								class="field-input"
+						/></label>
+						<div class="flex flex-wrap gap-2">
+							<button
+								type="button"
+								class="btn-secondary"
+								@click="openSignature('vendor')"
+							>
+								{{ form.vendor_signature_data ? "Sign freshly again" : "Vendor sign on screen" }}
+							</button>
+						</div>
+						<img
+							v-if="form.vendor_signature_data"
+							:src="form.vendor_signature_data"
+							alt="Vendor signature preview"
+							class="signature-preview"
+						/>
+					</div>
 				</div>
 			</section>
 
@@ -476,7 +512,7 @@
 					name="output_format"
 					value="pdf"
 					class="btn-primary px-5 py-2.5"
-					:disabled="generating || !approvedBank || !officeAddresses.length"
+					:disabled="generating || !officeAddresses.length"
 				>
 					{{ generating === "pdf" ? "Generating PDF…" : "Generate PDF" }}
 				</button>
@@ -485,7 +521,7 @@
 					name="output_format"
 					value="docx"
 					class="btn-secondary px-5 py-2.5"
-					:disabled="generating || !approvedBank || !officeAddresses.length"
+					:disabled="generating || !officeAddresses.length"
 				>
 					{{ generating === "docx" ? "Generating Word…" : "Generate Word" }}
 				</button>
@@ -499,7 +535,9 @@
 			aria-labelledby="signature-dialog-title"
 		>
 			<div class="signature-dialog">
-				<h2 id="signature-dialog-title" class="form-title">Sign on screen</h2>
+				<h2 id="signature-dialog-title" class="form-title">
+					{{ activeSignatureKind === "vendor" ? "Vendor sign on screen" : "Volunteer sign on screen" }}
+				</h2>
 				<p class="form-hint">
 					Use a finger, stylus or mouse. The white panel is the signature area.
 				</p>
@@ -551,6 +589,15 @@ const invoiceTypes = [
 	{ value: "GST", label: "GST tax invoice", hint: "For a GST-registered supplier" },
 ];
 const blankParty = () => ({ name: "", address: "", state: "", pin_code: "", gstin: "", pan: "" });
+const blankBank = () => ({
+	account_name: "",
+	bank_name: "",
+	account_number: "",
+	ifsc: "",
+	branch: "",
+	swift: "",
+	upi_id: "",
+});
 let itemKey = 1;
 const blankItem = () => ({
 	key: itemKey++,
@@ -562,7 +609,6 @@ const blankItem = () => ({
 });
 const form = reactive({
 	invoice_type: "NON_GST",
-	signer_type: "SUPPLIER",
 	volunteer: { name: "", employee: "" },
 	invoice_date: "",
 	buyer_order_number: "",
@@ -571,14 +617,17 @@ const form = reactive({
 	dispatch_document_number: "",
 	delivery_note_date: "",
 	supplier: blankParty(),
+	bank: blankBank(),
 	consignee_address_name: "",
 	consignee: blankParty(),
 	items: [blankItem()],
 	transportation_charges: 0,
 	other_charges: 0,
 	gst_amount: 0,
+	vendor_will_sign: false,
 	authorised_signatory: "",
-	signature_data: "",
+	volunteer_signature_data: "",
+	vendor_signature_data: "",
 });
 const loading = ref(true);
 const generating = ref(null);
@@ -586,18 +635,18 @@ const generationReference = ref(null);
 const generatedSnapshot = ref("");
 const error = ref("");
 const result = ref(null);
-const approvedBank = ref(null);
 const officeAddresses = ref([]);
 const vendorAddresses = ref([]);
 const selectedVendorAddress = ref("");
+const savedVolunteerSignature = ref("");
+const volunteerSignatureSource = ref("");
 const signatureOpen = ref(false);
 const signatureCanvas = ref(null);
 const signatureError = ref("");
+const activeSignatureKind = ref("volunteer");
 let signing = false;
 let signatureHasInk = false;
-let signedInvoiceSnapshot = "";
 const isGst = computed(() => form.invoice_type === "GST");
-const isVolunteer = computed(() => form.signer_type === "VOLUNTEER");
 const itemsTotal = computed(() => form.items.reduce((sum, item) => sum + itemAmount(item), 0));
 const taxableTotal = computed(
 	() =>
@@ -636,12 +685,16 @@ function applyOfficeAddress() {
 function applyVendorAddress() {
 	if (!selectedVendorAddress.value) {
 		Object.assign(form.supplier, blankParty());
+		Object.assign(form.bank, blankBank());
 		return;
 	}
 	const selected = vendorAddresses.value.find(
 		(vendor) => vendor.name === selectedVendorAddress.value,
 	);
-	if (selected) Object.assign(form.supplier, blankParty(), selected.party);
+	if (selected) {
+		Object.assign(form.supplier, blankParty(), selected.party);
+		Object.assign(form.bank, blankBank(), selected.bank || {});
+	}
 }
 
 function rememberGeneratedVendor(vendor) {
@@ -656,7 +709,8 @@ function canvasPoint(event) {
 	const rect = signatureCanvas.value.getBoundingClientRect();
 	return { x: event.clientX - rect.left, y: event.clientY - rect.top };
 }
-async function openSignature() {
+async function openSignature(kind) {
+	activeSignatureKind.value = kind === "vendor" ? "vendor" : "volunteer";
 	signatureOpen.value = true;
 	signatureError.value = "";
 	await nextTick();
@@ -711,23 +765,23 @@ function saveSignature() {
 		signatureError.value = "Draw a signature before using it.";
 		return;
 	}
-	form.signature_data = signatureCanvas.value.toDataURL("image/png");
-	signedInvoiceSnapshot = invoiceContentSnapshot();
+	const value = signatureCanvas.value.toDataURL("image/png");
+	if (activeSignatureKind.value === "vendor") {
+		form.vendor_signature_data = value;
+	} else {
+		form.volunteer_signature_data = value;
+		volunteerSignatureSource.value = "fresh";
+	}
 	signatureOpen.value = false;
 }
 function closeSignature() {
 	signatureOpen.value = false;
 	signing = false;
 }
-function clearSavedSignature() {
-	form.signature_data = "";
-	signedInvoiceSnapshot = "";
-}
-
-function invoiceContentSnapshot() {
-	const values = JSON.parse(JSON.stringify(form));
-	delete values.signature_data;
-	return JSON.stringify(values);
+function useSavedVolunteerSignature() {
+	if (!savedVolunteerSignature.value) return;
+	form.volunteer_signature_data = savedVolunteerSignature.value;
+	volunteerSignatureSource.value = "saved";
 }
 
 onMounted(async () => {
@@ -735,9 +789,9 @@ onMounted(async () => {
 		const defaults = await call(
 			"volunteering.volunteering.invoice_generator.get_invoice_generator_defaults",
 		);
-		approvedBank.value = defaults.remittance_bank || null;
 		officeAddresses.value = defaults.office_addresses || [];
 		vendorAddresses.value = defaults.vendor_addresses || [];
+		savedVolunteerSignature.value = defaults.saved_volunteer_signature || "";
 		Object.assign(form.volunteer, defaults.volunteer || {});
 		form.invoice_date = defaults.invoice_date || "";
 		form.consignee_address_name = defaults.default_office_address || "";
@@ -759,20 +813,11 @@ watch(
 );
 
 watch(
-	() => form.signer_type,
-	() => clearSavedSignature(),
-);
-
-watch(
-	() => invoiceContentSnapshot(),
-	(snapshot) => {
-		if (
-			props.embedded &&
-			form.signature_data &&
-			signedInvoiceSnapshot &&
-			snapshot !== signedInvoiceSnapshot
-		) {
-			clearSavedSignature();
+	() => form.vendor_will_sign,
+	(enabled) => {
+		if (!enabled) {
+			form.authorised_signatory = "";
+			form.vendor_signature_data = "";
 		}
 	},
 );
@@ -787,16 +832,14 @@ function applySeed(seed) {
 
 function getSubmissionPayload() {
 	if (loading.value) throw new Error("Invoice details are still loading.");
-	if (!approvedBank.value) {
-		throw new Error(
-			"An Accounts Manager must approve your reimbursement bank account before you can generate an invoice.",
-		);
-	}
 	if (!officeAddresses.value.length) {
 		throw new Error("A Sevamrita office address is required before submitting this invoice.");
 	}
-	if (!form.signature_data) {
-		throw new Error("Sign the generated invoice on screen before submitting it.");
+	if (!form.volunteer_signature_data) {
+		throw new Error("Add the volunteer signature before submitting this invoice.");
+	}
+	if (form.vendor_will_sign && !form.vendor_signature_data) {
+		throw new Error("Ask the vendor to sign on screen, or turn off vendor signing.");
 	}
 	return JSON.parse(JSON.stringify(form));
 }
@@ -811,6 +854,7 @@ async function generate(event) {
 	error.value = "";
 	generating.value = outputFormat;
 	try {
+		getSubmissionPayload();
 		const generated = await call(
 			"volunteering.volunteering.invoice_generator.generate_invoice_documents",
 			{ payload: form, output_format: outputFormat, generation_reference: reference },
@@ -821,6 +865,8 @@ async function generate(event) {
 				: generated;
 		generationReference.value = generated.generation_reference;
 		generatedSnapshot.value = snapshot;
+		savedVolunteerSignature.value = form.volunteer_signature_data;
+		volunteerSignatureSource.value = "saved";
 		rememberGeneratedVendor(generated.vendor_address);
 		download(generated[outputFormat]);
 		window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });

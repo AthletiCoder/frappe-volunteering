@@ -86,7 +86,10 @@ class IntegrationTestProjectAccountMapping(IntegrationTestCase):
 		return save_account_mapping(
 			self.project,
 			workspace["modified"],
-			[{"budget_key": row["budget_key"], "expense_account": self.account} for row in workspace["rows"]],
+			[
+				{"budget_key": row["budget_key"], "expense_accounts": [self.account]}
+				for row in workspace["rows"]
+			],
 		)
 
 	def _claim(self, amount=125):
@@ -107,12 +110,19 @@ class IntegrationTestProjectAccountMapping(IntegrationTestCase):
 			}
 		)
 
-	def test_project_approves_without_accounts_and_employee_choices_wait(self):
+	def test_project_approves_without_accounts_and_employee_choices_remain_available(self):
 		doc = frappe.get_doc("Project", self.project)
 		self.assertTrue(all(not row.expense_account for row in doc.account_budgets))
-		self.assertEqual(employee_options(doc), [])
-		with self.assertRaisesRegex(frappe.ValidationError, "map all active"):
-			assign_and_validate_project_expense_accounts(self._claim())
+		self.assertEqual(
+			[row["label"] for row in employee_options(doc)],
+			["Travel", "Materials", "Others"],
+		)
+		claim = self._claim()
+		assign_and_validate_project_expense_accounts(claim)
+		self.assertEqual(
+			frappe.db.get_value("Account", claim.expenses[0].default_account, "account_name"),
+			"Unclassified Employee Expenses",
+		)
 
 	def test_only_accounts_manager_can_access_mapping(self):
 		for user in (self.proposer, self.manager, self.accounts_user, "Guest"):
@@ -169,7 +179,10 @@ class IntegrationTestProjectAccountMapping(IntegrationTestCase):
 	def test_mapping_rejects_budget_injection_incomplete_and_stale_payloads(self):
 		frappe.set_user(self.accounts)
 		project = get_mapping_workspace(self.project)["project"]
-		rows = [{"budget_key": row["budget_key"], "expense_account": self.account} for row in project["rows"]]
+		rows = [
+			{"budget_key": row["budget_key"], "expense_accounts": [self.account]}
+			for row in project["rows"]
+		]
 		with self.assertRaises(frappe.TimestampMismatchError):
 			save_account_mapping(self.project, "stale", rows)
 		with self.assertRaises(frappe.ValidationError):
@@ -188,7 +201,10 @@ class IntegrationTestProjectAccountMapping(IntegrationTestCase):
 			save_account_mapping(
 				self.project,
 				project["modified"],
-				[{"budget_key": row["budget_key"], "expense_account": invalid} for row in project["rows"]],
+				[
+					{"budget_key": row["budget_key"], "expense_accounts": [invalid]}
+					for row in project["rows"]
+				],
 			)
 		doc = frappe.get_doc("Project", self.project)
 		doc.account_budgets[0].expense_account = self.account
@@ -210,7 +226,7 @@ class IntegrationTestProjectAccountMapping(IntegrationTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			save_proposal(data, project=self.project, reason="Not allowed")
 
-	def test_budget_revision_retains_mapping_but_new_label_requires_mapping(self):
+	def test_budget_revision_retains_mapping_and_new_unmapped_label_is_usable(self):
 		self._map()
 		frappe.set_user(self.proposer)
 		rows = get_project(self.project)["account_budgets"]
@@ -229,19 +245,22 @@ class IntegrationTestProjectAccountMapping(IntegrationTestCase):
 		self.assertEqual(doc.account_budgets[0].expense_account, self.account)
 		meals = next(row for row in doc.account_budgets if row.employee_label == "Meals")
 		self.assertFalse(meals.expense_account)
-		self.assertEqual(employee_options(doc), [])
+		self.assertEqual(
+			{row["label"] for row in employee_options(doc)},
+			{"Travel", "Materials", "Meals", "Others"},
+		)
 
-	def test_used_mapping_is_locked(self):
+	def test_used_mapping_remains_an_editable_suggestion(self):
 		self._map()
 		project = get_mapping_workspace(self.project)["project"]
 		rows = [
-			{"budget_key": row["budget_key"], "expense_account": row["expense_account"]}
+			{"budget_key": row["budget_key"], "expense_accounts": row["expense_accounts"]}
 			for row in project["rows"]
 		]
-		rows[0]["expense_account"] = ""
+		rows[0]["expense_accounts"] = []
 		with patch("volunteering.volunteering.project_account_mapping.label_has_claims", return_value=True):
-			with self.assertRaisesRegex(frappe.ValidationError, "already used"):
-				save_account_mapping(self.project, project["modified"], rows)
+			result = save_account_mapping(self.project, project["modified"], rows)
+		self.assertFalse(result["rows"][0]["expense_accounts"])
 
 	def test_mapping_requires_an_approved_project_and_closed_projects_are_locked(self):
 		frappe.set_user(self.accounts)

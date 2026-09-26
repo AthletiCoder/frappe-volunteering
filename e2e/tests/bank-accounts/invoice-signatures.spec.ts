@@ -1,8 +1,42 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { loginViaAPI } from "../../helpers/auth";
 import { PERSONAS } from "../../helpers/personas";
 
-test("supplier and volunteer signing generate distinct GST/non-GST documents", async ({
+async function drawSignature(page: Page, buttonName: string) {
+  await page.getByRole("button", { name: buttonName, exact: true }).click();
+  const canvas = page.locator("canvas.signature-canvas");
+  await expect(canvas).toBeVisible();
+  const box = await canvas.boundingBox();
+  expect(box).toBeTruthy();
+  await page.mouse.move(box!.x + 60, box!.y + 120);
+  await page.mouse.down();
+  await page.mouse.move(box!.x + 180, box!.y + 55, { steps: 8 });
+  await page.mouse.move(box!.x + 280, box!.y + 135, { steps: 8 });
+  await page.mouse.move(box!.x + 430, box!.y + 50, { steps: 8 });
+  await page.mouse.up();
+  await page
+    .getByRole("button", { name: "Use this signature", exact: true })
+    .click();
+}
+
+async function fillRequiredInvoiceFields(page: Page) {
+  const supplier = page.locator("section").filter({
+    has: page.getByRole("heading", { name: "Supplier", exact: true }),
+  });
+  await supplier
+    .getByLabel("Legal name *", { exact: true })
+    .fill("Demo Kitchen Supplies");
+  await supplier
+    .getByLabel("Address *", { exact: true })
+    .fill("12 Demo Market Road, Mumbai");
+  await supplier.getByLabel("State *", { exact: true }).fill("Maharashtra");
+  await page
+    .getByLabel("Description *", { exact: true })
+    .fill("Local test utensils");
+  await page.getByLabel("Rate (INR) *", { exact: true }).fill("500");
+}
+
+test("volunteer signature is mandatory and reusable while vendor signature is optional", async ({
   page,
   baseURL,
 }, testInfo) => {
@@ -12,9 +46,7 @@ test("supplier and volunteer signing generate distinct GST/non-GST documents", a
       new URL(baseURL).hostname,
     )
   ) {
-    throw new Error(
-      "Invoice generation demo tests may only write to localhost.",
-    );
+    throw new Error("Invoice generation demo tests may only write to localhost.");
   }
   await loginViaAPI(
     page.request,
@@ -27,155 +59,77 @@ test("supplier and volunteer signing generate distinct GST/non-GST documents", a
   await page.goto("/volunteering/invoice-generator");
   const defaults = (await (await defaultsPromise).json()).message;
   expect(defaults.volunteer.employee).toBe(defaults.employee);
-  expect(defaults.has_approved_bank).toBe(true);
+
+  await fillRequiredInvoiceFields(page);
+
   await expect(
-    page.getByText("Supplier confirmation is mandatory", { exact: true }),
-  ).toHaveCount(0);
-  const supplier = page.locator("section").filter({
-    has: page.getByRole("heading", { name: "Supplier", exact: true }),
-  });
-  await supplier
-    .getByLabel("Legal name *", { exact: true })
-    .fill("Demo Kitchen Supplies");
-  await supplier
-    .getByLabel("Address *", { exact: true })
-    .fill("12 Demo Market Road, Mumbai");
-  await supplier.getByLabel("State *", { exact: true }).fill("Maharashtra");
-  const office = page.locator("section").filter({
-    has: page.getByRole("heading", { name: "Sevamrita office" }),
-  });
-  await expect(
-    office.getByLabel("Office address *", { exact: true }),
-  ).toHaveValue(defaults.default_office_address);
-  await expect(office.locator("address")).toContainText(
-    defaults.consignee.address,
-  );
-  await page
-    .getByLabel("Description *", { exact: true })
-    .fill("Local test utensils");
-  // Leave HSN/SAC blank and generate both formats for both signer/invoice choices.
-  const hsn = page.getByLabel("HSN/SAC (optional)", { exact: true });
-  await expect(hsn).not.toHaveAttribute("required", "");
-  await expect(hsn).toHaveValue("");
-  await expect(
-    page.getByText("I will obtain supplier verification and signature.", {
+    page.getByRole("heading", {
+      name: "Volunteer declaration and signature",
       exact: true,
     }),
-  ).toHaveCount(0);
-  await expect(
-    page.getByText("I will verify the details and sign as the volunteer.", {
-      exact: true,
-    }),
-  ).toHaveCount(0);
+  ).toBeVisible();
   await expect(
     page.getByText(
-      "Generating a file does not sign it or approve reimbursement.",
+      "I confirm that I paid the amount shown above and request reimbursement to my bank account.",
       { exact: true },
     ),
-  ).toHaveCount(0);
-  await page.getByLabel("Rate (INR) *", { exact: true }).fill("500");
+  ).toBeVisible();
+  await expect(page.getByLabel("Vendor will also sign this invoice")).not.toBeChecked();
+  await expect(page.getByAltText("Vendor signature preview")).toHaveCount(0);
 
-  const sectionOrder = await page
-    .locator("section.form-card h2.form-title")
-    .allTextContents();
-  expect(sectionOrder.indexOf("Signature")).toBeGreaterThan(
-    sectionOrder.indexOf("Items"),
-  );
-  expect(sectionOrder.indexOf("Signature")).toBeGreaterThan(
-    sectionOrder.indexOf("Approved reimbursement remittance details"),
-  );
+  await page.getByRole("button", { name: "Generate PDF", exact: true }).click();
+  await expect(
+    page.getByText("Add the volunteer signature before submitting this invoice.", {
+      exact: true,
+    }),
+  ).toBeVisible();
 
-  const numbers = new Set<string>();
-  for (const signer of ["SUPPLIER", "VOLUNTEER"]) {
-    await page
-      .getByLabel("Who will sign? *", { exact: true })
-      .selectOption(signer);
-    await page
-      .getByRole("button", { name: "Sign on screen", exact: true })
-      .click();
-    const signatureCanvas = page.locator("canvas.signature-canvas");
-    await expect(signatureCanvas).toBeVisible();
-    const signatureBox = await signatureCanvas.boundingBox();
-    expect(signatureBox).toBeTruthy();
-    await page.mouse.move(signatureBox!.x + 60, signatureBox!.y + 120);
-    await page.mouse.down();
-    await page.mouse.move(signatureBox!.x + 180, signatureBox!.y + 55, {
-      steps: 8,
-    });
-    await page.mouse.move(signatureBox!.x + 280, signatureBox!.y + 135, {
-      steps: 8,
-    });
-    await page.mouse.move(signatureBox!.x + 430, signatureBox!.y + 50, {
-      steps: 8,
-    });
-    await page.mouse.up();
-    await page
-      .getByRole("button", { name: "Use this signature", exact: true })
-      .click();
-    await expect(page.getByAltText("Captured signature preview")).toBeVisible();
-    for (const type of ["NON_GST", "GST"]) {
-      await page
-        .getByRole("button", {
-          name: type === "GST" ? /^GST tax invoice/ : /^Non-GST invoice/,
-        })
-        .click();
-      if (type === "GST") {
-        await supplier
-          .getByLabel("GSTIN *", { exact: true })
-          .fill("27ABCDE1234F1Z5");
-        await page.getByLabel("GST amount", { exact: true }).fill("90");
-      }
-      const declaration = page.getByRole("heading", {
-        name: "Non-GST declaration",
-        exact: true,
-      });
-      await expect(declaration).toHaveCount(0);
-      if (signer === "VOLUNTEER") {
-        await expect(
-          page.getByLabel("Volunteer name", { exact: true }),
-        ).toHaveValue(defaults.volunteer.name);
-        await expect(
-          page.getByLabel("Volunteer name", { exact: true }),
-        ).toHaveAttribute("readonly", "");
-        await expect(
-          page.getByLabel("Supplier signatory name", { exact: true }),
-        ).toHaveCount(0);
-      } else {
-        await page
-          .getByLabel("Supplier signatory name", { exact: true })
-          .fill("Asha Vendor");
-      }
-      let number: string | undefined;
-      for (const [button, extension] of [
-        ["Generate PDF", "pdf"],
-        ["Generate Word", "docx"],
-      ]) {
-        const responsePromise = page.waitForResponse((response) =>
-          response.url().includes("generate_invoice_documents"),
-        );
-        const downloadPromise = page.waitForEvent("download");
-        await page.getByRole("button", { name: button, exact: true }).click();
-        const response = await responsePromise;
-        expect(response.status()).toBe(200);
-        const generated = (await response.json()).message;
-        expect(generated.signer_type).toBe(signer);
-        const payload = response.request().postDataJSON().payload;
-        expect(payload.items[0].hsn_sac).toBe("");
-        expect(payload.signature_data).toMatch(/^data:image\/png;base64,/);
-        expect(payload).not.toHaveProperty("signature_confirmation_required");
-        expect(payload).not.toHaveProperty("supplier_confirmation_required");
-        if (number) expect(generated.invoice_number).toBe(number);
-        else {
-          expect(numbers.has(generated.invoice_number)).toBe(false);
-          numbers.add(generated.invoice_number);
-          number = generated.invoice_number;
-        }
-        const download = await downloadPromise;
-        await download.saveAs(
-          testInfo.outputPath(`${signer}-${type}.${extension}`),
-        );
-      }
-    }
-  }
-  expect(numbers.size).toBe(4);
+  await drawSignature(page, "Sign freshly");
+  await expect(page.getByAltText("Volunteer signature preview")).toBeVisible();
+
+  const firstResponse = page.waitForResponse((response) =>
+    response.url().includes("generate_invoice_documents"),
+  );
+  const firstDownload = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Generate PDF", exact: true }).click();
+  const firstHttpResponse = await firstResponse;
+  const first = (await firstHttpResponse.json()).message;
+  const firstPayload = firstHttpResponse.request().postDataJSON().payload;
+  expect(first.vendor_signed).toBe(false);
+  expect(firstPayload.volunteer_signature_data).toMatch(/^data:image\/png;base64,/);
+  expect(firstPayload.vendor_will_sign).toBe(false);
+  expect(firstPayload.vendor_signature_data).toBe("");
+  await (await firstDownload).saveAs(testInfo.outputPath("volunteer-only.pdf"));
+
+  await page.reload();
+  await expect(
+    page.getByText("A saved signature is available for reuse.", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Use saved signature", exact: true })
+    .click();
+  await expect(page.getByText("Using saved signature", { exact: true })).toBeVisible();
+  await fillRequiredInvoiceFields(page);
+
+  await page.getByLabel("Vendor will also sign this invoice").check();
+  await page
+    .getByLabel("Vendor signatory name (optional)", { exact: true })
+    .fill("Asha Vendor");
+  await drawSignature(page, "Vendor sign on screen");
+  await expect(page.getByAltText("Vendor signature preview")).toBeVisible();
+
+  const secondResponse = page.waitForResponse((response) =>
+    response.url().includes("generate_invoice_documents"),
+  );
+  const secondDownload = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Generate Word", exact: true }).click();
+  const secondHttpResponse = await secondResponse;
+  const second = (await secondHttpResponse.json()).message;
+  const secondPayload = secondHttpResponse.request().postDataJSON().payload;
+  expect(second.vendor_signed).toBe(true);
+  expect(secondPayload.volunteer_signature_data).toMatch(/^data:image\/png;base64,/);
+  expect(secondPayload.vendor_signature_data).toMatch(/^data:image\/png;base64,/);
+  await (await secondDownload).saveAs(
+    testInfo.outputPath("volunteer-and-vendor.docx"),
+  );
 });

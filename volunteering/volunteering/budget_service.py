@@ -79,7 +79,7 @@ def get_account_allocated_budget(project, account):
 
 def get_document_label_amounts(doc):
 	amounts = defaultdict(float)
-	approved = doc.get("workflow_state") == "Approved"
+	approved = doc.get("workflow_state") in ("Pending Accounts Classification", "Approved")
 	for row in doc.get("expenses") or []:
 		amounts[row.get("project_expense_account") or UNASSIGNED_ACCOUNT] += _expense_claim_row_amount(
 			row, approved
@@ -146,7 +146,13 @@ def get_document_account_amounts(doc):
 	"""Return base-currency committed amount by trusted Expense Account."""
 	amounts = defaultdict(float)
 	if doc.doctype == "Expense Claim":
-		approved = doc.get("workflow_state") == "Approved"
+		approved = doc.get("workflow_state") in ("Pending Accounts Classification", "Approved")
+		if doc.get("account_allocations"):
+			for allocation in doc.get("account_allocations"):
+				amounts[allocation.expense_account or UNASSIGNED_ACCOUNT] += flt(
+					allocation.allocated_amount
+				) * flt(doc.get("exchange_rate") or 1)
+			return dict(amounts)
 		for row in doc.get("expenses") or []:
 			account = row.get("default_account") or UNASSIGNED_ACCOUNT
 			amounts[account] += _expense_claim_row_amount(row, approved=approved)
@@ -250,10 +256,11 @@ def _overspend_pct(allocated, proposed):
 
 def _is_approving(doc):
 	"""True when this save is transitioning into Approved."""
-	if doc.get("workflow_state") != "Approved":
+	target = "Pending Accounts Classification" if doc.doctype == "Expense Claim" else "Approved"
+	if doc.get("workflow_state") != target:
 		return False
 	previous = doc.get_doc_before_save()
-	return not previous or previous.get("workflow_state") != "Approved"
+	return not previous or previous.get("workflow_state") != target
 
 
 def _can_override_budget(settings=None):
@@ -321,6 +328,12 @@ def _budget_violations(doc, project_values, exclude):
 			else:
 				continue
 			violations.append(frappe._dict(mode=account_control, message=message))
+	# Expense Claim break-up budgets are enforced by their employee-facing label.
+	# Project account mappings are suggestions, not allocations, and may contain
+	# several accounts. Final claim allocations are therefore not compared with a
+	# fictitious per-account project ceiling.
+	if doc.doctype == "Expense Claim":
+		return violations
 	allocations = _account_allocations(doc.project)
 	existing_consumption = get_project_account_consumption(doc.project, exclude=exclude)
 	for account, document_amount in get_document_account_amounts(doc).items():

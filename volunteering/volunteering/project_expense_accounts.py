@@ -35,6 +35,30 @@ def _account_rows(project: str, *, active_only: bool = False) -> list[frappe._di
 	)
 
 
+def suggested_accounts(project: str, budget_key: str) -> list[str]:
+	"""Return optional Accounts-maintained suggestions for one approved label."""
+	if frappe.db.exists("DocType", "Project Expense Account Mapping"):
+		accounts = frappe.get_all(
+			"Project Expense Account Mapping",
+			filters={
+				"parent": project,
+				"parenttype": "Project",
+				"parentfield": "expense_account_mappings",
+				"budget_key": budget_key,
+			},
+			pluck="expense_account",
+			order_by="idx asc",
+		)
+		if accounts:
+			return list(dict.fromkeys(filter(None, accounts)))
+	legacy = frappe.db.get_value(
+		"Project Account Budget",
+		{"parent": project, "parenttype": "Project", "budget_key": budget_key},
+		"expense_account",
+	)
+	return [legacy] if legacy else []
+
+
 def _account_details(account: str | None) -> frappe._dict:
 	if not account:
 		return frappe._dict()
@@ -75,11 +99,13 @@ def _selected_account(row, *, permit_legacy_fallback: bool) -> str:
 
 
 def assign_and_validate_project_expense_accounts(doc) -> None:
-	"""Resolve the safe employee selector into HRMS' hidden ledger field.
+	"""Resolve the safe employee expense-label selector for an HRMS claim.
 
 	The selector is an Autocomplete/Data field, not a Link, so an employee never
 	needs Account DocPerm. Every value is checked against the selected Project's
-	active allow-list before it is copied to ``default_account`` for GL posting.
+	approved labels. A suggested or temporary account is copied provisionally to
+	``default_account`` for draft validation; Accounts replaces it with the final
+	allocation before the claim is submitted and posted.
 	"""
 	if doc.doctype != "Expense Claim":
 		return
@@ -88,10 +114,6 @@ def assign_and_validate_project_expense_accounts(doc) -> None:
 		frappe.throw(_("Select a Project before choosing an expense category."))
 	if doc.get("company") and project.company and doc.company != project.company:
 		frappe.throw(_("Project {0} belongs to a different Company.").format(doc.project))
-	# Serialize classification against Accounts Manager remapping, so a claim
-	# cannot slip in with a ledger value that was changed concurrently.
-	frappe.db.sql("SELECT name FROM `tabProject` WHERE name=%s FOR UPDATE", doc.project)
-
 	all_rows = _account_rows(doc.project)
 	allowed = {row.budget_key: row for row in all_rows if cint(row.is_active)}
 	if not allowed:
@@ -104,12 +126,6 @@ def assign_and_validate_project_expense_accounts(doc) -> None:
 
 	previous = doc.get_doc_before_save()
 	previous_rows = {row.name: row for row in (previous.get("expenses") or [])} if previous else {}
-	if any(not row.expense_account for row in allowed.values()) and (
-		not previous or previous.get("workflow_state") in EMPLOYEE_EDITABLE_STATES
-	):
-		frappe.throw(
-			_("An Accounts Manager must map all active expense labels before new claims can be raised.")
-		)
 	changes = []
 	for row in doc.get("expenses") or []:
 		old_row = previous_rows.get(row.name) if previous and previous.project == doc.project else None
@@ -127,8 +143,8 @@ def assign_and_validate_project_expense_accounts(doc) -> None:
 			and old_row.get("project_expense_account") == selected
 			and previous.workflow_state not in EMPLOYEE_EDITABLE_STATES
 		):
-			# Existing reviewed/approved claims retain their original ledger values,
-			# even if the category has since been disabled for new claims.
+			# Existing reviewed/approved claims retain their category and provisional
+			# account even if the category has since been disabled for new claims.
 			row.default_account = old_row.default_account
 			row.project_expense_account = selected
 			continue
@@ -139,9 +155,14 @@ def assign_and_validate_project_expense_accounts(doc) -> None:
 				),
 				title=_("Expense Category Not Allowed"),
 			)
-		account = allowed[selected].expense_account
+		accounts = suggested_accounts(doc.project, selected)
+		account = accounts[0] if accounts else None
 		if not account:
-			frappe.throw(_("This expense label has not been mapped by an Accounts Manager."))
+			from volunteering.volunteering.accounting_setup import ensure_unclassified_expense_account
+
+			account = ensure_unclassified_expense_account(project.company or doc.company)
+		if not account:
+			frappe.throw(_("No temporary Expense Account is available for this Company."))
 		_validate_account(account, project.company or doc.company)
 
 		old_account = (
@@ -155,7 +176,7 @@ def assign_and_validate_project_expense_accounts(doc) -> None:
 				and not _can_change_after_employee_submission()
 			):
 				frappe.throw(
-					_("Only Accounts can change an Expense Account after the claim is submitted."),
+					_("Only Accounts can change an expense category after the claim is submitted."),
 					frappe.PermissionError,
 				)
 			changes.append((row.idx, old_account, selected))
@@ -192,14 +213,7 @@ def employee_options(project_doc, txt=""):
 	needle = cstr(txt).strip().casefold()
 	options = []
 	rows = [row for row in project_doc.get("account_budgets") or [] if cint(row.is_active)]
-	if any(not row.expense_account for row in rows):
-		return []
 	for row in rows:
-		account = _account_details(row.expense_account)
-		if not account or account.company != project_doc.company:
-			continue
-		if account.root_type != "Expense" or cint(account.is_group) or cint(account.disabled):
-			continue
 		friendly = cstr(row.employee_label).strip()
 		if needle and needle not in friendly.casefold():
 			continue

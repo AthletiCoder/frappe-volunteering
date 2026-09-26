@@ -53,6 +53,18 @@
    {
     "allow_edit": "Accounts Manager",
     "avoid_status_override": 0,
+    "doc_status": "0",
+    "evaluate_as_expression": 0,
+    "is_optional_state": 0,
+    "send_email": 0,
+    "state": "Pending Accounts Classification",
+    "update_field": "approval_status",
+    "update_value": "Approved",
+    "workflow_builder_id": null
+   },
+   {
+    "allow_edit": "Accounts Manager",
+    "avoid_status_override": 0,
     "doc_status": "1",
     "evaluate_as_expression": 0,
     "is_optional_state": 0,
@@ -111,7 +123,7 @@
     "allow_self_approval": 0,
     "allowed": "Employee",
     "condition": "frappe.session.user == doc.pending_approver",
-    "next_state": "Approved",
+    "next_state": "Pending Accounts Classification",
     "send_email_to_creator": 1,
     "state": "Pending Approval",
     "workflow_builder_id": null
@@ -131,7 +143,7 @@
     "allow_self_approval": 0,
     "allowed": "Employee",
     "condition": "frappe.session.user != 'Guest' and (frappe.db.get_value('Employee', {'user_id': frappe.session.user}, 'grade') == 'Board of Directors' or frappe.db.get_value('Has Role', {'parenttype': 'User', 'parent': frappe.session.user, 'role': 'Executive Board Chairperson'}, 'name'))",
-    "next_state": "Approved",
+    "next_state": "Pending Accounts Classification",
     "send_email_to_creator": 1,
     "state": "Pending Approval",
     "workflow_builder_id": null
@@ -144,6 +156,16 @@
     "next_state": "Rejected",
     "send_email_to_creator": 1,
     "state": "Pending Approval",
+    "workflow_builder_id": null
+   },
+   {
+    "action": "Finalise Accounts",
+    "allow_self_approval": 1,
+    "allowed": "Accounts Manager",
+    "condition": "doc.account_classification_status == 'Complete'",
+    "next_state": "Approved",
+    "send_email_to_creator": 1,
+    "state": "Pending Accounts Classification",
     "workflow_builder_id": null
    }
   ],

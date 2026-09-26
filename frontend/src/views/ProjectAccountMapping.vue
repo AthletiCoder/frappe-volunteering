@@ -3,7 +3,7 @@
 		<PageHeader
 			title="Project account mapping"
 			eyebrow="Accounts"
-			subtitle="Map the approved project expense break up to ledger accounts. Labels, allocations and project details cannot be changed here."
+			subtitle="Suggest one or more ledger accounts for each approved expense break-up. Final classification still happens on each claim."
 		>
 			<template #actions
 				><RouterLink to="/home" class="btn-secondary">Back to Home</RouterLink></template
@@ -21,11 +21,11 @@
 		</div>
 		<div v-if="loading" class="text-muted">Loading approved projects…</div>
 		<template v-else-if="authorized">
-			<section class="form-card">
+			<section v-if="!selected" class="form-card">
 				<h2 class="form-title">Approved projects</h2>
 				<p class="form-hint">
-					New claims become available once every active label has an account. Only
-					Accounts Managers can save mappings.
+					Suggestions are optional and do not block claims. They help Accounts classify
+					each approved claim quickly before it is posted.
 				</p>
 				<div v-if="!projects.length" class="text-muted text-sm">
 					No manager-approved projects are available.
@@ -37,7 +37,8 @@
 						type="button"
 						@click="open(project.name)"
 						class="w-full rounded-xl border border-line p-3 text-left flex flex-wrap justify-between gap-2"
-						:disabled="saving"
+						:disabled="saving || Boolean(openingProject)"
+						:data-project-name="project.name"
 					>
 						<span class="font-semibold text-sm"
 							>{{ project.project_name }}
@@ -47,17 +48,31 @@
 							project.closed
 								? "Closed"
 								: project.ready
-									? "Mapped"
-									: "Awaiting account mapping"
+								? "Mapped"
+									: "No account suggestions yet"
 						}}</span>
 					</button>
 				</div>
 			</section>
-			<form v-if="selected" class="form-card" @submit.prevent="save">
-				<h2 class="form-title">{{ selected.project_name }}</h2>
+			<form
+				v-if="selected"
+				ref="mappingForm"
+				class="form-card"
+				tabindex="-1"
+				@submit.prevent="save"
+			>
+				<div class="flex flex-wrap items-start justify-between gap-3 mb-3">
+					<div>
+						<h2 class="form-title mb-0">{{ selected.project_name }}</h2>
+						<p class="text-sm text-muted">{{ selected.name }}</p>
+					</div>
+					<button type="button" class="btn-secondary" @click="closeProject">
+						Choose another project
+					</button>
+				</div>
 				<p class="form-hint">
-					The same ledger account may serve several labels; each label keeps its own
-					claim budget. A mapping is locked once its label is used in a claim.
+					A label may suggest several ledger accounts, and the same account may serve
+					several labels. These suggestions can be changed later without rewriting old claims.
 				</p>
 				<div v-if="selected.closed" class="text-muted text-sm mb-4">
 					This project is closed; its mappings cannot be changed.
@@ -75,17 +90,41 @@
 								}}{{ row.is_active ? "" : " · Disabled for new claims" }}</span
 							>
 						</div>
-						<SearchSelect
-							v-model="row.expense_account"
-							:label="`Ledger account for ${row.employee_label}`"
-							:required="Boolean(row.is_active)"
-							:disabled="row.locked || selected.closed || saving"
-							:options="accountOptions(row)"
-						/>
-						<p v-if="row.locked" class="field-help mt-2">
-							Used in an existing claim. Propose a new label if a different account
-							is needed for future bills.
-						</p>
+						<div class="space-y-3">
+							<div
+								v-for="(account, index) in row.expense_accounts"
+								:key="`${row.budget_key}-${index}`"
+								class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
+							>
+								<SearchSelect
+									v-model="row.expense_accounts[index]"
+									:label="`Suggested account ${index + 1}`"
+									:disabled="selected.closed || saving"
+									:options="accountOptions(row, index)"
+								/>
+								<button
+									type="button"
+									class="btn-secondary text-bad"
+									:disabled="selected.closed || saving"
+									@click="removeAccount(row, index)"
+								>
+									Remove
+								</button>
+							</div>
+							<button
+								v-if="!selected.closed"
+								type="button"
+								class="btn-secondary"
+								:disabled="saving"
+								@click="addAccount(row)"
+							>
+								+ Suggest an account
+							</button>
+							<p v-if="!row.expense_accounts.length" class="field-help">
+								No suggestion. Employees may still claim against this label; Accounts will
+								choose the ledger before posting.
+							</p>
+						</div>
 					</section>
 				</div>
 				<button
@@ -94,7 +133,7 @@
 					type="submit"
 					:disabled="saving || !selected.rows.length"
 				>
-					{{ saving ? "Saving…" : "Save account mappings" }}
+					{{ saving ? "Saving…" : "Save account suggestions" }}
 				</button>
 			</form>
 		</template>
@@ -102,46 +141,72 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from "vue";
-import { RouterLink, useRoute } from "vue-router";
+import { nextTick, onMounted, ref } from "vue";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import PageHeader from "../components/PageHeader.vue";
 import SearchSelect from "../components/SearchSelect.vue";
 import { call } from "../lib/frappe";
 
 const service = "volunteering.volunteering.project_account_mapping.";
 const route = useRoute();
+const router = useRouter();
 const projects = ref([]),
 	selected = ref(null),
 	accounts = ref([]);
 const loading = ref(true),
 	saving = ref(false),
+	openingProject = ref(""),
 	authorized = ref(false),
 	error = ref(""),
 	message = ref("");
+const mappingForm = ref(null);
 const currency = (amount) =>
 	new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(amount || 0);
 
-function accountOptions(row) {
+function accountOptions(row, currentIndex) {
 	const options = accounts.value.map((account) => ({
 		value: account.name,
 		label: account.account_name,
 		description: account.name,
 	}));
-	if (row.expense_account && !options.some((option) => option.value === row.expense_account))
-		options.push({ value: row.expense_account, label: row.expense_account });
-	return options;
+	const current = row.expense_accounts[currentIndex];
+	return options.filter(
+		(option) => option.value === current || !row.expense_accounts.includes(option.value),
+	);
+}
+function addAccount(row) {
+	row.expense_accounts.push("");
+}
+function removeAccount(row, index) {
+	row.expense_accounts.splice(index, 1);
 }
 async function open(project) {
 	error.value = "";
 	message.value = "";
+	openingProject.value = project;
 	try {
 		const result = await call(service + "get_mapping_workspace", { project });
 		selected.value = result.project;
 		accounts.value = result.accounts;
+		await router.replace({ query: { ...route.query, project } });
+		await nextTick();
+		mappingForm.value?.scrollIntoView({ behavior: "smooth", block: "start" });
+		mappingForm.value?.focus({ preventScroll: true });
 	} catch (err) {
 		selected.value = null;
 		error.value = err.message || "Unable to load account mappings.";
+	} finally {
+		openingProject.value = "";
 	}
+}
+async function closeProject() {
+	selected.value = null;
+	accounts.value = [];
+	error.value = "";
+	message.value = "";
+	const query = { ...route.query };
+	delete query.project;
+	await router.replace({ query });
 }
 async function save() {
 	saving.value = true;
@@ -153,12 +218,12 @@ async function save() {
 			modified: selected.value.modified,
 			mappings: selected.value.rows.map((row) => ({
 				budget_key: row.budget_key,
-				expense_account: row.expense_account,
+				expense_accounts: row.expense_accounts.filter(Boolean),
 			})),
 		});
 		projects.value = (await call(service + "get_mapping_workspace")).projects;
 		message.value =
-			"Account mappings saved. Employees can now select the active expense labels.";
+			"Account suggestions saved. Claims remain available even when a label has no suggestion.";
 	} catch (err) {
 		error.value = err.message || "Unable to save account mappings.";
 	} finally {

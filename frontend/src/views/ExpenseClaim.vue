@@ -121,9 +121,8 @@
 					/></label>
 				</div>
 				<p v-if="!isCorrection && !defaults.projects.length" class="warning-box mt-3">
-					No active project with mapped expense categories is available to you. A
-					Projects Manager must add you as a member and approve labels; an Accounts
-					Manager must then map them.
+					No active project with approved expense categories is available to you. A
+					Projects Manager must add you as a member and approve the project labels.
 				</p>
 			</section>
 

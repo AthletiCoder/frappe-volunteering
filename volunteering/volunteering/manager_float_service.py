@@ -213,7 +213,11 @@ def validate_manager_float_on_approve(doc) -> None:
 		return
 
 	previous = doc.get_doc_before_save()
-	if not previous or previous.workflow_state == "Approved" or doc.workflow_state != "Approved":
+	if (
+		not previous
+		or previous.workflow_state == "Pending Accounts Classification"
+		or doc.workflow_state != "Pending Accounts Classification"
+	):
 		return
 
 	status = manager_float_funding_status(doc)

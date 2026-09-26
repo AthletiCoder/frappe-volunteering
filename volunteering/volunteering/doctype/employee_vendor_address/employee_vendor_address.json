@@ -13,6 +13,16 @@
   "pin_code",
   "gstin",
   "pan",
+  "bank_section",
+  "bank_name",
+  "bank_branch",
+  "account_name",
+  "account_number",
+  "ifsc",
+  "swift",
+  "upi_id",
+  "invoice_style",
+  "vendor_identity_key",
   "usage_section",
   "use_count",
   "last_used_on",
@@ -75,6 +85,66 @@
    "fieldname": "pan",
    "fieldtype": "Data",
    "label": "PAN",
+   "read_only": 1
+  },
+  {
+   "fieldname": "bank_section",
+   "fieldtype": "Section Break",
+   "label": "Supplier Bank Details"
+  },
+  {
+   "fieldname": "bank_name",
+   "fieldtype": "Data",
+   "label": "Bank Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "bank_branch",
+   "fieldtype": "Data",
+   "label": "Branch",
+   "read_only": 1
+  },
+  {
+   "fieldname": "account_name",
+   "fieldtype": "Data",
+   "label": "Account Holder Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "account_number",
+   "fieldtype": "Password",
+   "label": "Account Number",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ifsc",
+   "fieldtype": "Data",
+   "label": "IFSC",
+   "read_only": 1
+  },
+  {
+   "fieldname": "swift",
+   "fieldtype": "Data",
+   "label": "SWIFT",
+   "read_only": 1
+  },
+  {
+   "fieldname": "upi_id",
+   "fieldtype": "Data",
+   "label": "UPI ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "invoice_style",
+   "fieldtype": "Data",
+   "label": "Invoice Style",
+   "read_only": 1
+  },
+  {
+   "fieldname": "vendor_identity_key",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Vendor Identity Key",
    "read_only": 1
   },
   {

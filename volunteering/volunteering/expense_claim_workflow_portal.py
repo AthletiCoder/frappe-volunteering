@@ -24,6 +24,13 @@ from volunteering.volunteering.approval_routing import (
 	get_approver_action_flags,
 )
 from volunteering.volunteering.employee_bank_accounts import get_approved_bank_details
+from volunteering.volunteering.expense_account_classification import (
+	CLASSIFICATION_COMPLETE,
+	PENDING_ACCOUNTS_CLASSIFICATION,
+	can_classify,
+	classification_snapshot,
+	set_account_allocations,
+)
 from volunteering.volunteering.expense_claim_portal import _claim_source, _expense_labels, _project_names
 from volunteering.volunteering.receipt_review import (
 	PENDING_RECEIPT_REVIEW,
@@ -65,6 +72,14 @@ def _can_approve(doc, user: str) -> bool:
 	)
 
 
+def _can_classify(doc, user: str) -> bool:
+	return (
+		can_classify(user)
+		and doc.docstatus == 0
+		and doc.workflow_state == PENDING_ACCOUNTS_CLASSIFICATION
+	)
+
+
 def _can_reimburse(doc, user: str) -> bool:
 	return (
 		_is_accounts_user(user)
@@ -80,6 +95,7 @@ def _assert_work_access(doc) -> dict:
 	access = {
 		"receipt_review": _can_receipt_review(doc, user),
 		"approval": _can_approve(doc, user),
+		"classification": _can_classify(doc, user),
 		"reimbursement": _can_reimburse(doc, user),
 	}
 	if not any(access.values()):
@@ -119,7 +135,7 @@ def get_expense_claim_work_queue():
 		"total_sanctioned_amount",
 		"modified",
 	]
-	queues = {"receipt_review": [], "approval": [], "reimbursement": []}
+	queues = {"receipt_review": [], "approval": [], "classification": [], "reimbursement": []}
 	roles = _roles(user)
 	if user == "Administrator" or RECEIPT_REVIEWER_ROLE in roles:
 		filters = {"docstatus": 0, "workflow_state": PENDING_RECEIPT_REVIEW}
@@ -163,9 +179,21 @@ def get_expense_claim_work_queue():
 				limit=500,
 			)
 		]
+	if can_classify(user):
+		queues["classification"] = [
+			_queue_row(row, "classification")
+			for row in frappe.get_all(
+				"Expense Claim",
+				filters={"docstatus": 0, "workflow_state": PENDING_ACCOUNTS_CLASSIFICATION},
+				fields=fields,
+				order_by="posting_date asc, modified asc",
+				limit=500,
+			)
+		]
 
 	return {
 		"can_review_receipts": user == "Administrator" or RECEIPT_REVIEWER_ROLE in roles,
+		"can_classify": can_classify(user),
 		"can_reimburse": _is_accounts_user(user),
 		"queues": queues,
 		"counts": {key: len(value) for key, value in queues.items()},
@@ -246,6 +274,7 @@ def get_expense_claim_work_item(name: str):
 		"access": access,
 		"approval_flags": flags,
 		"payment": _payment_options(doc),
+		"classification": classification_snapshot(doc, labels) if access["classification"] else None,
 		"expenses": [
 			{
 				"name": row.name,
@@ -347,6 +376,27 @@ def decide_expense_claim(name: str, action: str, sanctioned_amounts=None, reason
 	return {"name": doc.name, "action": "approved", "sanctioned_amount": flt(total, 2)}
 
 
+@frappe.whitelist(methods=["POST"])
+def classify_expense_claim_accounts(name: str, allocations=None, note: str = ""):
+	"""Record the final ledger split, then submit the approved claim to accounting."""
+	claim_name = cstr(name).strip()
+	frappe.db.sql("SELECT name FROM `tabExpense Claim` WHERE name=%s FOR UPDATE", claim_name)
+	doc = frappe.get_doc("Expense Claim", claim_name)
+	if not _can_classify(doc, frappe.session.user):
+		frappe.throw(_("This claim is not awaiting your Accounts classification."), frappe.PermissionError)
+	rows = frappe.parse_json(allocations) if isinstance(allocations, str) else allocations
+	set_account_allocations(doc, rows, note)
+	doc.save(ignore_permissions=True)
+	doc.add_comment(
+		"Comment",
+		_("Expense accounts classified by {0}{1}.").format(
+			frappe.session.user, _(" — {0}").format(cstr(note).strip()) if cstr(note).strip() else ""
+		),
+	)
+	apply_workflow(doc, "Finalise Accounts")
+	return {"name": doc.name, "action": "classified", "workflow_state": "Approved"}
+
+
 def _validate_payment_account(company: str, account: str):
 	row = frappe.db.get_value(
 		"Account",
@@ -384,6 +434,8 @@ def reimburse_expense_claim(name: str, payment=None):
 		frappe.throw(_("This claim is not approved and awaiting reimbursement."))
 	if doc.get("receipt_review_status") != REVIEW_STATUS_VERIFIED:
 		frappe.throw(_("Receipt review must be Verified before reimbursement."))
+	if doc.get("account_classification_status") != CLASSIFICATION_COMPLETE:
+		frappe.throw(_("Accounts classification must be Complete before reimbursement."))
 
 	from hrms.hr.doctype.expense_claim.expense_claim import get_outstanding_amount_for_claim
 	from hrms.overrides.employee_payment_entry import get_payment_entry_for_employee

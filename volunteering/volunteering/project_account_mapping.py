@@ -28,15 +28,30 @@ def mapping_context(project):
 		_mapping.reset(token)
 
 
-def _ledger_values(doc):
-	return {row.budget_key: row.expense_account or "" for row in doc.get("account_budgets") or []}
+def _mapping_values(doc):
+	values = {}
+	for row in doc.get("expense_account_mappings") or []:
+		values.setdefault(row.budget_key, [])
+		if row.expense_account and row.expense_account not in values[row.budget_key]:
+			values[row.budget_key].append(row.expense_account)
+	return {key: sorted(accounts) for key, accounts in values.items()}
+
+
+def _legacy_ledger_values(doc):
+	return {
+		row.budget_key: row.expense_account
+		for row in doc.get("account_budgets") or []
+		if row.expense_account
+	}
 
 
 def validate_mapping_changes(doc, method=None):
 	previous = doc.get_doc_before_save()
-	before = _ledger_values(previous) if previous else {}
-	after = _ledger_values(doc)
-	changed = any(account != before.get(key, "") for key, account in after.items())
+	before = _mapping_values(previous) if previous else {}
+	after = _mapping_values(doc)
+	legacy_before = _legacy_ledger_values(previous) if previous else {}
+	legacy_after = _legacy_ledger_values(doc)
+	changed = before != after or legacy_before != legacy_after
 	if changed and not (_mapping.get() is not None and _mapping.get() == doc.name and can_map()):
 		frappe.throw(
 			_(
@@ -44,10 +59,6 @@ def validate_mapping_changes(doc, method=None):
 			),
 			frappe.PermissionError,
 		)
-	# A used label must stay in the approved project, even if disabled for new claims.
-	for key in set(before) - set(after):
-		if label_has_claims(doc.name, key):
-			frappe.throw(_("A label used by an expense claim cannot be removed. Disable it instead."))
 
 
 def label_has_claims(project, key):
@@ -63,7 +74,7 @@ def label_has_claims(project, key):
 
 def resolve_budget_rows(doc, rows):
 	"""Approval updates labels/allocations, retaining only server-held mappings."""
-	existing = _ledger_values(doc)
+	existing = _legacy_ledger_values(doc)
 	return [{**row, "expense_account": existing.get(row.get("budget_key"), "")} for row in rows]
 
 
@@ -85,14 +96,14 @@ def _load(project):
 
 
 def _serialize(doc):
+	suggestions = _mapping_values(doc)
 	rows = [
 		{
 			"budget_key": row.budget_key,
 			"employee_label": row.employee_label,
 			"approved_amount": flt(row.approved_amount),
 			"is_active": cint(row.is_active),
-			"expense_account": row.expense_account or "",
-			"locked": label_has_claims(doc.name, row.budget_key),
+			"expense_accounts": suggestions.get(row.budget_key, []),
 		}
 		for row in doc.get("account_budgets") or []
 	]
@@ -101,7 +112,7 @@ def _serialize(doc):
 		"project_name": doc.project_name,
 		"modified": str(doc.modified),
 		"rows": rows,
-		"ready": all(row["expense_account"] for row in rows if row["is_active"]),
+		"ready": all(row["expense_accounts"] for row in rows if row["is_active"]),
 		"closed": doc.get("budget_status") == "Closed" or bool(cint(doc.get("is_archived"))),
 	}
 
@@ -149,33 +160,41 @@ def save_account_mapping(project, modified, mappings):
 		frappe.throw(_("Invalid account mappings."))
 	rows = {row.budget_key: row for row in doc.account_budgets}
 	seen = set()
-	before = _ledger_values(doc)
+	before = _mapping_values(doc)
 	from volunteering.volunteering.project_expense_accounts import _validate_account
 
+	new_rows = []
 	for mapping in mappings:
-		if not isinstance(mapping, dict) or set(mapping) != {"budget_key", "expense_account"}:
-			frappe.throw(_("Only label IDs and expense accounts may be changed here."))
-		key, account = mapping["budget_key"], cstr(mapping["expense_account"]).strip()
+		if not isinstance(mapping, dict) or "budget_key" not in mapping:
+			frappe.throw(_("Only label IDs and expense-account suggestions may be changed here."))
+		if set(mapping) - {"budget_key", "expense_accounts", "expense_account"}:
+			frappe.throw(_("Only label IDs and expense-account suggestions may be changed here."))
+		key = mapping["budget_key"]
+		accounts = mapping.get("expense_accounts")
+		if accounts is None:  # compatibility with the former one-account client
+			accounts = [mapping.get("expense_account")] if mapping.get("expense_account") else []
+		if not isinstance(accounts, list) or len(accounts) > 25:
+			frappe.throw(_("A label may have up to 25 suggested expense accounts."))
 		if key not in rows or key in seen:
 			frappe.throw(_("Unknown or duplicate project expense label."))
 		seen.add(key)
-		row = rows[key]
-		if account != (row.expense_account or "") and label_has_claims(project, key):
-			frappe.throw(
-				_(
-					"{0} is already used in claims. Its ledger mapping is locked; propose a new label for future expenses."
-				).format(row.employee_label)
-			)
-		if account:
+		deduplicated = []
+		for value in accounts:
+			account = cstr(value).strip()
+			if not account or account in deduplicated:
+				continue
 			_validate_account(account, doc.company)
-		row.expense_account = account
+			deduplicated.append(account)
+			new_rows.append({"budget_key": key, "expense_account": account})
+		# Preserve the old column as a first-suggestion mirror for reports and
+		# older clients. It is not the final posting decision.
+		rows[key].expense_account = deduplicated[0] if deduplicated else ""
 	if seen != set(rows):
-		frappe.throw(_("Include every approved label when saving account mappings."))
-	if any(cint(row.is_active) and not row.expense_account for row in rows.values()):
-		frappe.throw(_("Map every active expense label before saving."))
+		frappe.throw(_("Include a row for every approved label when saving account suggestions."))
+	doc.set("expense_account_mappings", new_rows)
 	with mapping_context(doc.name):
 		doc.save(ignore_permissions=True)
-	after = _ledger_values(doc)
+	after = _mapping_values(doc)
 	if before != after:
 		revision = frappe.get_doc(
 			{

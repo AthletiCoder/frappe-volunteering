@@ -38,6 +38,19 @@ async function signIn(page: Page, user: string) {
   await expect(page.getByRole("heading", { name: /^Hello/ })).toBeVisible();
 }
 
+async function addVolunteerSignature(page: Page) {
+  await page.getByRole("button", { name: "Sign freshly", exact: true }).click();
+  const canvas = page.locator("canvas.signature-canvas");
+  const box = await canvas.boundingBox();
+  expect(box).toBeTruthy();
+  await page.mouse.move(box!.x + 50, box!.y + 100);
+  await page.mouse.down();
+  await page.mouse.move(box!.x + 220, box!.y + 50, { steps: 8 });
+  await page.mouse.move(box!.x + 400, box!.y + 120, { steps: 8 });
+  await page.mouse.up();
+  await page.getByRole("button", { name: "Use this signature", exact: true }).click();
+}
+
 async function api(page: Page, method: string, args = {}) {
   return page.evaluate(
     async ({ method, args }) => {
@@ -145,15 +158,9 @@ test.describe.serial("Employee bank approval @bank-accounts @ui", () => {
     expect(workspace.pending_requests).toEqual([]);
     expect((await page.request.get(request.proof_url)).status()).toBe(200);
     await page.goto("/volunteering/invoice-generator");
-    if (workspace.approved) {
-      await expect(
-        page.getByRole("button", { name: "Generate PDF", exact: true }),
-      ).toBeEnabled();
-    } else {
-      await expect(
-        page.getByRole("button", { name: "Generate PDF", exact: true }),
-      ).toBeDisabled();
-    }
+    await expect(
+      page.getByRole("button", { name: "Generate PDF", exact: true }),
+    ).toBeEnabled();
   });
 
   test("Accounts User cannot review or download another employee's bank proof", async ({
@@ -195,21 +202,18 @@ test.describe.serial("Employee bank approval @bank-accounts @ui", () => {
     await expect(card).toHaveCount(0);
   });
 
-  test("employee generates GST and non-GST PDF/Word using approved remittance", async ({
+  test("employee generates GST and non-GST PDF/Word using optional supplier remittance", async ({
     page,
   }, testInfo) => {
     await signIn(page, employee);
     await page.getByRole("link", { name: /Prepare an invoice/ }).click();
     await expect(
       page.getByRole("heading", {
-        name: "Approved reimbursement remittance details",
+        name: "Supplier bank details (optional)",
       }),
     ).toBeVisible();
     await expect(
       page.getByText("••••••" + number.slice(-4), { exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.getByLabel("Account number", { exact: true }),
     ).toHaveCount(0);
     await expect(
       page.getByLabel("Invoice number", { exact: true }),
@@ -238,10 +242,21 @@ test.describe.serial("Employee bank approval @bank-accounts @ui", () => {
     ).not.toHaveValue("");
     await expect(office.locator("address")).not.toHaveText("");
     await page
+      .getByLabel("Account holder name", { exact: true })
+      .fill("Demo Kitchen Supplies");
+    await page
+      .getByLabel("Bank name", { exact: true })
+      .fill("Demo Vendor Bank");
+    await page
+      .getByLabel("Account number", { exact: true })
+      .fill("880012345678");
+    await page.getByLabel("IFSC", { exact: true }).fill("DEMO0123456");
+    await page
       .getByLabel("Description *", { exact: true })
       .fill("Local test utensils");
     await page.getByLabel("HSN/SAC (optional)", { exact: true }).fill("7323");
     await page.getByLabel("Rate (INR) *", { exact: true }).fill("500");
+    await addVolunteerSignature(page);
     let previousNumber: string | undefined;
     let generationPayload: any;
     for (const type of ["NON_GST", "GST"]) {
@@ -266,6 +281,12 @@ test.describe.serial("Employee bank approval @bank-accounts @ui", () => {
         expect(response.status()).toBe(200);
         const generated = (await response.json()).message;
         generationPayload = response.request().postDataJSON().payload;
+        expect(generationPayload.bank).toMatchObject({
+          account_name: "Demo Kitchen Supplies",
+          bank_name: "Demo Vendor Bank",
+          account_number: "880012345678",
+          ifsc: "DEMO0123456",
+        });
         expect(response.request().postDataJSON().output_format).toBe(extension);
         expect(generated).toHaveProperty(extension);
         expect(generated).not.toHaveProperty(

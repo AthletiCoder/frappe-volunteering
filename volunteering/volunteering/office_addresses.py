@@ -22,6 +22,67 @@ ALLOWED_ADDRESS_TYPES = {
 	"Warehouse",
 	"Other",
 }
+
+SEVAMRITA_OFFICE_ADDRESSES = (
+	{
+		"address_title": "Registered Office - Kandi",
+		"address_type": "Office",
+		"address_line1": "301, Plot No 6, Kandi",
+		"address_line2": "",
+		"city": "Sangareddy",
+		"county": "Medak",
+		"state": "Telangana",
+		"country": "India",
+		"pincode": "502285",
+		"is_primary_address": 1,
+		"is_shipping_address": 0,
+		"disabled": 0,
+	},
+	{
+		"address_title": "Talegaon Floriculture Park Office",
+		"address_type": "Office",
+		"address_line1": "Plot No 58, Talegaon Floriculture Park",
+		"address_line2": "MIDC Ambi - Ambale Road",
+		"city": "Talegaon Dabhade",
+		"county": "",
+		"state": "Maharashtra",
+		"country": "India",
+		"pincode": "410507",
+		"is_primary_address": 0,
+		"is_shipping_address": 0,
+		"disabled": 0,
+	},
+	{
+		"address_title": "Balewadi Office - Pune",
+		"address_type": "Office",
+		"address_line1": "A801, Palazzo Apartment",
+		"address_line2": "Balewadi",
+		"city": "Pune",
+		"county": "",
+		"state": "Maharashtra",
+		"country": "India",
+		"pincode": "411045",
+		"is_primary_address": 0,
+		"is_shipping_address": 0,
+		"disabled": 0,
+	},
+	{
+		"address_title": "Powai Office - Mumbai",
+		"address_type": "Office",
+		"address_line1": "104 Shivranjani Boys Hostel",
+		"address_line2": "Chaitanya Nagar, Tirandaz, Powai",
+		"city": "Mumbai",
+		"county": "",
+		"state": "Maharashtra",
+		"country": "India",
+		"pincode": "400076",
+		"is_primary_address": 0,
+		"is_shipping_address": 0,
+		"disabled": 0,
+	},
+)
+
+
 def can_manage_office_addresses(user=None):
 	user = user or frappe.session.user
 	return user == "Administrator" or MANAGER_ROLE in frappe.get_roles(user)
@@ -54,6 +115,40 @@ def _company():
 		return SEVAMRITA_COMPANY
 	company = frappe.db.get_single_value("Global Defaults", "default_company")
 	return company or frappe.db.get_value("Company", {}, "name")
+
+
+def ensure_sevamrita_office_addresses():
+	"""Install the four approved Sevamrita office addresses once during migration.
+
+	The migration patch that calls this function is recorded by Frappe, so later
+	Accounts Manager edits are not overwritten on every deployment. Keeping the
+	function idempotent also makes interrupted or manually retried migrations safe.
+	"""
+	if not frappe.db.exists("Company", SEVAMRITA_COMPANY):
+		return []
+
+	existing_by_title = {
+		row.address_title: row.name
+		for row in _address_rows(SEVAMRITA_COMPANY, include_disabled=True)
+	}
+	names = []
+	for values in SEVAMRITA_OFFICE_ADDRESSES:
+		name = existing_by_title.get(values["address_title"])
+		doc = frappe.get_doc("Address", name) if name else frappe.new_doc("Address")
+		for field, value in values.items():
+			doc.set(field, value)
+		doc.is_your_company_address = 1
+		if not any(
+			row.link_doctype == "Company" and row.link_name == SEVAMRITA_COMPANY
+			for row in (doc.get("links") or [])
+		):
+			doc.append(
+				"links",
+				{"link_doctype": "Company", "link_name": SEVAMRITA_COMPANY},
+			)
+		doc.save(ignore_permissions=True)
+		names.append(doc.name)
+	return names
 
 
 @frappe.whitelist(methods=["POST"])

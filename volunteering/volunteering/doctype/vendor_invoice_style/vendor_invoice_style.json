@@ -1,0 +1,76 @@
+{
+ "actions": [],
+ "autoname": "field:vendor_key",
+ "doctype": "DocType",
+ "document_type": "Document",
+ "engine": "InnoDB",
+ "field_order": [
+  "vendor_name",
+  "vendor_gstin",
+  "invoice_style",
+  "assignment_sequence",
+  "vendor_key"
+ ],
+ "fields": [
+  {
+   "fieldname": "vendor_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Vendor Name",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "vendor_gstin",
+   "fieldtype": "Data",
+   "label": "Vendor GSTIN",
+   "read_only": 1
+  },
+  {
+   "fieldname": "invoice_style",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Invoice Style",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "assignment_sequence",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Assignment Sequence",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "vendor_key",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Vendor Key",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "Volunteering",
+ "name": "Vendor Invoice Style",
+ "naming_rule": "By fieldname",
+ "permissions": [
+  {
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager"
+  }
+ ],
+ "sort_field": "assignment_sequence",
+ "sort_order": "ASC",
+ "states": [],
+ "track_changes": 1
+}

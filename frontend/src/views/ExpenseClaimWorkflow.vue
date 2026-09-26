@@ -208,6 +208,80 @@
 				</div>
 			</section>
 
+			<section v-if="selected.access.classification" class="form-card mb-5">
+				<h2 class="form-title">Accounts classification</h2>
+				<p class="form-hint">
+					The manager has approved these amounts. Allocate every sanctioned item to one
+					or more Expense Accounts. This submits the claim and posts the expense liability;
+					payment remains a separate later step.
+				</p>
+				<div class="space-y-4">
+					<section
+						v-for="item in classificationRows"
+						:key="item.expense_detail"
+						class="rounded-xl border border-line bg-bg p-4"
+					>
+						<div class="flex flex-wrap justify-between gap-2 mb-3">
+							<div>
+								<strong>{{ item.label }}</strong>
+								<p v-if="item.suggested_accounts.length" class="field-help mt-1">
+									Project suggestions: {{ suggestedLabels(item) }}
+								</p>
+							</div>
+							<strong>{{ money(item.required_amount, selected.currency) }}</strong>
+						</div>
+						<div class="space-y-3">
+							<div
+								v-for="(allocation, index) in item.allocations"
+								:key="`${item.expense_detail}-${index}`"
+								class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem_auto] sm:items-end"
+							>
+								<SearchSelect
+									v-model="allocation.expense_account"
+									:label="`Expense account ${index + 1}`"
+									:required="true"
+									:disabled="busy"
+									:options="classificationAccountOptions(item, index)"
+								/>
+								<label class="field-label"
+									>Amount *<input
+										v-model.number="allocation.amount"
+										type="number"
+										min="0.01"
+										step="0.01"
+										class="field-input"
+								/></label>
+								<button
+									type="button"
+									class="btn-secondary text-bad"
+									:disabled="busy || item.allocations.length === 1"
+									@click="removeAllocation(item, index)"
+								>
+									Remove
+								</button>
+							</div>
+						</div>
+						<div class="flex flex-wrap items-center justify-between gap-3 mt-3">
+							<button type="button" class="btn-secondary" :disabled="busy" @click="addAllocation(item)">
+								+ Split to another account
+							</button>
+							<p :class="['text-sm font-semibold', allocationMatches(item) ? 'text-ok' : 'text-bad']">
+								Allocated {{ money(allocationTotal(item), selected.currency) }} of
+								{{ money(item.required_amount, selected.currency) }}
+							</p>
+						</div>
+					</section>
+				</div>
+				<label class="field-label mt-4"
+					>Accounts note<textarea v-model.trim="classificationNote" rows="3" class="field-input"></textarea>
+				</label>
+				<div class="flex justify-end mt-5">
+					<button type="button" class="btn-primary" :disabled="busy || !classificationValid" @click="finaliseClassification">
+						Finalise accounts and submit claim
+					</button>
+				</div>
+			</section>
+
 			<section v-if="selected.access.reimbursement" class="form-card">
 				<h2 class="form-title">Accounts reimbursement</h2>
 				<p class="form-hint">
@@ -302,6 +376,7 @@
 import { computed, defineComponent, h, onMounted, reactive, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import PageHeader from "../components/PageHeader.vue";
+import SearchSelect from "../components/SearchSelect.vue";
 import { call } from "../lib/frappe";
 
 const API = "volunteering.volunteering.expense_claim_workflow_portal.";
@@ -317,6 +392,8 @@ const tab = ref(String(route.query.view || "receipt_review"));
 const review = reactive({ notes: "" });
 const sanctioned = reactive({});
 const decisionReason = ref("");
+const classificationRows = ref([]);
+const classificationNote = ref("");
 const payment = reactive({
 	paid_from: "",
 	mode_of_payment: "",
@@ -328,6 +405,7 @@ const payment = reactive({
 const allTabs = [
 	{ key: "receipt_review", label: "Receipt review" },
 	{ key: "approval", label: "Manager approval" },
+	{ key: "classification", label: "Accounts classification" },
 	{ key: "reimbursement", label: "Accounts reimbursement" },
 ];
 const counts = computed(() => queuePayload.value.counts || {});
@@ -336,6 +414,7 @@ const visibleTabs = computed(() =>
 		(option) =>
 			(option.key === "receipt_review" && queuePayload.value.can_review_receipts) ||
 			(option.key === "reimbursement" && queuePayload.value.can_reimburse) ||
+			(option.key === "classification" && queuePayload.value.can_classify) ||
 			option.key === "approval",
 	),
 );
@@ -345,6 +424,16 @@ const sanctionedTotal = computed(() =>
 );
 const selectedPaymentAccount = computed(() =>
 	selected.value?.payment?.accounts?.find((account) => account.value === payment.paid_from),
+);
+const classificationValid = computed(
+	() =>
+		classificationRows.value.length > 0 &&
+		classificationRows.value.every(
+			(item) =>
+				allocationMatches(item) &&
+				item.allocations.length > 0 &&
+				item.allocations.every((row) => row.expense_account && Number(row.amount) > 0),
+		),
 );
 const approvalMessage = computed(
 	() =>
@@ -388,6 +477,19 @@ async function loadDetail(name) {
 	Object.keys(sanctioned).forEach((key) => delete sanctioned[key]);
 	selected.value.expenses.forEach((item) => (sanctioned[item.name] = Number(item.amount || 0)));
 	decisionReason.value = "";
+	classificationNote.value = selected.value.classification?.note || "";
+	classificationRows.value = (selected.value.classification?.items || []).map((item) => {
+		let allocations = (item.allocations || []).map((row) => ({ ...row }));
+		if (!allocations.length && Number(item.required_amount) > 0) {
+			allocations = [
+				{
+					expense_account: item.suggested_accounts?.[0] || "",
+					amount: Number(item.required_amount || 0),
+				},
+			];
+		}
+		return { ...item, allocations };
+	});
 	payment.paid_from =
 		selected.value.payment?.accounts?.find((account) => account.type === "Cash")?.value || "";
 	payment.mode_of_payment = "";
@@ -460,10 +562,60 @@ function decide(action) {
 				reason: decisionReason.value,
 			}),
 		action === "approve"
-			? "Claim approved."
+			? "Claim approved by the manager and sent to Accounts for classification."
 			: action === "reject"
 				? "Claim rejected."
 				: "Claim escalated.",
+	);
+}
+function classificationAccountOptions(item, currentIndex) {
+	const current = item.allocations[currentIndex]?.expense_account;
+	return (selected.value.classification?.accounts || []).filter(
+		(option) =>
+			option.value === current ||
+			!item.allocations.some(
+				(row, index) => index !== currentIndex && row.expense_account === option.value,
+			),
+	);
+}
+function suggestedLabels(item) {
+	const lookup = new Map(
+		(selected.value.classification?.accounts || []).map((account) => [account.value, account.label]),
+	);
+	return item.suggested_accounts.map((account) => lookup.get(account) || account).join(", ");
+}
+function allocationTotal(item) {
+	return item.allocations.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+}
+function allocationMatches(item) {
+	return Math.abs(allocationTotal(item) - Number(item.required_amount || 0)) < 0.005;
+}
+function addAllocation(item) {
+	item.allocations.push({ expense_account: "", amount: 0 });
+}
+function removeAllocation(item, index) {
+	item.allocations.splice(index, 1);
+}
+function finaliseClassification() {
+	if (!classificationValid.value) {
+		error.value = "Allocate every sanctioned amount exactly before finalising accounts.";
+		return;
+	}
+	if (!window.confirm("Submit this approved claim and post its expense liability now? Payment will remain outstanding.")) return;
+	return runAction(
+		() =>
+			call(`${API}classify_expense_claim_accounts`, {
+				name: selected.value.name,
+				note: classificationNote.value,
+				allocations: classificationRows.value.map((item) => ({
+					expense_detail: item.expense_detail,
+					allocations: item.allocations.map((row) => ({
+						expense_account: row.expense_account,
+						amount: Number(row.amount),
+					})),
+				})),
+			}),
+		"Accounts classified and claim submitted. It is now ready for reimbursement.",
 	);
 }
 function reimburse() {

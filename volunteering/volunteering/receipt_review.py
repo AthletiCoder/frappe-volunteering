@@ -131,7 +131,7 @@ def validate_verified_receipts(doc, method=None):
 	"""Require an intact verified snapshot before manager approval/submission."""
 	if doc.doctype != "Expense Claim":
 		return
-	if doc.workflow_state not in ("Pending Approval", "Approved"):
+	if doc.workflow_state not in ("Pending Approval", "Pending Accounts Classification", "Approved"):
 		return
 	if doc.get("receipt_review_status") != REVIEW_STATUS_VERIFIED:
 		frappe.throw(_("Receipt review must be Verified before manager approval."))

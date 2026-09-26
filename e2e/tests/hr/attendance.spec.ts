@@ -120,7 +120,7 @@ test.describe("HR Attendance @hr @ui", () => {
   }) => {
     const cast = await getCast(request, "admin");
     const emp = cast.employee.employee!;
-    const date = workingDayFromToday(-2);
+    const date = workingDayFromToday(-1);
     const project = await getE2eProject(request);
     await cleanupDay(request, emp, date, "admin");
 

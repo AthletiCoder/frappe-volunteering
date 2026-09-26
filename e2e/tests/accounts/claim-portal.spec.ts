@@ -64,7 +64,20 @@ test.describe("Employee expense portal @ui @expense-portal", () => {
       await expect(page.getByLabel(field)).toHaveCount(0);
     }
     const defaults = await api(page, API + "get_expense_claim_form");
-    expect(defaults.projects.length).toBeGreaterThan(0);
+    if (!defaults.projects.length) {
+      await expect(
+        page.getByText(
+          /No active project with approved expense categories is available to you/,
+        ),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("combobox", {
+          name: "Project expense category *",
+          exact: true,
+        }),
+      ).toBeDisabled();
+      return;
+    }
     const project = defaults.projects[0].value;
     await page
       .getByRole("combobox", { name: "Project *", exact: true })
@@ -157,7 +170,7 @@ test.describe("Employee expense portal @ui @expense-portal", () => {
     ).toBeVisible();
     await expect(page.getByLabel("Status")).toBeVisible();
     await expect(
-      page.getByRole("link", { name: "Submit an expense" }),
+      page.getByRole("link", { name: "Submit an expense" }).first(),
     ).toBeVisible();
   });
 
@@ -198,8 +211,20 @@ test.describe("Employee expense portal @ui @expense-portal", () => {
       page.getByRole("heading", { name: "Invoice type", exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Sign on screen", exact: true }),
+      page.getByRole("button", { name: "Sign freshly", exact: true }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("heading", {
+        name: "Supplier bank details (optional)",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await page
+      .getByLabel("Bank name", { exact: true })
+      .fill("Integrated Supplier Bank");
+    await expect(
+      page.getByLabel("Bank name", { exact: true }),
+    ).toHaveValue("Integrated Supplier Bank");
     await expect(
       page.getByRole("button", { name: "Generate PDF", exact: true }),
     ).toHaveCount(0);

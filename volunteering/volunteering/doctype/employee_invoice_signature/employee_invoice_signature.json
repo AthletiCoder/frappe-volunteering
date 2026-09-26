@@ -1,0 +1,67 @@
+{
+ "actions": [],
+ "autoname": "field:employee",
+ "doctype": "DocType",
+ "document_type": "Document",
+ "engine": "InnoDB",
+ "field_order": [
+  "employee",
+  "employee_name",
+  "signature_data",
+  "signature_sha256",
+  "last_used_on"
+ ],
+ "fields": [
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Employee",
+   "options": "Employee",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fetch_from": "employee.employee_name",
+   "fieldname": "employee_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Employee Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "signature_data",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "label": "Signature Data",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "signature_sha256",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Signature SHA-256",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "last_used_on",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Last Used On",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "Volunteering",
+ "name": "Employee Invoice Signature",
+ "naming_rule": "By fieldname",
+ "permissions": [],
+ "sort_field": "last_used_on",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

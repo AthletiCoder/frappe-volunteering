@@ -60,18 +60,22 @@ def reload_accounting_workflows():
 
 	frappe.clear_cache(doctype="Workflow")
 	sync_workflow_submit_permissions()
+	ensure_expense_claim_accounts_permissions()
 
 
 def after_migrate():
 	setup_accounting_custom_fields()
 	backfill_project_budget_controls()
 	backfill_project_expense_accounts()
+	backfill_project_expense_account_mappings()
+	backfill_expense_claim_account_classification()
 	ensure_project_budget_field_visibility()
 	backfill_receipt_review_states()
 	remove_obsolete_accounting_custom_fields()
 	ensure_project_types()
 	ensure_accounting_roles()
 	ensure_receipt_reviewer_permissions()
+	ensure_expense_claim_accounts_permissions()
 	ensure_workflow_actions()
 	ensure_workflow_states()
 	ensure_departments()
@@ -81,6 +85,7 @@ def after_migrate():
 	ensure_designation_limits()
 	ensure_employee_advance_accounts()
 	ensure_expense_claim_payable_account()
+	ensure_unclassified_expense_accounts()
 	from volunteering.volunteering.donation_accounting_setup import ensure_donation_accounting
 
 	ensure_donation_accounting()
@@ -458,9 +463,6 @@ def remove_obsolete_accounting_custom_fields():
 		"Project-fund_project_type",
 		"Expense Claim-department",
 		"Employee Advance-is_emergency",
-		"Expense Claim-account_classification_section",
-		"Expense Claim-account_classified_by",
-		"Expense Claim-account_classified_on",
 		"Expense Claim Detail-expense_category",
 	):
 		if frappe.db.exists("Custom Field", fieldname):
@@ -473,7 +475,7 @@ def ensure_workflow_actions():
 	Fresh sites (e.g. Frappe Cloud) may not have Submit / Re-submit yet; only
 	seeding Escalate left migrate failing on LinkValidationError.
 	"""
-	for action_name in ("Submit", "Re-submit", "Approve", "Reject", "Escalate"):
+	for action_name in ("Submit", "Re-submit", "Approve", "Reject", "Escalate", "Finalise Accounts"):
 		if frappe.db.exists("Workflow Action Master", action_name):
 			continue
 		frappe.get_doc({"doctype": "Workflow Action Master", "workflow_action_name": action_name}).insert(
@@ -488,6 +490,7 @@ def ensure_workflow_states():
 		("Pending Receipt Review", "Warning", "search"),
 		("Receipt Correction Required", "Danger", "edit"),
 		("Pending Approval", "Warning", "question-sign"),
+		("Pending Accounts Classification", "Warning", "briefcase"),
 		("Approved", "Success", "ok-sign"),
 		("Rejected", "Danger", "remove"),
 	)
@@ -648,6 +651,75 @@ def backfill_project_expense_accounts(*, seed_empty_projects=False):
 	)
 
 
+def backfill_project_expense_account_mappings():
+	"""Copy legacy one-account mappings into the new optional many-account table."""
+	if not (
+		frappe.db.exists("DocType", "Project Expense Account Mapping")
+		and frappe.db.has_column("Project", "expense_account_mappings")
+	):
+		return
+	for project in frappe.get_all("Project", pluck="name"):
+		existing = {
+			(row.budget_key, row.expense_account)
+			for row in frappe.get_all(
+				"Project Expense Account Mapping",
+				filters={"parent": project, "parenttype": "Project"},
+				fields=["budget_key", "expense_account"],
+			)
+		}
+		legacy = frappe.get_all(
+			"Project Account Budget",
+			filters={"parent": project, "parenttype": "Project"},
+			fields=["budget_key", "expense_account"],
+		)
+		for row in legacy:
+			if not row.budget_key or not row.expense_account or (row.budget_key, row.expense_account) in existing:
+				continue
+			frappe.get_doc(
+				{
+					"doctype": "Project Expense Account Mapping",
+					"parent": project,
+					"parenttype": "Project",
+					"parentfield": "expense_account_mappings",
+					"budget_key": row.budget_key,
+					"expense_account": row.expense_account,
+				}
+			).db_insert()
+
+
+def backfill_expense_claim_account_classification():
+	"""Keep submitted legacy claims payable and preserve their posted account split."""
+	if not (
+		frappe.db.exists("DocType", "Expense Claim Account Allocation")
+		and frappe.db.has_column("Expense Claim", "account_classification_status")
+	):
+		return
+	for claim in frappe.get_all(
+		"Expense Claim",
+		filters={"docstatus": 1, "workflow_state": "Approved"},
+		fields=["name", "account_classification_status"],
+	):
+		if claim.account_classification_status == "Complete":
+			continue
+		doc = frappe.get_doc("Expense Claim", claim.name)
+		if not doc.get("account_allocations"):
+			for row in doc.expenses:
+				if row.default_account and flt(row.sanctioned_amount) > 0:
+					doc.append(
+						"account_allocations",
+						{
+							"expense_detail": row.name,
+							"expense_label": row.get("project_expense_account") or row.description,
+							"expense_account": row.default_account,
+							"allocated_amount": flt(row.sanctioned_amount),
+						},
+					)
+		doc.db_set("account_classification_status", "Complete", update_modified=False)
+		for row in doc.get("account_allocations") or []:
+			if row.is_new():
+				row.db_insert()
+
+
 def ensure_project_budget_field_visibility():
 	"""Keep legacy department data but remove it from the Project form."""
 	visibility = {
@@ -733,6 +805,31 @@ def ensure_receipt_reviewer_permissions():
 	for permission_type in ("read", "select", "report", "print", "email"):
 		update_permission_property("Expense Claim", role, 0, permission_type, 1, validate=False)
 	for permission_type in ("write", "create", "delete", "submit", "cancel", "amend"):
+		update_permission_property("Expense Claim", role, 0, permission_type, 0, validate=False)
+	frappe.clear_cache(doctype="Expense Claim")
+
+
+def ensure_expense_claim_accounts_permissions():
+	"""Let Accounts Managers complete the final classification workflow step."""
+	from frappe.permissions import add_permission, update_permission_property
+
+	role = "Accounts Manager"
+	if not frappe.db.exists("Role", role) or not frappe.db.exists("DocType", "Expense Claim"):
+		return
+	if not frappe.db.exists(
+		"Custom DocPerm",
+		{
+			"parent": "Expense Claim",
+			"parenttype": "DocType",
+			"role": role,
+			"permlevel": 0,
+			"if_owner": 0,
+		},
+	):
+		add_permission("Expense Claim", role, permlevel=0, ptype="read")
+	for permission_type in ("read", "write", "submit", "select", "report", "print", "email"):
+		update_permission_property("Expense Claim", role, 0, permission_type, 1, validate=False)
+	for permission_type in ("create", "delete", "cancel", "amend"):
 		update_permission_property("Expense Claim", role, 0, permission_type, 0, validate=False)
 	frappe.clear_cache(doctype="Expense Claim")
 
@@ -859,6 +956,48 @@ def ensure_expense_claim_payable_account():
 			replacement,
 		)
 		frappe.clear_cache(doctype="Company")
+
+
+def ensure_unclassified_expense_accounts():
+	"""Create the temporary draft ledger used before Accounts classification.
+
+	The workflow prevents this account from ever being posted. It exists only
+	to satisfy HRMS' draft validation until Accounts selects the final ledgers.
+	"""
+	for company in frappe.get_all("Company", pluck="name"):
+		ensure_unclassified_expense_account(company)
+
+
+def ensure_unclassified_expense_account(company: str) -> str | None:
+	existing = frappe.db.get_value(
+		"Account",
+		{"company": company, "account_name": "Unclassified Employee Expenses", "is_group": 0},
+		"name",
+	)
+	if existing:
+		return existing
+	parent = frappe.db.get_value(
+		"Account",
+		{"company": company, "is_group": 1, "root_type": "Expense"},
+		"name",
+		order_by="lft desc",
+	)
+	if not parent:
+		return None
+	doc = frappe.get_doc(
+		{
+			"doctype": "Account",
+			"account_name": "Unclassified Employee Expenses",
+			"company": company,
+			"parent_account": parent,
+			"is_group": 0,
+			"root_type": "Expense",
+			"report_type": "Profit and Loss",
+			"account_currency": frappe.db.get_value("Company", company, "default_currency"),
+		}
+	)
+	doc.insert(ignore_permissions=True)
+	return doc.name
 
 
 def ensure_designation_limits():

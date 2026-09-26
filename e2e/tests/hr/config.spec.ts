@@ -317,9 +317,11 @@ test.describe("HR Configuration & Settings @hr @ui", () => {
           "admin",
         );
 
+        const outsideBackdateWindow = addDays(todayLocal(), -2);
+        await cleanupDay(request, emp, outsideBackdateWindow, "admin");
         const dwl = new DailyWorkLogFormPage(page);
         await dwl.openNew();
-        await dwl.setDate(addDays(todayLocal(), -2));
+        await dwl.setDate(outsideBackdateWindow);
         await dwl.addItem({ project, hours: 6 });
         await dwl.save({ expectError: /backdat/i });
 

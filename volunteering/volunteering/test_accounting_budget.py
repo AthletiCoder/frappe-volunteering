@@ -241,7 +241,7 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 		with patch("volunteering.volunteering.budget_service._can_override_budget", return_value=True):
 			apply_workflow(claim, "Approve")
 		claim.reload()
-		self.assertEqual(claim.workflow_state, "Approved")
+		self.assertEqual(claim.workflow_state, "Pending Accounts Classification")
 
 	def test_warn_only_allows_approval_without_override(self):
 		frappe.set_user("Administrator")
@@ -257,20 +257,23 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 
 		frappe.set_user(self.manager_email)
 		apply_workflow(frappe.get_doc("Expense Claim", claim.name), "Approve")
-		self.assertEqual(frappe.db.get_value("Expense Claim", claim.name, "workflow_state"), "Approved")
+		self.assertEqual(
+			frappe.db.get_value("Expense Claim", claim.name, "workflow_state"),
+			"Pending Accounts Classification",
+		)
 		status = get_budget_commitment_breakdown(self.project)
 		self.assertEqual(
 			status["pending_claim_commitments"],
-			before_approval["pending_claim_commitments"] - 12000,
+			before_approval["pending_claim_commitments"],
 		)
-		self.assertEqual(status["approved_expenditure"], before_approval["approved_expenditure"] + 12000)
+		self.assertEqual(status["approved_expenditure"], before_approval["approved_expenditure"])
 		self.assertEqual(status["total_committed"], before_approval["total_committed"])
 		self.assertEqual(
 			status["total_committed"],
 			status["pending_commitments"] + status["approved_expenditure"],
 		)
 
-	def test_expense_account_budget_is_independent_of_project_ceiling(self):
+	def test_expense_category_budget_is_independent_of_project_ceiling(self):
 		frappe.set_user("Administrator")
 		set_project_budget(
 			self.project,
