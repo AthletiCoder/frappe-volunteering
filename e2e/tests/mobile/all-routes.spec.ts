@@ -74,6 +74,17 @@ async function auditMobileLayout(
         return rect.left < -1 || rect.right > viewportWidth + 1;
       })
       .map(describe);
+    const overflowingElements = Array.from(document.querySelectorAll("body *"))
+      .filter(visible)
+      .filter((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.left < -1 || rect.right > viewportWidth + 1;
+      })
+      .slice(0, 20)
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        return `${describe(element)} (${Math.round(rect.left)}..${Math.round(rect.right)})`;
+      });
     const smallPrimaryTargets = Array.from(
       document.querySelectorAll(
         "main button.btn-primary, main button.btn-secondary, main a.btn-primary, main a.btn-secondary, main summary",
@@ -104,6 +115,7 @@ async function auditMobileLayout(
     return {
       viewportWidth,
       documentWidth: document.documentElement.scrollWidth,
+      overflowingElements,
       clippedControls,
       smallPrimaryTargets,
       undersizedTextInputs,
@@ -111,7 +123,7 @@ async function auditMobileLayout(
   });
   expect(
     audit.documentWidth,
-    `${label}: document is wider than its phone viewport`,
+    `${label}: document is wider than its phone viewport; overflowing elements: ${audit.overflowingElements.join(", ")}`,
   ).toBeLessThanOrEqual(audit.viewportWidth + 1);
   expect(
     audit.clippedControls,

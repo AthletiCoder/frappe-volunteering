@@ -1,36 +1,36 @@
 <template>
-	<div v-if="actions.length">
+	<section v-if="actions.length" :class="variant === 'dashboard' ? 'rounded-2xl border border-line bg-surface p-4 shadow-soft sm:p-5' : ''">
 		<h2 class="text-sm font-semibold text-ink mb-2 flex items-center gap-2">
 			<Icon :name="icon" size="sm" class="text-accent" />
 			{{ title }}
 		</h2>
-		<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+		<div :class="variant === 'dashboard' ? 'divide-y divide-line' : 'grid grid-cols-1 sm:grid-cols-2 gap-3'">
 			<article
 				v-for="action in actions"
 				:key="action.id"
 				:data-action-id="action.id"
-				class="rounded-2xl border border-line bg-surface p-3 shadow-soft hover:shadow-lift hover:-translate-y-0.5 transition-all duration-200"
+				:class="variant === 'dashboard' ? 'py-2.5 first:pt-1 last:pb-0' : 'rounded-2xl border border-line bg-surface p-3 shadow-soft hover:shadow-lift hover:-translate-y-0.5 transition-all duration-200'"
 			>
-				<a :href="action.route" class="group flex items-start gap-3 p-1">
+				<a :href="action.route" class="group flex items-start gap-3 rounded-lg p-1 hover:bg-bg">
 					<span
 						:data-icon-name="visualFor(action.id).icon"
 						:data-icon-tone="visualFor(action.id).tone"
 						:class="[
-							'w-10 h-10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-200',
+							variant === 'dashboard' ? 'w-9 h-9 rounded-lg flex items-center justify-center shrink-0' : 'w-10 h-10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-200',
 							`action-icon--${visualFor(action.id).tone}`,
 						]"
 					>
 						<Icon :name="visualFor(action.id).icon" />
 					</span>
-					<div>
-						<div class="font-semibold text-ink">{{ action.label }}</div>
-						<div class="text-sm text-muted mt-0.5">{{ action.hint }}</div>
+					<div class="min-w-0">
+						<div class="font-semibold text-ink" :class="variant === 'dashboard' ? 'text-sm' : ''">{{ action.label }}</div>
+						<div class="text-sm text-muted mt-0.5" :class="variant === 'dashboard' ? 'line-clamp-2' : ''">{{ action.hint }}</div>
 					</div>
 				</a>
 				<a
 					v-if="action.list_route"
 					:href="action.list_route"
-					class="mt-2 self-start inline-flex items-center gap-2 rounded-full bg-soft px-2.5 py-1 text-xs text-muted hover:shadow-soft hover:-translate-y-px transition-all duration-150"
+					:class="variant === 'dashboard' ? 'ml-12 mt-1 inline-flex items-center gap-2 rounded-full bg-soft px-2 py-0.5 text-xs text-muted hover:text-accent' : 'mt-2 self-start inline-flex items-center gap-2 rounded-full bg-soft px-2.5 py-1 text-xs text-muted hover:shadow-soft hover:-translate-y-px transition-all duration-150'"
 				>
 					<span>{{ action.list_label }}</span>
 					<span class="tabular-nums font-semibold text-ink">{{
@@ -39,7 +39,7 @@
 				</a>
 			</article>
 		</div>
-	</div>
+	</section>
 </template>
 
 <script setup>
@@ -49,6 +49,7 @@ defineProps({
 	title: { type: String, required: true },
 	icon: { type: String, default: "spark" },
 	actions: { type: Array, default: () => [] },
+	variant: { type: String, default: "default" },
 });
 
 const actionVisuals = {

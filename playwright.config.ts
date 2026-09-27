@@ -13,6 +13,9 @@ import { personaStorage } from './e2e/helpers/personas';
  */
 export default defineConfig({
 	testDir: './e2e/tests',
+	// Phone-layout specs have their own 360px/390px projects in playwright.mobile.config.ts.
+	// Running them here uses the desktop viewport and produces misleading failures.
+	testIgnore: /mobile\/.*\.spec\.ts$/,
 	globalSetup: './e2e/global-setup.ts',
 	fullyParallel: false,
 	forbidOnly: !!process.env.CI,

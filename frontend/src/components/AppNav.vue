@@ -1,11 +1,12 @@
 <template>
 	<nav
-		:class="cn('flex', layout === 'bottom' ? 'w-full max-w-md mx-auto justify-between gap-1' : 'gap-0.5')"
+		:class="cn('flex', layout === 'bottom' ? 'w-full max-w-md mx-auto justify-between gap-1' : layout === 'sidebar' ? 'w-full flex-col gap-1' : 'gap-0.5')"
 		:aria-label="ariaLabel"
 	>
 		<template v-for="item in items" :key="itemKey(item)">
+			<p v-if="item.section && layout === 'sidebar'" class="px-3 pt-5 pb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{{ item.section }}</p>
 			<a
-				v-if="item.href"
+				v-else-if="item.href"
 				:href="item.href"
 				:aria-label="item.label"
 				:class="linkClass(item, false)"
@@ -14,6 +15,7 @@
 					<Icon :name="item.icon" :size="layout === 'bottom' ? 'md' : 'sm'" />
 				</span>
 				<span :class="layout === 'bottom' ? 'truncate max-w-full' : null">{{ item.label }}</span>
+				<span v-if="item.badge && layout === 'sidebar'" class="ml-auto rounded-full bg-todo-soft px-2 py-0.5 text-xs font-semibold text-todo">{{ item.badge > 9 ? '9+' : item.badge }}</span>
 			</a>
 			<RouterLink
 				v-else
@@ -28,7 +30,7 @@
 				<span :class="layout === 'bottom' ? 'truncate max-w-full' : null">{{ item.label }}</span>
 				<span
 					v-if="item.badge"
-					class="absolute top-1 right-[18%] md:static md:ml-1 min-w-[1.1rem] h-4 px-1 rounded-full bg-todo text-on-todo text-[10px] font-bold inline-flex items-center justify-center"
+					:class="layout === 'sidebar' ? 'ml-auto rounded-full bg-todo-soft px-2 py-0.5 text-xs font-semibold text-todo' : 'absolute top-1 right-[18%] min-w-[1.1rem] h-4 px-1 rounded-full bg-todo text-on-todo text-[10px] font-bold inline-flex items-center justify-center'"
 					>{{ item.badge > 9 ? "9+" : item.badge }}</span
 				>
 			</RouterLink>
@@ -50,16 +52,18 @@ const props = defineProps({
 const route = useRoute();
 
 function itemKey(item) {
-	return item.href || item.to;
+	return item.section || item.href || item.to;
 }
 
 function linkClass(item, active) {
 	return cn(
-		"relative flex items-center gap-1.5 rounded-2xl text-sm font-medium transition-all duration-150",
+		"relative flex items-center gap-2.5 text-sm font-medium transition-colors duration-150",
 		props.layout === "bottom"
-			? "flex-1 flex-col py-2 px-1 min-w-0 text-[11px] text-muted"
-			: "px-2 py-1.5 text-muted hover:text-accent hover:bg-accent-soft",
-		{ "text-accent": active }
+			? "flex-1 flex-col rounded-xl py-2 px-1 min-w-0 text-[11px] text-muted"
+			: props.layout === "sidebar"
+				? "min-h-10 rounded-xl px-3 py-2.5 text-muted hover:text-ink hover:bg-soft"
+				: "rounded-xl px-2 py-1.5 text-muted hover:text-accent hover:bg-accent-soft",
+		{ "text-accent": active && props.layout !== "sidebar", "bg-accent-soft text-accent font-semibold": active && props.layout === "sidebar" }
 	);
 }
 

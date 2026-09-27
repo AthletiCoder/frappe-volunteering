@@ -22,8 +22,8 @@ test.describe('HR L1 smoke @smoke @hr', () => {
 			const home = new HomePage(page);
 			await home.goto();
 			await home.expectLoaded();
-			await expect(page.getByText('Time')).toBeVisible();
-			await expect(page.getByRole('link', { name: 'Apply for leave' })).toBeVisible();
+			await expect(page.getByRole('heading', { name: 'Time and leave' })).toBeVisible();
+			await expect(page.locator('[data-action-id="leave"] a').first()).toBeVisible();
 		});
 	});
 

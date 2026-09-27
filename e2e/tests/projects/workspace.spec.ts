@@ -440,16 +440,16 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
 
     await page.goto("/volunteering/home");
     await expect(
-      page.getByRole("link", { name: /Propose a project/ }),
+      page.getByRole("link", { name: /Propose a project/ }).first(),
     ).toBeVisible();
     await expect(
-      page.getByRole("link", { name: /Approved projects/ }),
+      page.getByRole("link", { name: /Approved projects/ }).first(),
     ).toBeVisible();
     await expect(
-      page.getByRole("link", { name: /Your proposals and change requests/ }),
+      page.getByRole("link", { name: /Your proposals and change requests/ }).first(),
     ).toBeVisible();
     await expect(
-      page.getByRole("link", { name: /Review pending proposals/ }),
+      page.getByRole("link", { name: /Review pending proposals/ }).first(),
     ).toBeVisible();
   });
 

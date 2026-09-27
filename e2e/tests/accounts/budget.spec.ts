@@ -180,7 +180,7 @@ test.describe('Budget controls @accounts @ui', () => {
 			{ doctype: 'Expense Claim', name: claimName, field: 'workflow_state' },
 			'admin',
 		);
-		expect(workflowState).toBe('Approved');
+		expect(workflowState).toBe('Pending Accounts Classification');
 	});
 
 	test('Expense Claim without project is blocked', async ({ browser, request }) => {

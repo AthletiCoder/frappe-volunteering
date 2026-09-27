@@ -188,7 +188,8 @@ test.describe.serial("Employee bank approval @bank-accounts @ui", () => {
   }) => {
     await signIn(page, manager);
     await page
-      .getByRole("link", { name: /Review reimbursement bank accounts/ })
+      .getByRole("region", { name: "Quick actions" })
+      .getByRole("link", { name: "Review reimbursement bank accounts", exact: true })
       .click();
     const card = page.locator("article").filter({ hasText: request.name });
     await expect(card).toContainText(number);
@@ -206,7 +207,10 @@ test.describe.serial("Employee bank approval @bank-accounts @ui", () => {
     page,
   }, testInfo) => {
     await signIn(page, employee);
-    await page.getByRole("link", { name: /Prepare an invoice/ }).click();
+    await page
+      .getByRole("region", { name: "Quick actions" })
+      .getByRole("link", { name: "Prepare an invoice", exact: true })
+      .click();
     await expect(
       page.getByRole("heading", {
         name: "Supplier bank details (optional)",

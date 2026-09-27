@@ -99,7 +99,7 @@ test.describe("Cross-module shared employee master @hr @accounts @ui", () => {
       { doctype: "Expense Claim", name: claimName, field: "workflow_state" },
       "admin",
     );
-    expect(approvedState).toBe("Approved");
+    expect(approvedState).toBe("Pending Accounts Classification");
   });
 
   test("XM-002 @regression @critical: Grade change updates Accounts limits; HR still works", async ({

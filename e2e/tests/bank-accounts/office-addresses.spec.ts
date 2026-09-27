@@ -49,7 +49,7 @@ test("employees view office addresses while Accounts Manager administers them", 
   let addressName = "";
 
   await signIn(page, "accounts");
-  await page.getByRole("link", { name: /Office addresses/ }).click();
+  await page.getByRole("link", { name: "Office addresses", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Office addresses", exact: true }),
   ).toBeVisible();
@@ -73,7 +73,7 @@ test("employees view office addresses while Accounts Manager administers them", 
 
   try {
     await signIn(page, "employee");
-    await page.getByRole("link", { name: /Office addresses/ }).click();
+    await page.getByRole("link", { name: "Office addresses", exact: true }).click();
     const employeeCard = page.locator("article").filter({ hasText: title });
     await expect(employeeCard).toContainText("101 Local Browser Test Road");
     await expect(
@@ -114,7 +114,7 @@ test("employees view office addresses while Accounts Manager administers them", 
   } finally {
     if (addressName) {
       await signIn(page, "accounts");
-      await page.getByRole("link", { name: /Office addresses/ }).click();
+      await page.getByRole("link", { name: "Office addresses", exact: true }).click();
       const cleanupCard = page.locator("article").filter({ hasText: title });
       await expect(cleanupCard).toBeVisible();
       page.once("dialog", (dialog) => dialog.accept());

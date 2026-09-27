@@ -57,7 +57,7 @@ test.describe('Approval routing @accounts @ui', () => {
 			{ doctype: 'Expense Claim', name: claimName, field: 'workflow_state' },
 			'admin',
 		);
-		expect(workflowState).toBe('Approved');
+		expect(workflowState).toBe('Pending Accounts Classification');
 	});
 
 	test('AC-APR-002 @regression @critical: Cannot Approve when over authority; can Escalate', async ({
@@ -199,7 +199,7 @@ test.describe('Approval routing @accounts @ui', () => {
 			{ doctype: 'Expense Claim', name: claimName, field: 'workflow_state' },
 			'admin',
 		);
-		expect(workflowState).toBe('Approved');
+		expect(workflowState).toBe('Pending Accounts Classification');
 	});
 
 	test('AC-APR-005 @regression @critical: Cannot approve own spending request', async ({
@@ -298,7 +298,7 @@ test.describe('Approval routing @accounts @ui', () => {
 			{ doctype: 'Expense Claim', name: claimName, field: 'workflow_state' },
 			'admin',
 		);
-		expect(workflowState).toBe('Approved');
+		expect(workflowState).toBe('Pending Accounts Classification');
 	});
 
 	test('AC-APR-007 @regression: Approval Authority toggle Off uses simple tiers', async ({

@@ -125,7 +125,9 @@ def ensure_sevamrita_office_addresses():
 	function idempotent also makes interrupted or manually retried migrations safe.
 	"""
 	if not frappe.db.exists("Company", SEVAMRITA_COMPANY):
-		return []
+		frappe.throw(
+			_("Cannot seed office addresses because Company {0} does not exist.").format(SEVAMRITA_COMPANY)
+		)
 
 	existing_by_title = {
 		row.address_title: row.name

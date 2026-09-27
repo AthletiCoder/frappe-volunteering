@@ -51,7 +51,10 @@ test("REL-001: Home claim → receipt reviewer → manager → Accounts classifi
   }
   await repairE2eReportsToChain(request);
   await signIn(page, "employee");
-  await page.getByRole("link", { name: /Submit an Expense/ }).click();
+  await page
+    .getByRole("region", { name: "Quick actions" })
+    .getByRole("link", { name: "Submit an Expense", exact: true })
+    .click();
   const defaults = await portalData(
     page,
     "volunteering.volunteering.expense_claim_portal.get_expense_claim_form",

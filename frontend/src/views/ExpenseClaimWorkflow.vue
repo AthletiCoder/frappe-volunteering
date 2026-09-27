@@ -649,7 +649,7 @@ function date(value) {
 
 watch(() => route.fullPath, load);
 watch(tab, (value) => {
-	if (!selected.value && route.query.view !== value)
+	if (!selected.value && !route.query.claim && route.query.view !== value)
 		router.replace({ path: "/expense-claim-workflow", query: { view: value } });
 });
 onMounted(load);

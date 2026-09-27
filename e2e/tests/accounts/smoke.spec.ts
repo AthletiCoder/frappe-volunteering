@@ -60,11 +60,12 @@ test.describe("Accounts L1 smoke @smoke @accounts", () => {
       const home = new HomePage(page);
       await home.goto();
       await home.expectLoaded();
+      const quick = page.getByRole("region", { name: "Quick actions" });
       await expect(
-        page.getByRole("link", { name: "Submit an Expense" }),
+        quick.getByRole("link", { name: "Submit an Expense", exact: true }),
       ).toBeVisible();
       await expect(
-        page.getByRole("link", { name: "Request an advance" }),
+        quick.getByRole("link", { name: "Request an advance", exact: true }),
       ).toBeVisible();
       await expect(page.getByText("To pay")).toHaveCount(0);
     });

@@ -136,6 +136,8 @@
 		/>
 		<path v-else-if="name === 'menu'" d="M5 7h14M5 12h14M5 17h14" />
 		<path v-else-if="name === 'close'" d="M7 7l10 10M17 7 7 17" />
+		<path v-else-if="name === 'search'" d="M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM17 17l4 4" />
+		<path v-else-if="name === 'arrow-right'" d="M4 12h16m0 0-6-6m6 6-6 6" />
 		<path
 			v-else-if="name === 'moon'"
 			fill="currentColor"

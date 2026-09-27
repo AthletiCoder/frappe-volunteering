@@ -15,6 +15,7 @@ import {
 import { PERSONAS, personaStorage } from '../../helpers/personas';
 import { getE2eProject } from '../../helpers/ui-fixtures';
 import { ExpenseClaimFormPage } from '../../pages/desk/expense-claim.page';
+import { callMethod } from '../../helpers/frappe';
 
 test.describe('Manager float reimbursement @accounts @ui', () => {
 	test.describe.configure({ mode: 'serial' });
@@ -37,12 +38,12 @@ test.describe('Manager float reimbursement @accounts @ui', () => {
 			budgetOverrideReason: 'E2E firm reimbursement approval.',
 		});
 
-		expect(approved.workflow_state).toBe('Approved');
+		expect(approved.workflow_state).toBe('Pending Accounts Classification');
 		expect(approved.manager_float_advance || '').toBeFalsy();
 		expect(Number(approved.total_amount_reimbursed || 0)).toBe(0);
 	});
 
-	test('AC-MFL-002 @regression @critical: Manager Advance approve settles from manager paid advance', async ({
+	test('AC-MFL-002 @regression @critical: Manager Advance classification settles from manager paid advance', async ({
 		request,
 	}) => {
 		test.setTimeout(180_000);
@@ -61,6 +62,35 @@ test.describe('Manager float reimbursement @accounts @ui', () => {
 		const approved = await seedApproveExpenseClaim(request, claim.name, {
 			budgetOverrideReason: 'E2E manager float approval.',
 		});
+		expect(approved.workflow_state).toBe('Pending Accounts Classification');
+
+		const workItem = await callMethod<{
+			classification: {
+				accounts: Array<{ value: string }>;
+				items: Array<{ expense_detail: string; required_amount: number; suggested_accounts: string[] }>;
+			};
+		}>(
+			request,
+			'volunteering.volunteering.expense_claim_workflow_portal.get_expense_claim_work_item',
+			{ name: claim.name },
+			'accounts',
+		);
+		const account = workItem.classification.items[0]?.suggested_accounts?.[0]
+			|| workItem.classification.accounts[0]?.value;
+		expect(account).toBeTruthy();
+		const classified = await callMethod<{ workflow_state: string }>(
+			request,
+			'volunteering.volunteering.expense_claim_workflow_portal.classify_expense_claim_accounts',
+			{
+				name: claim.name,
+				allocations: workItem.classification.items.map((item) => ({
+					expense_detail: item.expense_detail,
+					allocations: [{ expense_account: account, amount: item.required_amount }],
+				})),
+			},
+			'accounts',
+		);
+		expect(classified.workflow_state).toBe('Approved');
 
 		const claimedAmount = await e2eCall<number>(
 			request,
@@ -69,9 +99,12 @@ test.describe('Manager float reimbursement @accounts @ui', () => {
 			'admin',
 		);
 
-		expect(approved.workflow_state).toBe('Approved');
-		expect(approved.manager_float_advance).toBe(advanceName);
-		expect(Number(approved.total_amount_reimbursed)).toBe(1500);
+		expect(await e2eCall(request, 'get_doc_field', {
+			doctype: 'Expense Claim', name: claim.name, field: 'manager_float_advance',
+		})).toBe(advanceName);
+		expect(Number(await e2eCall(request, 'get_doc_field', {
+			doctype: 'Expense Claim', name: claim.name, field: 'total_amount_reimbursed',
+		}))).toBe(1500);
 		expect(Number(claimedAmount)).toBe(1500);
 	});
 

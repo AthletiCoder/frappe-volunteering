@@ -139,8 +139,8 @@ test.describe('Expense Claim @accounts @ui', () => {
 				{ doctype: 'Expense Claim', name: claimName, field: 'docstatus' },
 				'admin',
 			);
-			expect(approvedState).toBe('Approved');
-			expect(docstatus).toBe(1);
+			expect(approvedState).toBe('Pending Accounts Classification');
+			expect(docstatus).toBe(0);
 		});
 
 		test('AC-CLM-002 @regression @critical: Monthly Reimbursement Cap blocks excess', async ({

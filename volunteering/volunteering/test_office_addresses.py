@@ -1,6 +1,8 @@
 # Copyright (c) 2026, Vadiraj Tirtha Das and contributors
 # For license information, please see license.txt
 
+from unittest.mock import patch
+
 import frappe
 from frappe.tests import IntegrationTestCase, UnitTestCase
 
@@ -33,6 +35,11 @@ def address_details(title="_Test Mumbai Office"):
 
 
 class UnitTestOfficeAddresses(UnitTestCase):
+	def test_deployment_seed_fails_if_company_is_missing(self):
+		with patch.object(offices.frappe.db, "exists", return_value=None):
+			with self.assertRaisesRegex(frappe.ValidationError, "Company Sevamrita Foundation does not exist"):
+				offices.ensure_sevamrita_office_addresses()
+
 	def test_required_fields_and_address_type_are_validated(self):
 		for change in (
 			{"address_title": ""},

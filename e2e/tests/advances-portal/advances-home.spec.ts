@@ -122,7 +122,10 @@ test.afterEach(async ({ request }) => {
 test("AP-001: Home request form exposes scoped projects and masked bank details, not ledger fields", async ({
   page,
 }) => {
-  await page.getByRole("link", { name: /Request an advance/ }).click();
+  await page
+    .getByRole("region", { name: "Quick actions" })
+    .getByRole("link", { name: "Request an advance", exact: true })
+    .click();
   await expect(page).toHaveURL(/\/volunteering\/advances\?new=1/);
   const defaults = await openRequest(page);
   for (const internal of [

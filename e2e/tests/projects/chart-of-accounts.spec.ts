@@ -12,9 +12,9 @@ test("Accounts Manager opens Home Chart of Accounts and an account detail", asyn
   );
   await page.goto("/volunteering/home");
   await expect(
-    page.getByRole("link", { name: /Chart of Accounts/ }),
+    page.getByRole("region", { name: "Quick actions" }).getByRole("link", { name: "Chart of Accounts", exact: true }),
   ).toBeVisible();
-  await page.getByRole("link", { name: /Chart of Accounts/ }).click();
+  await page.getByRole("region", { name: "Quick actions" }).getByRole("link", { name: "Chart of Accounts", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Chart of Accounts" }),
   ).toBeVisible();

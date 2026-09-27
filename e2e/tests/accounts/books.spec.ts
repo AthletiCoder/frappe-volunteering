@@ -23,13 +23,12 @@ test.describe('Books and hubs @accounts @ui', () => {
 			const desk = new DeskForm(page);
 			await desk.gotoList('Payment Entry');
 			await expect(page.locator('.list-row, .frappe-list, .no-result').first()).toBeVisible();
-			const firstRow = page.locator('.list-row').first();
-			if (await firstRow.isVisible().catch(() => false)) {
-				await firstRow.click();
-				await desk.waitForFormReady();
-				const deleteBtn = page.locator('button, .dropdown-item').filter({ hasText: /^Delete$/ });
-				await expect(deleteBtn).toHaveCount(0);
-			}
+			const submittedRow = page.locator('.list-row').filter({ hasText: 'Submitted' }).first();
+			await expect(submittedRow).toBeVisible();
+			await submittedRow.locator('.list-subject a').click();
+			await desk.waitForFormReady();
+			const deleteBtn = page.locator('button, .dropdown-item').filter({ hasText: /^Delete$/ });
+			await expect(deleteBtn).toHaveCount(0);
 		});
 
 		test('AC-BKS-004 @regression: General Ledger report runs', async ({ page }) => {

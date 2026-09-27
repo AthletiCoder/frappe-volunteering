@@ -40,7 +40,10 @@ test.describe("Employee expense portal @ui @expense-portal", () => {
     );
     await page.goto("/volunteering/home");
     await expect(page.getByRole("heading", { name: /^Hello/ })).toBeVisible();
-    await page.getByRole("link", { name: /Submit an Expense/ }).click();
+    await page
+      .getByRole("region", { name: "Quick actions" })
+      .getByRole("link", { name: "Submit an Expense", exact: true })
+      .click();
     await expect(
       page.getByRole("heading", { name: "Submit an expense", exact: true }),
     ).toBeVisible();
@@ -177,13 +180,18 @@ test.describe("Employee expense portal @ui @expense-portal", () => {
   }) => {
     await page.goto("/volunteering/home");
     await expect(
-      page.getByRole("link", { name: /Submit an Expense/ }),
+      page
+        .getByRole("region", { name: "Quick actions" })
+        .getByRole("link", { name: "Submit an Expense", exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByRole("link", { name: /^Prepare an invoice/ }),
+      page
+        .getByRole("region", { name: "Quick actions" })
+        .getByRole("link", { name: "Prepare an invoice", exact: true }),
     ).toBeVisible();
     await page
-      .getByRole("link", { name: /Prepare invoice and submit expense/ })
+      .getByRole("region", { name: "Quick actions" })
+      .getByRole("link", { name: "Prepare invoice and submit expense", exact: true })
       .click();
     await expect(page).toHaveURL(/\/volunteering\/invoice-expense-claim$/);
     await expect(

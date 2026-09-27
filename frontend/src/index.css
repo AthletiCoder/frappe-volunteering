@@ -4,15 +4,15 @@
 
 :root {
 	color-scheme: light;
-	--bg: #f6f4ef;
+	--bg: #f5f7f9;
 	--surface: #ffffff;
-	--soft: #efeae1;
-	--ink: #1c1914;
-	--muted: #6f675c;
-	--line: #e4ddd3;
-	--accent: #0f6e56;
-	--accent-hover: #0c5e49;
-	--accent-soft: #dceee7;
+	--soft: #edf2f5;
+	--ink: #1d2935;
+	--muted: #647483;
+	--line: #dfe6eb;
+	--accent: #0c755f;
+	--accent-hover: #095d4d;
+	--accent-soft: #def1ea;
 	--on-accent: #ffffff;
 	--todo: #c2410c;
 	--todo-soft: #ffedd5;
@@ -23,8 +23,8 @@
 	--warn-soft: #fef3c7;
 	--bad: #b91c1c;
 	--bad-soft: #fee2e2;
-	--shadow-soft: 0 1px 2px rgb(28 25 20 / 0.05), 0 8px 24px rgb(28 25 20 / 0.04);
-	--shadow-lift: 0 10px 28px rgb(15 110 86 / 0.12);
+	--shadow-soft: 0 1px 2px rgb(29 41 53 / 0.04), 0 8px 24px rgb(29 41 53 / 0.04);
+	--shadow-lift: 0 10px 28px rgb(12 117 95 / 0.12);
 	--header-bg: rgb(255 255 255 / 0.96);
 }
 
@@ -154,6 +154,22 @@ html.dark button:focus-visible {
 	background: var(--header-bg);
 	backdrop-filter: blur(14px);
 	-webkit-backdrop-filter: blur(14px);
+}
+
+/* Frappe's website CSS also defines `.hidden` with higher priority than the
+   responsive Tailwind utilities. These shell controls must explicitly switch
+   on at their desktop breakpoints. */
+@media (min-width: 640px) {
+	.portal-search-trigger { display: flex !important; }
+}
+@media (min-width: 768px) {
+	.portal-profile-trigger { display: flex !important; }
+}
+@media (min-width: 1024px) {
+	.portal-sidebar { display: flex !important; }
+}
+@media (min-width: 1280px) {
+	.portal-profile-details { display: block !important; }
 }
 
 .app-scrim {
