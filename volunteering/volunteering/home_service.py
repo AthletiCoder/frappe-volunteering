@@ -34,7 +34,7 @@ PERSONA_GREETING = {
 	"hr": _("People ops first."),
 	"coordinator": _("Campaign snapshot, then your own work."),
 	"admin": _("Organisation home."),
-	"volunteer": _("This Home is for staff. Use the volunteer portal."),
+	"volunteer": _("No staff actions are assigned to your account."),
 }
 
 

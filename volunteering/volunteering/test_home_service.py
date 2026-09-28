@@ -23,6 +23,7 @@ from volunteering.volunteering.home_service import (
 	get_home_payload,
 )
 from volunteering.volunteering.home_cutover import home_project_filter
+from volunteering.www.volunteering import is_open_home_route
 
 
 class UnitTestHomeAccess(UnitTestCase):
@@ -36,33 +37,34 @@ class UnitTestHomeAccess(UnitTestCase):
 			frappe.get_hooks("get_website_user_home_page"),
 		)
 
-	def test_login_landing_page_is_home_only_for_staff(self):
-		self.assertEqual(
-			staff_login_target("employee@example.com", ["Employee"], True), "/volunteering/home"
-		)
-		self.assertEqual(
-			staff_login_target("manager@example.com", ["Projects Manager"], False), "/volunteering/home"
-		)
-		self.assertIsNone(staff_login_target("volunteer@example.com", ["NGO Member"], False))
-		self.assertIsNone(staff_login_target("Guest", ["Employee"], True))
-		self.assertIsNone(staff_login_target("Administrator", ["System Manager"], True))
+	def test_login_landing_page_is_home_for_every_authenticated_user(self):
+		for user in (
+			"employee@example.com",
+			"manager@example.com",
+			"volunteer@example.com",
+			"Administrator",
+		):
+			with self.subTest(user=user):
+				self.assertEqual(staff_login_target(user), "/volunteering/home")
+		self.assertIsNone(staff_login_target("Guest"))
+		self.assertIsNone(staff_login_target(None))
 
-	def test_session_creation_sets_staff_home_without_changing_admin_landing(self):
+	def test_session_creation_sets_home_for_employee_and_administrator(self):
 		from types import SimpleNamespace
 		from frappe.website.utils import get_home_page
 
 		previous = frappe.local.flags.get("home_page")
 		try:
-			frappe.local.flags.pop("home_page", None)
-			with patch("volunteering.volunteering.home_access.get_staff_home_page", return_value="/volunteering/home"):
-				set_staff_login_home(SimpleNamespace(user="employee@example.com"))
-			self.assertEqual(frappe.local.flags.home_page, "/volunteering/home")
-			with patch.object(frappe, "in_test", False):
-				self.assertEqual(get_home_page(), "/volunteering/home")
+			for user in ("employee@example.com", "Administrator"):
+				with self.subTest(user=user):
+					frappe.local.flags.pop("home_page", None)
+					set_staff_login_home(SimpleNamespace(user=user))
+					self.assertEqual(frappe.local.flags.home_page, "/volunteering/home")
+					with patch.object(frappe, "in_test", False):
+						self.assertEqual(get_home_page(), "/volunteering/home")
 
 			frappe.local.flags.pop("home_page", None)
-			with patch("volunteering.volunteering.home_access.get_staff_home_page", return_value=None):
-				set_staff_login_home(SimpleNamespace(user="Administrator"))
+			set_staff_login_home(SimpleNamespace(user="Guest"))
 			self.assertIsNone(frappe.local.flags.get("home_page"))
 		finally:
 			if previous is None:
@@ -70,12 +72,17 @@ class UnitTestHomeAccess(UnitTestCase):
 			else:
 				frappe.local.flags.home_page = previous
 
-	def test_home_page_hook_uses_same_access_rules(self):
-		with patch("frappe.get_roles", return_value=["Employee"]), patch.object(
-			frappe.db, "exists", return_value="HR-EMP-00001"
-		):
-			self.assertEqual(get_staff_home_page("employee@example.com"), "/volunteering/home")
-		self.assertIsNone(get_staff_home_page("Administrator"))
+	def test_home_page_hook_requires_only_an_authenticated_user(self):
+		self.assertEqual(get_staff_home_page("employee@example.com"), "/volunteering/home")
+		self.assertEqual(get_staff_home_page("Administrator"), "/volunteering/home")
+		self.assertEqual(get_staff_home_page("volunteer@example.com"), "/volunteering/home")
+		self.assertIsNone(get_staff_home_page("Guest"))
+
+	def test_everyone_can_open_home_but_other_portal_routes_keep_role_gate(self):
+		self.assertTrue(is_open_home_route("/volunteering/home"))
+		self.assertTrue(is_open_home_route("/volunteering/home/"))
+		self.assertTrue(is_open_home_route("/volunteering/profile"))
+		self.assertFalse(is_open_home_route("/volunteering/chart-of-accounts"))
 
 	def test_employee_sees_time_and_money_not_pay_queues(self):
 		flags = classify_home_access(["Employee"], has_employee=True, grade="Associate")

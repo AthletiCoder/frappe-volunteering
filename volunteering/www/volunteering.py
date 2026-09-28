@@ -10,27 +10,34 @@ from volunteering.volunteering.home_access import require_logged_in_or_redirect
 no_cache = 1
 
 
+def is_open_home_route(path):
+	return path.rstrip("/") in ("/volunteering", "/volunteering/home", "/volunteering/profile")
+
+
 def get_context(context):
 	require_logged_in_or_redirect()
-	frappe.only_for(
-		(
-			"Employee",
-			"Accounts User",
-			"Accounts Manager",
-			"System Manager",
-			"HR Manager",
-			"HR User",
-			"NGO Coordinator",
-			"Leave Approver",
-			"Expense Approver",
-			"Expense Receipt Reviewer",
-			"Projects User",
-			"Projects Manager",
-			"Project Proposer",
-			"Project Viewer",
-			"Auditor",
+	# Home and Profile are safe for any authenticated account. Preserve the
+	# existing page-level role gate for every other workflow route.
+	if not is_open_home_route(frappe.local.request.path):
+		frappe.only_for(
+			(
+				"Employee",
+				"Accounts User",
+				"Accounts Manager",
+				"System Manager",
+				"HR Manager",
+				"HR User",
+				"NGO Coordinator",
+				"Leave Approver",
+				"Expense Approver",
+				"Expense Receipt Reviewer",
+				"Projects User",
+				"Projects Manager",
+				"Project Proposer",
+				"Project Viewer",
+				"Auditor",
+			)
 		)
-	)
 	context.no_cache = 1
 	context.full_width = 1
 	context.no_header = 1

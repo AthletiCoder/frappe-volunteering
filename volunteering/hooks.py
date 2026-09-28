@@ -26,8 +26,8 @@ website_redirects = [
 	{"source": "/", "target": "/volunteering/home"},
 ]
 
-# Staff accounts land on Home after login; the Administrator retains Desk as
-# its default. Explicit login redirect targets still take precedence.
+# All authenticated accounts land on Home after login. Explicit login redirect
+# targets may still take precedence; the Desk root has a client-side fallback.
 on_session_creation = "volunteering.volunteering.home_access.set_staff_login_home"
 get_website_user_home_page = "volunteering.volunteering.home_access.get_staff_home_page"
 

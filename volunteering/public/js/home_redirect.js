@@ -4,6 +4,9 @@ volunteering.home_redirect.HOME_URL = "/volunteering/home";
 
 volunteering.home_redirect.is_legacy_hub = function () {
 	const path = (window.location.pathname || "").toLowerCase();
+	if (/\/(app|desk)\/?$/.test(path)) {
+		return true;
+	}
 	if (/\/(app|desk)\/my-work\/?$/.test(path) || /\/(app|desk)\/my-expenses\/?$/.test(path)) {
 		return true;
 	}

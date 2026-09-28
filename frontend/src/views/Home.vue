@@ -9,7 +9,7 @@
 		<p v-if="logoutError" class="mb-4 text-bad" role="alert">{{ logoutError }}</p>
 		<div v-if="error" class="mb-4 text-bad" role="alert">{{ error }}</div>
 		<div v-else-if="!payload" class="text-muted">Loading…</div>
-		<div v-else-if="!payload.allowed" class="rounded-2xl border border-line bg-surface p-6 shadow-soft"><p class="text-ink">Home is for staff. Use the volunteer portal for your activities.</p></div>
+		<div v-else-if="!payload.allowed" class="rounded-2xl border border-line bg-surface p-6 shadow-soft"><p class="text-ink">No staff actions are assigned to your account. You can view your profile or contact an administrator if you need staff access.</p></div>
 		<div v-else class="space-y-6">
 			<div class="grid items-start gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(20rem,1fr)]">
 				<section class="overflow-hidden rounded-2xl border border-line bg-surface shadow-soft" aria-labelledby="attention-title">
