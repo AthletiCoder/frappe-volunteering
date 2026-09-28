@@ -20,6 +20,7 @@ from volunteering.volunteering.approval_routing import (
 )
 from volunteering.volunteering.employee_advance_controls import advance_residual_amount
 from volunteering.volunteering.employee_bank_accounts import get_approved_bank_details
+from volunteering.volunteering.home_cutover import home_project_filter, is_home_advance
 
 HOME_ROUTE = "/volunteering/advance-workflow"
 DISBURSEMENT_ROLES = frozenset({"Accounts Manager", "Accounts User"})
@@ -36,7 +37,8 @@ def _is_accounts_user(user: str | None = None) -> bool:
 
 def _can_approve(doc, user: str) -> bool:
 	return (
-		doc.docstatus == 0
+		is_home_advance(doc)
+		and doc.docstatus == 0
 		and doc.get("workflow_state") == "Pending Approval"
 		and doc.get("pending_approver") == user
 	)
@@ -48,7 +50,8 @@ def _outstanding_to_pay(doc) -> float:
 
 def _can_disburse(doc, user: str) -> bool:
 	return (
-		_is_accounts_user(user)
+		is_home_advance(doc)
+		and _is_accounts_user(user)
 		and doc.docstatus == 1
 		and doc.get("workflow_state") == "Approved"
 		and _outstanding_to_pay(doc) > 0
@@ -57,7 +60,8 @@ def _can_disburse(doc, user: str) -> bool:
 
 def _can_record_return(doc, user: str) -> bool:
 	return (
-		_is_accounts_user(user)
+		is_home_advance(doc)
+		and _is_accounts_user(user)
 		and doc.docstatus == 1
 		and doc.get("workflow_state") == "Approved"
 		and flt(doc.get("paid_amount"), 2) > 0
@@ -120,6 +124,7 @@ def get_advance_work_queue():
 				"docstatus": 0,
 				"workflow_state": "Pending Approval",
 				"pending_approver": user,
+				**home_project_filter("intended_project"),
 			},
 			fields=fields,
 			order_by="modified asc",
@@ -129,17 +134,25 @@ def get_advance_work_queue():
 	if _is_accounts_user(user):
 		rows = frappe.get_all(
 			"Employee Advance",
-			filters={"docstatus": 1, "workflow_state": "Approved"},
+			filters={
+				"docstatus": 1, "workflow_state": "Approved",
+				**home_project_filter("intended_project"),
+			},
 			fields=fields,
 			order_by="required_by_date asc, modified asc",
 			limit=500,
 		)
 		queues["disbursement"] = [
-			_queue_row(row, "disbursement") for row in rows if _outstanding_to_pay(row) > 0
+			_queue_row(row, "disbursement")
+			for row in rows
+			if _outstanding_to_pay(row) > 0
 		]
 		return_rows = frappe.get_all(
 			"Employee Advance",
-			filters={"docstatus": 1, "workflow_state": "Approved", "paid_amount": [">", 0]},
+			filters={
+				"docstatus": 1, "workflow_state": "Approved", "paid_amount": [">", 0],
+				**home_project_filter("intended_project"),
+			},
 			fields=fields + ["claimed_amount", "return_amount", "status"],
 			order_by="modified desc",
 			limit=500,

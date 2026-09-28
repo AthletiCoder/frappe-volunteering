@@ -16,6 +16,7 @@ from volunteering.volunteering.employee_advance_controls import (
 	advance_residual_amount,
 )
 from volunteering.volunteering.home_access import classify_home_access
+from volunteering.volunteering.home_cutover import home_project_filter, is_home_advance, is_home_project
 from volunteering.volunteering.workspace_setup import get_latest_ngo_event
 
 HOME_URL = "/volunteering/home"
@@ -345,16 +346,26 @@ def _employee_draft_todos(employee):
 		if not frappe.db.exists("DocType", doctype):
 			continue
 		fields = ["name", "creation", "modified", amount_field]
+		fields.append("intended_project" if doctype == "Employee Advance" else "project")
 		if frappe.db.has_column(doctype, "workflow_state"):
 			fields.append("workflow_state")
 		rows = frappe.get_all(
 			doctype,
-			filters={"employee": employee, "docstatus": 0},
+			filters={
+				"employee": employee, "docstatus": 0,
+				**home_project_filter("intended_project" if doctype == "Employee Advance" else "project"),
+			},
 			fields=fields,
 			order_by="modified desc",
 			limit=8,
 		)
 		for row in rows:
+			if not (
+				is_home_advance(row)
+				if doctype == "Employee Advance"
+				else is_home_project(row.project)
+			):
+				continue
 			amount = row.get(amount_field)
 			subtitle_parts = [format_datetime(row.creation, "dd MMM yyyy, HH:mm")]
 			if amount:
@@ -587,8 +598,8 @@ def _receipt_review_inbox(reviewer_employee):
 		filters["employee"] = ["!=", reviewer_employee]
 	rows = frappe.get_all(
 		"Expense Claim",
-		filters=filters,
-		fields=["name", "employee_name", "total_claimed_amount", "creation", "modified"],
+		filters={**filters, **home_project_filter()},
+		fields=["name", "employee_name", "total_claimed_amount", "creation", "modified", "project"],
 		order_by="modified desc",
 		limit=INBOX_CAP,
 	)
@@ -610,6 +621,7 @@ def _receipt_review_inbox(reviewer_employee):
 			"raised_at": str(row.creation or ""),
 		}
 		for row in rows
+		if is_home_project(row.project)
 	]
 
 
@@ -689,9 +701,17 @@ def _pending_approver_inbox(doctype, kind, user):
 		fields.append("grand_total")
 	if frappe.db.has_column(doctype, "advance_amount"):
 		fields.append("advance_amount")
+	if doctype == "Employee Advance":
+		fields.append("intended_project")
+	elif doctype in ("Expense Claim", "Purchase Order"):
+		fields.append("project")
 	filters = {"pending_approver": user, "docstatus": 0}
 	if doctype == "Expense Claim":
 		filters["workflow_state"] = "Pending Approval"
+	if doctype in ("Expense Claim", "Purchase Order"):
+		filters.update(home_project_filter())
+	elif doctype == "Employee Advance":
+		filters.update(home_project_filter("intended_project"))
 	rows = frappe.get_all(
 		doctype,
 		filters=filters,
@@ -701,6 +721,10 @@ def _pending_approver_inbox(doctype, kind, user):
 	)
 	out = []
 	for row in rows:
+		if doctype == "Employee Advance" and not is_home_advance(row):
+			continue
+		if doctype in ("Expense Claim", "Purchase Order") and not is_home_project(row.project):
+			continue
 		amount = row.get("grand_total") or row.get("total_claimed_amount") or row.get("advance_amount")
 		who = row.get("employee_name") or row.get("supplier_name") or row.name
 		subtitle_parts = [format_datetime(row.creation, "dd MMM yyyy, HH:mm"), row.name]
@@ -765,8 +789,11 @@ def _accounts_queues():
 		1
 		for row in frappe.get_all(
 			"Employee Advance",
-			filters={"docstatus": 1, "workflow_state": "Approved"},
-			fields=["advance_amount", "paid_amount"],
+			filters={
+				"docstatus": 1, "workflow_state": "Approved",
+				**home_project_filter("intended_project"),
+			},
+			fields=["advance_amount", "paid_amount", "intended_project"],
 			limit=500,
 		)
 		if flt(row.advance_amount) - flt(row.paid_amount) > 0
@@ -815,11 +842,20 @@ def _residual_advance_count():
 		return 0
 	rows = frappe.get_all(
 		"Employee Advance",
-		filters={"docstatus": 1, "status": ["not in", list(SETTLED_STATUSES)]},
-		fields=["name", "advance_amount", "paid_amount", "claimed_amount", "return_amount", "status"],
+		filters={
+			"docstatus": 1, "status": ["not in", list(SETTLED_STATUSES)],
+			**home_project_filter("intended_project"),
+		},
+		fields=[
+			"name", "advance_amount", "paid_amount", "claimed_amount", "return_amount", "status",
+			"intended_project",
+		],
 		limit=200,
 	)
-	return sum(1 for row in rows if flt(row.paid_amount) > 0 and advance_residual_amount(row) > 0)
+	return sum(
+		1 for row in rows
+		if flt(row.paid_amount) > 0 and advance_residual_amount(row) > 0
+	)
 
 
 def _programs_block():
@@ -879,6 +915,14 @@ def _safe_count(doctype, filters):
 	if not frappe.db.exists("DocType", doctype):
 		return 0
 	try:
+		project_field = {
+			"Employee Advance": "intended_project",
+			"Expense Claim": "project",
+			"Purchase Order": "project",
+			"Purchase Invoice": "project",
+		}.get(doctype)
+		if project_field:
+			filters = {**filters, **home_project_filter(project_field)}
 		return frappe.db.count(doctype, filters) or 0
 	except Exception:
 		return 0

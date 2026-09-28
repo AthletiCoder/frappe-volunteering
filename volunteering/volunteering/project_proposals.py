@@ -10,6 +10,7 @@ from frappe import _
 from frappe.utils import cint, cstr, now_datetime
 
 from volunteering.volunteering import project_workspace as workspace
+from volunteering.volunteering.home_cutover import home_project_names, require_home_project
 
 _mutation = ContextVar("project_request_mutation", default=False)
 _application = ContextVar("approved_project_application", default=None)
@@ -108,6 +109,10 @@ def get_permission_query_conditions(user=None):
 def _load(name, modified=None, lock=False):
 	workspace._logged_in()
 	doc = frappe.get_doc("Project Proposal", name)
+	if not cint(doc.get("home_workspace_record")):
+		frappe.throw(_("This record is not available in Home."), frappe.PermissionError)
+	if doc.project:
+		require_home_project(doc.project)
 	if not _readable(doc):
 		frappe.throw(_("You cannot access this project request."), frappe.PermissionError)
 	if lock:
@@ -121,6 +126,7 @@ def _load(name, modified=None, lock=False):
 
 
 def _project(project):
+	require_home_project(project)
 	doc = frappe.get_doc("Project", project)
 	if not workspace._can_view(doc) or not workspace.can_propose_changes(doc):
 		frappe.throw(
@@ -353,10 +359,16 @@ def get_proposal(proposal):
 @frappe.whitelist()
 def get_proposals():
 	workspace._logged_in()
-	filters = {} if workspace.is_project_manager() else {"proposed_by": frappe.session.user}
-	return frappe.get_all(
+	filters = {"home_workspace_record": 1}
+	if not workspace.is_project_manager():
+		filters["proposed_by"] = frappe.session.user
+	rows = frappe.get_all(
 		"Project Proposal",
 		filters=filters,
+		or_filters=[
+			{"project": ["is", "not set"]},
+			{"project": ["in", home_project_names() or [""]]},
+		],
 		fields=[
 			"name",
 			"title",
@@ -370,6 +382,7 @@ def get_proposals():
 		order_by="modified desc",
 		limit_page_length=100,
 	)
+	return rows
 
 
 @frappe.whitelist(methods=["POST"])
@@ -413,6 +426,7 @@ def save_proposal(data, proposal=None, project=None, modified=None, reason="", a
 				"project": project,
 				"proposed_by": frappe.session.user,
 				"proposal_status": "Draft",
+				"home_workspace_record": 1,
 			}
 		)
 		# A planning draft may be saved before the proposer knows who should

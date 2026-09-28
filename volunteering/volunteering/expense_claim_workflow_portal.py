@@ -32,6 +32,7 @@ from volunteering.volunteering.expense_account_classification import (
 	set_account_allocations,
 )
 from volunteering.volunteering.expense_claim_portal import _claim_source, _expense_labels, _project_names
+from volunteering.volunteering.home_cutover import home_project_filter, is_home_project
 from volunteering.volunteering.receipt_review import (
 	PENDING_RECEIPT_REVIEW,
 	RECEIPT_REVIEWER_ROLE,
@@ -57,7 +58,8 @@ def _requester_user(doc) -> str | None:
 
 def _can_receipt_review(doc, user: str) -> bool:
 	return (
-		(user == "Administrator" or RECEIPT_REVIEWER_ROLE in _roles(user))
+		is_home_project(doc.project)
+		and (user == "Administrator" or RECEIPT_REVIEWER_ROLE in _roles(user))
 		and doc.docstatus == 0
 		and doc.workflow_state == PENDING_RECEIPT_REVIEW
 		and _requester_user(doc) != user
@@ -66,7 +68,8 @@ def _can_receipt_review(doc, user: str) -> bool:
 
 def _can_approve(doc, user: str) -> bool:
 	return (
-		doc.docstatus == 0
+		is_home_project(doc.project)
+		and doc.docstatus == 0
 		and doc.workflow_state == "Pending Approval"
 		and doc.get("pending_approver") == user
 	)
@@ -74,7 +77,8 @@ def _can_approve(doc, user: str) -> bool:
 
 def _can_classify(doc, user: str) -> bool:
 	return (
-		can_classify(user)
+		is_home_project(doc.project)
+		and can_classify(user)
 		and doc.docstatus == 0
 		and doc.workflow_state == PENDING_ACCOUNTS_CLASSIFICATION
 	)
@@ -82,7 +86,8 @@ def _can_classify(doc, user: str) -> bool:
 
 def _can_reimburse(doc, user: str) -> bool:
 	return (
-		_is_accounts_user(user)
+		is_home_project(doc.project)
+		and _is_accounts_user(user)
 		and doc.docstatus == 1
 		and doc.get("approval_status") == "Approved"
 		and doc.get("status") == "Unpaid"
@@ -139,6 +144,7 @@ def get_expense_claim_work_queue():
 	roles = _roles(user)
 	if user == "Administrator" or RECEIPT_REVIEWER_ROLE in roles:
 		filters = {"docstatus": 0, "workflow_state": PENDING_RECEIPT_REVIEW}
+		filters.update(home_project_filter())
 		employee = frappe.db.get_value("Employee", {"user_id": user}, "name")
 		if employee and user != "Administrator":
 			filters["employee"] = ["!=", employee]
@@ -157,6 +163,7 @@ def get_expense_claim_work_queue():
 				"docstatus": 0,
 				"workflow_state": "Pending Approval",
 				"pending_approver": user,
+				**home_project_filter(),
 			},
 			fields=fields,
 			order_by="modified desc",
@@ -173,6 +180,7 @@ def get_expense_claim_work_queue():
 					"docstatus": 1,
 					"approval_status": "Approved",
 					"status": "Unpaid",
+					**home_project_filter(),
 				},
 				fields=fields,
 				order_by="posting_date asc, modified asc",
@@ -184,7 +192,10 @@ def get_expense_claim_work_queue():
 			_queue_row(row, "classification")
 			for row in frappe.get_all(
 				"Expense Claim",
-				filters={"docstatus": 0, "workflow_state": PENDING_ACCOUNTS_CLASSIFICATION},
+				filters={
+					"docstatus": 0, "workflow_state": PENDING_ACCOUNTS_CLASSIFICATION,
+					**home_project_filter(),
+				},
 				fields=fields,
 				order_by="posting_date asc, modified asc",
 				limit=500,

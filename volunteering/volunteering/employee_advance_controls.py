@@ -233,10 +233,21 @@ def get_advance_approval_exposure(employee, current_name=None, current_amount=0)
 	sees, and the approval action rechecks, the employee's current total exposure.
 	"""
 	request_amount = max(flt(current_amount), 0.0)
+	# Historical test advances remain available in Desk, but must neither appear
+	# nor inflate the approval ladder for a new Home advance.
+	from volunteering.volunteering.home_cutover import is_home_advance
+
+	current_is_home = bool(
+		current_name
+		and is_home_advance(
+			{"intended_project": frappe.db.get_value("Employee Advance", current_name, "intended_project")}
+		)
+	)
 	other_outstanding = sum(
 		advance_approval_outstanding_amount(row)
 		for row in list_open_advances_for_employee(employee, exclude_name=current_name)
 		if advance_counts_towards_approval_exposure(row)
+		and (not current_is_home or is_home_advance(row))
 	)
 	return {
 		"request_amount": flt(request_amount, 2),

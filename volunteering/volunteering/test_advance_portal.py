@@ -17,7 +17,9 @@ from volunteering.volunteering.accounting_test_utils import (
 )
 from volunteering.volunteering.advance_freeze import freeze_status, set_advance_freeze
 from volunteering.volunteering.advance_portal import (
+	get_advance_detail,
 	get_advance_request_form,
+	get_my_advances,
 	save_advance_request,
 )
 from volunteering.volunteering.advance_workflow_portal import (
@@ -33,6 +35,7 @@ from volunteering.volunteering.approval_routing import (
 	get_live_workflow_transitions,
 )
 from volunteering.volunteering.employee_advance_controls import get_grade_advance_limit_for_employee
+from volunteering.volunteering.home_service import get_home_payload
 from volunteering.volunteering.employee_bank_accounts import (
 	review_bank_account_request,
 	submit_bank_account_request,
@@ -153,6 +156,29 @@ class IntegrationTestAdvanceHome(IntegrationTestCase):
 		self.assertEqual(doc.advance_use, "My expenses")
 		self.assertFalse(doc.project)
 		self.assertEqual(doc.docstatus, 0)
+
+	@patch("volunteering.volunteering.employee_bank_accounts.get_approved_bank_details")
+	def test_legacy_advance_is_desk_only_for_employee_and_reviewer(self, bank):
+		bank.return_value = self.bank()
+		frappe.set_user(self.employee_user)
+		name = save_advance_request(self.payload(), 1)["name"]
+		frappe.set_user("Administrator")
+		frappe.db.set_value("Employee Advance", name, "intended_project", None)
+		self.assertTrue(frappe.db.exists("Employee Advance", name))
+
+		frappe.set_user(self.employee_user)
+		self.assertNotIn(name, [row["name"] for row in get_my_advances()["advances"]])
+		with self.assertRaises(frappe.PermissionError):
+			get_advance_detail(name)
+		money = get_home_payload()["actions"]["money"]
+		self.assertEqual(next(row["pending"] for row in money if row["id"] == "advance"), 0)
+
+		frappe.set_user(self.manager_user)
+		self.assertNotIn(name, [row["name"] for row in get_advance_work_queue()["queues"]["approval"]])
+		with self.assertRaises(frappe.PermissionError):
+			get_advance_work_item(name)
+		team = get_team_dashboard()["team"]
+		self.assertNotIn(name, [row["name"] for row in team[0]["advances"]])
 
 	def test_manager_freeze_is_audited_and_blocks_new_requests(self):
 		frappe.set_user(self.manager_user)

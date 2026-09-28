@@ -23,6 +23,11 @@ from frappe.utils import cint, cstr, flt, getdate, nowdate
 
 from volunteering.volunteering.authority import get_employee_for_user
 from volunteering.volunteering.employee_advance_controls import advance_residual_amount
+from volunteering.volunteering.home_cutover import (
+	home_project_filter,
+	is_home_advance,
+	require_home_project,
+)
 from volunteering.volunteering.manager_float_service import (
 	REIMBURSEMENT_MANAGER_ADVANCE,
 	REIMBURSEMENT_OUT_OF_POCKET,
@@ -131,7 +136,7 @@ def get_my_expense_claims():
 	employee = _require_employee()
 	rows = frappe.get_all(
 		"Expense Claim",
-		filters={"employee": employee},
+		filters={"employee": employee, **home_project_filter()},
 		fields=[
 			"name",
 			"posting_date",
@@ -244,6 +249,7 @@ def get_my_expense_claim(name: str):
 	doc = frappe.get_doc("Expense Claim", cstr(name).strip())
 	if doc.employee != employee:
 		frappe.throw(_("You can only view your own expense claims."), frappe.PermissionError)
+	require_home_project(doc.project)
 	projects = _project_names([doc.project])
 	labels = _expense_labels(doc.project)
 	summary = _claim_summary(doc, projects)
@@ -305,7 +311,7 @@ def get_expense_claim_form():
 		if manager_employee
 		else None
 	)
-	manager_advances = list_fundable_manager_advances(manager_employee, 0)
+	manager_advances = list_fundable_manager_advances(manager_employee, 0, home_only=True)
 	return {
 		"employee": employee,
 		"employee_name": employee_values.employee_name or employee,
@@ -499,6 +505,7 @@ def resubmit_expense_claim(name: str, payload):
 	doc = frappe.get_doc("Expense Claim", cstr(name).strip())
 	if doc.employee != employee:
 		frappe.throw(_("You can only correct your own expense claims."), frappe.PermissionError)
+	require_home_project(doc.project)
 	if doc.docstatus != 0 or doc.workflow_state not in ("Receipt Correction Required", "Rejected"):
 		frappe.throw(_("This expense claim is not available for correction."))
 	data = frappe.parse_json(payload)
@@ -703,6 +710,7 @@ def _own_advances(employee: str, company: str) -> list[dict]:
 			"company": company,
 			"docstatus": 1,
 			"paid_amount": [">", 0],
+			**home_project_filter("intended_project"),
 		},
 		fields=[
 			"name",
@@ -714,6 +722,7 @@ def _own_advances(employee: str, company: str) -> list[dict]:
 			"return_amount",
 			"status",
 			"currency",
+			"intended_project",
 		],
 		order_by="posting_date desc, creation desc",
 	)
@@ -840,6 +849,8 @@ def _attach_own_advance(doc, advance_name: str | None, employee: str, total: flo
 	if not advance_name:
 		frappe.throw(_("Select the advance that these expenses should settle."))
 	advance = frappe.get_doc("Employee Advance", advance_name)
+	if not is_home_advance(advance):
+		frappe.throw(_("This record is not available in Home."), frappe.PermissionError)
 	if advance.employee != employee or advance.company != doc.company:
 		frappe.throw(_("You can only settle your own advance."), frappe.PermissionError)
 	if advance.docstatus != 1 or flt(advance.paid_amount) <= 0:

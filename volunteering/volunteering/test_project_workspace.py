@@ -17,7 +17,9 @@ from volunteering.volunteering.home_access import classify_home_access
 from volunteering.volunteering.home_service import _project_actions
 from volunteering.volunteering.project_proposals import (
 	backfill_unassigned_project_proposals,
+	get_proposal,
 	get_proposals,
+	mutation,
 	remove_unused_project,
 	review_proposal,
 	save_proposal,
@@ -63,6 +65,7 @@ class IntegrationTestProjectGovernance(IntegrationTestCase):
 		cls.email_patch = mute_accounting_test_emails()
 		frappe.set_user("Administrator")
 		base = frappe.get_doc("Project", get_or_create_project_with_cost_center())
+		cls.legacy_project = base.name
 		cls.company, cls.cost_center = base.company, base.cost_center
 		cls.account = get_or_create_expense_account(cls.company)
 		cls.proposer = get_or_create_user("project-proposer@example.com", ["Employee", "Project Proposer"])
@@ -159,6 +162,24 @@ class IntegrationTestProjectGovernance(IntegrationTestCase):
 		)
 		with self.assertRaisesRegex(frappe.ValidationError, "Project Name"):
 			submit_proposal(draft["name"], draft["modified"])
+
+	def test_legacy_unlinked_proposal_is_not_available_in_home(self):
+		frappe.set_user("Administrator")
+		legacy = frappe.get_doc(
+			{
+				"doctype": "Project Proposal",
+				"title": "Old planning draft",
+				"request_kind": "New Project",
+				"proposed_by": self.proposer,
+				"proposal_status": "Draft",
+			}
+		)
+		with mutation():
+			legacy.insert(ignore_permissions=True)
+		frappe.set_user(self.proposer)
+		self.assertNotIn(legacy.name, [row.name for row in get_proposals()])
+		with self.assertRaises(frappe.PermissionError):
+			get_proposal(legacy.name)
 
 	def test_new_proposal_waits_for_assigned_manager_but_all_managers_can_view(self):
 		self.assertFalse(self.request["project"])
@@ -304,6 +325,14 @@ class IntegrationTestProjectGovernance(IntegrationTestCase):
 			save_proposal({"project_purpose": "Viewer edit"}, project=approved["project"], reason="No")
 		frappe.set_user(self.manager)
 		self.assertIn(approved["project"], [row.name for row in get_projects()["projects"]])
+
+	def test_legacy_project_is_hidden_from_home_even_for_administrator(self):
+		frappe.set_user("Administrator")
+		frappe.db.set_value("Project", self.legacy_project, "project_setup_version", 0)
+		self.assertTrue(frappe.db.exists("Project", self.legacy_project))
+		self.assertNotIn(self.legacy_project, [row.name for row in get_projects()["projects"]])
+		with self.assertRaises(frappe.PermissionError):
+			get_project(self.legacy_project)
 
 	def test_all_members_can_claim_but_only_owner_and_financial_roles_see_amounts(self):
 		approved = self.approve()

@@ -1,7 +1,7 @@
 {
  "doctype": "DocType", "name": "Project Proposal", "module": "Volunteering",
  "autoname": "hash", "title_field": "title", "track_changes": 1,
- "field_order": ["title", "request_kind", "project", "proposed_by", "assigned_approver", "proposal_status", "request_reason", "base_modified", "proposal_data", "events", "decided_by", "decided_on"],
+ "field_order": ["title", "request_kind", "project", "proposed_by", "assigned_approver", "proposal_status", "home_workspace_record", "request_reason", "base_modified", "proposal_data", "events", "decided_by", "decided_on"],
  "fields": [
   {"fieldname":"title","label":"Title","fieldtype":"Data","reqd":1,"in_list_view":1},
   {"fieldname":"request_kind","label":"Request Kind","fieldtype":"Select","options":"New Project\nProject Change","reqd":1,"in_list_view":1},
@@ -9,6 +9,7 @@
   {"fieldname":"proposed_by","label":"Proposed By","fieldtype":"Link","options":"User","read_only":1,"reqd":1},
   {"fieldname":"assigned_approver","label":"Assigned Projects Manager","fieldtype":"Link","options":"User","read_only":1},
   {"fieldname":"proposal_status","label":"Status","fieldtype":"Select","options":"Draft\nPending Approval\nCorrection Required\nApproved\nRejected\nWithdrawn","reqd":1,"read_only":1,"in_list_view":1},
+  {"fieldname":"home_workspace_record","label":"Home Workspace Record","fieldtype":"Check","default":"0","hidden":1,"read_only":1},
   {"fieldname":"request_reason","label":"Reason / Submission Note","fieldtype":"Small Text"},
   {"fieldname":"base_modified","label":"Approved Project Baseline","fieldtype":"Data","read_only":1},
   {"fieldname":"proposal_data","label":"Requested Changes","fieldtype":"Code","options":"JSON","permlevel":2,"read_only":1},

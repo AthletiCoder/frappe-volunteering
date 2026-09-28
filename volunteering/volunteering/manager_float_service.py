@@ -15,6 +15,7 @@ from volunteering.volunteering.employee_advance_controls import (
 	is_blocking_advance,
 	list_open_advances_for_employee,
 )
+from volunteering.volunteering.home_cutover import home_project_filter, is_home_advance, is_home_project
 
 REIMBURSEMENT_OUT_OF_POCKET = "Out of Pocket"
 REIMBURSEMENT_MANAGER_ADVANCE = "Manager Advance"
@@ -48,22 +49,27 @@ def _prefill_suggested_manager_advance(doc) -> None:
 	if doc.get("manager_float_advance") or not doc.get("manager_float_holder"):
 		return
 	amount = flt(get_document_amount(doc))
-	suggested = pick_manager_advance(doc.manager_float_holder, amount)
+	home_only = is_home_project(doc.get("project"))
+	suggested = pick_manager_advance(doc.manager_float_holder, amount, home_only=home_only)
 	if not suggested:
 		# Amount may still be 0 on a new draft — offer the largest residual advance.
-		advances = list_fundable_manager_advances(doc.manager_float_holder, 0)
+		advances = list_fundable_manager_advances(doc.manager_float_holder, 0, home_only=home_only)
 		suggested = advances[0]["name"] if advances else None
 	if suggested:
 		doc.manager_float_advance = suggested
 
 
-def list_fundable_manager_advances(manager_employee: str, min_amount: float = 0) -> list[dict]:
+def list_fundable_manager_advances(
+	manager_employee: str, min_amount: float = 0, *, home_only: bool = False
+) -> list[dict]:
 	"""Paid advances with enough residual for at least min_amount."""
 	if not manager_employee:
 		return []
 
 	out = []
 	for row in list_open_advances_for_employee(manager_employee):
+		if home_only and not is_home_advance(row):
+			continue
 		if row.docstatus != 1 or flt(row.paid_amount) <= 0:
 			continue
 		# Keep legacy manager floats usable, but respect the explicit choice
@@ -88,8 +94,8 @@ def list_fundable_manager_advances(manager_employee: str, min_amount: float = 0)
 	return out
 
 
-def pick_manager_advance(manager_employee: str, amount: float) -> str | None:
-	advances = list_fundable_manager_advances(manager_employee, amount)
+def pick_manager_advance(manager_employee: str, amount: float, *, home_only: bool = False) -> str | None:
+	advances = list_fundable_manager_advances(manager_employee, amount, home_only=home_only)
 	if not advances:
 		return None
 	return advances[0]["name"]
@@ -112,7 +118,9 @@ def manager_float_funding_status(doc) -> dict:
 
 	manager_user = frappe.db.get_value("Employee", manager, "user_id")
 	manager_name = frappe.db.get_value("Employee", manager, "employee_name")
-	advances = list_fundable_manager_advances(manager, amount)
+	advances = list_fundable_manager_advances(
+		manager, amount, home_only=is_home_project(doc.get("project"))
+	)
 	advance_name = advances[0]["name"] if advances else None
 	available = flt(advances[0]["residual"]) if advances else 0
 
@@ -171,7 +179,7 @@ def validate_manager_float_expense_claim(doc, method=None) -> None:
 		return
 
 
-def _employee_own_blocking_advance(employee: str | None):
+def _employee_own_blocking_advance(employee: str | None, *, home_only: bool = False):
 	"""Open own advance that should force Get Advances / Out of Pocket (not manager float)."""
 	if not employee:
 		return None
@@ -185,6 +193,8 @@ def _employee_own_blocking_advance(employee: str | None):
 		replenish_pct = 10.0
 
 	for row in list_open_advances_for_employee(employee):
+		if home_only and not is_home_advance(row):
+			continue
 		# Cancelled already excluded; drafts and unpaid residuals still block manager float.
 		if is_blocking_advance(row, replenish_pct):
 			return row
@@ -193,7 +203,9 @@ def _employee_own_blocking_advance(employee: str | None):
 
 def _validate_employee_has_no_blocking_advance_for_manager_float(doc) -> None:
 	"""Staff with their own unsettled advance must settle via Get Advances, not manager float."""
-	blocking = _employee_own_blocking_advance(doc.employee)
+	blocking = _employee_own_blocking_advance(
+		doc.employee, home_only=is_home_project(doc.get("project"))
+	)
 	if not blocking:
 		return
 
@@ -263,13 +275,18 @@ def settle_expense_claim_from_manager_float(doc) -> None:
 		return
 
 	manager = doc.get("manager_float_holder")
-	advance_name = doc.get("manager_float_advance") or pick_manager_advance(manager, amount)
+	home_only = is_home_project(doc.get("project"))
+	advance_name = doc.get("manager_float_advance") or pick_manager_advance(
+		manager, amount, home_only=home_only
+	)
 	if not advance_name:
 		frappe.throw(
 			_("Cannot settle: no manager advance with sufficient residual."), title=_("Settlement Failed")
 		)
 
 	advance = frappe.get_doc("Employee Advance", advance_name)
+	if home_only and not is_home_advance(advance):
+		frappe.throw(_("This record is not available in Home."), frappe.PermissionError)
 	if advance.employee != manager or (
 		advance.get("intended_project") and advance.get("advance_use") != "Team expenses"
 	):
@@ -353,9 +370,9 @@ def get_manager_float_context(employee=None):
 	employee = _resolve_session_employee(employee)
 	manager = get_direct_manager_employee(employee)
 	manager_name = frappe.db.get_value("Employee", manager, "employee_name") if manager else None
-	advances = list_fundable_manager_advances(manager) if manager else []
+	advances = list_fundable_manager_advances(manager, home_only=True) if manager else []
 	total_residual = sum(flt(a["residual"]) for a in advances)
-	own_blocking = _employee_own_blocking_advance(employee)
+	own_blocking = _employee_own_blocking_advance(employee, home_only=True)
 	can_request = bool(manager) and not own_blocking
 
 	return {
@@ -392,7 +409,7 @@ def get_team_manager_float_requests():
 		pluck="name",
 	)
 	if not reportees:
-		return {"requests": [], "fundable_advances": list_fundable_manager_advances(manager)}
+		return {"requests": [], "fundable_advances": list_fundable_manager_advances(manager, home_only=True)}
 
 	claims = frappe.get_all(
 		"Expense Claim",
@@ -401,6 +418,7 @@ def get_team_manager_float_requests():
 			"reimbursement_source": REIMBURSEMENT_MANAGER_ADVANCE,
 			"workflow_state": "Pending Approval",
 			"docstatus": 0,
+			**home_project_filter(),
 		},
 		fields=[
 			"name",
@@ -418,6 +436,8 @@ def get_team_manager_float_requests():
 
 	requests = []
 	for row in claims:
+		if not is_home_project(row.project):
+			continue
 		amount = flt(row.total_sanctioned_amount or row.total_claimed_amount)
 		status = manager_float_funding_status(
 			frappe._dict(**row, reimbursement_source=REIMBURSEMENT_MANAGER_ADVANCE)
@@ -435,7 +455,7 @@ def get_team_manager_float_requests():
 
 	return {
 		"manager_employee": manager,
-		"fundable_advances": list_fundable_manager_advances(manager),
+		"fundable_advances": list_fundable_manager_advances(manager, home_only=True),
 		"requests": requests,
 	}
 

@@ -222,7 +222,9 @@ class UnitTestHomePayload(UnitTestCase):
 	@patch("volunteering.volunteering.home_service.frappe.db.exists", return_value=True)
 	@patch("volunteering.volunteering.home_service.frappe.db.has_column", return_value=True)
 	@patch("volunteering.volunteering.home_service.frappe.get_all")
-	def test_draft_advance_resumes_in_home_portal(self, get_all, _has_column, _exists):
+	@patch("volunteering.volunteering.home_service.is_home_advance", return_value=True)
+	@patch("volunteering.volunteering.home_service.home_project_filter", return_value={})
+	def test_draft_advance_resumes_in_home_portal(self, _filter, _home, get_all, _has_column, _exists):
 		get_all.side_effect = [
 			[
 				frappe._dict(

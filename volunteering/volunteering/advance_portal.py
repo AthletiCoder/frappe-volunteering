@@ -22,6 +22,12 @@ from volunteering.volunteering.employee_advance_controls import (
 	advance_residual_ratio,
 )
 from volunteering.volunteering.employee_bank_accounts import get_approved_bank_details
+from volunteering.volunteering.home_cutover import (
+	home_project_filter,
+	is_home_advance,
+	require_home_advance,
+	require_home_project,
+)
 
 MAX_FILE_BYTES = 5 * 1024 * 1024
 
@@ -32,7 +38,7 @@ def get_my_advances(employee=None):
 	employee = _resolve_employee(employee)
 	rows = frappe.get_all(
 		"Employee Advance",
-		filters={"employee": employee, "docstatus": ["!=", 2]},
+		filters={"employee": employee, "docstatus": ["!=", 2], **home_project_filter("intended_project")},
 		fields=[
 			"name",
 			"employee",
@@ -75,6 +81,7 @@ def get_my_advances(employee=None):
 def get_advance_detail(name):
 	frappe.has_permission("Employee Advance", "read", name, throw=True)
 	doc = frappe.get_doc("Employee Advance", name)
+	require_home_advance(doc)
 	row = {
 		"name": doc.name,
 		"employee": doc.employee,
@@ -153,8 +160,8 @@ def get_advance_request_form():
 				"status": row.status,
 				"residual": flt(advance_residual_amount(row)),
 			}
-			for row in list_open_advances_for_employee(employee)
-			if advance_residual_amount(row) > 0
+		for row in list_open_advances_for_employee(employee)
+		if is_home_advance(row) and advance_residual_amount(row) > 0
 		],
 	}
 
@@ -199,6 +206,7 @@ def save_advance_request(payload, submit_request=0):
 	name = cstr(data.get("name")).strip()
 	if name:
 		doc = frappe.get_doc("Employee Advance", name)
+		require_home_advance(doc)
 		frappe.has_permission("Employee Advance", "write", name, throw=True)
 		if (
 			doc.employee != employee
@@ -223,6 +231,8 @@ def save_advance_request(payload, submit_request=0):
 		)
 
 	doc.intended_project = cstr(data.get("intended_project")).strip()
+	if doc.intended_project:
+		require_home_project(doc.intended_project)
 	doc.advance_amount = amount
 	doc.purpose = purpose
 	doc.required_by_date = getdate(data.get("required_by_date") or nowdate())

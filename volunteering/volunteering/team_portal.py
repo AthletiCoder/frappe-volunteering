@@ -12,6 +12,7 @@ from volunteering.volunteering.advance_freeze import (
 	freeze_status,
 )
 from volunteering.volunteering.employee_advance_controls import advance_residual_amount
+from volunteering.volunteering.home_cutover import home_project_filter
 
 
 @frappe.whitelist(methods=["POST"])
@@ -90,7 +91,10 @@ def _people_request_summary(employee):
 def _advance_summary(employee):
 	rows = frappe.get_all(
 		"Employee Advance",
-		filters={"employee": employee, "docstatus": ["!=", 2]},
+		filters={
+			"employee": employee, "docstatus": ["!=", 2],
+			**home_project_filter("intended_project"),
+		},
 		fields=[
 			"name",
 			"purpose",
@@ -131,7 +135,7 @@ def _project_summary(user):
 		return []
 	return frappe.get_all(
 		"Project",
-		filters={"name": ["in", names], "is_archived": 0},
+		filters={"name": ["in", names], "is_archived": 0, "project_setup_version": [">", 0]},
 		fields=["name", "project_name", "operational_status"],
 		order_by="project_name asc",
 	)

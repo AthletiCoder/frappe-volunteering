@@ -33,6 +33,10 @@ from volunteering.volunteering.expense_claim_portal import (
 	submit_expense_claim,
 	submit_generated_invoice_expense_claim,
 )
+from volunteering.volunteering.expense_claim_workflow_portal import (
+	get_expense_claim_work_item,
+	get_expense_claim_work_queue,
+)
 from volunteering.volunteering.receipt_review import review_receipts
 
 
@@ -256,6 +260,25 @@ class IntegrationTestExpenseClaimPortal(IntegrationTestCase):
 		self.assertTrue(detail["expenses"][0]["receipt_attachment"].startswith("/private/files/"))
 		self.assertEqual(detail["timeline"][0]["label"], "Claim created")
 
+	def test_legacy_project_claim_is_hidden_from_home_history_and_review(self):
+		frappe.set_user(self.user)
+		name = submit_expense_claim(self._payload())["name"]
+		frappe.set_user("Administrator")
+		frappe.db.set_value("Project", self.project, "project_setup_version", 0)
+
+		frappe.set_user(self.user)
+		self.assertNotIn(name, [row["name"] for row in get_my_expense_claims()["claims"]])
+		with self.assertRaises(frappe.PermissionError):
+			get_my_expense_claim(name)
+
+		frappe.set_user("Administrator")
+		self.assertNotIn(
+			name,
+			[row["name"] for row in get_expense_claim_work_queue()["queues"]["receipt_review"]],
+		)
+		with self.assertRaises(frappe.PermissionError):
+			get_expense_claim_work_item(name)
+
 	def test_each_expense_requires_its_own_receipt(self):
 		frappe.set_user(self.user)
 		payload = self._payload()
@@ -329,7 +352,8 @@ class UnitTestExpenseClaimPortal(UnitTestCase):
 
 	@patch("hrms.hr.doctype.expense_claim.expense_claim.get_expense_claim_advances")
 	@patch("volunteering.volunteering.expense_claim_portal.frappe.get_doc")
-	def test_paid_own_advance_allocates_only_up_to_claim_total(self, get_doc, get_advances):
+	@patch("volunteering.volunteering.expense_claim_portal.is_home_advance", return_value=True)
+	def test_paid_own_advance_allocates_only_up_to_claim_total(self, _home, get_doc, get_advances):
 		get_doc.return_value = frappe._dict(
 			employee="EMPLOYEE",
 			company="COMPANY",
@@ -350,13 +374,15 @@ class UnitTestExpenseClaimPortal(UnitTestCase):
 		self.assertEqual(doc.advances[0].allocated_amount, 125)
 
 	@patch("volunteering.volunteering.expense_claim_portal.frappe.get_doc")
-	def test_another_employees_advance_is_rejected(self, get_doc):
+	@patch("volunteering.volunteering.expense_claim_portal.is_home_advance", return_value=True)
+	def test_another_employees_advance_is_rejected(self, _home, get_doc):
 		get_doc.return_value = frappe._dict(employee="OTHER", company="COMPANY")
 		with self.assertRaises(frappe.PermissionError):
 			_attach_own_advance(frappe._dict(company="COMPANY"), "ADVANCE", "EMPLOYEE", 125)
 
 	@patch("volunteering.volunteering.expense_claim_portal.frappe.get_doc")
-	def test_unpaid_advance_is_rejected(self, get_doc):
+	@patch("volunteering.volunteering.expense_claim_portal.is_home_advance", return_value=True)
+	def test_unpaid_advance_is_rejected(self, _home, get_doc):
 		get_doc.return_value = frappe._dict(
 			employee="EMPLOYEE",
 			company="COMPANY",

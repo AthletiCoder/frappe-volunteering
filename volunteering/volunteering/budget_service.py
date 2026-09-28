@@ -445,6 +445,9 @@ def get_budget_snapshot(project, department=None):
 	"""Whole-Project and Expense Account utilisation; department is ignored."""
 	if not project:
 		return {}
+	from volunteering.volunteering.home_cutover import require_home_project
+
+	require_home_project(project)
 	project_doc = frappe.get_doc("Project", project)
 	project_doc.check_permission("read")
 	from volunteering.volunteering.project_workspace import can_view_finance
@@ -559,7 +562,13 @@ validate_project_department_budgets = validate_project_budgets
 def get_budget_health(project=None):
 	"""Return one whole-Project row with nested Expense Account allocations."""
 	frappe.has_permission("Project", "read", throw=True)
-	filters = {"name": project} if project else {}
+	from volunteering.volunteering.home_cutover import require_home_project
+
+	if project:
+		require_home_project(project)
+	filters = {"project_setup_version": [">", 0]}
+	if project:
+		filters["name"] = project
 	projects = frappe.get_list(
 		"Project",
 		filters=filters,

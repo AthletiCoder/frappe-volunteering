@@ -652,9 +652,13 @@ def _serialize(doc):
 @frappe.whitelist()
 def get_projects(include_removed=False):
 	_logged_in()
+	# The pre-workspace Project records remain in Desk, not the Home catalogue.
+	filters = {"project_setup_version": [">", 0]}
+	if not (cint(include_removed) and is_project_manager()):
+		filters["is_archived"] = 0
 	rows = frappe.get_list(
 		"Project",
-		filters={} if cint(include_removed) and is_project_manager() else {"is_archived": 0},
+		filters=filters,
 		fields=[
 			"name",
 			"project_name",
@@ -674,6 +678,9 @@ def get_projects(include_removed=False):
 @frappe.whitelist()
 def get_project(project):
 	_logged_in()
+	from volunteering.volunteering.home_cutover import require_home_project
+
+	require_home_project(project)
 	doc = frappe.get_doc("Project", project)
 	if not _can_view(doc):
 		frappe.throw(_("You are not a participant of this project."), frappe.PermissionError)
