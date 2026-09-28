@@ -120,13 +120,33 @@ def check_app_permission():
 	"""Whether to show Sevamrita on the Frappe apps screen."""
 	import frappe
 
-	if frappe.session.user in ("Guest",):
-		return False
-	if frappe.session.user in ("Administrator",):
-		return True
-	roles = frappe.get_roles()
-	has_employee = bool(frappe.db.exists("Employee", {"user_id": frappe.session.user, "status": "Active"}))
-	return bool(classify_home_access(roles, has_employee).get("allowed"))
+	return frappe.session.user == "Administrator" or bool(get_staff_home_page(frappe.session.user))
+
+
+def staff_login_target(user, roles, has_employee):
+	"""Only users with Home access get the staff landing page."""
+	if user in ("Guest", "Administrator"):
+		return None
+	return HOME_URL if classify_home_access(roles, has_employee).get("allowed") else None
+
+
+def get_staff_home_page(user):
+	"""Frappe's website-home hook for authenticated staff."""
+	import frappe
+
+	if user in ("Guest", "Administrator"):
+		return None
+	roles = frappe.get_roles(user)
+	has_employee = bool(frappe.db.exists("Employee", {"user_id": user, "status": "Active"}))
+	return staff_login_target(user, roles, has_employee)
+
+
+def set_staff_login_home(login_manager):
+	"""Set the default login response for staff without changing Desk access."""
+	import frappe
+
+	if home_page := get_staff_home_page(login_manager.user):
+		frappe.local.flags.home_page = home_page
 
 
 def _persona(

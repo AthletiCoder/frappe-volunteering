@@ -8,8 +8,11 @@ from frappe.tests import UnitTestCase
 
 from volunteering.volunteering.home_access import (
 	classify_home_access,
+	get_staff_home_page,
 	guest_login_redirect_url,
 	require_logged_in_or_redirect,
+	set_staff_login_home,
+	staff_login_target,
 )
 from volunteering.volunteering.home_service import (
 	_accounts_actions,
@@ -23,6 +26,57 @@ from volunteering.volunteering.home_cutover import home_project_filter
 
 
 class UnitTestHomeAccess(UnitTestCase):
+	def test_frappe_login_hooks_are_registered(self):
+		self.assertIn(
+			"volunteering.volunteering.home_access.set_staff_login_home",
+			frappe.get_hooks("on_session_creation"),
+		)
+		self.assertIn(
+			"volunteering.volunteering.home_access.get_staff_home_page",
+			frappe.get_hooks("get_website_user_home_page"),
+		)
+
+	def test_login_landing_page_is_home_only_for_staff(self):
+		self.assertEqual(
+			staff_login_target("employee@example.com", ["Employee"], True), "/volunteering/home"
+		)
+		self.assertEqual(
+			staff_login_target("manager@example.com", ["Projects Manager"], False), "/volunteering/home"
+		)
+		self.assertIsNone(staff_login_target("volunteer@example.com", ["NGO Member"], False))
+		self.assertIsNone(staff_login_target("Guest", ["Employee"], True))
+		self.assertIsNone(staff_login_target("Administrator", ["System Manager"], True))
+
+	def test_session_creation_sets_staff_home_without_changing_admin_landing(self):
+		from types import SimpleNamespace
+		from frappe.website.utils import get_home_page
+
+		previous = frappe.local.flags.get("home_page")
+		try:
+			frappe.local.flags.pop("home_page", None)
+			with patch("volunteering.volunteering.home_access.get_staff_home_page", return_value="/volunteering/home"):
+				set_staff_login_home(SimpleNamespace(user="employee@example.com"))
+			self.assertEqual(frappe.local.flags.home_page, "/volunteering/home")
+			with patch.object(frappe, "in_test", False):
+				self.assertEqual(get_home_page(), "/volunteering/home")
+
+			frappe.local.flags.pop("home_page", None)
+			with patch("volunteering.volunteering.home_access.get_staff_home_page", return_value=None):
+				set_staff_login_home(SimpleNamespace(user="Administrator"))
+			self.assertIsNone(frappe.local.flags.get("home_page"))
+		finally:
+			if previous is None:
+				frappe.local.flags.pop("home_page", None)
+			else:
+				frappe.local.flags.home_page = previous
+
+	def test_home_page_hook_uses_same_access_rules(self):
+		with patch("frappe.get_roles", return_value=["Employee"]), patch.object(
+			frappe.db, "exists", return_value="HR-EMP-00001"
+		):
+			self.assertEqual(get_staff_home_page("employee@example.com"), "/volunteering/home")
+		self.assertIsNone(get_staff_home_page("Administrator"))
+
 	def test_employee_sees_time_and_money_not_pay_queues(self):
 		flags = classify_home_access(["Employee"], has_employee=True, grade="Associate")
 		self.assertTrue(flags["allowed"])
