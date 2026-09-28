@@ -64,6 +64,8 @@ def get_my_advances(employee=None):
 	)
 	out = []
 	for row in rows:
+		if not is_home_advance(row):
+			continue
 		residual = advance_residual_amount(row)
 		out.append(
 			{

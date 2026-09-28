@@ -21,7 +21,10 @@ def home_project_names():
 
 def home_project_filter(field="project"):
 	"""Query only Home projects, before list limits and pagination apply."""
-	return {field: ["in", home_project_names() or [""]]}
+	# An empty-string fallback matches historical records whose project field is
+	# blank. Use a deliberately non-blank sentinel when there are no governed
+	# projects yet.
+	return {field: ["in", home_project_names() or ["__NO_GOVERNED_PROJECT__"]]}
 
 
 def is_home_project(project):

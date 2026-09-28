@@ -130,6 +130,7 @@ def get_advance_work_queue():
 			order_by="modified asc",
 			limit=200,
 		)
+		if is_home_advance(row)
 	]
 	if _is_accounts_user(user):
 		rows = frappe.get_all(
@@ -145,7 +146,7 @@ def get_advance_work_queue():
 		queues["disbursement"] = [
 			_queue_row(row, "disbursement")
 			for row in rows
-			if _outstanding_to_pay(row) > 0
+			if is_home_advance(row) and _outstanding_to_pay(row) > 0
 		]
 		return_rows = frappe.get_all(
 			"Employee Advance",
@@ -160,7 +161,7 @@ def get_advance_work_queue():
 		queues["return"] = [
 			_queue_row(row, "return")
 			for row in return_rows
-			if flt(advance_residual_amount(row), 2) > 0
+			if is_home_advance(row) and flt(advance_residual_amount(row), 2) > 0
 		]
 
 	return {

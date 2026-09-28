@@ -796,7 +796,7 @@ def _accounts_queues():
 			fields=["advance_amount", "paid_amount", "intended_project"],
 			limit=500,
 		)
-		if flt(row.advance_amount) - flt(row.paid_amount) > 0
+		if is_home_advance(row) and flt(row.advance_amount) - flt(row.paid_amount) > 0
 	)
 	if advance_disburse:
 		queues.append(
@@ -854,7 +854,7 @@ def _residual_advance_count():
 	)
 	return sum(
 		1 for row in rows
-		if flt(row.paid_amount) > 0 and advance_residual_amount(row) > 0
+		if is_home_advance(row) and flt(row.paid_amount) > 0 and advance_residual_amount(row) > 0
 	)
 
 

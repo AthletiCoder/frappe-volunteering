@@ -19,6 +19,7 @@ from volunteering.volunteering.home_service import (
 	_time_actions,
 	get_home_payload,
 )
+from volunteering.volunteering.home_cutover import home_project_filter
 
 
 class UnitTestHomeAccess(UnitTestCase):
@@ -132,6 +133,13 @@ class UnitTestHomeAccess(UnitTestCase):
 
 
 class UnitTestHomePayload(UnitTestCase):
+	@patch("volunteering.volunteering.home_cutover.home_project_names", return_value=[])
+	def test_empty_governed_project_filter_does_not_match_blank_legacy_links(self, _names):
+		self.assertEqual(
+			home_project_filter("intended_project"),
+			{"intended_project": ["in", ["__NO_GOVERNED_PROJECT__"]]},
+		)
+
 	@patch(
 		"volunteering.volunteering.home_service.frappe.get_roles",
 		return_value=["Accounts User", "Accounts Manager"],

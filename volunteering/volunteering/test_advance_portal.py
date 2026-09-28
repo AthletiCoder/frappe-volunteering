@@ -35,7 +35,7 @@ from volunteering.volunteering.approval_routing import (
 	get_live_workflow_transitions,
 )
 from volunteering.volunteering.employee_advance_controls import get_grade_advance_limit_for_employee
-from volunteering.volunteering.home_service import get_home_payload
+from volunteering.volunteering.home_service import _accounts_queues, get_home_payload
 from volunteering.volunteering.employee_bank_accounts import (
 	review_bank_account_request,
 	submit_bank_account_request,
@@ -179,6 +179,26 @@ class IntegrationTestAdvanceHome(IntegrationTestCase):
 			get_advance_work_item(name)
 		team = get_team_dashboard()["team"]
 		self.assertNotIn(name, [row["name"] for row in team[0]["advances"]])
+
+	@patch("volunteering.volunteering.employee_bank_accounts.get_approved_bank_details")
+	def test_approved_legacy_advance_is_hidden_when_no_home_projects_exist(self, bank):
+		bank.return_value = self.bank()
+		frappe.set_user(self.employee_user)
+		name = save_advance_request(self.payload(), 1)["name"]
+		frappe.set_user(self.manager_user)
+		decide_advance(name, "approve")
+		frappe.set_user("Administrator")
+		frappe.db.set_value("Employee Advance", name, "intended_project", "")
+		self.assertTrue(frappe.db.exists("Employee Advance", name))
+
+		with patch("volunteering.volunteering.home_cutover.home_project_names", return_value=[]):
+			frappe.set_user(self.employee_user)
+			self.assertNotIn(name, [row["name"] for row in get_my_advances()["advances"]])
+			frappe.set_user(self.accounts_user)
+			self.assertNotIn(name, [row["name"] for row in get_advance_work_queue()["queues"]["disbursement"]])
+			with self.assertRaises(frappe.PermissionError):
+				get_advance_work_item(name)
+			self.assertNotIn("advance_disburse", [row["id"] for row in _accounts_queues()])
 
 	def test_manager_freeze_is_audited_and_blocks_new_requests(self):
 		frappe.set_user(self.manager_user)
