@@ -18,7 +18,6 @@ def get_test_company():
 
 
 def ensure_holiday_list(company=None):
-	company = company or get_test_company()
 	today = getdate()
 	from_date = get_year_start(today)
 	to_date = get_year_ending(today)
@@ -26,7 +25,6 @@ def ensure_holiday_list(company=None):
 	if frappe.db.exists("Holiday List", HOLIDAY_LIST_NAME):
 		holiday_list = frappe.get_doc("Holiday List", HOLIDAY_LIST_NAME)
 		if getdate(holiday_list.from_date) <= today <= getdate(holiday_list.to_date):
-			_ensure_holiday_list_assignment("Company", company, HOLIDAY_LIST_NAME, company)
 			return HOLIDAY_LIST_NAME
 
 	frappe.delete_doc_if_exists("Holiday List", HOLIDAY_LIST_NAME, force=True)
@@ -42,8 +40,6 @@ def ensure_holiday_list(company=None):
 	holiday_list.get_weekly_off_dates()
 	holiday_list.save(ignore_permissions=True)
 
-	frappe.db.set_value("Company", company, "default_holiday_list", HOLIDAY_LIST_NAME)
-	_ensure_holiday_list_assignment("Company", company, HOLIDAY_LIST_NAME, company)
 	return HOLIDAY_LIST_NAME
 
 
@@ -136,10 +132,9 @@ def _create_test_user(email):
 
 
 def get_or_create_test_employee():
-	employee = (
-		frappe.db.get_value("Employee", {"user_id": TEST_EMPLOYEE_EMAIL, "status": "Active"}, "name")
-		or frappe.db.get_value("Employee", {"first_name": "Volunteering Test", "status": "Active"}, "name")
-		or frappe.db.get_value("Employee", {"status": "Active"}, "name")
+	# Never run destructive test cleanup against an arbitrary production employee.
+	employee = frappe.db.get_value(
+		"Employee", {"user_id": TEST_EMPLOYEE_EMAIL, "status": "Active"}, "name"
 	)
 
 	if not employee:

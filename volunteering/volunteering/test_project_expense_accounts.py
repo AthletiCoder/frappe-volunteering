@@ -1,9 +1,12 @@
 # Copyright (c) 2026, Vadiraj Tirtha Das and contributors
 # For license information, please see license.txt
 
-import frappe
-from frappe.tests import IntegrationTestCase
+from unittest.mock import call, patch
 
+import frappe
+from frappe.tests import IntegrationTestCase, UnitTestCase
+
+from volunteering.patches import migrate_project_expense_accounts
 from volunteering.volunteering.accounting_setup import (
 	backfill_project_expense_accounts,
 	ensure_expense_claim_field_visibility,
@@ -24,6 +27,47 @@ from volunteering.volunteering.accounting_test_utils import (
 from volunteering.volunteering.project_expense_accounts import (
 	get_project_expense_account_options,
 )
+
+
+class UnitTestProjectExpenseAccountMigration(UnitTestCase):
+	def test_patch_syncs_missing_columns_before_backfill(self):
+		missing = {
+			("Project Account Budget", "employee_label"),
+			("Expense Claim Detail", "project_expense_account"),
+		}
+		with (
+			patch.object(migrate_project_expense_accounts, "frappe") as mock_frappe,
+			patch.object(migrate_project_expense_accounts, "setup_accounting_custom_fields") as setup,
+			patch.object(migrate_project_expense_accounts, "has_current_site_column") as has_column,
+			patch.object(migrate_project_expense_accounts, "backfill_project_expense_accounts") as backfill,
+		):
+			has_column.side_effect = lambda doctype, fieldname: (doctype, fieldname) not in missing
+			mock_frappe.db.updatedb.side_effect = lambda doctype: missing.discard(
+				{
+					"Project Account Budget": ("Project Account Budget", "employee_label"),
+					"Expense Claim Detail": ("Expense Claim Detail", "project_expense_account"),
+				}[doctype]
+			)
+
+			migrate_project_expense_accounts.execute()
+
+			setup.assert_called_once_with()
+			self.assertEqual(
+				mock_frappe.db.updatedb.call_args_list,
+				[call("Project Account Budget"), call("Expense Claim Detail")],
+			)
+			backfill.assert_called_once_with(seed_empty_projects=True)
+
+	def test_patch_never_marks_missing_schema_as_backfilled(self):
+		with (
+			patch.object(migrate_project_expense_accounts, "frappe"),
+			patch.object(migrate_project_expense_accounts, "setup_accounting_custom_fields"),
+			patch.object(migrate_project_expense_accounts, "has_current_site_column", return_value=False),
+			patch.object(migrate_project_expense_accounts, "backfill_project_expense_accounts") as backfill,
+		):
+			with self.assertRaisesRegex(RuntimeError, "missing employee_label column"):
+				migrate_project_expense_accounts.execute()
+			backfill.assert_not_called()
 
 
 class IntegrationTestProjectExpenseAccounts(IntegrationTestCase):

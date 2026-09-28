@@ -532,6 +532,28 @@ def setup_accounting_custom_fields():
 	create_custom_fields(ACCOUNTING_CUSTOM_FIELDS, ignore_validate=True)
 
 
+def has_current_site_column(doctype, fieldname):
+	"""Check the active database, not another site's identically named table.
+
+	Frappe's ``has_column`` on our v16 bench looks up ``information_schema`` by
+	table name alone. On a multi-site bench, that can report a column which is
+	only present on a different site.
+	"""
+	return bool(
+		frappe.db.sql(
+			"""
+			SELECT 1
+			FROM information_schema.COLUMNS
+			WHERE TABLE_SCHEMA = DATABASE()
+				AND TABLE_NAME = %s
+				AND COLUMN_NAME = %s
+			LIMIT 1
+			""",
+			(f"tab{doctype}", fieldname),
+		)
+	)
+
+
 def backfill_project_budget_controls():
 	"""Adopt legacy department totals without continuing department enforcement."""
 	if not frappe.db.has_column("Project", "total_approved_budget"):
@@ -580,8 +602,8 @@ def backfill_project_expense_accounts(*, seed_empty_projects=False):
 	"""
 	if not (
 		frappe.db.exists("DocType", "Project Account Budget")
-		and frappe.db.has_column("Project Account Budget", "employee_label")
-		and frappe.db.has_column("Expense Claim Detail", "project_expense_account")
+		and has_current_site_column("Project Account Budget", "employee_label")
+		and has_current_site_column("Expense Claim Detail", "project_expense_account")
 	):
 		return
 

@@ -22,6 +22,7 @@ class IntegrationTestDonationAccountingSetup(IntegrationTestCase):
 		company = frappe.db.get_value("Company", {}, "name")
 		if not company:
 			self.skipTest("No company on site")
+		existing_mode = frappe.db.get_single_value("Cashfree Settings", "mode_of_payment")
 
 		ensure_donation_accounting()
 		clearing_1 = frappe.db.get_value(
@@ -57,4 +58,4 @@ class IntegrationTestDonationAccountingSetup(IntegrationTestCase):
 		self.assertEqual(settings.company, company)
 		self.assertEqual(settings.paid_to_account, clearing_1)
 		self.assertEqual(settings.income_account, income_1)
-		self.assertEqual(settings.mode_of_payment, CASHFREE_MODE_OF_PAYMENT)
+		self.assertEqual(settings.mode_of_payment, existing_mode or CASHFREE_MODE_OF_PAYMENT)
