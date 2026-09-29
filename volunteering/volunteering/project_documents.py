@@ -59,7 +59,9 @@ def has_permission(doc, user=None, ptype=None, **kwargs):
 		return ptype in ("read", "select") and can_read(doc, user)
 	if scoped(doc):
 		return ptype in ("read", "select", "print") and can_read(doc, user)
-	return None
+	# Controllers may only deny; True = fall through to core File.has_permission.
+	# Returning None is treated as deny on Frappe v16.
+	return True
 
 
 def validate_change(doc, method=None):
