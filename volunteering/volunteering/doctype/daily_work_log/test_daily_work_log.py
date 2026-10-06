@@ -83,6 +83,26 @@ class IntegrationTestDailyWorkLog(IntegrationTestCase):
 				}
 			).insert(ignore_permissions=True)
 
+	def test_project_is_optional_on_work_log_item(self):
+		self.assertFalse(frappe.get_meta("Daily Work Log Item").get_field("project").reqd)
+		doc = frappe.get_doc(
+			{
+				"doctype": "Daily Work Log",
+				"employee": self.employee,
+				"date": nowdate(),
+				"items": [
+					{
+						"task_title": "No Project Task",
+						"description": "Logged work without assigning a project.",
+						"time_spent_hours": 4,
+					}
+				],
+			}
+		)
+		doc.insert(ignore_permissions=True)
+		self.assertFalse(doc.items[0].project)
+		self.assertEqual(doc.total_hours, 4)
+
 	def test_total_hours_cannot_exceed_24(self):
 		with self.assertRaises(frappe.ValidationError):
 			frappe.get_doc(

@@ -49,7 +49,7 @@ test.describe("HR Daily Work Log @hr @ui", () => {
         .toMatch(/Present|Half Day|Work From Home/i);
     });
 
-    test("HR-DWL-002 @regression @critical: Project is required on work log item", async ({
+    test("HR-DWL-002 @regression @critical: Project is optional on work log item", async ({
       page,
       request,
     }) => {
@@ -64,10 +64,10 @@ test.describe("HR Daily Work Log @hr @ui", () => {
       await dwl.addItem({
         hours: 6,
         taskTitle: "E2E Task",
-        description: "Missing project on purpose",
+        description: "Work logged without a project on purpose",
         skipProject: true,
       });
-      await dwl.save({ expectError: /project/i });
+      await dwl.saveAndSubmit();
     });
 
     test("HR-DWL-003 @regression @critical: One work log per employee per day", async ({
