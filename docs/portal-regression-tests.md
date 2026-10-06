@@ -17,8 +17,9 @@ The desktop suite covers role-based navigation; project proposal, approval and
 financial visibility; advance requests, hierarchy, freezes, disbursement and
 returns; bank-account approval; invoice creation and signatures; single- and
 multi-invoice claims; receipt review, approval, classification and payment;
-and general/CSR donations. The mobile suite audits those forms and management
-workspaces at 360px and 390px for clipped controls, horizontal overflow, small
+general/CSR donations; and opening-balance form access and posting preview.
+The mobile suite audits those forms and management workspaces at 360px and
+390px for clipped controls, horizontal overflow, small
 primary targets and inputs that trigger mobile focus zoom.
 
 Also run the Frappe backend suite from the local bench before deployment:

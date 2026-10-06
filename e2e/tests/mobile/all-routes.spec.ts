@@ -366,7 +366,7 @@ test("HR and System Management workspaces", async ({ page }, testInfo) => {
   });
 });
 
-test("Budget Health, Chart of Accounts and project-account mapping", async ({
+test("Budget Health, Chart of Accounts, opening balances and project-account mapping", async ({
   page,
 }, testInfo) => {
   await test.step("budget-health", async () => {
@@ -410,6 +410,18 @@ test("Budget Health, Chart of Accounts and project-account mapping", async ({
       page.getByRole("heading", { name: "Add account" }),
     ).toBeVisible();
     await auditMobileLayout(page, testInfo, "chart-of-accounts-form");
+  });
+  await test.step("opening-balances", async () => {
+    await openRoute(
+      page,
+      PERSONAS.accounts,
+      "/volunteering/opening-balances",
+      "Opening balances",
+    );
+    await expect(
+      page.getByRole("heading", { name: "Record a starting balance" }),
+    ).toBeVisible();
+    await auditMobileLayout(page, testInfo, "opening-balances");
   });
 });
 

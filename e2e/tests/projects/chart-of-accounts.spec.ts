@@ -20,7 +20,7 @@ test("Accounts Manager opens Home Chart of Accounts and an account detail", asyn
   await expect(
     page.getByRole("heading", { name: "Chart of Accounts" }),
   ).toBeVisible();
-  await expect(page.getByText(/of .* accounts/)).toBeVisible();
+  await expect(page.getByText(/^\d+ of \d+ accounts\s*$/)).toBeVisible();
   await expect(page.getByRole("alert")).toHaveCount(0);
 
   const rows = page.locator(".account-row");
