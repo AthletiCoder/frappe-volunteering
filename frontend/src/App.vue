@@ -11,16 +11,16 @@
 				<div class="ml-auto flex items-center gap-1 sm:ml-0">
 					<button type="button" class="btn-ghost sm:hidden" aria-label="Search" @click="openSearch"><Icon name="search" /></button>
 					<NotifyMenu />
-					<a href="/desk" class="btn-ghost" title="Open Desk" aria-label="Open Desk"><Icon name="desk" /></a>
 					<a href="/help" class="btn-ghost" aria-label="Help"><Icon name="help" /></a>
-					<RouterLink to="/profile" class="portal-profile-trigger ml-1 hidden items-center gap-2 rounded-xl p-1.5 hover:bg-soft md:flex" aria-label="Account profile">
+					<div class="portal-profile-trigger ml-1 hidden items-center gap-2 p-1.5 md:flex">
 						<span class="flex h-8 w-8 items-center justify-center rounded-full bg-accent-soft text-xs font-bold text-accent">{{ initials }}</span>
 						<span class="portal-profile-details hidden text-left xl:block"><span class="block text-xs font-semibold leading-tight">{{ fullName }}</span><span class="block text-[11px] text-muted">{{ roleLabel }}</span></span>
-					</RouterLink>
+					</div>
+					<button type="button" class="ml-1 rounded-xl border border-line bg-surface px-3 py-2 text-xs font-semibold text-ink hover:bg-soft disabled:opacity-60" :disabled="loggingOut" @click="logout">{{ loggingOut ? "Logging out…" : "Logout" }}</button>
 				</div>
 			</div>
 		</header>
-		<main class="mx-auto w-full max-w-[1480px] p-4 md:p-6 lg:p-8"><RouterView /></main>
+		<main class="mx-auto w-full max-w-[1480px] p-4 md:p-6 lg:p-8"><p v-if="logoutError" class="mb-4 text-sm text-bad" role="alert">{{ logoutError }}</p><RouterView /></main>
 		<div class="app-header fixed inset-x-0 bottom-0 z-20 w-full border-t border-line pb-[env(safe-area-inset-bottom)] lg:hidden">
 			<div class="mx-auto flex max-w-lg items-center px-2">
 				<AppNav layout="bottom" :items="mobileItems" aria-label="Mobile" />
@@ -43,6 +43,8 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, RouterView, useRoute } from "vue-router";
 import { homePayload, loadHomePayload, startHomePoll, stopHomePoll } from "./lib/home";
+import { buildSidebarItems } from "./lib/workspaceNavigation";
+import { call } from "./lib/frappe";
 import AppNav from "./components/AppNav.vue";
 import Icon from "./components/Icon.vue";
 import NotifyMenu from "./components/NotifyMenu.vue";
@@ -53,6 +55,8 @@ const drawerOpen = ref(false);
 const searchOpen = ref(false);
 const searchQuery = ref("");
 const searchInput = ref(null);
+const loggingOut = ref(false);
+const logoutError = ref("");
 const payload = computed(() => homePayload.value);
 const actions = computed(() => payload.value?.actions || {});
 const todoCount = computed(() => payload.value?.waiting_count ?? payload.value?.todo_count ?? 0);
@@ -67,26 +71,7 @@ const roleLabel = computed(() => {
 	if (actions.value.team?.length) return "Team lead";
 	return "Employee";
 });
-
-const sidebarItems = computed(() => {
-	const nav = payload.value?.nav || {};
-	const items = [{ to: "/home", label: "Home", icon: "home" }, { to: "/todos", label: "My Work", icon: "check", badge: todoCount.value }, { section: "Work" }];
-	if (nav.projects) items.push({ to: "/projects", label: "Projects", icon: "folder" });
-	if (payload.value?.flags?.show_time) items.push({ href: "/volunteering/home#time", label: "Time & leave", icon: "clock" });
-	if (payload.value?.flags?.show_money) items.push({ to: "/expense-claims", label: "Expenses", icon: "receipt" });
-	if (nav.advances) items.push({ to: "/advances", label: "Advances", icon: "wallet" });
-	if (nav.team) items.push({ to: "/team", label: "My team", icon: "people" });
-	if (nav.volunteering) items.push({ href: "/desk/volunteering", label: "Volunteering", icon: "people" });
-	const management = [];
-	if (actions.value.projects?.some((row) => row.id === "review_project_proposals")) management.push({ to: "/project-proposals/review", label: "Project reviews", icon: "clipboard-check" });
-	if (actions.value.accounts?.length) management.push({ href: "/volunteering/home#accounts", label: "Accounts work", icon: "bank" });
-	if (nav.budget_health) management.push({ to: "/budget-health", label: "Budgets", icon: "chart" });
-	if (actions.value.hr_management?.length) management.push({ to: "/hr-management", label: "HR management", icon: "user-plus" });
-	if (actions.value.system_management?.length) management.push({ to: "/system-management", label: "System management", icon: "user-shield" });
-	if (management.length) items.push({ section: "Management" }, ...management);
-	if (payload.value?.allowed) items.push({ section: "Organisation" }, { to: "/office-addresses", label: "Office addresses", icon: "map-pin" });
-	return items;
-});
+const sidebarItems = computed(() => buildSidebarItems(payload.value));
 const mobileItems = computed(() => {
 	const items = [{ to: "/home", label: "Home", icon: "home" }, { to: "/todos", label: "My Work", icon: "check", badge: todoCount.value }];
 	if (payload.value?.nav?.projects) items.push({ to: "/projects", label: "Projects", icon: "folder" });
@@ -94,7 +79,8 @@ const mobileItems = computed(() => {
 	return items;
 });
 const searchCatalog = computed(() => {
-	const entries = sidebarItems.value.filter((item) => item.to || item.href).map((item) => ({ label: item.label, route: item.href || `/volunteering${item.to}`, icon: item.icon }));
+	const entries = sidebarItems.value.flatMap((item) => item.children || (item.to || item.href ? [item] : []))
+		.map((item) => ({ label: item.label, route: item.href || `/volunteering${item.to}`, icon: item.icon || "document-history" }));
 	for (const group of Object.values(actions.value)) for (const action of group || []) {
 		if (action.route) entries.push({ label: action.label, route: action.route, icon: "arrow-right", hint: action.hint });
 		if (action.list_route) entries.push({ label: action.list_label, route: action.list_route, icon: "document-history" });
@@ -110,6 +96,20 @@ async function openSearch() {
 	searchOpen.value = true;
 	await nextTick();
 	searchInput.value?.focus();
+}
+async function logout() {
+	if (loggingOut.value) return;
+	loggingOut.value = true;
+	logoutError.value = "";
+	try {
+		await call("logout");
+		stopHomePoll();
+		homePayload.value = null;
+		window.location.replace("/login?redirect-to=%2Fvolunteering%2Fhome");
+	} catch (err) {
+		logoutError.value = err.message || "Unable to log out. Please try again.";
+		loggingOut.value = false;
+	}
 }
 function onKeydown(event) {
 	if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); openSearch(); }

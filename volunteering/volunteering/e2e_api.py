@@ -982,6 +982,7 @@ def seed_manager_paid_advance(employee=None, paid_amount=5000):
 	paid_amount = flt(paid_amount)
 	cleanup_employee_advances(employee)
 	company = frappe.db.get_value("Employee", employee, "company")
+	project = frappe.db.get_value("Project", {"project_name": E2E_PROJECT_NAME}, "name")
 	doc = frappe.get_doc(
 		{
 			"doctype": "Employee Advance",
@@ -990,6 +991,8 @@ def seed_manager_paid_advance(employee=None, paid_amount=5000):
 			"purpose": "E2E manager float fixture",
 			"advance_amount": paid_amount,
 			"posting_date": nowdate(),
+			"intended_project": project,
+			"advance_use": "Team expenses",
 		}
 	)
 	doc.flags.ignore_advance_eligibility = True

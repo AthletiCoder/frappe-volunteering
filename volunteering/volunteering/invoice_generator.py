@@ -29,6 +29,18 @@ from volunteering.volunteering.authority import get_employee_for_user
 
 MAX_ITEMS = 20
 MAX_SIGNATURE_BYTES = 500_000
+SIGNATURE_FIELDS = frozenset(
+	{
+		"volunteer_signature_data",
+		"vendor_signature_data",
+		"volunteer_signature_proof",
+		"vendor_signature_proof",
+		"signature_data",
+		"signer_type",
+		"volunteer",
+		"invoice_number",
+	}
+)
 VENDOR_ADDRESS_DOCTYPE = "Employee Vendor Address"
 VENDOR_STYLE_DOCTYPE = "Vendor Invoice Style"
 EMPLOYEE_SIGNATURE_DOCTYPE = "Employee Invoice Signature"
@@ -268,6 +280,71 @@ def generate_invoice_documents(payload, output_format="both", generation_referen
 				)
 
 
+def _signature_details_fingerprint(payload):
+	raw = frappe.parse_json(payload) if isinstance(payload, str) else payload
+	if not isinstance(raw, dict):
+		frappe.throw(_("Invoice details must be a valid object."))
+	details = {key: value for key, value in raw.items() if key not in SIGNATURE_FIELDS}
+	return hashlib.sha256(
+		json.dumps(details, sort_keys=True, default=str, separators=(",", ":")).encode()
+	).hexdigest()
+
+
+def _make_signature_proof(payload, kind, employee):
+	if kind not in {"volunteer", "vendor"}:
+		frappe.throw(_("Choose the volunteer or vendor signature."))
+	raw = frappe.parse_json(payload) if isinstance(payload, str) else payload
+	if not isinstance(raw, dict):
+		frappe.throw(_("Invoice details must be a valid object."))
+	signature = _signature_png(raw.get(f"{kind}_signature_data"))
+	if not signature:
+		frappe.throw(_("Draw or select a signature before continuing."))
+	return encrypt(
+		json.dumps(
+			{
+				"purpose": "invoice-signature-v1",
+				"employee": employee,
+				"kind": kind,
+				"details": _signature_details_fingerprint(raw),
+				"signature": hashlib.sha256(signature).hexdigest(),
+			}
+		)
+	)
+
+
+@frappe.whitelist(methods=["POST"])
+def bind_invoice_signature(payload, kind):
+	"""Bind one on-screen or reused signature to the current invoice details."""
+	return {"proof": _make_signature_proof(payload, kind, _require_employee())}
+
+
+def _validate_signature_proofs(payload, employee):
+	raw = frappe.parse_json(payload) if isinstance(payload, str) else payload
+	if not isinstance(raw, dict):
+		frappe.throw(_("Invoice details must be a valid object."))
+	details = _signature_details_fingerprint(raw)
+	for kind in ("volunteer", "vendor"):
+		if kind == "vendor" and not cint(raw.get("vendor_will_sign")):
+			continue
+		try:
+			proof = json.loads(decrypt(raw.get(f"{kind}_signature_proof") or ""))
+		except (frappe.ValidationError, ValueError, TypeError):
+			frappe.throw(_("The {0} signature must be added again before submitting.").format(kind))
+		if not isinstance(proof, dict):
+			frappe.throw(_("The {0} signature must be added again before submitting.").format(kind))
+		signature = _signature_png(raw.get(f"{kind}_signature_data"))
+		if (
+			proof.get("purpose") != "invoice-signature-v1"
+			or proof.get("employee") != employee
+			or proof.get("kind") != kind
+			or proof.get("details") != details
+			or proof.get("signature") != hashlib.sha256(signature).hexdigest()
+		):
+			frappe.throw(
+				_("Invoice details changed after the {0} signed. Please obtain a fresh signature.").format(kind)
+			)
+
+
 def _generate_invoice_documents(payload, output_format="both", generation_reference=None):
 	if output_format not in {"pdf", "docx", "both"}:
 		frappe.throw(_("Choose PDF or Word document."))
@@ -278,6 +355,7 @@ def _generate_invoice_documents(payload, output_format="both", generation_refere
 		invoice_number_override="INV-AUTOMATIC",
 		volunteer_override=_employee_signer(employee),
 	)
+	_validate_signature_proofs(payload, employee)
 	vendor_identity_key, invoice_style = _vendor_invoice_style(employee, data["supplier"])
 	data["invoice_style"] = invoice_style
 	fingerprint_data = {

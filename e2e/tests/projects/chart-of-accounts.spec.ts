@@ -11,10 +11,12 @@ test("Accounts Manager opens Home Chart of Accounts and an account detail", asyn
     PERSONAS.accounts.password,
   );
   await page.goto("/volunteering/home");
-  await expect(
-    page.getByRole("region", { name: "Quick actions" }).getByRole("link", { name: "Chart of Accounts", exact: true }),
-  ).toBeVisible();
-  await page.getByRole("region", { name: "Quick actions" }).getByRole("link", { name: "Chart of Accounts", exact: true }).click();
+  const accountsMenu = page.getByRole("navigation", { name: "Sections" }).locator("details").filter({
+    has: page.locator("summary").filter({ hasText: /^Accounts$/ }),
+  });
+  await accountsMenu.locator("summary").click();
+  await expect(accountsMenu.getByRole("link", { name: "Chart of Accounts", exact: true })).toBeVisible();
+  await accountsMenu.getByRole("link", { name: "Chart of Accounts", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Chart of Accounts" }),
   ).toBeVisible();

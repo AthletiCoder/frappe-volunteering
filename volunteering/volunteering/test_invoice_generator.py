@@ -18,8 +18,8 @@ from volunteering.volunteering.invoice_generator import (
 )
 
 
-def _payload(invoice_type="GST"):
-	return {
+def _payload(invoice_type="GST", employee="Test Employee"):
+	payload = {
 		"invoice_type": invoice_type,
 		"invoice_number": "INV/2026/001",
 		"invoice_date": "2026-09-16",
@@ -55,6 +55,14 @@ def _payload(invoice_type="GST"):
 		"volunteer_signature_data": _signature_data(),
 		"vendor_will_sign": False,
 	}
+	_bind_payload_signatures(payload, employee)
+	return payload
+
+
+def _bind_payload_signatures(payload, employee="Test Employee"):
+	payload["volunteer_signature_proof"] = invoices._make_signature_proof(payload, "volunteer", employee)
+	if payload.get("vendor_will_sign"):
+		payload["vendor_signature_proof"] = invoices._make_signature_proof(payload, "vendor", employee)
 
 
 def _signature_data(blank=False, transparent=False):
@@ -72,6 +80,36 @@ def _signature_data(blank=False, transparent=False):
 
 
 class UnitTestInvoiceGenerator(UnitTestCase):
+	def test_signature_proof_is_bound_to_invoice_details_and_employee(self):
+		payload = _payload()
+		invoices._validate_signature_proofs(payload, "Test Employee")
+		for change in (
+			lambda data: data["items"][0].update(rate=125),
+			lambda data: data.update(gst_amount=48),
+			lambda data: data["supplier"].update(address="Changed supplier address"),
+		):
+			changed = frappe.parse_json(frappe.as_json(payload))
+			change(changed)
+			with self.assertRaisesRegex(frappe.ValidationError, "changed after"):
+				invoices._validate_signature_proofs(changed, "Test Employee")
+		with self.assertRaisesRegex(frappe.ValidationError, "changed after"):
+			invoices._validate_signature_proofs(payload, "Another Employee")
+
+	def test_vendor_signature_must_match_current_details_and_image(self):
+		payload = _payload("NON_GST")
+		payload["vendor_will_sign"] = True
+		payload["vendor_signature_data"] = _signature_data()
+		payload["authorised_signatory"] = "Asha Vendor"
+		_bind_payload_signatures(payload)
+		invoices._validate_signature_proofs(payload, "Test Employee")
+		payload["vendor_signature_data"] = _signature_data(transparent=True)
+		with self.assertRaisesRegex(frappe.ValidationError, "changed after"):
+			invoices._validate_signature_proofs(payload, "Test Employee")
+		payload["vendor_signature_data"] = _signature_data()
+		payload["other_charges"] = 12
+		with self.assertRaisesRegex(frappe.ValidationError, "changed after"):
+			invoices._validate_signature_proofs(payload, "Test Employee")
+
 	def test_generation_retries_transaction_conflict(self):
 		result = {"invoice_number": "INV-2098-000001"}
 		with (
@@ -428,7 +466,7 @@ class IntegrationTestGeneratedInvoiceNumbers(IntegrationTestCase):
 		with self.generation_context():
 			first = invoices.generate_invoice_documents(_payload("NON_GST"))
 			with patch.object(invoices, "_require_employee", return_value="Another Employee"):
-				second = invoices.generate_invoice_documents(_payload("GST"))
+				second = invoices.generate_invoice_documents(_payload("GST", "Another Employee"))
 		self.assertEqual(first["invoice_number"], "INV-2098-000001")
 		self.assertEqual(second["invoice_number"], "INV-2098-000002")
 
@@ -443,6 +481,7 @@ class IntegrationTestGeneratedInvoiceNumbers(IntegrationTestCase):
 	def test_pdf_only_does_not_generate_word_and_word_reuses_number(self):
 		payload = _payload("NON_GST")
 		payload["supplier"].pop("pan")
+		_bind_payload_signatures(payload)
 		with self.generation_context(), patch.object(invoices, "_build_docx") as word:
 			pdf = invoices.generate_invoice_documents(payload, output_format="pdf")
 			word.assert_not_called()
@@ -474,6 +513,7 @@ class IntegrationTestGeneratedInvoiceNumbers(IntegrationTestCase):
 			payload["vendor_will_sign"] = True
 			payload["vendor_signature_data"] = _signature_data()
 			payload["authorised_signatory"] = "Asha Vendor"
+			_bind_payload_signatures(payload)
 			with_vendor = invoices.generate_invoice_documents(
 				payload, output_format="pdf", generation_reference=volunteer_only["generation_reference"]
 			)
@@ -496,6 +536,11 @@ class IntegrationTestGeneratedInvoiceNumbers(IntegrationTestCase):
 		with self.generation_context():
 			first = invoices.generate_invoice_documents(payload, output_format="pdf")
 			payload["items"][0]["rate"] = 200
+			with self.assertRaisesRegex(frappe.ValidationError, "changed after"):
+				invoices.generate_invoice_documents(
+					payload, output_format="docx", generation_reference=first["generation_reference"]
+				)
+			_bind_payload_signatures(payload)
 			second = invoices.generate_invoice_documents(
 				payload, output_format="docx", generation_reference=first["generation_reference"]
 			)
@@ -511,7 +556,9 @@ class IntegrationTestGeneratedInvoiceNumbers(IntegrationTestCase):
 			with patch.object(invoices, "_require_employee", return_value="Another Employee"):
 				with self.assertRaises(frappe.PermissionError):
 					invoices.generate_invoice_documents(
-						_payload(), output_format="docx", generation_reference=first["generation_reference"]
+						_payload(employee="Another Employee"),
+						output_format="docx",
+						generation_reference=first["generation_reference"],
 					)
 
 	def test_invalid_format_does_not_consume_number(self):

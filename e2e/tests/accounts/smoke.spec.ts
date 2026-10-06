@@ -21,9 +21,9 @@ test.describe("Accounts L1 smoke @smoke @accounts", () => {
       const budgetHealth = new BudgetHealthPage(page);
       await budgetHealth.goto();
       await page.getByRole("link", { name: "Advances" }).first().click();
-      await expect(page).toHaveURL(/\/volunteering\/advances/);
+      await expect(page).toHaveURL(/\/volunteering\/advance-workflow\?view=disbursement/);
       await expect(
-        page.getByRole("heading", { name: "Advances", level: 1 }),
+        page.getByRole("heading", { name: "Advance work", level: 1 }),
       ).toBeVisible();
     });
 
@@ -60,12 +60,12 @@ test.describe("Accounts L1 smoke @smoke @accounts", () => {
       const home = new HomePage(page);
       await home.goto();
       await home.expectLoaded();
-      const quick = page.getByRole("region", { name: "Quick actions" });
+      const project = page.locator("main section[aria-labelledby='member-projects-title'] article").first();
       await expect(
-        quick.getByRole("link", { name: "Submit an Expense", exact: true }),
+        project.getByRole("link", { name: "Submit an expense", exact: true }),
       ).toBeVisible();
       await expect(
-        quick.getByRole("link", { name: "Request an advance", exact: true }),
+        project.getByRole("link", { name: "Request an advance", exact: true }),
       ).toBeVisible();
       await expect(page.getByText("To pay")).toHaveCount(0);
     });

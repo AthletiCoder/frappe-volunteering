@@ -30,6 +30,7 @@ from volunteering.volunteering.accounting_test_utils import (
 	get_or_create_user,
 	make_expense_claim,
 	mute_accounting_test_emails,
+	save_test_project,
 	set_employee_grade,
 )
 from volunteering.volunteering.expense_claim_permissions import (
@@ -200,31 +201,45 @@ class IntegrationTestAccountingDashboard(IntegrationTestCase):
 			get_pending_reimbursements()
 
 	def test_get_pending_reimbursements_lists_approved_unpaid_claims(self):
-		claim = self._submit_claim_as(self.employee_email, amount=1500)
-		approved = self._approve_claim(claim)
-		frappe.set_user(self.accounts_email)
-		classify_expense_claim_accounts(
-			approved.name,
-			[
-				{
-					"expense_detail": approved.expenses[0].name,
-					"allocations": [
-						{
-							"expense_account": approved.expenses[0].default_account,
-							"amount": approved.expenses[0].sanctioned_amount,
-						}
-					],
-				}
-			],
-			"Dashboard reimbursement test.",
-		)
-		approved.reload()
-		self.assertEqual(approved.approval_status, "Approved")
-		self.assertEqual(approved.status, "Unpaid")
-
-		rows = get_pending_reimbursements()
-		names = {row.name for row in rows}
-		self.assertIn(approved.name, names)
+		# Use a governed project for the Home classification path, then restore the
+		# shared legacy fixture so later permission tests retain their original scope.
+		frappe.db.savepoint("dashboard_home_reimbursement")
+		try:
+			project = frappe.get_doc("Project", self.project)
+			project.project_setup_version = 1
+			project.project_purpose = project.project_purpose or "Dashboard reimbursement test"
+			project.project_owner = self.dept_head_email
+			project.operational_status = "Active"
+			project.budget_status = "Active"
+			if self.employee_email not in [row.user for row in project.project_participants]:
+				project.append("project_participants", {"user": self.employee_email, "access_level": "Basic"})
+			save_test_project(project)
+			claim = self._submit_claim_as(self.employee_email, amount=1500)
+			approved = self._approve_claim(claim)
+			frappe.set_user(self.accounts_email)
+			classify_expense_claim_accounts(
+				approved.name,
+				[
+					{
+						"expense_detail": approved.expenses[0].name,
+						"allocations": [
+							{
+								"expense_account": approved.expenses[0].default_account,
+								"amount": approved.expenses[0].sanctioned_amount,
+							}
+						],
+					}
+				],
+				"Dashboard reimbursement test.",
+			)
+			approved.reload()
+			self.assertEqual(approved.approval_status, "Approved")
+			self.assertEqual(approved.status, "Unpaid")
+			rows = get_pending_reimbursements()
+			self.assertIn(approved.name, {row.name for row in rows})
+		finally:
+			frappe.db.rollback(save_point="dashboard_home_reimbursement")
+			frappe.db.value_cache.clear()
 
 	def test_get_pending_vendor_payments_requires_accounts_role(self):
 		frappe.set_user(self.employee_email)

@@ -16,9 +16,12 @@ from volunteering.volunteering.home_access import (
 )
 from volunteering.volunteering.home_service import (
 	_accounts_actions,
+	_accounts_queues,
 	_compose_todos,
 	_employee_draft_todos,
+	_member_project_cards,
 	_money_actions,
+	_show_member_projects,
 	_time_actions,
 	get_home_payload,
 )
@@ -194,6 +197,47 @@ class UnitTestHomeAccess(UnitTestCase):
 
 
 class UnitTestHomePayload(UnitTestCase):
+	def test_project_cards_only_for_non_accounts_employee_members(self):
+		self.assertTrue(_show_member_projects("employee@example.com", "EMP-1", ["Employee"], False))
+		self.assertFalse(_show_member_projects("manager@example.com", "EMP-2", ["Projects Manager"], True))
+		self.assertFalse(_show_member_projects("accounts@example.com", "EMP-3", ["Accounts User"], False))
+		self.assertFalse(_show_member_projects("accounts@example.com", "EMP-3", ["Accounts Manager"], False))
+		self.assertFalse(_show_member_projects("Administrator", "EMP-4", ["Employee"], False))
+		self.assertFalse(_show_member_projects("employee@example.com", None, ["Employee"], False))
+
+	@patch("volunteering.volunteering.home_service.frappe.get_list")
+	@patch("volunteering.volunteering.home_service.frappe.get_all")
+	@patch("volunteering.volunteering.home_service.frappe.db.get_value", return_value="Sevamrita Foundation")
+	def test_member_project_cards_only_return_basic_details_and_eligible_actions(self, _company, get_all, get_list):
+		get_all.side_effect = [
+			["PROJ-1", "PROJ-2"],
+			[frappe._dict(name="PROJ-1", budget_status="Active"), frappe._dict(name="PROJ-2", budget_status="Closed")],
+			["PROJ-1"],
+		]
+		get_list.return_value = [
+			frappe._dict(
+				name="PROJ-1", project_name="Active Project", project_purpose="Field work",
+				project_type="", operational_status="Active",
+				expected_start_date="2026-10-01", expected_end_date=None,
+			),
+			frappe._dict(
+				name="PROJ-2", project_name="Active but financially closed", project_purpose="Done",
+				project_type="", operational_status="Active",
+				expected_start_date=None, expected_end_date=None,
+			),
+		]
+		cards = _member_project_cards("employee@example.com", "EMP-1")
+		self.assertEqual([card["name"] for card in cards], ["PROJ-1"])
+		self.assertTrue(cards[0]["can_submit_expense"])
+		self.assertTrue(cards[0]["can_request_advance"])
+		self.assertNotIn("budget_status", cards[0])
+		self.assertNotIn("total_approved_budget", cards[0])
+		filters = get_list.call_args.kwargs["filters"]
+		self.assertEqual(filters["project_setup_version"], [">", 0])
+		self.assertEqual(filters["is_archived"], 0)
+		self.assertEqual(filters["operational_status"], "Active")
+		self.assertEqual(filters["company"], "Sevamrita Foundation")
+
 	@patch("volunteering.volunteering.home_cutover.home_project_names", return_value=[])
 	def test_empty_governed_project_filter_does_not_match_blank_legacy_links(self, _names):
 		self.assertEqual(
@@ -209,6 +253,10 @@ class UnitTestHomePayload(UnitTestCase):
 		actions = _accounts_actions("accounts@example.com")
 		chart = next(row for row in actions if row["id"] == "chart_of_accounts")
 		self.assertEqual(chart["route"], "/volunteering/chart-of-accounts")
+		opening = next(row for row in actions if row["id"] == "opening_balances")
+		self.assertEqual(opening["route"], "/volunteering/opening-balances")
+		donations = next(row for row in actions if row["id"] == "donations")
+		self.assertEqual(donations["route"], "/volunteering/donations")
 		mapping = next(row for row in actions if row["id"] == "project_account_mapping")
 		self.assertEqual(mapping["route"], "/volunteering/project-account-mapping")
 		returns = next(row for row in actions if row["id"] == "advance_returns")
@@ -277,6 +325,7 @@ class UnitTestHomePayload(UnitTestCase):
 		self.assertEqual(leave["pending"], 2)
 
 	def test_money_actions_include_employee_invoice_generator(self):
+		self.assertNotIn("vendor", [row["id"] for row in _money_actions()])
 		action = next(row for row in _money_actions() if row["id"] == "invoice_generator")
 		self.assertEqual(action["route"], "/volunteering/invoice-generator")
 		self.assertIn("GST", action["hint"])
@@ -287,6 +336,14 @@ class UnitTestHomePayload(UnitTestCase):
 		claim = next(row for row in _money_actions() if row["id"] == "claim")
 		self.assertEqual(claim["route"], "/volunteering/expense-claim")
 		self.assertEqual(claim["list_route"], "/volunteering/expense-claims")
+
+	@patch("volunteering.volunteering.home_service._residual_advance_count", return_value=0)
+	@patch("volunteering.volunteering.home_service.frappe.get_all", return_value=[])
+	@patch("volunteering.volunteering.home_service._safe_count", return_value=1)
+	@patch("volunteering.volunteering.home_service.frappe.get_roles", return_value=[])
+	def test_accounts_queue_hides_unfinished_vendor_payment(self, _roles, safe_count, _advances, _residual):
+		self.assertNotIn("vendor_pay", [row["id"] for row in _accounts_queues()])
+		self.assertNotIn("Purchase Invoice", [call.args[0] for call in safe_count.call_args_list])
 
 	@patch("volunteering.volunteering.home_service.frappe.db.exists", return_value=True)
 	@patch("volunteering.volunteering.home_service.frappe.db.has_column", return_value=True)

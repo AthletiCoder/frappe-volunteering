@@ -22,7 +22,7 @@
 		<path v-else-if="name === 'chart'" d="M4 19V5M4 19h16M8 16v-5M12 16V8M16 16v-3" />
 		<path
 			v-else-if="name === 'bell'"
-			d="M6 17h12l-1.2-2.2A6 6 0 0 1 6.8 9.5L6 17zM10 19a2 2 0 0 0 4 0"
+			d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"
 		/>
 		<path
 			v-else-if="name === 'help'"
@@ -82,6 +82,7 @@
 			v-else-if="name === 'people'"
 			d="M16 19v-1a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v1M10 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM20 19v-1a3 3 0 0 0-2-2.8M16 6.2a3 3 0 0 1 0 5.6"
 		/>
+		<path v-else-if="name === 'user'" d="M19 20v-1a6 6 0 0 0-6-6h-2a6 6 0 0 0-6 6v1M12 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
 		<path
 			v-else-if="name === 'user-plus'"
 			d="M15 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM19 8v6M16 11h6"
@@ -138,6 +139,7 @@
 		<path v-else-if="name === 'close'" d="M7 7l10 10M17 7 7 17" />
 		<path v-else-if="name === 'search'" d="M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM17 17l4 4" />
 		<path v-else-if="name === 'arrow-right'" d="M4 12h16m0 0-6-6m6 6-6 6" />
+		<path v-else-if="name === 'chevron-down'" d="m6 9 6 6 6-6" />
 		<path
 			v-else-if="name === 'moon'"
 			fill="currentColor"

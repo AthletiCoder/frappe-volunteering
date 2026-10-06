@@ -269,6 +269,32 @@ def get_bank_account_workspace():
 
 
 @frappe.whitelist(methods=["POST"])
+def get_my_bank_account_summary():
+	"""Only the signed-in employee's masked bank details for their profile."""
+	employee = _employee_for_current_user(required=False)
+	if not employee:
+		return {"approved": None, "pending": None}
+
+	def summary(status):
+		rows = _requests({"employee": employee, "request_status": status}, limit=1)
+		if not rows:
+			return None
+		row = rows[0]
+		return {
+			"account_holder_name": row["account_holder_name"],
+			"bank_name": row["bank_name"],
+			"branch": row["branch"],
+			"account_type": row["account_type"],
+			"account_number_masked": row["account_number_masked"],
+			"ifsc": row["ifsc"],
+			"swift": row["swift"],
+			"reviewed_on": row["reviewed_on"],
+		}
+
+	return {"approved": summary(APPROVED), "pending": summary(PENDING)}
+
+
+@frappe.whitelist(methods=["POST"])
 def submit_bank_account_request(details):
 	employee = _employee_for_current_user()
 	# All requests/decisions for one employee serialize on the same parent row.

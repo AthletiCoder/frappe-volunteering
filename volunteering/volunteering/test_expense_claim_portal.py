@@ -12,6 +12,7 @@ from volunteering.volunteering.accounting_setup import (
 	ensure_expense_claim_field_visibility,
 	setup_accounting_custom_fields,
 )
+from volunteering.volunteering.approval_routing import get_document_approval_amount
 from volunteering.volunteering.accounting_test_utils import (
 	allow_project_expense_account,
 	get_or_create_department,
@@ -24,6 +25,7 @@ from volunteering.volunteering.accounting_test_utils import (
 )
 from volunteering.volunteering.expense_claim_portal import (
 	_attach_own_advance,
+	_generated_invoice_claim_context,
 	_normalise_expenses,
 	get_expense_claim_form,
 	get_my_expense_claim,
@@ -32,6 +34,7 @@ from volunteering.volunteering.expense_claim_portal import (
 	resubmit_expense_claim,
 	submit_expense_claim,
 	submit_generated_invoice_expense_claim,
+	submit_multi_invoice_expense_claim,
 )
 from volunteering.volunteering.expense_claim_workflow_portal import (
 	get_expense_claim_work_item,
@@ -159,6 +162,115 @@ class IntegrationTestExpenseClaimPortal(IntegrationTestCase):
 		self.assertEqual(file_row.is_private, 1)
 		self.assertEqual(file_row.file_url, claim.expenses[0].receipt_attachment)
 
+	def test_multiple_invoices_create_separately_dated_linked_claims(self):
+		frappe.set_user("Administrator")
+		previous_year = "2025-2026"
+		created_year = not frappe.db.exists("Fiscal Year", previous_year)
+		if created_year:
+			frappe.get_doc({
+				"doctype": "Fiscal Year",
+				"year": previous_year,
+				"year_start_date": "2025-04-01",
+				"year_end_date": "2026-03-31",
+				"companies": [{"company": self.company}],
+			}).insert()
+		try:
+			frappe.set_user(self.user)
+			item = self._payload()["expenses"][0]
+			invoice = lambda date, amount: {
+				"invoice_date": date,
+				"invoice_number": f"TEST-{date}",
+				"supplier_name": "Portal supplier",
+				"receipt_filename": "bill.pdf",
+				"receipt_content": base64.b64encode(_valid_pdf()).decode(),
+				"items": [
+					{"account": item["account"], "description": "Billed item 1", "amount": amount},
+					{"account": item["account"], "description": "Billed item 2", "amount": 25},
+				],
+			}
+			result = submit_multi_invoice_expense_claim({
+				"project": self.project,
+				"reimbursement_source": "PERSONAL",
+				"invoices": [invoice("2026-03-31", 100), invoice("2026-04-01", 200)],
+			})
+			self.assertEqual(result["total"], 350)
+			claims = [frappe.get_doc("Expense Claim", row["name"]) for row in result["claims"]]
+			self.assertEqual([str(row.posting_date) for row in claims], ["2026-03-31", "2026-04-01"])
+			for claim, expected_year in zip(claims, ["2025-2026", "2026-2027"]):
+				gl_row = claim.get_gl_dict({"account": self.account, "debit": 1})
+				self.assertEqual(gl_row.posting_date, claim.posting_date)
+				self.assertEqual(gl_row.fiscal_year, expected_year)
+			self.assertEqual({row.expense_submission_id for row in claims}, {result["submission_id"]})
+			for claim in claims:
+				self.assertEqual(claim.workflow_state, "Pending Receipt Review")
+				self.assertEqual(get_document_approval_amount(claim), 350)
+				self.assertEqual(claim.expenses[0].receipt_attachment, claim.expenses[1].receipt_attachment)
+				self.assertEqual(
+					frappe.db.count("File", {"attached_to_doctype": "Expense Claim", "attached_to_name": claim.name}),
+					1,
+				)
+		finally:
+			frappe.set_user("Administrator")
+			if created_year:
+				frappe.db.delete("Expense Claim", {"employee": self.employee})
+				frappe.delete_doc("Fiscal Year", previous_year)
+
+	def test_single_claim_rejects_mixed_invoice_dates(self):
+		frappe.set_user(self.user)
+		payload = self._payload()
+		payload["expenses"].append({**payload["expenses"][0], "expense_date": "2026-04-01"})
+		with self.assertRaises(frappe.ValidationError):
+			submit_expense_claim(payload)
+		self.assertFalse(frappe.db.exists("Expense Claim", {"employee": self.employee}))
+
+	def test_invalid_second_invoice_creates_no_partial_submission(self):
+		frappe.set_user(self.user)
+		item = self._payload()["expenses"][0]
+		invoice = {
+			"invoice_date": frappe.utils.nowdate(),
+			"receipt_filename": "bill.pdf",
+			"receipt_content": base64.b64encode(_valid_pdf()).decode(),
+			"items": [{"account": item["account"], "description": "Billed item", "amount": 125}],
+		}
+		with self.assertRaises(frappe.ValidationError):
+			submit_multi_invoice_expense_claim({
+				"project": self.project,
+				"reimbursement_source": "PERSONAL",
+				"invoices": [invoice, {**invoice, "receipt_content": "invalid"}],
+			})
+		self.assertFalse(frappe.db.exists("Expense Claim", {"employee": self.employee}))
+
+	def test_late_second_invoice_failure_rolls_back_first_claim(self):
+		from volunteering.volunteering import expense_claim_portal
+
+		frappe.set_user(self.user)
+		item = self._payload()["expenses"][0]
+		invoice = {
+			"invoice_date": frappe.utils.nowdate(),
+			"receipt_filename": "bill.pdf",
+			"receipt_content": base64.b64encode(_valid_pdf()).decode(),
+			"items": [{"account": item["account"], "description": "Billed item", "amount": 125}],
+		}
+		original = expense_claim_portal._submit_expense_claim_data
+		calls = 0
+
+		def fail_second(*args, **kwargs):
+			nonlocal calls
+			calls += 1
+			if calls == 2:
+				raise frappe.ValidationError("Second invoice failed after the first was saved")
+			return original(*args, **kwargs)
+
+		with patch.object(expense_claim_portal, "_submit_expense_claim_data", side_effect=fail_second):
+			with self.assertRaisesRegex(frappe.ValidationError, "Second invoice failed"):
+				submit_multi_invoice_expense_claim({
+					"project": self.project,
+					"reimbursement_source": "PERSONAL",
+					"invoices": [invoice, invoice],
+				})
+		self.assertEqual(calls, 2)
+		self.assertFalse(frappe.db.exists("Expense Claim", {"employee": self.employee}))
+
 	@patch("volunteering.volunteering.invoice_generator.generate_invoice_documents")
 	def test_signed_generated_invoice_is_privately_attached_and_submitted(self, generate):
 		generate.return_value = {
@@ -176,6 +288,7 @@ class IntegrationTestExpenseClaimPortal(IntegrationTestCase):
 		frappe.set_user(self.user)
 		invoice_payload = {
 			"volunteer_signature_data": "data:image/png;base64,signed",
+			"signature_context": _generated_invoice_claim_context(payload),
 			"bank": {
 				"account_name": "Generated supplier",
 				"bank_name": "Supplier Bank",
@@ -216,9 +329,39 @@ class IntegrationTestExpenseClaimPortal(IntegrationTestCase):
 		}
 		with self.assertRaisesRegex(frappe.ValidationError, "must equal the expense amount"):
 			submit_generated_invoice_expense_claim(
-				payload, {"volunteer_signature_data": "data:image/png;base64,signed"}
+				payload,
+				{
+					"volunteer_signature_data": "data:image/png;base64,signed",
+					"signature_context": _generated_invoice_claim_context(payload),
+				},
 			)
 		self.assertFalse(frappe.db.exists("Expense Claim", {"employee": self.employee}))
+
+	@patch("volunteering.volunteering.invoice_generator.generate_invoice_documents")
+	def test_generated_invoice_rejects_claim_details_changed_after_signing(self, generate):
+		payload = self._payload()
+		invoice = {
+			"volunteer_signature_data": "data:image/png;base64,signed",
+			"signature_context": _generated_invoice_claim_context(payload),
+		}
+		payload["expenses"][0]["description"] = "Changed purpose after signing"
+		frappe.set_user(self.user)
+		with self.assertRaisesRegex(frappe.ValidationError, "changed after signing"):
+			submit_generated_invoice_expense_claim(payload, invoice)
+		generate.assert_not_called()
+
+	@patch("volunteering.volunteering.invoice_generator.generate_invoice_documents")
+	def test_generated_invoice_date_must_match_claim_bill_date(self, generate):
+		payload = self._payload()
+		invoice = {
+			"invoice_date": "2026-04-01",
+			"volunteer_signature_data": "data:image/png;base64,signed",
+			"signature_context": _generated_invoice_claim_context(payload),
+		}
+		frappe.set_user(self.user)
+		with self.assertRaisesRegex(frappe.ValidationError, "must match the bill date"):
+			submit_generated_invoice_expense_claim(payload, invoice)
+		generate.assert_not_called()
 
 	def test_employee_can_correct_and_resubmit_from_home(self):
 		frappe.set_user(self.user)

@@ -10,6 +10,8 @@
   },
   "scripts": {
     "test:e2e": "playwright test",
+    "test:e2e:portal": "E2E_PROJECT_DEMOS=1 E2E_EXPENSE_PORTAL_WRITES=1 E2E_DONATION_WRITES=1 E2E_MULTI_INVOICE_WRITES=1 playwright test -c playwright.portal-regression.config.ts",
+    "test:e2e:portal:mobile": "playwright test -c playwright.mobile.config.ts",
     "test:e2e:last-failed": "playwright test --last-failed --project=chromium",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",

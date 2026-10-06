@@ -409,7 +409,10 @@ const canSave = computed(
 
 function resetForm() {
 	Object.assign(form, blankForm());
-	if (defaults.value.projects.length === 1)
+	const requestedProject = String(route.query.project || "");
+	if (defaults.value.projects.some((project) => project.value === requestedProject))
+		form.intended_project = requestedProject;
+	else if (defaults.value.projects.length === 1)
 		form.intended_project = defaults.value.projects[0].value;
 }
 
@@ -417,7 +420,7 @@ function startNew() {
 	result.value = null;
 	resetForm();
 	showForm.value = true;
-	router.replace({ path: "/advances", query: { new: "1" } });
+	router.replace({ path: "/advances", query: { new: "1", ...(form.intended_project ? { project: form.intended_project } : {}) } });
 	window.scrollTo({ top: 0, behavior: "smooth" });
 }
 

@@ -37,7 +37,7 @@ test.beforeEach(async ({ page, baseURL }) => {
     PERSONAS.employee.password,
   );
   await page.goto("/volunteering/home");
-  await expect(page.getByRole("heading", { name: /^Hello/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^(Home|Your active projects)$/ })).toBeVisible();
 });
 
 test("Home opens a read-only own profile; supplied identities cannot expose another employee", async ({
@@ -119,8 +119,9 @@ test("A second employee sees their own record, not the first employee's", async 
 
 test("Home and profile fit mobile and enforce light theme", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Open menu" }).click();
   await expect(
-    page.getByRole("link", { name: "Profile", exact: true }),
+    page.getByRole("navigation", { name: "Mobile sections" }).getByRole("link", { name: "Profile", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Logout", exact: true }),
@@ -130,7 +131,7 @@ test("Home and profile fit mobile and enforce light theme", async ({ page }) => 
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBeTruthy();
-  await page.getByRole("link", { name: "Profile", exact: true }).click();
+  await page.getByRole("navigation", { name: "Mobile sections" }).getByRole("link", { name: "Profile", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Employment details", exact: true }),
   ).toBeVisible();

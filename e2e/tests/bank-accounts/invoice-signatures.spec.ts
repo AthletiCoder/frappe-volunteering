@@ -105,18 +105,22 @@ test("volunteer signature is mandatory and reusable while vendor signature is op
   await expect(
     page.getByText("A saved signature is available for reuse.", { exact: true }),
   ).toBeVisible();
+  await fillRequiredInvoiceFields(page);
   await page
     .getByRole("button", { name: "Use saved signature", exact: true })
     .click();
   await expect(page.getByText("Using saved signature", { exact: true })).toBeVisible();
-  await fillRequiredInvoiceFields(page);
 
   await page.getByLabel("Vendor will also sign this invoice").check();
+  await expect(page.getByAltText("Volunteer signature preview")).toHaveCount(0);
+  await expect(page.getByRole("alert")).toContainText("Form details changed after signing");
   await page
     .getByLabel("Vendor signatory name (optional)", { exact: true })
     .fill("Asha Vendor");
   await drawSignature(page, "Vendor sign on screen");
   await expect(page.getByAltText("Vendor signature preview")).toBeVisible();
+  await page.getByRole("button", { name: "Use saved signature", exact: true }).click();
+  await expect(page.getByAltText("Volunteer signature preview")).toBeVisible();
 
   const secondResponse = page.waitForResponse((response) =>
     response.url().includes("generate_invoice_documents"),

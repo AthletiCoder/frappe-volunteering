@@ -18,6 +18,7 @@
 			eyebrow="Expenses"
 		>
 			<template #actions>
+				<RouterLink v-if="!isCorrection" :to="{ path: '/expense-claim/multiple', query: { project: form.project || route.query.project } }" class="btn-secondary">Submit multiple invoices</RouterLink>
 				<RouterLink to="/expense-claims" class="btn-secondary">My claims</RouterLink>
 				<RouterLink to="/home" class="btn-secondary">Back to Home</RouterLink>
 			</template>
@@ -254,8 +255,9 @@
 								below supplies the amount and receipt evidence.
 							</template>
 							<template v-else>
-								Attach the bill to the specific item it supports. PDF, PNG or JPEG;
-								maximum 5 MB each.
+								Attach the bill to the specific item it supports. All items in this
+								claim must have the same bill date, which determines its accounting
+								year. For bills with different dates, use Submit multiple invoices.
 							</template>
 						</p>
 					</div>
@@ -284,7 +286,7 @@
 					</div>
 					<div class="expense-portal-grid">
 						<label class="field-label"
-							>Expense date *<input
+							>Date shown on invoice / bill *<input
 								v-model="item.expense_date"
 								type="date"
 								required
@@ -376,6 +378,7 @@
 					ref="invoiceGenerator"
 					embedded
 					:seed="invoiceSeed"
+					:signature-context="claimSignatureContext"
 					@total-change="setGeneratedInvoiceTotal"
 				/>
 			</section>
@@ -502,6 +505,23 @@ const invoiceSeed = computed(() => ({
 	expense_date: form.expenses[0]?.expense_date || "",
 	description: form.expenses[0]?.description || "",
 }));
+const claimSignatureContext = computed(() => {
+	const item = form.expenses[0] || {};
+	return {
+		project: form.project,
+		reimbursement_source: form.reimbursement_source,
+		employee_advance: form.employee_advance,
+		is_emergency: form.is_emergency,
+		emergency_date: form.emergency_date,
+		emergency_reason: form.emergency_reason,
+		expense: {
+			expense_date: item.expense_date,
+			account: item.account,
+			description: item.description,
+			amount: item.amount,
+		},
+	};
+});
 const selectedAdvance = computed(() =>
 	form.reimbursement_source === "OWN_ADVANCE"
 		? defaults.value.own_advances.find((advance) => advance.name === form.employee_advance)
@@ -577,7 +597,11 @@ async function loadDefaults() {
 		) {
 			form.reimbursement_source = "MANAGER_ADVANCE";
 		}
-		if (defaults.value.projects.length === 1) {
+		const requestedProject = String(route.query.project || "");
+		if (!isCorrection.value && defaults.value.projects.some((project) => project.value === requestedProject)) {
+			form.project = requestedProject;
+			await projectChanged();
+		} else if (defaults.value.projects.length === 1) {
 			form.project = defaults.value.projects[0].value;
 			await projectChanged();
 		}

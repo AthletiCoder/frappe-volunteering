@@ -160,7 +160,7 @@ test("employee Home, Profile and Waiting screens", async ({
   page,
 }, testInfo) => {
   for (const screen of [
-    { route: "/volunteering/home", ready: /^Hello/, label: "home" },
+    { route: "/volunteering/home", ready: "Your active projects", label: "home" },
     { route: "/volunteering/profile", ready: "My profile", label: "profile" },
     { route: "/volunteering/todos", ready: "Waiting", label: "waiting" },
   ]) {
@@ -251,6 +251,33 @@ test("expense claim and invoice preparation forms", async ({
   });
 });
 
+test("multi-invoice claims and both donation types", async ({ page }, testInfo) => {
+  await test.step("multi-invoice-claim", async () => {
+    await openRoute(
+      page,
+      PERSONAS.employee,
+      "/volunteering/expense-claim/multiple",
+      "Submit multiple invoices",
+    );
+    await auditMobileLayout(page, testInfo, "multi-invoice-claim");
+  });
+  await test.step("general-donation", async () => {
+    await openRoute(
+      page,
+      PERSONAS.accounts,
+      "/volunteering/donations",
+      "Register a donation",
+    );
+    await page.getByRole("button", { name: /General donation/ }).click();
+    await auditMobileLayout(page, testInfo, "general-donation");
+  });
+  await test.step("csr-donation", async () => {
+    await page.getByRole("button", { name: /CSR donation/ }).click();
+    await expect(page.getByRole("heading", { name: "CSR organisation" })).toBeVisible();
+    await auditMobileLayout(page, testInfo, "csr-donation");
+  });
+});
+
 test("bank-account and office-address screens", async ({ page }, testInfo) => {
   await test.step("bank-account", async () => {
     await openRoute(
@@ -279,13 +306,8 @@ test("bank-account and office-address screens", async ({ page }, testInfo) => {
 
 test("HR and System Management workspaces", async ({ page }, testInfo) => {
   await test.step("hr-management", async () => {
-    await openRoute(page, PERSONAS.hr, "/volunteering/home", /^Hello/);
-    await expect(
-      page.getByRole("heading", { name: "HR Management" }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "System Management" }),
-    ).toHaveCount(0);
+    await openRoute(page, PERSONAS.hr, "/volunteering/home", /^(Home|Your active projects)$/);
+    await expect(page.getByRole("heading", { name: "Your shortcuts" })).toBeVisible();
     await openRoute(
       page,
       PERSONAS.hr,
@@ -300,13 +322,8 @@ test("HR and System Management workspaces", async ({ page }, testInfo) => {
     await auditMobileLayout(page, testInfo, "hr-employee-form");
   });
   await test.step("system-management", async () => {
-    await openRoute(page, PERSONAS.admin, "/volunteering/home", /^Hello/);
-    await expect(
-      page.getByRole("heading", { name: "HR Management" }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "System Management" }),
-    ).toBeVisible();
+    await openRoute(page, PERSONAS.admin, "/volunteering/home", /^(Home|Your active projects)$/);
+    await expect(page.getByRole("heading", { name: "Your shortcuts" })).toBeVisible();
     await openRoute(
       page,
       PERSONAS.admin,

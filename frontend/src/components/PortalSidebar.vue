@@ -16,7 +16,7 @@
 			<span class="font-bold">Sevamrita Operations</span>
 			<button type="button" class="btn-ghost" aria-label="Close menu" @click="$emit('close')"><Icon name="close" /></button>
 		</div>
-		<div class="min-h-0 flex-1 overflow-y-auto px-3 py-3" @click="$emit('close')"><AppNav layout="sidebar" :items="items" aria-label="Mobile sections" /></div>
+		<div class="min-h-0 flex-1 overflow-y-auto px-3 py-3"><AppNav layout="sidebar" :items="items" aria-label="Mobile sections" @navigate="$emit('close')" /></div>
 		<RouterLink to="/profile" class="border-t border-line px-5 py-4 text-sm font-medium text-accent" @click="$emit('close')">{{ fullName }} · Profile</RouterLink>
 	</aside>
 </template>

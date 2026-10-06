@@ -22,6 +22,7 @@ from volunteering.volunteering.accounting_dashboard.constants import ACCOUNTS_RO
 from volunteering.volunteering.approval_routing import (
 	escalate_document,
 	get_approver_action_flags,
+	get_document_approval_amount,
 )
 from volunteering.volunteering.employee_bank_accounts import get_approved_bank_details
 from volunteering.volunteering.expense_account_classification import (
@@ -31,7 +32,12 @@ from volunteering.volunteering.expense_account_classification import (
 	classification_snapshot,
 	set_account_allocations,
 )
-from volunteering.volunteering.expense_claim_portal import _claim_source, _expense_labels, _project_names
+from volunteering.volunteering.expense_claim_portal import (
+	_claim_source,
+	_expense_labels,
+	_project_names,
+	_related_submission_claims,
+)
 from volunteering.volunteering.home_cutover import home_project_filter, is_home_project
 from volunteering.volunteering.receipt_review import (
 	PENDING_RECEIPT_REVIEW,
@@ -272,6 +278,10 @@ def get_expense_claim_work_item(name: str):
 		"project": doc.project,
 		"project_name": projects.get(doc.project) or doc.project,
 		"posting_date": doc.posting_date,
+		"expense_submission_id": doc.get("expense_submission_id") or "",
+		"expense_submission_total": flt(doc.get("expense_submission_total"), 2),
+		"approval_basis": get_document_approval_amount(doc),
+		"related_invoices": _related_submission_claims(doc),
 		"currency": doc.currency or "INR",
 		"source": _claim_source(doc),
 		"workflow_state": doc.workflow_state,

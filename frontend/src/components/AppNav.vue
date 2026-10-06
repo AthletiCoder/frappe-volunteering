@@ -5,11 +5,25 @@
 	>
 		<template v-for="item in items" :key="itemKey(item)">
 			<p v-if="item.section && layout === 'sidebar'" class="px-3 pt-5 pb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{{ item.section }}</p>
+			<details v-else-if="item.children && layout === 'sidebar'" :open="item.children.some((child) => isActiveHref(child.href))" class="group">
+				<summary :class="cn(linkClass(item, item.children.some((child) => isActiveHref(child.href))), 'record-summary cursor-pointer list-none')">
+					<span :class="iconWrapClass(item, false)"><Icon :name="item.icon" size="sm" /></span>
+					<span class="min-w-0 flex-1">{{ item.label }}</span>
+					<Icon name="chevron-down" size="sm" class="ml-auto transition-transform group-open:rotate-180" />
+				</summary>
+				<div class="ml-5 mt-1 space-y-1 border-l border-line pl-2">
+					<a v-for="child in item.children" :key="child.href" :href="child.href" :title="child.label" :aria-current="isActiveHref(child.href) ? 'page' : undefined" :class="cn('flex min-h-9 items-center gap-2 rounded-lg px-2 py-2 text-xs font-medium text-muted hover:bg-soft hover:text-ink', { 'bg-accent-soft text-accent font-semibold': isActiveHref(child.href) })" @click="emit('navigate')">
+						<span class="min-w-0 flex-1 truncate">{{ child.label }}</span>
+						<span v-if="child.badge" class="shrink-0 rounded-full bg-soft px-1.5 py-0.5 text-[11px] tabular-nums">{{ child.badge > 9 ? '9+' : child.badge }}</span>
+					</a>
+				</div>
+			</details>
 			<a
 				v-else-if="item.href"
 				:href="item.href"
 				:aria-label="item.label"
 				:class="linkClass(item, false)"
+				@click="emit('navigate')"
 			>
 				<span :class="iconWrapClass(item, false)">
 					<Icon :name="item.icon" :size="layout === 'bottom' ? 'md' : 'sm'" />
@@ -23,6 +37,7 @@
 				:aria-label="item.label"
 				:class="linkClass(item, isActive(item.to))"
 				active-class=""
+				@click="emit('navigate')"
 			>
 				<span :class="iconWrapClass(item, isActive(item.to))">
 					<Icon :name="item.icon" :size="layout === 'bottom' ? 'md' : 'sm'" />
@@ -48,11 +63,20 @@ const props = defineProps({
 	layout: { type: String, default: "top" },
 	ariaLabel: { type: String, default: "Primary" },
 });
+const emit = defineEmits(["navigate"]);
 
 const route = useRoute();
 
 function itemKey(item) {
-	return item.section || item.href || item.to;
+	return item.section || item.id || item.href || item.to || item.label;
+}
+
+function isActiveHref(href) {
+	if (!href?.startsWith("/volunteering/")) return false;
+	const url = new URL(href, window.location.origin);
+	const path = url.pathname.slice("/volunteering".length);
+	if (route.path !== path && !route.path.startsWith(`${path}/`)) return false;
+	return [...url.searchParams].every(([key, value]) => String(route.query[key] ?? "") === value);
 }
 
 function linkClass(item, active) {
@@ -84,3 +108,7 @@ function isActive(to) {
 	return route.path === to || route.path.startsWith(`${to}/`);
 }
 </script>
+
+<style scoped>
+.record-summary::-webkit-details-marker { display: none; }
+</style>

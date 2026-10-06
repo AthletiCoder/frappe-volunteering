@@ -22,8 +22,10 @@ test.describe('HR L1 smoke @smoke @hr', () => {
 			const home = new HomePage(page);
 			await home.goto();
 			await home.expectLoaded();
-			await expect(page.getByRole('heading', { name: 'Time and leave' })).toBeVisible();
-			await expect(page.locator('[data-action-id="leave"] a').first()).toBeVisible();
+			await expect(page.getByRole('heading', { name: 'Your active projects' })).toBeVisible();
+			const timeMenu = page.locator('nav[aria-label="Sections"] details').filter({ hasText: 'Apply for leave' });
+			await timeMenu.locator('summary').click();
+			await expect(timeMenu.getByRole('link', { name: 'Apply for leave' })).toBeVisible();
 		});
 	});
 

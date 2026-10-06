@@ -13,23 +13,37 @@
 		<p v-else-if="error" class="text-bad" role="alert">{{ error }}</p>
 		<template v-else-if="profile">
 			<p class="text-sm text-muted">
-				These details are read-only. Contact your administrator if a correction is needed.
+				Login and employment details are read-only. Contact your administrator if a correction is needed.
 			</p>
-			<section
-				v-for="section in sections"
-				:key="section.title"
-				class="rounded-2xl border border-line bg-surface p-5 sm:p-6 shadow-soft"
-			>
-				<h2 class="text-lg font-semibold text-ink mb-4">{{ section.title }}</h2>
-				<dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
-					<div v-for="field in section.fields" :key="field.label" class="min-w-0">
-						<dt class="text-sm text-muted">{{ field.label }}</dt>
-						<dd class="mt-1 font-medium text-ink break-words whitespace-pre-wrap">
-							{{ field.value || "Not set" }}
-						</dd>
+			<template v-for="(section, index) in sections" :key="section.title">
+				<section class="rounded-2xl border border-line bg-surface p-5 shadow-soft sm:p-6">
+					<h2 class="mb-4 text-lg font-semibold text-ink">{{ section.title }}</h2>
+					<dl class="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
+						<div v-for="field in section.fields" :key="field.label" class="min-w-0">
+							<dt class="text-sm text-muted">{{ field.label }}</dt>
+							<dd class="mt-1 break-words whitespace-pre-wrap font-medium text-ink">{{ field.value || "Not set" }}</dd>
+						</div>
+					</dl>
+				</section>
+				<section v-if="index === 0 && profile.employee" class="rounded-2xl border border-line bg-surface p-5 shadow-soft sm:p-6">
+					<div class="flex flex-wrap items-start justify-between gap-3">
+						<div><h2 class="text-lg font-semibold text-ink">Reimbursement bank account</h2><p class="mt-1 text-sm text-muted">Only Accounts Manager-approved details can be used for bank reimbursement.</p></div>
+						<RouterLink to="/bank-account" class="btn-secondary">{{ bankSummary?.approved ? "Manage bank details" : "Add bank details" }}</RouterLink>
 					</div>
-				</dl>
-			</section>
+					<p v-if="bankError" class="mt-4 rounded-xl bg-bad-soft p-3 text-sm text-bad" role="alert">{{ bankError }}</p>
+					<template v-else-if="bankSummary?.approved">
+						<dl class="mt-5 grid grid-cols-1 gap-x-6 gap-y-5 border-t border-line pt-5 sm:grid-cols-2 lg:grid-cols-3">
+							<div v-for="field in approvedBankFields" :key="field.label" class="min-w-0">
+								<dt class="text-sm text-muted">{{ field.label }}</dt>
+								<dd class="mt-1 break-words font-medium text-ink">{{ field.value || "Not set" }}</dd>
+							</div>
+						</dl>
+						<p v-if="bankSummary.pending" class="mt-5 rounded-xl bg-warn-soft p-3 text-sm text-ink">A replacement bank account is awaiting Accounts Manager approval. The approved account above remains active until then.</p>
+					</template>
+					<p v-else-if="bankSummary?.pending" class="mt-4 rounded-xl bg-warn-soft p-3 text-sm text-ink">{{ bankSummary.pending.bank_name }} · {{ bankSummary.pending.account_number_masked }} is awaiting Accounts Manager approval.</p>
+					<p v-else class="mt-4 text-sm text-muted">No approved reimbursement bank account is on file.</p>
+				</section>
+			</template>
 			<p
 				v-if="!profile.employee"
 				class="rounded-xl border border-line bg-surface p-4 text-sm text-muted"
@@ -37,9 +51,6 @@
 				No Employee record is linked to your login yet. Contact your administrator to link
 				it.
 			</p>
-			<RouterLink v-if="profile.employee" to="/bank-account" class="btn-secondary"
-				>Reimbursement bank details</RouterLink
-			>
 		</template>
 	</div>
 </template>
@@ -52,6 +63,8 @@ import { call } from "../lib/frappe";
 const loading = ref(true);
 const error = ref("");
 const profile = ref(null);
+const bankSummary = ref(null);
+const bankError = ref("");
 const field = (label, value) => ({ label, value });
 function formatDate(value) {
 	if (!value) return "";
@@ -114,10 +127,30 @@ const sections = computed(() => {
 	);
 	return result;
 });
+const approvedBankFields = computed(() => {
+	const account = bankSummary.value?.approved;
+	if (!account) return [];
+	return [
+		field("Account holder", account.account_holder_name),
+		field("Bank", account.bank_name),
+		field("Branch", account.branch),
+		field("Account number", account.account_number_masked),
+		field("IFSC", account.ifsc),
+		field("Account type", account.account_type),
+		field("Approved on", formatDate(account.reviewed_on)),
+	];
+});
 
 onMounted(async () => {
 	try {
 		profile.value = await call("volunteering.volunteering.employee_profile.get_my_profile");
+		if (profile.value?.employee) {
+			try {
+				bankSummary.value = await call("volunteering.volunteering.employee_bank_accounts.get_my_bank_account_summary");
+			} catch (err) {
+				bankError.value = err.message || "Unable to load your bank details.";
+			}
+		}
 	} catch (err) {
 		error.value = err.message || "Unable to load your profile.";
 	} finally {

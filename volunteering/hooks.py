@@ -235,6 +235,7 @@ doc_events = {
 	"Expense Claim": {
 		"before_validate": [
 			"volunteering.volunteering.accounting_controls.ensure_expense_claim_accounts",
+			"volunteering.volunteering.expense_claim_portal.validate_expense_submission_integrity",
 		],
 		"before_save": [
 			"volunteering.volunteering.project_workspace.validate_project_claim_access",
@@ -254,6 +255,7 @@ doc_events = {
 		],
 		# Approve sets docstatus=1 and calls submit() (skips before_save) — re-check budget here.
 		"before_submit": [
+			"volunteering.volunteering.expense_claim_portal.validate_expense_submission_integrity",
 			"volunteering.volunteering.project_workspace.validate_project_claim_access",
 			"volunteering.volunteering.accounting_controls.validate_project_required",
 			"volunteering.volunteering.accounting_controls.set_cost_center_from_project",

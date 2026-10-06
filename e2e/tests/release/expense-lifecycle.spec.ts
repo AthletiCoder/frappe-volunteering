@@ -10,7 +10,7 @@ async function signIn(page: Page, persona: PersonaKey) {
     PERSONAS[persona].password,
   );
   await page.goto("/volunteering/home");
-  await expect(page.getByRole("heading", { name: /^Hello/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^(Home|Your active projects)$/ })).toBeVisible();
 }
 
 async function portalData(page: Page, method: string, args = {}) {
@@ -51,10 +51,7 @@ test("REL-001: Home claim → receipt reviewer → manager → Accounts classifi
   }
   await repairE2eReportsToChain(request);
   await signIn(page, "employee");
-  await page
-    .getByRole("region", { name: "Quick actions" })
-    .getByRole("link", { name: "Submit an Expense", exact: true })
-    .click();
+  await page.getByRole("link", { name: "Submit an expense", exact: true }).first().click();
   const defaults = await portalData(
     page,
     "volunteering.volunteering.expense_claim_portal.get_expense_claim_form",

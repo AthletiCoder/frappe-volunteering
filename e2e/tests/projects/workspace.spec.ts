@@ -440,16 +440,20 @@ test.describe.serial("Governed project workspace @projects @ui", () => {
 
     await page.goto("/volunteering/home");
     await expect(
-      page.getByRole("link", { name: /Propose a project/ }).first(),
+      page.locator("main").getByRole("link", { name: /Propose a project/ }),
+    ).toBeVisible();
+    const projectsMenu = page.getByRole("navigation", { name: "Sections" }).locator("details").filter({
+      has: page.locator("summary").filter({ hasText: /^Projects$/ }),
+    });
+    await projectsMenu.locator("summary").click();
+    await expect(
+      projectsMenu.getByRole("link", { name: /Approved projects/ }),
     ).toBeVisible();
     await expect(
-      page.getByRole("link", { name: /Approved projects/ }).first(),
+      projectsMenu.getByRole("link", { name: /Your proposals and change requests/ }),
     ).toBeVisible();
     await expect(
-      page.getByRole("link", { name: /Your proposals and change requests/ }).first(),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("link", { name: /Review pending proposals/ }).first(),
+      projectsMenu.getByRole("link", { name: /Review pending proposals/ }),
     ).toBeVisible();
   });
 

@@ -35,6 +35,7 @@ from volunteering.volunteering.manager_float_service import (
 )
 
 MAX_EXPENSES = 10
+MAX_INVOICES = 10
 MAX_FILE_BYTES = 5 * 1024 * 1024
 MAX_TOTAL_FILE_BYTES = 25 * 1024 * 1024
 ALLOWED_SOURCE_VALUES = frozenset({"PERSONAL", "OWN_ADVANCE", "MANAGER_ADVANCE"})
@@ -109,6 +110,8 @@ def _claim_summary(row, project_names=None) -> dict:
 	stage = _claim_stage(row)
 	return {
 		"name": row.name,
+		"expense_submission_id": row.get("expense_submission_id") or "",
+		"expense_submission_total": flt(row.get("expense_submission_total"), 2),
 		"posting_date": row.posting_date,
 		"creation": row.creation,
 		"modified": row.modified,
@@ -139,6 +142,8 @@ def get_my_expense_claims():
 		filters={"employee": employee, **home_project_filter()},
 		fields=[
 			"name",
+			"expense_submission_id",
+			"expense_submission_total",
 			"posting_date",
 			"creation",
 			"modified",
@@ -259,6 +264,7 @@ def get_my_expense_claim(name: str):
 	)
 	summary.update(
 		{
+			"related_invoices": _related_submission_claims(doc),
 			"source": _claim_source(doc),
 			"pending_with": (
 				frappe.db.get_value("User", doc.get("pending_approver"), "full_name")
@@ -294,6 +300,22 @@ def get_my_expense_claim(name: str):
 		}
 	)
 	return summary
+
+
+def _related_submission_claims(doc):
+	"""Safe sibling summary for a submission whose current claim was authorised."""
+	if not doc.get("expense_submission_id"):
+		return []
+	return frappe.get_all(
+		"Expense Claim",
+		filters={
+			"expense_submission_id": doc.expense_submission_id,
+			"employee": doc.employee,
+			"project": doc.project,
+		},
+		fields=["name", "posting_date", "workflow_state", "total_claimed_amount"],
+		order_by="posting_date asc, name asc",
+	)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -342,8 +364,39 @@ def get_project_accounts(project: str):
 @frappe.whitelist(methods=["POST"])
 def submit_expense_claim(payload):
 	"""Create a draft, attach private item evidence, then enter receipt review."""
-	employee = _require_employee()
 	data = frappe.parse_json(payload)
+	return _submit_expense_claim_data(data)
+
+
+def _invoice_posting_date(expenses, company):
+	"""An accounting claim cannot span invoice dates; its GL uses one posting date."""
+	dates = {getdate(row.get("expense_date")) for row in expenses}
+	if len(dates) != 1:
+		frappe.throw(
+			_("Invoices with different dates need separate accounting claims. Use Submit multiple invoices.")
+		)
+	date = dates.pop()
+	_require_invoice_fiscal_year(date, company)
+	return date
+
+
+def _require_invoice_fiscal_year(date, company):
+	from erpnext.accounts.utils import FiscalYearError, get_fiscal_year
+
+	try:
+		return get_fiscal_year(date, company=company)[0]
+	except FiscalYearError:
+		frappe.throw(
+			_(
+				"No active Fiscal Year covers invoice date {0}. Ask Accounts to configure that year before submitting; nothing has been posted."
+			).format(date)
+		)
+
+
+def _submit_expense_claim_data(
+	data, *, submission_id=None, submission_total=None, shared_receipt=None, advance_remaining=None
+):
+	employee = _require_employee()
 	if not isinstance(data, dict):
 		frappe.throw(_("Expense claim details must be a valid object."))
 	allowed = {
@@ -364,7 +417,10 @@ def submit_expense_claim(payload):
 	if project.company != employee_values.company:
 		frappe.throw(_("The selected Project belongs to a different Company."))
 	accounts = {row["value"] for row in _account_options(project)}
-	expenses, attachments, total = _normalise_expenses(data.get("expenses"), accounts)
+	expenses, attachments, total = _normalise_expenses(
+		data.get("expenses"), accounts, shared_receipt=shared_receipt
+	)
+	posting_date = _invoice_posting_date(expenses, employee_values.company)
 	source = cstr(data.get("reimbursement_source") or "PERSONAL").strip().upper()
 	if source not in ALLOWED_SOURCE_VALUES:
 		frappe.throw(_("Choose a valid reimbursement source."))
@@ -397,7 +453,9 @@ def submit_expense_claim(payload):
 			"company": employee_values.company,
 			"department": employee_values.department,
 			"project": project.name,
-			"posting_date": nowdate(),
+			"posting_date": posting_date,
+			"expense_submission_id": submission_id,
+			"expense_submission_total": submission_total,
 			"currency": company_currency,
 			"exchange_rate": 1,
 			"remark": purpose,
@@ -413,9 +471,13 @@ def submit_expense_claim(payload):
 			"expenses": expenses,
 		}
 	)
+	if submission_id:
+		doc.flags.expense_submission_creation = True
 
 	if source == "OWN_ADVANCE":
-		_attach_own_advance(doc, data.get("employee_advance"), employee, total)
+		_attach_own_advance(
+			doc, data.get("employee_advance"), employee, total, max_allocatable=advance_remaining
+		)
 	elif data.get("employee_advance"):
 		frappe.throw(_("An Employee Advance can only be selected for 'Against my advance'."))
 
@@ -424,8 +486,11 @@ def submit_expense_claim(payload):
 	doc.insert()
 	for index, file_data in attachments:
 		file_doc = _attach_receipt(doc.name, index, file_data)
-		row = doc.expenses[index]
-		row.receipt_attachment = file_doc.file_url
+		if shared_receipt:
+			for row in doc.expenses:
+				row.receipt_attachment = file_doc.file_url
+		else:
+			doc.expenses[index].receipt_attachment = file_doc.file_url
 	# Persist the per-item evidence association after File names/URLs exist.
 	doc.save()
 	apply_workflow(doc, "Submit")
@@ -443,6 +508,136 @@ def submit_expense_claim(payload):
 		"receipt_review_status": doc.get("receipt_review_status"),
 		"total": flt(doc.total_claimed_amount),
 		"warnings": warnings,
+	}
+
+
+@frappe.whitelist(methods=["POST"])
+def submit_multi_invoice_expense_claim(payload):
+	"""One employee submission, one dated accounting claim and receipt per invoice.
+
+	The database savepoint makes partial bundles impossible even when this method is
+	called from a test or another service that catches the validation exception.
+	"""
+	data = frappe.parse_json(payload)
+	if not isinstance(data, dict):
+		frappe.throw(_("Expense submission details must be a valid object."))
+	allowed = {
+		"project", "reimbursement_source", "employee_advance", "is_emergency",
+		"emergency_date", "emergency_reason", "invoices",
+	}
+	if set(data) - allowed:
+		frappe.throw(_("The expense submission contains unsupported fields."))
+	invoices = data.get("invoices")
+	if not isinstance(invoices, list) or not 2 <= len(invoices) <= MAX_INVOICES:
+		frappe.throw(_("Add between 2 and {0} invoices.").format(MAX_INVOICES))
+
+	# Validate the entire bundle and its receipts before creating any documents.
+	employee = _require_employee()
+	project = _validate_claim_project(data.get("project"), employee)
+	company = frappe.db.get_value("Employee", employee, "company")
+	if project.company != company:
+		frappe.throw(_("The selected Project belongs to a different Company."))
+	accounts = {row["value"] for row in _account_options(project)}
+	prepared = []
+	file_bytes = 0
+	for index, invoice in enumerate(invoices):
+		if not isinstance(invoice, dict) or set(invoice) - {
+			"invoice_date", "invoice_number", "supplier_name", "receipt_filename",
+			"receipt_content", "items",
+		}:
+			frappe.throw(_("Invoice {0} contains unsupported fields.").format(index + 1))
+		if not invoice.get("invoice_date"):
+			frappe.throw(_("Enter the date shown on invoice {0}.").format(index + 1))
+		date = getdate(invoice["invoice_date"])
+		if date > getdate(nowdate()):
+			frappe.throw(_("Invoice {0} cannot have a future date.").format(index + 1))
+		_require_invoice_fiscal_year(date, company)
+		receipt = _receipt(invoice, index + 1)
+		file_bytes += len(receipt[1])
+		if file_bytes > MAX_TOTAL_FILE_BYTES:
+			frappe.throw(_("The combined invoice files must be 25 MB or smaller."))
+		supplier = _text(invoice.get("supplier_name"), _("Supplier / payee"), 160)
+		number = _text(invoice.get("invoice_number"), _("Invoice number"), 100)
+		items = invoice.get("items")
+		if not isinstance(items, list) or not items:
+			frappe.throw(_("Add at least one expense item to invoice {0}.").format(index + 1))
+		rows = []
+		for item in items:
+			if not isinstance(item, dict) or set(item) - {"account", "description", "amount"}:
+				frappe.throw(_("Invoice {0} has an invalid expense item.").format(index + 1))
+			rows.append({
+				"expense_date": date,
+				"account": item.get("account"),
+				"supplier_name": supplier,
+				"invoice_number": number,
+				"description": item.get("description"),
+				"amount": item.get("amount"),
+			})
+		_normalised, _attachments, invoice_total = _normalise_expenses(
+			rows, accounts, shared_receipt=receipt
+		)
+		prepared.append((rows, receipt, invoice_total))
+
+	total = flt(sum(row[2] for row in prepared), 2)
+	if cstr(data.get("reimbursement_source")).strip().upper() == "MANAGER_ADVANCE":
+		manager_employee = frappe.db.get_value("Employee", employee, "reports_to")
+		if not manager_employee or not list_fundable_manager_advances(
+			manager_employee, total, home_only=True
+		):
+			frappe.throw(
+				_("The manager has no single paid advance that can cover the full invoice submission.")
+			)
+	# This fixed total is a floor for every linked claim's approval authority.
+	# Later corrections that increase the bundle use the current combined total.
+	submission_id = frappe.generate_hash(length=16)
+	savepoint = f"expense_submission_{submission_id}"
+	frappe.db.savepoint(savepoint)
+	results = []
+	advance_remaining = None
+	try:
+		for rows, receipt, invoice_total in prepared:
+			claim_data = {key: value for key, value in data.items() if key != "invoices"}
+			claim_data["expenses"] = rows
+			result = _submit_expense_claim_data(
+				claim_data,
+				submission_id=submission_id,
+				submission_total=total,
+				shared_receipt=receipt,
+				advance_remaining=advance_remaining,
+			)
+			results.append(result)
+			if cstr(data.get("reimbursement_source")).upper() == "OWN_ADVANCE":
+				claim = frappe.get_doc("Expense Claim", result["name"])
+				allocated = sum(flt(row.allocated_amount) for row in claim.advances)
+				if advance_remaining is None:
+					advance = frappe.get_doc("Employee Advance", data.get("employee_advance"))
+					advance_remaining = flt(advance_residual_amount(advance), 2)
+				advance_remaining = max(flt(advance_remaining - allocated, 2), 0)
+	except Exception:
+		frappe.db.rollback(save_point=savepoint)
+		raise
+	return {
+		"submission_id": submission_id,
+		"total": total,
+		"claims": results,
+	}
+
+
+def _generated_invoice_claim_context(claim):
+	expense = claim["expenses"][0]
+	return {
+		"project": claim.get("project"),
+		"reimbursement_source": claim.get("reimbursement_source"),
+		"employee_advance": claim.get("employee_advance"),
+		"is_emergency": claim.get("is_emergency"),
+		"emergency_date": claim.get("emergency_date"),
+		"emergency_reason": claim.get("emergency_reason"),
+		"expense": {
+			"expense_date": expense.get("expense_date"),
+			"account": expense.get("account"),
+			"description": expense.get("description"),
+			"amount": expense.get("amount"),
+		},
 	}
 
 
@@ -467,6 +662,14 @@ def submit_generated_invoice_expense_claim(claim_payload, invoice_payload):
 		frappe.throw(_("Add the volunteer signature before submitting the generated invoice."))
 	if cint(invoice.get("vendor_will_sign")) and not cstr(invoice.get("vendor_signature_data")).strip():
 		frappe.throw(_("Ask the vendor to sign on screen, or turn off vendor signing."))
+	if invoice.get("signature_context") != _generated_invoice_claim_context(claim):
+		frappe.throw(_("Claim details changed after signing. Review them and sign the invoice again."))
+	if invoice.get("invoice_date") and getdate(invoice["invoice_date"]) != getdate(
+		expenses[0].get("expense_date")
+	):
+		frappe.throw(
+			_("The generated invoice date must match the bill date on the claim. Correct the dates and sign again.")
+		)
 
 	from volunteering.volunteering.invoice_generator import generate_invoice_documents
 
@@ -486,12 +689,30 @@ def submit_generated_invoice_expense_claim(claim_payload, invoice_payload):
 
 	expense["supplier_name"] = generated.get("supplier_name") or ""
 	expense["invoice_number"] = generated["invoice_number"]
+	# The date printed on the signed invoice determines the accounting year.
+	expense["expense_date"] = getdate(invoice.get("invoice_date") or expense.get("expense_date"))
 	expense["receipt_filename"] = pdf["filename"]
 	expense["receipt_content"] = pdf["content_base64"]
 	claim["expenses"] = [expense]
 	result = submit_expense_claim(claim)
 	result["generated_invoice_number"] = generated["invoice_number"]
 	return result
+
+
+def validate_expense_submission_integrity(doc, method=None):
+	"""Keep bundle identity, approval floor and invoice accounting date trustworthy."""
+	if not doc.get("expense_submission_id"):
+		return
+	previous = doc.get_doc_before_save()
+	if not previous and not getattr(doc.flags, "expense_submission_creation", False):
+		frappe.throw(_("Only the employee submission flow can create a linked invoice claim."))
+	if previous and (
+		doc.expense_submission_id != previous.get("expense_submission_id")
+		or flt(doc.expense_submission_total, 2) != flt(previous.get("expense_submission_total"), 2)
+	):
+		frappe.throw(_("The original expense submission and its approval total cannot be changed."))
+	if getdate(doc.posting_date) != _invoice_posting_date(doc.expenses, doc.company):
+		frappe.throw(_("The claim posting date must be the date shown on its invoice."))
 
 
 @frappe.whitelist(methods=["POST"])
@@ -571,16 +792,49 @@ def resubmit_expense_claim(name: str, payload):
 		elif not _receipt_file_exists(doc.name, row.get("receipt_attachment")):
 			frappe.throw(_("Attach receipt evidence for expense item {0}.").format(index + 1))
 
+	corrected_dates = {getdate(row.expense_date) for row in doc.expenses}
+	if len(corrected_dates) == 1:
+		doc.posting_date = _invoice_posting_date(doc.expenses, doc.company)
+	if doc.get("expense_submission_id"):
+		if len(corrected_dates) != 1:
+			frappe.throw(_("All items on this invoice must use its one invoice date."))
+		if len(replacements) > 1:
+			frappe.throw(_("Replace the shared invoice receipt only once for this claim."))
 	doc.remark = " · ".join(dict.fromkeys(row.description for row in doc.expenses))[:500]
 	if doc.get("advances"):
 		advance_name = doc.advances[0].employee_advance
 		doc.set("advances", [])
-		_attach_own_advance(doc, advance_name, employee, flt(total, 2))
+		remaining = None
+		if doc.get("expense_submission_id"):
+			other_names = frappe.get_all(
+				"Expense Claim",
+				filters={
+					"expense_submission_id": doc.expense_submission_id,
+					"name": ["!=", doc.name],
+				},
+				pluck="name",
+			)
+			allocated_elsewhere = sum(
+				flt(row.allocated_amount)
+				for other_name in other_names
+				for row in frappe.get_doc("Expense Claim", other_name).advances
+				if row.employee_advance == advance_name
+			)
+			remaining = max(
+				flt(advance_residual_amount(frappe.get_doc("Employee Advance", advance_name)), 2)
+				- allocated_elsewhere,
+				0,
+			)
+		_attach_own_advance(doc, advance_name, employee, flt(total, 2), max_allocatable=remaining)
 	doc.save()
 
 	for index, row, file_data, old_url in replacements:
 		file_doc = _attach_receipt(doc.name, index, file_data)
-		frappe.db.set_value(row.doctype, row.name, "receipt_attachment", file_doc.file_url)
+		if doc.get("expense_submission_id"):
+			for expense in doc.expenses:
+				frappe.db.set_value(expense.doctype, expense.name, "receipt_attachment", file_doc.file_url)
+		else:
+			frappe.db.set_value(row.doctype, row.name, "receipt_attachment", file_doc.file_url)
 		old_file = frappe.db.get_value(
 			"File",
 			{
@@ -739,7 +993,7 @@ def _own_advances(employee: str, company: str) -> list[dict]:
 	]
 
 
-def _normalise_expenses(expenses, allowed_accounts: set[str]):
+def _normalise_expenses(expenses, allowed_accounts: set[str], shared_receipt=None):
 	if not isinstance(expenses, list) or not expenses:
 		frappe.throw(_("Add at least one expense item."))
 	if len(expenses) > MAX_EXPENSES:
@@ -747,7 +1001,7 @@ def _normalise_expenses(expenses, allowed_accounts: set[str]):
 	rows = []
 	attachments = []
 	total = 0.0
-	total_file_bytes = 0
+	total_file_bytes = len(shared_receipt[1]) if shared_receipt else 0
 	for index, item in enumerate(expenses):
 		if not isinstance(item, dict):
 			frappe.throw(_("Expense item {0} is invalid.").format(index + 1))
@@ -777,8 +1031,9 @@ def _normalise_expenses(expenses, allowed_accounts: set[str]):
 		amount = flt(item.get("amount"), 2)
 		if not math.isfinite(amount) or amount <= 0 or amount > 999_999_999:
 			frappe.throw(_("Enter a valid positive amount for expense item {0}.").format(index + 1))
-		file_data = _receipt(item, index + 1)
-		total_file_bytes += len(file_data[1])
+		file_data = None if shared_receipt else _receipt(item, index + 1)
+		if file_data:
+			total_file_bytes += len(file_data[1])
 		if total_file_bytes > MAX_TOTAL_FILE_BYTES:
 			frappe.throw(_("The combined receipt files must be 25 MB or smaller."))
 		rows.append(
@@ -797,8 +1052,11 @@ def _normalise_expenses(expenses, allowed_accounts: set[str]):
 				"exchange_rate": 1,
 			}
 		)
-		attachments.append((index, file_data))
+		if file_data:
+			attachments.append((index, file_data))
 		total += amount
+	if shared_receipt:
+		attachments.append((0, shared_receipt))
 	return rows, attachments, flt(total, 2)
 
 
@@ -844,7 +1102,9 @@ def _attach_receipt(claim_name: str, index: int, file_data: tuple[str, bytes]):
 	).insert(ignore_permissions=True)
 
 
-def _attach_own_advance(doc, advance_name: str | None, employee: str, total: float):
+def _attach_own_advance(
+	doc, advance_name: str | None, employee: str, total: float, max_allocatable=None
+):
 	advance_name = cstr(advance_name).strip()
 	if not advance_name:
 		frappe.throw(_("Select the advance that these expenses should settle."))
@@ -864,7 +1124,10 @@ def _attach_own_advance(doc, advance_name: str | None, employee: str, total: flo
 	from hrms.hr.doctype.expense_claim.expense_claim import get_expense_claim_advances
 
 	get_expense_claim_advances(doc, advance)
-	remaining = total
+	remaining = min(total, max_allocatable) if max_allocatable is not None else total
+	if remaining <= 0:
+		doc.set("advances", [])
+		return
 	kept = []
 	for row in doc.advances:
 		available = max(flt(row.unclaimed_amount) - flt(row.return_amount), 0)

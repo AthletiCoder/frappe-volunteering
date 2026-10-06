@@ -59,6 +59,9 @@ def get_home_payload():
 
 	flags["can_create_projects"] = flags["allowed"] and can_propose_project()
 	flags["can_review_projects"] = flags["allowed"] and is_project_manager()
+	flags["show_member_projects"] = _show_member_projects(
+		user, employee, roles, flags["can_review_projects"]
+	)
 	flags["has_team"] = bool(
 		flags["allowed"]
 		and employee
@@ -98,6 +101,7 @@ def get_home_payload():
 				"system_management": [],
 			},
 			"status": [],
+			"member_projects": [],
 			"programs": None,
 			"people": [],
 			"admin": [],
@@ -106,7 +110,7 @@ def get_home_payload():
 
 	inbox = _approver_inbox(user, employee) if flags["show_approver_inbox"] else []
 	accounts_queues = _accounts_queues() if flags["show_accounts"] else []
-	pending = _own_pending(employee, user)
+	pending = _own_pending(employee)
 	status = _status_rows(pending)
 	waiting = _compose_waiting(inbox, accounts_queues)
 	resume = _employee_draft_todos(employee)
@@ -145,12 +149,93 @@ def get_home_payload():
 			"system_management": (_system_management_actions() if flags["show_system_management"] else []),
 		},
 		"status": status,
+		"member_projects": _member_project_cards(user, employee) if flags["show_member_projects"] else [],
 		"programs": _programs_block() if flags["show_programs"] else None,
 		"people": _people_links() if flags["show_people"] else [],
 		"admin": _admin_links() if flags["show_admin"] else [],
 		"flags": flags,
 	}
 	return payload
+
+
+def _show_member_projects(user, employee, roles, can_review_projects):
+	return bool(
+		employee
+		and user != "Administrator"
+		and not can_review_projects
+		and not {"Accounts User", "Accounts Manager"}.intersection(roles)
+	)
+
+
+def _member_project_cards(user, employee):
+	"""Basic details of active, spendable member projects; never financial data."""
+	company = frappe.db.get_value("Employee", employee, "company")
+	project_names = frappe.get_all(
+		"Project Participant",
+		filters={"user": user, "parenttype": "Project", "parentfield": "project_participants"},
+		pluck="parent",
+		limit_page_length=0,
+	)
+	if not company or not project_names:
+		return []
+	projects = frappe.get_list(
+		"Project",
+		filters={
+			"name": ["in", list(set(project_names))],
+			"company": company,
+			"project_setup_version": [">", 0],
+			"is_archived": 0,
+			"operational_status": "Active",
+		},
+		fields=[
+			"name", "project_name", "project_purpose", "project_type", "operational_status",
+			"expected_start_date", "expected_end_date",
+		],
+		limit_page_length=0,
+	)
+	if not projects:
+		return []
+	project_ids = [project.name for project in projects]
+	# Budget status is a finance-level field; use it only to decide whether the
+	# action is available. Do not include it in the employee-facing response.
+	budget_statuses = {
+		row.name: row.budget_status
+		for row in frappe.get_all(
+			"Project", filters={"name": ["in", project_ids]},
+			fields=["name", "budget_status"], limit_page_length=0,
+		)
+	}
+	active_labels = set(
+		frappe.get_all(
+			"Project Account Budget",
+			filters={
+				"parent": ["in", project_ids],
+				"parenttype": "Project",
+				"parentfield": "account_budgets",
+				"is_active": 1,
+			},
+			pluck="parent",
+			limit_page_length=0,
+		)
+	)
+	cards = []
+	for project in projects:
+		if project.operational_status != "Active" or budget_statuses.get(project.name) == "Closed":
+			continue
+		cards.append(
+			{
+				"name": project.name,
+				"project_name": project.project_name or project.name,
+				"purpose": project.project_purpose or "",
+				"project_type": project.project_type or "",
+				"status": project.operational_status or "Planned",
+				"starts_on": project.expected_start_date,
+				"ends_on": project.expected_end_date,
+				"can_submit_expense": project.name in active_labels,
+				"can_request_advance": True,
+			}
+		)
+	return sorted(cards, key=lambda card: card["project_name"].casefold())
 
 
 def _hr_management_actions():
@@ -221,6 +306,12 @@ def _accounts_actions(user):
 	return [
 		*links,
 		{
+			"id": "donations",
+			"label": _("Register donations"),
+			"hint": _("Save donors, post received donations and issue signed acknowledgement receipts."),
+			"route": "/volunteering/donations",
+		},
+		{
 			"id": "expense_approval_limits",
 			"label": _("Expense Claim approval limits"),
 			"hint": _("Set the individual-claim authority for every employee grade."),
@@ -231,6 +322,12 @@ def _accounts_actions(user):
 			"label": _("Chart of Accounts"),
 			"hint": _("Create, organise, rename, disable or remove ledger accounts and groups."),
 			"route": "/volunteering/chart-of-accounts",
+		},
+		{
+			"id": "opening_balances",
+			"label": _("Opening balances"),
+			"hint": _("Record each ledger's starting amount at the beginning of the financial year."),
+			"route": "/volunteering/opening-balances",
 		},
 		{
 			"id": "bank_account",
@@ -392,13 +489,12 @@ def _employee_draft_todos(employee):
 	return todos
 
 
-def _own_pending(employee, user):
+def _own_pending(employee):
 	pending = {
 		"log_work": 0,
 		"wfh": 0,
 		"leave": 0,
 		"fix_attendance": 0,
-		"vendor": 0,
 		"advance": 0,
 		"claim": 0,
 	}
@@ -427,8 +523,6 @@ def _own_pending(employee, user):
 			"Daily Work Log",
 			{"employee": employee, "docstatus": 0},
 		)
-	if user:
-		pending["vendor"] = _safe_count("Purchase Order", {"owner": user, "docstatus": 0})
 	return pending
 
 
@@ -496,18 +590,6 @@ def _time_actions(pending=None):
 def _money_actions(pending=None):
 	pending = pending or {}
 	return [
-		_with_history(
-			{
-				"id": "vendor",
-				"label": _("Pay a vendor"),
-				"hint": _("Organisation pays the vendor directly"),
-				"route": "/desk/purchase-order/new",
-			},
-			"/desk/purchase-order",
-			_("Previous purchase orders"),
-			"vendor",
-			pending,
-		),
 		_with_history(
 			{
 				"id": "advance",
@@ -780,10 +862,6 @@ def _accounts_queues():
 		"Expense Claim",
 		{"docstatus": 1, "approval_status": "Approved", "status": "Unpaid"},
 	)
-	vendor = _safe_count(
-		"Purchase Invoice",
-		{"docstatus": 1, "outstanding_amount": [">", 0]},
-	)
 	residual = _residual_advance_count()
 	advance_disburse = sum(
 		1
@@ -814,15 +892,6 @@ def _accounts_queues():
 				"label": _("Claims to reimburse"),
 				"count": reimburse,
 				"route": "/volunteering/expense-claim-workflow?view=reimbursement",
-			}
-		)
-	if vendor:
-		queues.append(
-			{
-				"id": "vendor_pay",
-				"label": _("Vendor invoices to pay"),
-				"count": vendor,
-				"route": "/desk/purchase-invoice",
 			}
 		)
 	if residual:

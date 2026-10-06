@@ -9,7 +9,13 @@ async function signIn(page: Page, persona: PersonaKey) {
   const credentials = PERSONAS[persona];
   await loginViaAPI(page.request, credentials.email, credentials.password);
   await page.goto("/volunteering/home");
-  await expect(page.getByRole("heading", { name: /^Hello/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^(Home|Your active projects)$/ })).toBeVisible();
+}
+
+async function openAddresses(page: Page) {
+  const menu = page.getByRole("navigation", { name: "Sections" }).locator("details").filter({ has: page.locator("summary").filter({ hasText: /^Organisation resources$/ }) });
+  await menu.locator("summary").click();
+  await menu.getByRole("link", { name: "Office addresses", exact: true }).click();
 }
 
 async function api(page: Page, method: string, args = {}) {
@@ -49,7 +55,7 @@ test("employees view office addresses while Accounts Manager administers them", 
   let addressName = "";
 
   await signIn(page, "accounts");
-  await page.getByRole("link", { name: "Office addresses", exact: true }).click();
+  await openAddresses(page);
   await expect(
     page.getByRole("heading", { name: "Office addresses", exact: true }),
   ).toBeVisible();
@@ -73,7 +79,7 @@ test("employees view office addresses while Accounts Manager administers them", 
 
   try {
     await signIn(page, "employee");
-    await page.getByRole("link", { name: "Office addresses", exact: true }).click();
+    await openAddresses(page);
     const employeeCard = page.locator("article").filter({ hasText: title });
     await expect(employeeCard).toContainText("101 Local Browser Test Road");
     await expect(
@@ -114,7 +120,7 @@ test("employees view office addresses while Accounts Manager administers them", 
   } finally {
     if (addressName) {
       await signIn(page, "accounts");
-      await page.getByRole("link", { name: "Office addresses", exact: true }).click();
+      await openAddresses(page);
       const cleanupCard = page.locator("article").filter({ hasText: title });
       await expect(cleanupCard).toBeVisible();
       page.once("dialog", (dialog) => dialog.accept());

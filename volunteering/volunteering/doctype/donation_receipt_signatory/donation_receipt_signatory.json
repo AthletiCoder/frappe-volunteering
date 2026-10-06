@@ -1,0 +1,14 @@
+{
+ "doctype":"DocType", "name":"Donation Receipt Signatory", "module":"Volunteering", "autoname":"field:signatory_name", "track_changes":1,
+ "field_order":["signatory_name","designation","signature_data","disabled"],
+ "fields":[
+  {"fieldname":"signatory_name","label":"Authorised signatory","fieldtype":"Data","reqd":1,"unique":1,"in_list_view":1},
+  {"fieldname":"designation","label":"Designation","fieldtype":"Data"},
+  {"fieldname":"signature_data","label":"Signature PNG data","fieldtype":"Long Text","hidden":1,"reqd":1},
+  {"fieldname":"disabled","label":"Disabled","fieldtype":"Check","default":"0"}
+ ],
+ "permissions":[
+  {"role":"Accounts Manager","read":1,"create":1,"write":1,"report":1},
+  {"role":"System Manager","read":1,"create":1,"write":1,"report":1}
+ ]
+}

@@ -35,7 +35,7 @@ async function signIn(page: Page, user: string) {
   await page.context().clearCookies();
   await loginViaAPI(page.request, user, PERSONAS.employee.password);
   await page.goto("/volunteering/home");
-  await expect(page.getByRole("heading", { name: /^Hello/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^(Home|Your active projects)$/ })).toBeVisible();
 }
 
 async function addVolunteerSignature(page: Page) {
@@ -114,9 +114,9 @@ test.describe.serial("Employee bank approval @bank-accounts @ui", () => {
       expect(cleanup.status, cleanup.body).toBe(200);
       await signIn(page, employee);
     }
-    await page
-      .getByRole("link", { name: /My reimbursement bank account/ })
-      .click();
+    const expensesMenu = page.getByRole("navigation", { name: "Sections" }).locator("details").filter({ has: page.locator("summary").filter({ hasText: /^Expenses & invoices$/ }) });
+    await expensesMenu.locator("summary").click();
+    await expensesMenu.getByRole("link", { name: "My reimbursement bank account" }).click();
     await expect(
       page.getByRole("heading", {
         name: "Reimbursement bank account",
@@ -167,9 +167,7 @@ test.describe.serial("Employee bank approval @bank-accounts @ui", () => {
     page,
   }) => {
     await signIn(page, operator);
-    await expect(
-      page.getByRole("link", { name: /Review reimbursement bank accounts/ }),
-    ).toHaveCount(0);
+    await expect(page.getByRole("navigation", { name: "Sections" }).locator('a[href="/volunteering/bank-account?queue=1"]')).toHaveCount(0);
     await page.goto("/volunteering/bank-account");
     await expect(
       page.getByRole("heading", { name: "Accounts Manager review queue" }),
@@ -187,10 +185,9 @@ test.describe.serial("Employee bank approval @bank-accounts @ui", () => {
     page,
   }) => {
     await signIn(page, manager);
-    await page
-      .getByRole("region", { name: "Quick actions" })
-      .getByRole("link", { name: "Review reimbursement bank accounts", exact: true })
-      .click();
+    const accountsMenu = page.getByRole("navigation", { name: "Sections" }).locator("details").filter({ has: page.locator("summary").filter({ hasText: /^Accounts$/ }) });
+    await accountsMenu.locator("summary").click();
+    await accountsMenu.getByRole("link", { name: "Review reimbursement bank accounts", exact: true }).click();
     const card = page.locator("article").filter({ hasText: request.name });
     await expect(card).toContainText(number);
     expect((await page.request.get(request.proof_url)).status()).toBe(200);
@@ -207,10 +204,7 @@ test.describe.serial("Employee bank approval @bank-accounts @ui", () => {
     page,
   }, testInfo) => {
     await signIn(page, employee);
-    await page
-      .getByRole("region", { name: "Quick actions" })
-      .getByRole("link", { name: "Prepare an invoice", exact: true })
-      .click();
+    await page.getByRole("link", { name: "Prepare an invoice", exact: true }).first().click();
     await expect(
       page.getByRole("heading", {
         name: "Supplier bank details (optional)",
@@ -270,6 +264,8 @@ test.describe.serial("Employee bank approval @bank-accounts @ui", () => {
           .getByLabel("GSTIN *", { exact: true })
           .fill("27ABCDE1234F1Z5");
         await page.getByLabel("GST amount", { exact: true }).fill("90");
+        await expect(page.getByAltText("Volunteer signature preview")).toHaveCount(0);
+        await addVolunteerSignature(page);
       }
       let invoiceNumber: string | undefined;
       for (const [button, extension] of [

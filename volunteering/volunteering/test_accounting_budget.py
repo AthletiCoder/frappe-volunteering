@@ -170,11 +170,18 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 
 	def test_budget_health_returns_one_project_row(self):
 		frappe.set_user("Administrator")
-		rows = get_budget_health(self.project)
-		self.assertEqual(len(rows), 1)
-		self.assertNotIn("department", rows[0])
-		self.assertEqual(rows[0]["allocated"], 10000)
-		self.assertEqual(rows[0]["project_control"], "Strict")
+		# The Home budget endpoint only exposes governed, post-cutover projects.
+		frappe.db.savepoint("budget_home_project")
+		try:
+			frappe.db.set_value("Project", self.project, "project_setup_version", 1)
+			rows = get_budget_health(self.project)
+			self.assertEqual(len(rows), 1)
+			self.assertNotIn("department", rows[0])
+			self.assertEqual(rows[0]["allocated"], 10000)
+			self.assertEqual(rows[0]["project_control"], "Strict")
+		finally:
+			frappe.db.rollback(save_point="budget_home_project")
+			frappe.db.value_cache.clear()
 
 	def test_over_budget_claim_still_saves_with_soft_warning(self):
 		frappe.set_user(self.employee_email)

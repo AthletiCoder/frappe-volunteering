@@ -20,7 +20,7 @@ test.describe('Volunteering product gaps @volunteering @ui', () => {
 
 			const home = new HomePage(page);
 			await home.goto();
-			await expect(page.locator('#app, .page-container, body')).toBeVisible({ timeout: 15000 });
+			await expect(page.locator('#app')).toBeVisible({ timeout: 15000 });
 		});
 	});
 

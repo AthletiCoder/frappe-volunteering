@@ -1,0 +1,17 @@
+{
+ "doctype":"DocType", "name":"Donation Receipt Settings", "module":"Volunteering", "issingle":1, "track_changes":1,
+ "field_order":["organisation_name","registered_address","contact_email","cin","organisation_pan","eighty_g_number","eighty_g_valid_until"],
+ "fields":[
+  {"fieldname":"organisation_name","label":"Organisation name","fieldtype":"Data","default":"Sevamrita Foundation","reqd":1},
+  {"fieldname":"registered_address","label":"Registered office address","fieldtype":"Small Text","reqd":1},
+  {"fieldname":"contact_email","label":"Contact email","fieldtype":"Data","options":"Email","reqd":1},
+  {"fieldname":"cin","label":"CIN","fieldtype":"Data"},
+  {"fieldname":"organisation_pan","label":"Organisation PAN","fieldtype":"Data"},
+  {"fieldname":"eighty_g_number","label":"80G registration number","fieldtype":"Data"},
+  {"fieldname":"eighty_g_valid_until","label":"80G valid until","fieldtype":"Date"}
+ ],
+ "permissions":[
+  {"role":"Accounts Manager","read":1,"write":1},
+  {"role":"System Manager","read":1,"write":1}
+ ]
+}

@@ -19,6 +19,9 @@ IGNORE_TEST_RECORD_DEPENDENCIES = [
 	"Fiscal Year",
 	"Payment Entry",
 	"Journal Entry",
+	"Account",
+	"Donation Donor",
+	"Donation Receipt Signatory",
 ]
 
 

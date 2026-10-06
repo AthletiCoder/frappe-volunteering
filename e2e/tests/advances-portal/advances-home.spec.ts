@@ -37,7 +37,7 @@ async function signIn(page: Page, persona: PersonaKey) {
     PERSONAS[persona].password,
   );
   await page.goto("/volunteering/home");
-  await expect(page.getByRole("heading", { name: /^Hello/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^(Home|Your active projects)$/ })).toBeVisible();
 }
 
 async function openRequest(page: Page) {
@@ -123,8 +123,9 @@ test("AP-001: Home request form exposes scoped projects and masked bank details,
   page,
 }) => {
   await page
-    .getByRole("region", { name: "Quick actions" })
+    .locator('section[aria-labelledby="member-projects-title"]')
     .getByRole("link", { name: "Request an advance", exact: true })
+    .first()
     .click();
   await expect(page).toHaveURL(/\/volunteering\/advances\?new=1/);
   const defaults = await openRequest(page);

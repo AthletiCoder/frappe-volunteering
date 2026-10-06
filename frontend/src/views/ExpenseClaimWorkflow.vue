@@ -69,6 +69,7 @@
 					<Summary label="Project" :value="selected.project_name || selected.project" />
 					<Summary label="Payment source" :value="selected.source" />
 					<Summary label="Workflow" :value="selected.workflow_state" />
+					<Summary label="Accounting date" :value="date(selected.posting_date)" />
 				</div>
 				<div class="grid gap-3 grid-cols-2 sm:grid-cols-3 mt-4">
 					<Amount
@@ -83,6 +84,15 @@
 						label="Already settled"
 						:value="money(selected.reimbursed_amount, selected.currency)"
 					/>
+				</div>
+			</section>
+			<section v-if="selected.related_invoices?.length > 1" class="form-card mb-5">
+				<h2 class="form-title">Linked invoice submission</h2>
+				<p class="text-sm text-muted mb-3">Approval limit is checked against the full submission of {{ money(selected.approval_basis, selected.currency) }}. Each invoice has its own receipt review, classification and accounting date.</p>
+				<div class="divide-y divide-line">
+					<div v-for="invoice in selected.related_invoices" :key="invoice.name" class="flex w-full justify-between gap-3 py-3 text-left text-sm text-muted">
+						<span>{{ invoice.name }} · {{ date(invoice.posting_date) }} · {{ invoice.workflow_state }}</span><span>{{ money(invoice.total_claimed_amount, selected.currency) }}</span>
+					</div>
 				</div>
 			</section>
 

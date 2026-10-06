@@ -15,7 +15,7 @@ test("Accounts Manager opens the approved project-label mapping interface", asyn
     page.getByRole("heading", { name: "Project account mapping" }),
   ).toBeVisible();
   await expect(
-    page.getByText("Approved projects", { exact: true }),
+    page.getByRole("heading", { name: "Approved projects", exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("alert")).toHaveCount(0);
   const project = page.locator("section.form-card button").first();
@@ -25,7 +25,7 @@ test("Accounts Manager opens the approved project-label mapping interface", asyn
   await project.click();
   await expect(page).toHaveURL(new RegExp(`project=${projectId}`));
   await expect(
-    page.getByText("Approved projects", { exact: true }),
+    page.getByRole("heading", { name: "Approved projects", exact: true }),
   ).toHaveCount(0);
   const mappingForm = page.locator("form.form-card");
   await expect(mappingForm).toBeVisible();
@@ -40,7 +40,7 @@ test("Accounts Manager opens the approved project-label mapping interface", asyn
   ).toBeVisible();
   await page.getByRole("button", { name: "Choose another project" }).click();
   await expect(
-    page.getByText("Approved projects", { exact: true }),
+    page.getByRole("heading", { name: "Approved projects", exact: true }),
   ).toBeVisible();
   await expect(page).not.toHaveURL(/project=/);
 
@@ -62,6 +62,6 @@ test("non-Accounts Manager cannot access project account mapping", async ({
   await page.goto("/volunteering/project-account-mapping");
   await expect(page.getByRole("alert")).toContainText(/Only Accounts Managers/);
   await expect(
-    page.getByText("Approved projects", { exact: true }),
+    page.getByRole("heading", { name: "Approved projects", exact: true }),
   ).toHaveCount(0);
 });

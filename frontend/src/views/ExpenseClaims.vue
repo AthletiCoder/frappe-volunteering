@@ -22,6 +22,7 @@
 				<RouterLink v-else to="/expense-claim" class="btn-primary"
 					>Submit an expense</RouterLink
 				>
+				<RouterLink v-if="!selected" to="/expense-claim/multiple" class="btn-secondary">Submit multiple invoices</RouterLink>
 				<RouterLink to="/home" class="btn-secondary">Home</RouterLink>
 			</template>
 		</PageHeader>
@@ -89,7 +90,7 @@
 							<p class="font-semibold text-ink">
 								{{ money(claim.claimed_amount, claim.currency) }}
 							</p>
-							<p class="text-xs text-muted mt-1">{{ date(claim.posting_date) }}</p>
+							<p class="text-xs text-muted mt-1">Invoice date: {{ date(claim.posting_date) }}</p>
 						</div>
 					</div>
 					<div
@@ -117,9 +118,19 @@
 						</p>
 					</div>
 					<div class="sm:text-right">
-						<p class="text-xs text-muted">Submitted</p>
+						<p class="text-xs text-muted">Invoice / accounting date</p>
 						<p class="font-medium text-ink">{{ date(selected.posting_date) }}</p>
+						<p class="text-xs text-muted mt-1">Submitted {{ dateTime(selected.creation) }}</p>
 					</div>
+				</div>
+			</section>
+			<section v-if="selected.related_invoices?.length > 1" class="form-card mb-5">
+				<h2 class="form-title">Invoices in this submission</h2>
+				<p class="text-sm text-muted mb-3">Combined amount for approval: {{ money(selected.expense_submission_total, selected.currency) }}. Each invoice is reviewed and posted separately.</p>
+				<div class="divide-y divide-line">
+					<button v-for="invoice in selected.related_invoices" :key="invoice.name" type="button" class="flex w-full justify-between gap-3 py-3 text-left text-sm text-accent" @click="openDetail(invoice.name)">
+						<span>{{ invoice.name }} · {{ date(invoice.posting_date) }} · {{ invoice.workflow_state }}</span><span>{{ money(invoice.total_claimed_amount, selected.currency) }}</span>
+					</button>
 				</div>
 			</section>
 

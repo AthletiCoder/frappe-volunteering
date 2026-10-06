@@ -149,6 +149,24 @@ ACCOUNTING_CUSTOM_FIELDS = {
 	"Expense Claim": [
 		*_approval_routing_fields("expense_approver", emergency_label="Emergency Expense"),
 		{
+			"fieldname": "expense_submission_id",
+			"label": "Expense Submission ID",
+			"fieldtype": "Data",
+			"insert_after": "expense_approver",
+			"read_only": 1,
+			"hidden": 1,
+			"no_copy": 1,
+		},
+		{
+			"fieldname": "expense_submission_total",
+			"label": "Original Submission Total",
+			"fieldtype": "Currency",
+			"insert_after": "expense_submission_id",
+			"read_only": 1,
+			"hidden": 1,
+			"no_copy": 1,
+		},
+		{
 			"fieldname": "emergency_date",
 			"label": "Emergency Date",
 			"fieldtype": "Date",

@@ -15,7 +15,7 @@ from volunteering.volunteering.accounting_test_utils import (
 	mute_accounting_test_emails,
 )
 from volunteering.volunteering.home_service import _accounts_actions
-from volunteering.volunteering.test_invoice_generator import _payload
+from volunteering.volunteering.test_invoice_generator import _bind_payload_signatures, _payload
 
 
 def details(number="123456789012"):
@@ -41,6 +41,33 @@ def details(number="123456789012"):
 
 
 class UnitTestEmployeeBankDetails(UnitTestCase):
+	@patch("volunteering.volunteering.employee_bank_accounts._requests")
+	@patch("volunteering.volunteering.employee_bank_accounts._employee_for_current_user", return_value="EMP-1")
+	def test_profile_bank_summary_is_own_and_masked(self, employee_for_user, requests):
+		requests.side_effect = [
+			[{
+				"account_holder_name": "Test Employee", "bank_name": "Test Bank", "branch": "Main",
+				"account_type": "Savings", "account_number_masked": "••••••9012",
+				"account_number": "123456789012", "ifsc": "TEST0123456", "swift": "",
+				"reviewed_on": "2026-10-01", "proof_url": "/private/files/proof.pdf",
+			}],
+			[],
+		]
+		summary = banking.get_my_bank_account_summary()
+		employee_for_user.assert_called_once_with(required=False)
+		self.assertEqual(requests.call_args_list[0].args[0], {"employee": "EMP-1", "request_status": banking.APPROVED})
+		self.assertEqual(requests.call_args_list[1].args[0], {"employee": "EMP-1", "request_status": banking.PENDING})
+		self.assertEqual(summary["approved"]["account_number_masked"], "••••••9012")
+		self.assertIsNone(summary["pending"])
+		self.assertNotIn("account_number", summary["approved"])
+		self.assertNotIn("proof_url", summary["approved"])
+
+	@patch("volunteering.volunteering.employee_bank_accounts._requests")
+	@patch("volunteering.volunteering.employee_bank_accounts._employee_for_current_user", return_value=None)
+	def test_profile_bank_summary_without_employee_returns_no_details(self, _employee_for_user, requests):
+		self.assertEqual(banking.get_my_bank_account_summary(), {"approved": None, "pending": None})
+		requests.assert_not_called()
+
 	def test_confirmation_ifsc_and_ownership_are_required(self):
 		for overrides in (
 			{"account_number_confirmation": "999999"},
@@ -71,8 +98,10 @@ class UnitTestEmployeeBankDetails(UnitTestCase):
 				[
 					"advance_disbursement",
 					"advance_returns",
+					"donations",
 					"expense_approval_limits",
 					"chart_of_accounts",
+					"opening_balances",
 					"bank_account",
 					"project_account_mapping",
 				],
@@ -288,10 +317,12 @@ class IntegrationTestEmployeeBankAccounts(IntegrationTestCase):
 		self.assertNotIn("has_approved_bank", defaults)
 		self.assertNotIn("remittance_bank", defaults)
 		self.assertNotIn(details()["account_number"], str(defaults))
+		payload = _payload()
+		_bind_payload_signatures(payload, self.employee)
 		with patch.object(
 			invoices, "_build_pdf", side_effect=lambda data: invoices._render_pdf_html(data).encode()
 		):
-			generated = invoices.generate_invoice_documents(_payload(), output_format="pdf")
+			generated = invoices.generate_invoice_documents(payload, output_format="pdf")
 		html = base64.b64decode(generated["pdf"]["content_base64"]).decode()
 		self.assertNotIn("Remittance Details", html)
 
@@ -307,6 +338,7 @@ class IntegrationTestEmployeeBankAccounts(IntegrationTestCase):
 			"bank_name": "Supplier Bank",
 			"ifsc": "SUPP0123456",
 		}
+		_bind_payload_signatures(payload, self.employee)
 		with patch.object(
 			invoices, "_build_pdf", side_effect=lambda data: invoices._render_pdf_html(data).encode()
 		):
@@ -330,6 +362,7 @@ class IntegrationTestEmployeeBankAccounts(IntegrationTestCase):
 			"account_number": "998877665544",
 			"ifsc": "MEMO0123456",
 		}
+		_bind_payload_signatures(payload, self.employee)
 		with patch.object(
 			invoices, "_build_pdf", side_effect=lambda data: invoices._render_pdf_html(data).encode()
 		):

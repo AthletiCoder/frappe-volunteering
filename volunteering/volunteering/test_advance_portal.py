@@ -134,6 +134,15 @@ class IntegrationTestAdvanceHome(IntegrationTestCase):
 			"ifsc": "TEST0123456",
 		}
 
+	def test_employee_home_shows_basic_project_card_without_financial_fields(self):
+		frappe.set_user(self.employee_user)
+		home = get_home_payload()
+		self.assertTrue(home["flags"]["show_member_projects"])
+		card = next(row for row in home["member_projects"] if row["name"] == self.project)
+		self.assertTrue(card["can_request_advance"])
+		self.assertNotIn("total_approved_budget", card)
+		self.assertNotIn("budget_status", card)
+
 	@patch("volunteering.volunteering.advance_portal.get_approved_bank_details")
 	def test_defaults_expose_only_eligible_project_and_masked_bank(self, bank):
 		bank.return_value = self.bank()

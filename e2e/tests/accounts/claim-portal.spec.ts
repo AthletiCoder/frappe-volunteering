@@ -39,11 +39,8 @@ test.describe("Employee expense portal @ui @expense-portal", () => {
       PERSONAS.employee.password,
     );
     await page.goto("/volunteering/home");
-    await expect(page.getByRole("heading", { name: /^Hello/ })).toBeVisible();
-    await page
-      .getByRole("region", { name: "Quick actions" })
-      .getByRole("link", { name: "Submit an Expense", exact: true })
-      .click();
+    await expect(page.getByRole("heading", { name: "Your active projects" })).toBeVisible();
+    await page.getByRole("link", { name: "Submit an expense", exact: true }).first().click();
     await expect(
       page.getByRole("heading", { name: "Submit an expense", exact: true }),
     ).toBeVisible();
@@ -55,7 +52,7 @@ test.describe("Employee expense portal @ui @expense-portal", () => {
   test("Home opens the portal; only safe project account choices and employee fields appear", async ({
     page,
   }) => {
-    await expect(page).toHaveURL(/\/volunteering\/expense-claim$/);
+    await expect(page).toHaveURL(/\/volunteering\/expense-claim(?:\?project=[^&]+)?$/);
     for (const field of [
       /^Series/,
       /^Company/,
@@ -164,7 +161,9 @@ test.describe("Employee expense portal @ui @expense-portal", () => {
     page,
   }) => {
     await page.goto("/volunteering/home");
-    await page.getByRole("link", { name: /Previous claims/ }).click();
+    const expensesMenu = page.getByRole("navigation", { name: "Sections" }).locator("details").filter({ has: page.locator("summary").filter({ hasText: /^Expenses & invoices$/ }) });
+    await expensesMenu.locator("summary").click();
+    await expensesMenu.getByRole("link", { name: "Previous claims" }).click();
     await expect(page).toHaveURL(/\/volunteering\/expense-claims$/);
     await expect(
       page.getByRole("heading", { name: "My reimbursement claims" }),
@@ -179,20 +178,11 @@ test.describe("Employee expense portal @ui @expense-portal", () => {
     page,
   }) => {
     await page.goto("/volunteering/home");
-    await expect(
-      page
-        .getByRole("region", { name: "Quick actions" })
-        .getByRole("link", { name: "Submit an Expense", exact: true }),
-    ).toBeVisible();
-    await expect(
-      page
-        .getByRole("region", { name: "Quick actions" })
-        .getByRole("link", { name: "Prepare an invoice", exact: true }),
-    ).toBeVisible();
-    await page
-      .getByRole("region", { name: "Quick actions" })
-      .getByRole("link", { name: "Prepare invoice and submit expense", exact: true })
-      .click();
+    const expensesMenu = page.getByRole("navigation", { name: "Sections" }).locator("details").filter({ has: page.locator("summary").filter({ hasText: /^Expenses & invoices$/ }) });
+    await expensesMenu.locator("summary").click();
+    await expect(expensesMenu.getByRole("link", { name: "Submit an Expense", exact: true })).toBeVisible();
+    await expect(expensesMenu.getByRole("link", { name: "Prepare an invoice", exact: true })).toBeVisible();
+    await expensesMenu.getByRole("link", { name: "Prepare invoice and submit expense", exact: true }).click();
     await expect(page).toHaveURL(/\/volunteering\/invoice-expense-claim$/);
     await expect(
       page.getByRole("heading", {

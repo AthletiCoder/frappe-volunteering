@@ -144,7 +144,7 @@ class TestApproverActionFlags(UnitTestCase):
 
 	@patch("volunteering.volunteering.approval_routing.user_can_approve_amount")
 	@patch("volunteering.volunteering.approval_routing.use_grade_approval")
-	@patch("volunteering.volunteering.approval_routing.get_document_amount")
+	@patch("volunteering.volunteering.approval_routing.get_document_approval_amount")
 	@patch("volunteering.volunteering.approval_routing.frappe.get_doc")
 	def test_escalate_blocked_when_under_limit(
 		self, mock_get_doc, mock_amount, mock_use_grade, mock_can_approve
@@ -160,7 +160,7 @@ class TestApproverActionFlags(UnitTestCase):
 
 	@patch("volunteering.volunteering.approval_routing.user_can_approve_amount")
 	@patch("volunteering.volunteering.approval_routing.use_grade_approval")
-	@patch("volunteering.volunteering.approval_routing.get_document_amount")
+	@patch("volunteering.volunteering.approval_routing.get_document_approval_amount")
 	@patch("volunteering.volunteering.approval_routing.frappe.get_doc")
 	def test_approver_flags_escalate_only_when_over_limit(
 		self, mock_get_doc, mock_amount, mock_use_grade, mock_can_approve

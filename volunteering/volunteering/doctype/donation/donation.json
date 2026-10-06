@@ -36,7 +36,22 @@
   "meta_section",
   "ip_address",
   "user_agent",
-  "is_recurring_placeholder"
+  "is_recurring_placeholder",
+  "manual_section",
+  "donor",
+  "donor_type",
+  "received_on",
+  "donation_purpose",
+  "payment_method",
+  "payment_reference",
+  "received_into_account",
+  "donation_account",
+  "receipt_number",
+  "receipt_date",
+  "receipt_signatory",
+  "donor_signature_data",
+  "receipt_file",
+  "registration_key"
  ],
  "fields": [
   {
@@ -66,14 +81,14 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Mobile Number",
-   "reqd": 1
+   "reqd": 0
   },
   {
    "fieldname": "email",
    "fieldtype": "Data",
    "label": "Email",
    "options": "Email",
-   "reqd": 1
+   "reqd": 0
   },
   {
    "fieldname": "column_break_donor",
@@ -243,6 +258,22 @@
    "fieldtype": "Check",
    "hidden": 1,
    "label": "Recurring (Future)"
+  },
+  {"fieldname":"manual_section","fieldtype":"Section Break","label":"Staff-recorded donation"},
+  {"fieldname":"donor","label":"Saved donor","fieldtype":"Link","options":"Donation Donor","read_only":1},
+  {"fieldname":"donor_type","label":"Donor type","fieldtype":"Data","read_only":1},
+  {"fieldname":"received_on","label":"Date money was received","fieldtype":"Date","read_only":1},
+  {"fieldname":"donation_purpose","label":"Purpose of donation","fieldtype":"Select","options":"\nGeneral\nCorpus\nRestricted\nCSR\nOther","read_only":1},
+  {"fieldname":"payment_method","label":"Payment method","fieldtype":"Select","options":"\nCash\nCheque\nOnline\nBank Transfer\nUPI","read_only":1},
+  {"fieldname":"payment_reference","label":"Cheque / transaction reference","fieldtype":"Data","read_only":1},
+  {"fieldname":"received_into_account","label":"Received into account","fieldtype":"Link","options":"Account","read_only":1},
+  {"fieldname":"donation_account","label":"Donation credit account","fieldtype":"Link","options":"Account","read_only":1},
+  {"fieldname":"receipt_number","label":"Acknowledgement receipt number","fieldtype":"Data","unique":1,"read_only":1},
+  {"fieldname":"receipt_date","label":"Receipt issue date","fieldtype":"Date","read_only":1},
+  {"fieldname":"receipt_signatory","label":"Authorised signatory","fieldtype":"Link","options":"Donation Receipt Signatory","read_only":1},
+  {"fieldname":"donor_signature_data","label":"Cash donor signature PNG","fieldtype":"Long Text","hidden":1,"read_only":1},
+  {"fieldname":"receipt_file","label":"Signed acknowledgement PDF","fieldtype":"Attach","read_only":1},
+  {"fieldname":"registration_key","label":"Home request key","fieldtype":"Data","unique":1,"hidden":1,"read_only":1
   }
  ],
  "links": [],

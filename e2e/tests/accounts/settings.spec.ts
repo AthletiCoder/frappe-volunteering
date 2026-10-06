@@ -17,12 +17,14 @@ test.describe("Accounting settings @accounts @ui", () => {
       page,
     }) => {
       await page.goto("/volunteering/home");
+      const accountsMenu = page.locator('nav[aria-label="Sections"] details').filter({
+        hasText: "Expense Claim approval limits",
+      });
+      await accountsMenu.locator("summary").click();
       await expect(
-        page.getByRole("link", { name: /Expense Claim approval limits/ }),
+        accountsMenu.getByRole("link", { name: "Expense Claim approval limits" }),
       ).toBeVisible();
-      await page
-        .getByRole("link", { name: /Expense Claim approval limits/ })
-        .click();
+      await accountsMenu.getByRole("link", { name: "Expense Claim approval limits" }).click();
       await expect(
         page.getByRole("heading", { name: "Expense Claim approval limits" }),
       ).toBeVisible();

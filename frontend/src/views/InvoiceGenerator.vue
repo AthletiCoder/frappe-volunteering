@@ -385,6 +385,9 @@
 
 			<section class="form-card">
 				<h2 class="form-title">Volunteer declaration and signature</h2>
+				<p v-if="signatureNotice" class="rounded-xl border border-warn bg-warn-soft p-3 text-sm text-ink mb-4" role="alert">
+					{{ signatureNotice }}
+				</p>
 				<p class="form-hint">
 					I confirm that I paid the amount shown above and request reimbursement to my
 					bank account.
@@ -413,6 +416,7 @@
 								v-if="savedVolunteerSignature"
 								type="button"
 								class="btn-secondary"
+								:disabled="bindingSignature"
 								@click="useSavedVolunteerSignature"
 							>
 								Use saved signature
@@ -420,6 +424,7 @@
 							<button
 								type="button"
 								class="btn-secondary"
+								:disabled="bindingSignature"
 								@click="openSignature('volunteer')"
 							>
 								Sign freshly
@@ -459,6 +464,7 @@
 							<button
 								type="button"
 								class="btn-secondary"
+								:disabled="bindingSignature"
 								@click="openSignature('vendor')"
 							>
 								{{ form.vendor_signature_data ? "Sign freshly again" : "Vendor sign on screen" }}
@@ -552,14 +558,14 @@
 				></canvas>
 				<p v-if="signatureError" class="text-sm text-bad mt-2">{{ signatureError }}</p>
 				<div class="flex flex-wrap justify-end gap-2 mt-4">
-					<button type="button" class="btn-secondary" @click="clearSignatureCanvas">
+					<button type="button" class="btn-secondary" :disabled="bindingSignature" @click="clearSignatureCanvas">
 						Clear
 					</button>
-					<button type="button" class="btn-secondary" @click="closeSignature">
+					<button type="button" class="btn-secondary" :disabled="bindingSignature" @click="closeSignature">
 						Cancel
 					</button>
-					<button type="button" class="btn-primary" @click="saveSignature">
-						Use this signature
+					<button type="button" class="btn-primary" :disabled="bindingSignature" @click="saveSignature">
+						{{ bindingSignature ? "Saving signature…" : "Use this signature" }}
 					</button>
 				</div>
 			</div>
@@ -576,6 +582,7 @@ import { call } from "../lib/frappe";
 const props = defineProps({
 	embedded: { type: Boolean, default: false },
 	seed: { type: Object, default: null },
+	signatureContext: { type: Object, default: null },
 });
 const emit = defineEmits(["total-change"]);
 const embedded = computed(() => props.embedded);
@@ -628,6 +635,8 @@ const form = reactive({
 	authorised_signatory: "",
 	volunteer_signature_data: "",
 	vendor_signature_data: "",
+	volunteer_signature_proof: "",
+	vendor_signature_proof: "",
 });
 const loading = ref(true);
 const generating = ref(null);
@@ -643,6 +652,9 @@ const volunteerSignatureSource = ref("");
 const signatureOpen = ref(false);
 const signatureCanvas = ref(null);
 const signatureError = ref("");
+const signatureNotice = ref("");
+const bindingSignature = ref(false);
+const signedDetailsSnapshot = ref("");
 const activeSignatureKind = ref("volunteer");
 let signing = false;
 let signatureHasInk = false;
@@ -656,8 +668,37 @@ const taxableTotal = computed(
 );
 const gstAmount = computed(() => (isGst.value ? Number(form.gst_amount || 0) : 0));
 const grandTotal = computed(() => taxableTotal.value + gstAmount.value);
+const invoiceDetailsSnapshot = computed(() => {
+	const { volunteer_signature_data, vendor_signature_data, volunteer_signature_proof, vendor_signature_proof, ...details } = form;
+	return JSON.stringify({ ...details, ...(props.signatureContext ? { signature_context: props.signatureContext } : {}) });
+});
+
+function signedPayload(overrides = {}) {
+	return {
+		...form,
+		...(props.signatureContext ? { signature_context: props.signatureContext } : {}),
+		...overrides,
+	};
+}
 
 watch(grandTotal, (value) => emit("total-change", Number(value || 0)), { immediate: true });
+watch(invoiceDetailsSnapshot, (details) => {
+	if (!signedDetailsSnapshot.value || details === signedDetailsSnapshot.value) return;
+	const hadVolunteer = Boolean(form.volunteer_signature_data);
+	const hadVendor = Boolean(form.vendor_signature_data);
+	form.volunteer_signature_data = "";
+	form.vendor_signature_data = "";
+	form.volunteer_signature_proof = "";
+	form.vendor_signature_proof = "";
+	volunteerSignatureSource.value = "";
+	signedDetailsSnapshot.value = "";
+	generationReference.value = null;
+	generatedSnapshot.value = "";
+	result.value = null;
+	if (hadVolunteer || hadVendor) {
+		signatureNotice.value = "Form details changed after signing. The signatures were removed; review the final details and sign again.";
+	}
+});
 
 function itemAmount(item) {
 	return Number(item.quantity || 0) * Number(item.rate || 0);
@@ -760,28 +801,57 @@ function clearSignatureCanvas() {
 	signatureHasInk = false;
 	signatureError.value = "";
 }
-function saveSignature() {
+async function bindSignature(kind, value) {
+	const details = invoiceDetailsSnapshot.value;
+	bindingSignature.value = true;
+	try {
+		const result = await call(
+			"volunteering.volunteering.invoice_generator.bind_invoice_signature",
+			{ payload: signedPayload({ [`${kind}_signature_data`]: value }), kind },
+		);
+		if (invoiceDetailsSnapshot.value !== details) {
+			signatureNotice.value = "Invoice details changed while saving the signature. Please sign again.";
+			return false;
+		}
+		form[`${kind}_signature_data`] = value;
+		form[`${kind}_signature_proof`] = result.proof;
+		signedDetailsSnapshot.value = details;
+		if (form.volunteer_signature_proof && (!form.vendor_will_sign || form.vendor_signature_proof)) {
+			signatureNotice.value = "";
+		}
+		return true;
+	} catch (e) {
+		signatureError.value = e.message || "Unable to save this signature. Please try again.";
+		return false;
+	} finally {
+		bindingSignature.value = false;
+	}
+}
+async function saveSignature() {
 	if (!signatureHasInk) {
 		signatureError.value = "Draw a signature before using it.";
 		return;
 	}
 	const value = signatureCanvas.value.toDataURL("image/png");
-	if (activeSignatureKind.value === "vendor") {
-		form.vendor_signature_data = value;
-	} else {
-		form.volunteer_signature_data = value;
-		volunteerSignatureSource.value = "fresh";
+	if (await bindSignature(activeSignatureKind.value, value)) {
+		if (activeSignatureKind.value === "volunteer") {
+			volunteerSignatureSource.value = "fresh";
+		}
+		signatureOpen.value = false;
 	}
-	signatureOpen.value = false;
 }
 function closeSignature() {
 	signatureOpen.value = false;
 	signing = false;
 }
-function useSavedVolunteerSignature() {
+async function useSavedVolunteerSignature() {
 	if (!savedVolunteerSignature.value) return;
-	form.volunteer_signature_data = savedVolunteerSignature.value;
-	volunteerSignatureSource.value = "saved";
+	signatureError.value = "";
+	if (await bindSignature("volunteer", savedVolunteerSignature.value)) {
+		volunteerSignatureSource.value = "saved";
+	} else if (signatureError.value) {
+		error.value = signatureError.value;
+	}
 }
 
 onMounted(async () => {
@@ -793,7 +863,7 @@ onMounted(async () => {
 		vendorAddresses.value = defaults.vendor_addresses || [];
 		savedVolunteerSignature.value = defaults.saved_volunteer_signature || "";
 		Object.assign(form.volunteer, defaults.volunteer || {});
-		form.invoice_date = defaults.invoice_date || "";
+		form.invoice_date = props.seed?.expense_date || defaults.invoice_date || "";
 		form.consignee_address_name = defaults.default_office_address || "";
 		Object.assign(form.consignee, defaults.consignee || {});
 		applySeed(props.seed);
@@ -813,18 +883,25 @@ watch(
 );
 
 watch(
+	() => props.seed?.expense_date,
+	(date) => {
+		if (props.embedded && date && !loading.value) form.invoice_date = date;
+	},
+);
+
+watch(
 	() => form.vendor_will_sign,
 	(enabled) => {
 		if (!enabled) {
 			form.authorised_signatory = "";
 			form.vendor_signature_data = "";
+			form.vendor_signature_proof = "";
 		}
 	},
 );
 
 function applySeed(seed) {
 	if (!seed) return;
-	if (seed.expense_date && !form.invoice_date) form.invoice_date = seed.expense_date;
 	if (seed.description && !form.items[0]?.description) {
 		form.items[0].description = seed.description;
 	}
@@ -838,10 +915,16 @@ function getSubmissionPayload() {
 	if (!form.volunteer_signature_data) {
 		throw new Error("Add the volunteer signature before submitting this invoice.");
 	}
+	if (!form.volunteer_signature_proof) {
+		throw new Error("Review the final invoice details and add the volunteer signature again.");
+	}
 	if (form.vendor_will_sign && !form.vendor_signature_data) {
 		throw new Error("Ask the vendor to sign on screen, or turn off vendor signing.");
 	}
-	return JSON.parse(JSON.stringify(form));
+	if (form.vendor_will_sign && !form.vendor_signature_proof) {
+		throw new Error("Review the final invoice details and ask the vendor to sign again.");
+	}
+	return JSON.parse(JSON.stringify(signedPayload()));
 }
 
 defineExpose({ getSubmissionPayload });

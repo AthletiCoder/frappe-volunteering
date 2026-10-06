@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 
 import base64
+from io import BytesIO
 
 import frappe
 from frappe.model.workflow import apply_workflow
@@ -15,18 +16,28 @@ from volunteering.volunteering.accounting_setup import (
 	setup_accounting_custom_fields,
 )
 from volunteering.volunteering.accounting_test_utils import (
+	allow_project_expense_account,
 	get_or_create_department,
 	get_or_create_employee,
 	get_or_create_project_with_cost_center,
 	get_or_create_user,
 	make_expense_claim,
 	mute_accounting_test_emails,
+	save_test_project,
 	set_employee_grade,
 )
-from volunteering.volunteering.approval_routing import PENDING_APPROVAL, escalate_document
+from volunteering.volunteering.approval_routing import (
+	PENDING_APPROVAL,
+	escalate_document,
+	get_document_approval_amount,
+)
 from volunteering.volunteering.expense_account_classification import (
 	CLASSIFICATION_COMPLETE,
 	PENDING_ACCOUNTS_CLASSIFICATION,
+)
+from volunteering.volunteering.expense_claim_portal import (
+	get_project_accounts,
+	submit_multi_invoice_expense_claim,
 )
 from volunteering.volunteering.expense_claim_workflow_portal import (
 	classify_expense_claim_accounts,
@@ -160,6 +171,31 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 			},
 		)
 		super().tearDown()
+
+	def setUp(self):
+		super().setUp()
+		# Home workflow tests must use a post-cutover project. Older test
+		# projects remain intentionally invisible in Home, even to Accounts.
+		frappe.set_user("Administrator")
+		project = frappe.get_doc("Project", self.project)
+		project.project_setup_version = 1
+		project.project_purpose = project.project_purpose or "Accounting approval test project"
+		project.project_owner = self.employee_email
+		project.operational_status = "Active"
+		project.budget_status = "Active"
+		project.is_archived = 0
+		members = {row.user for row in project.get("project_participants") or []}
+		for user in (
+			self.employee_email,
+			self.manager_email,
+			self.director_email,
+			self.reviewer_email,
+			self.accounts_email,
+			self.board_chair_email,
+		):
+			if user not in members:
+				project.append("project_participants", {"user": user, "access_level": "Basic"})
+		save_test_project(project)
 
 	def _review_claim(self, claim):
 		frappe.set_user(self.reviewer_email)
@@ -375,6 +411,62 @@ class IntegrationTestAccountingApproval(IntegrationTestCase):
 		frappe.set_user(self.director_email)
 		item = get_expense_claim_work_item(claim.name)
 		self.assertTrue(item["approval_flags"]["can_approve"])
+
+	def test_multi_invoice_submission_uses_combined_approval_amount_and_separate_gl_dates(self):
+		from pypdf import PdfWriter
+
+		frappe.set_user("Administrator")
+		allow_project_expense_account(self.project, self.expense_accounts[0], label="Travel bills")
+		frappe.set_user(self.employee_email)
+		category = next(
+			row["value"] for row in get_project_accounts(self.project) if row["label"] == "Travel bills"
+		)
+		pdf = BytesIO()
+		writer = PdfWriter()
+		writer.add_blank_page(width=72, height=72)
+		writer.write(pdf)
+		content = base64.b64encode(pdf.getvalue()).decode()
+		invoices = [
+			{
+				"invoice_date": date,
+				"invoice_number": f"TEST-{date}",
+				"supplier_name": "Test supplier",
+				"receipt_filename": "bill.pdf",
+				"receipt_content": content,
+				"items": [{"account": category, "description": "Project travel", "amount": 1500}],
+			}
+			for date in ("2026-09-30", "2026-10-01")
+		]
+		result = submit_multi_invoice_expense_claim(
+			{
+				"project": self.project,
+				"reimbursement_source": "PERSONAL",
+				"invoices": invoices,
+			}
+		)
+		claims = [frappe.get_doc("Expense Claim", row["name"]) for row in result["claims"]]
+		self.assertEqual(result["total"], 3000)
+		for claim in claims:
+			self.assertEqual(get_document_approval_amount(claim), 3000)
+			self._review_claim(claim)
+			frappe.set_user(self.manager_email)
+			item = get_expense_claim_work_item(claim.name)
+			self.assertFalse(item["approval_flags"]["can_approve"])
+			self.assertTrue(item["approval_flags"]["can_escalate"])
+			escalate_document("Expense Claim", claim.name, "Combined submission exceeds my limit")
+			frappe.set_user(self.director_email)
+			apply_workflow(frappe.get_doc("Expense Claim", claim.name), "Approve")
+			self._classify_claim(claim)
+
+		for claim, invoice in zip(claims, invoices):
+			entries = frappe.get_all(
+				"GL Entry",
+				filters={"voucher_type": "Expense Claim", "voucher_no": claim.name},
+				fields=["posting_date", "fiscal_year"],
+			)
+			self.assertTrue(entries)
+			self.assertEqual({str(row.posting_date) for row in entries}, {invoice["invoice_date"]})
+			self.assertEqual({row.fiscal_year for row in entries}, {"2026-2027"})
 
 	def test_high_value_claim_lands_with_first_manager(self):
 		# 30000 exceeds everyone in the chain; the immediate manager receives

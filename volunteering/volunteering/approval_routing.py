@@ -92,6 +92,18 @@ def get_document_amount(doc):
 
 def get_document_approval_amount(doc):
 	"""Amount used for approval authority, distinct from transaction value."""
+	if doc.doctype == "Expense Claim" and doc.get("expense_submission_id"):
+		# A multi-invoice submission creates separately dated claims for accurate
+		# financial years. The split must never lower the manager's authority tier.
+		rows = frappe.get_all(
+			"Expense Claim",
+			filters={"expense_submission_id": doc.expense_submission_id},
+			fields=["name", "total_claimed_amount"],
+		)
+		current_total = sum(
+			flt(row.total_claimed_amount) for row in rows if row.name != doc.name
+		) + get_document_amount(doc)
+		return max(flt(doc.get("expense_submission_total")), flt(current_total, 2))
 	if doc.doctype == "Employee Advance" and doc.get("employee"):
 		from volunteering.volunteering.employee_advance_controls import (
 			get_advance_approval_exposure,
@@ -223,7 +235,7 @@ def assign_pending_approver(doc):
 	"""Set pending_approver from reports_to chain. No self-approval."""
 	requester = get_requester_user(doc)
 	employee = get_requester_employee(doc)
-	amount = get_document_amount(doc)
+	amount = get_document_approval_amount(doc)
 
 	if not employee:
 		doc.pending_approver = get_fallback_board_approver()
@@ -250,7 +262,7 @@ def escalate_to_next_approver(doc):
 	requester_emp = get_requester_employee(doc)
 	current_user = doc.get("pending_approver") or frappe.session.user
 	current_emp = get_employee_for_user(current_user)
-	amount = get_document_amount(doc)
+	amount = get_document_approval_amount(doc)
 
 	next_approver = find_first_approver(
 		requester_emp,
@@ -462,7 +474,7 @@ def validate_expense_claim_review_assignment(doc):
 	if routing_changed and doc.workflow_state == PENDING_APPROVAL:
 		next_user = find_first_approver(
 			get_requester_employee(doc),
-			get_document_amount(doc),
+			get_document_approval_amount(doc),
 			start_after_employee=get_employee_for_user(assigned),
 			require_authority=False,
 		)
