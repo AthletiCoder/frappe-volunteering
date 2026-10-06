@@ -5,7 +5,8 @@ from __future__ import annotations
 import frappe
 
 CASHFREE_CLEARING_NAME = "Cashfree Clearing"
-DONATION_INCOME_NAME = "Donation Income"
+DONATION_INCOME_NAME = "General Donations"
+LEGACY_DONATION_INCOME_NAME = "Donation Income"
 CASHFREE_MODE_OF_PAYMENT = "Cashfree"
 
 
@@ -64,6 +65,15 @@ def _ensure_donation_income_account(company: str) -> str | None:
 	)
 	if existing:
 		return existing
+	# Deploy/migrate must not create a duplicate before the separately reviewed
+	# chart reorganisation renames the legacy ledger and updates its Links.
+	legacy = frappe.db.get_value(
+		"Account",
+		{"company": company, "account_name": LEGACY_DONATION_INCOME_NAME, "is_group": 0},
+		"name",
+	)
+	if legacy:
+		return legacy
 
 	parent = frappe.db.get_value(
 		"Account",

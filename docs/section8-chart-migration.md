@@ -1,5 +1,13 @@
 # Sevamrita Section 8 chart migration
 
+For the reorganised Sevamrita chart, use
+[`sevamrita-chart-reorganization.md`](sevamrita-chart-reorganization.md) instead.
+The additive PDF preview below is retained for reference; running it after the
+reorganisation can conflict with the new functional group accounts.
+It also creates optional expense ledgers, contrary to the current policy of
+adding those manually when an expense first needs them. Do not run its apply
+command for the current rollout.
+
 The September 2026 chart PDF is a **starter**, not an approved accounting policy. The
 `section8_chart` template adds its accounts to the existing ERPNext tree. It never
 renames, moves, disables, or deletes an account during `bench migrate` or app deploy.
