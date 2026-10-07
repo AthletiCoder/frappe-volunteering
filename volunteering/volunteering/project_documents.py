@@ -26,11 +26,22 @@ def scoped(file):
 	return file.attached_to_doctype in ("Project", "Project Proposal") and file.attached_to_name
 
 
+def opening_proof(file):
+	if file.attached_to_doctype != "Journal Entry" or not file.attached_to_name:
+		return False
+	from volunteering.volunteering.opening_balances_portal import MARKER
+
+	return (frappe.db.get_value("Journal Entry", file.attached_to_name, "user_remark") or "").startswith(MARKER)
+
+
 def can_read(file, user=None):
 	from volunteering.volunteering.employee_bank_accounts import can_read_file, scoped_file
+	from volunteering.volunteering.chart_of_accounts_portal import can_manage
 
 	if scoped_file(file):
 		return can_read_file(file, user)
+	if opening_proof(file):
+		return can_manage(user)
 	if not scoped(file):
 		return True
 	user = user or frappe.session.user
@@ -57,6 +68,8 @@ def has_permission(doc, user=None, ptype=None, **kwargs):
 
 	if scoped_file(doc):
 		return ptype in ("read", "select") and can_read(doc, user)
+	if opening_proof(doc):
+		return ptype in ("read", "select", "print") and can_read(doc, user)
 	if scoped(doc):
 		return ptype in ("read", "select", "print") and can_read(doc, user)
 	# Controllers may only deny; True = fall through to core File.has_permission.
@@ -66,6 +79,13 @@ def has_permission(doc, user=None, ptype=None, **kwargs):
 
 def validate_change(doc, method=None):
 	previous = doc.get_doc_before_save()
+	if opening_proof(doc) or (previous and opening_proof(previous)):
+		from volunteering.volunteering.chart_of_accounts_portal import can_manage
+
+		if not can_manage():
+			frappe.throw(_("Only Accounts Managers may change opening-balance proof documents."), frappe.PermissionError)
+		if not cint(doc.is_private):
+			frappe.throw(_("Opening-balance proof documents must be stored privately."))
 	if scoped(doc) or (previous and scoped(previous)):
 		if not _writing.get():
 			frappe.throw(
@@ -85,8 +105,8 @@ class ProjectAwareFile(File):
 	def get_content(self, encodings=None):
 		from volunteering.volunteering.employee_bank_accounts import scoped_file
 
-		if (scoped(self) or scoped_file(self)) and not _writing.get() and not can_read(self):
-			frappe.throw(_("You cannot download this project document."), frappe.PermissionError)
+		if (scoped(self) or scoped_file(self) or opening_proof(self)) and not _writing.get() and not can_read(self):
+			frappe.throw(_("You cannot download this private document."), frappe.PermissionError)
 		return super().get_content(encodings)
 
 
@@ -118,6 +138,8 @@ def publish(doc):
 def file_query(user=None):
 	user = user or frappe.session.user
 	from volunteering.volunteering.employee_bank_accounts import _is_accounts_manager
+	from volunteering.volunteering.chart_of_accounts_portal import can_manage
+	from volunteering.volunteering.opening_balances_portal import MARKER
 
 	bank_scope = (
 		"1=1"
@@ -127,8 +149,14 @@ def file_query(user=None):
 			f"OR EXISTS (SELECT 1 FROM `tabEmployee Bank Account Request` b WHERE b.name=`tabFile`.attached_to_name AND b.submitted_by={frappe.db.escape(user)}))"
 		)
 	)
+	opening_scope = (
+		"1=1" if can_manage(user) else
+		f"NOT (`tabFile`.attached_to_doctype='Journal Entry' AND EXISTS ("
+		f"SELECT 1 FROM `tabJournal Entry` je WHERE je.name=`tabFile`.attached_to_name "
+		f"AND je.user_remark LIKE {frappe.db.escape(MARKER + '%')}))"
+	)
 	if workspace.is_project_manager(user):
-		return bank_scope
+		return f"{bank_scope} AND {opening_scope}"
 	escaped = frappe.db.escape(user)
 	finance = (
 		"1=1"
@@ -140,7 +168,7 @@ def file_query(user=None):
 		if workspace._can_oversee(user)
 		else f"(p.owner={escaped} OR p.project_owner={escaped} OR p.project_proposed_by={escaped} OR EXISTS (SELECT 1 FROM `tabProject Participant` pm WHERE pm.parent=p.name AND pm.parenttype='Project' AND pm.user={escaped}))"
 	)
-	return f"""{bank_scope} AND (`tabFile`.attached_to_doctype NOT IN ('Project', 'Project Proposal') OR `tabFile`.attached_to_doctype IS NULL
+	return f"""{bank_scope} AND {opening_scope} AND (`tabFile`.attached_to_doctype NOT IN ('Project', 'Project Proposal') OR `tabFile`.attached_to_doctype IS NULL
 	 OR (`tabFile`.attached_to_doctype='Project' AND EXISTS (SELECT 1 FROM `tabProject` p WHERE p.name=`tabFile`.attached_to_name AND {view} AND (`tabFile`.project_visibility='Basic' OR {finance})))
 	 OR (`tabFile`.attached_to_doctype='Project Proposal' AND EXISTS (SELECT 1 FROM `tabProject Proposal` r WHERE r.name=`tabFile`.attached_to_name AND r.proposed_by={escaped}
 	 AND (`tabFile`.project_visibility='Basic' OR r.request_kind='New Project' OR EXISTS (SELECT 1 FROM `tabProject` p WHERE p.name=r.project AND {finance})))))"""

@@ -104,6 +104,17 @@
 						></label
 					>
 				</div>
+				<div class="proof-section">
+					<label class="field-label" for="opening-proof">Proof documents (optional)</label>
+					<p class="field-help">Attach up to three files, 5 MB each. PDF, PNG, JPEG, DOCX, XLSX or CSV. They are stored privately with the opening entry.</p>
+					<input id="opening-proof" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx,.csv" class="proof-input" :disabled="saving" @change="chooseProof" />
+					<ul v-if="proofFiles.length" class="proof-list">
+						<li v-for="(file, index) in proofFiles" :key="`${file.name}-${index}`">
+							<span>{{ file.name }} <small>({{ (file.size / 1024 / 1024).toFixed(2) }} MB)</small></span>
+							<button type="button" class="proof-remove" :disabled="saving" :aria-label="`Remove ${file.name}`" @click="removeProof(index)">Remove</button>
+						</li>
+					</ul>
+				</div>
 				<div v-if="selectedAccount && Number(form.amount) > 0" class="posting-preview" aria-live="polite">
 					<div class="preview-heading"><strong>Posting preview</strong><span>This is the entry that will be created</span></div>
 					<div class="preview-row"><span>{{ form.side }}</span><span>{{ selectedAccount.account_name }}</span><strong>{{ money(form.amount) }}</strong></div>
@@ -150,6 +161,10 @@
 							)
 						}}
 					</p>
+					<div v-if="entry.attachments?.length" class="history-proof">
+						<span>Proof documents</span>
+						<a v-for="file in entry.attachments" :key="file.file_url" :href="file.file_url" target="_blank" rel="noopener noreferrer">{{ file.file_name }}</a>
+					</div>
 				</div>
 			</section>
 		</template>
@@ -180,6 +195,10 @@ const form = reactive({
 	source_reference: "",
 });
 const partyOptions = ref([]);
+const proofFiles = ref([]);
+const MAX_PROOF_FILES = 3;
+const MAX_PROOF_BYTES = 5 * 1024 * 1024;
+const PROOF_TYPES = /\.(pdf|png|jpe?g|docx|xlsx|csv)$/i;
 const accountOptions = computed(() =>
 	(workspace.value?.accounts || []).map((row) => ({
 		value: row.name,
@@ -208,6 +227,32 @@ function dateLabel(value) {
 	if (!value) return "";
 	const [year, month, day] = String(value).slice(0, 10).split("-");
 	return `${day}/${month}/${year}`;
+}
+function chooseProof(event) {
+	const files = Array.from(event.target.files || []);
+	event.target.value = "";
+	if (!files.length) return;
+	if (proofFiles.value.length + files.length > MAX_PROOF_FILES) {
+		error.value = "Attach no more than three proof documents.";
+		return;
+	}
+	if (files.some((file) => !PROOF_TYPES.test(file.name) || !file.size || file.size > MAX_PROOF_BYTES)) {
+		error.value = "Choose PDF, PNG, JPEG, DOCX, XLSX or CSV files, each no larger than 5 MB.";
+		return;
+	}
+	error.value = "";
+	proofFiles.value = [...proofFiles.value, ...files];
+}
+function removeProof(index) {
+	proofFiles.value = proofFiles.value.filter((_, fileIndex) => fileIndex !== index);
+}
+function readProof(file) {
+	return new Promise((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onload = () => resolve(String(reader.result || "").split(",")[1] || "");
+		reader.onerror = () => reject(new Error(`Could not read ${file.name}.`));
+		reader.readAsDataURL(file);
+	});
 }
 async function load() {
 	loading.value = true;
@@ -252,7 +297,11 @@ async function record() {
 	}
 	saving.value = true;
 	try {
-		const result = await call(api + "record_opening_balance", { details: { ...form } });
+		const attachments = await Promise.all(proofFiles.value.map(async (file) => ({
+			file_name: file.name,
+			content: await readProof(file),
+		})));
+		const result = await call(api + "record_opening_balance", { details: { ...form, attachments } });
 		workspace.value = result.workspace;
 		message.value = `Opening balance posted as ${result.journal_entry}.`;
 		form.account = "";
@@ -260,6 +309,7 @@ async function record() {
 		form.party_type = "";
 		form.party = "";
 		form.source_reference = "";
+		proofFiles.value = [];
 		confirmed.value = false;
 	} catch (e) {
 		error.value = e.message || String(e);
@@ -305,6 +355,18 @@ onMounted(load);
 .side-option span { display: flex; flex-direction: column; gap: .2rem; min-width: 0; }
 .side-option strong { color: var(--ink); font-size: .9rem; }
 .side-option small { color: var(--muted); font-size: .76rem; line-height: 1.4; }
+.proof-section { margin-top: 1.5rem; padding-top: 1.4rem; border-top: 1px solid var(--line); }
+.proof-section .field-help { margin: .4rem 0 .8rem; }
+.proof-input { display: block; width: 100%; padding: .8rem; border: 1px dashed var(--line); border-radius: .8rem; color: var(--ink); background: var(--soft); font-size: .85rem; }
+.proof-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.proof-list { display: grid; gap: .5rem; margin: .8rem 0 0; padding: 0; list-style: none; }
+.proof-list li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .5rem 1rem; padding: .6rem .8rem; border: 1px solid var(--line); border-radius: .65rem; overflow-wrap: anywhere; font-size: .83rem; }
+.proof-list small { color: var(--muted); }
+.proof-remove { color: var(--accent); font-weight: 600; }
+.proof-remove:disabled { opacity: .5; }
+.history-proof { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem .9rem; margin-top: .8rem; font-size: .8rem; }
+.history-proof span { color: var(--muted); }
+.history-proof a { color: var(--accent); text-decoration: underline; overflow-wrap: anywhere; }
 .posting-preview { overflow: hidden; margin-top: 1.5rem; border: 1px solid var(--line); border-radius: .875rem; background: var(--soft); }
 .preview-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .25rem 1rem; padding: .85rem 1rem; border-bottom: 1px solid var(--line); }
 .preview-heading strong { font-size: .875rem; }

@@ -1,8 +1,12 @@
 """Accounts-only opening balance entries for a staged migration."""
 
+import base64
+from io import BytesIO
+
 import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import nowdate
+from pypdf import PdfWriter
 
 from volunteering.volunteering.accounting_test_utils import get_or_create_user
 from volunteering.volunteering.chart_of_accounts_portal import SEVAMRITA_COMPANY
@@ -68,6 +72,54 @@ class IntegrationTestOpeningBalancesPortal(IntegrationTestCase):
 		for amount in ("-1", "0", "1.234", "NaN", "Infinity", "wrong"):
 			with self.subTest(amount=amount), self.assertRaises(frappe.ValidationError):
 				_amount(amount)
+
+	def test_optional_proof_documents_are_private_and_visible_in_history(self):
+		frappe.set_user("Administrator")
+		account = self._account()
+		frappe.set_user(self.manager)
+		pdf_buffer = BytesIO()
+		writer = PdfWriter()
+		writer.add_blank_page(width=72, height=72)
+		writer.write(pdf_buffer)
+		pdf = base64.b64encode(pdf_buffer.getvalue()).decode()
+		csv = base64.b64encode(b"date,balance\n2026-04-01,125.25\n").decode()
+		result = record_opening_balance({
+			"account": account,
+			"opening_date": get_opening_balances()["default_opening_date"],
+			"side": "Debit",
+			"amount": "125.25",
+			"source_reference": "Test opening statement",
+			"attachments": [
+				{"file_name": "statement.pdf", "content": pdf},
+				{"file_name": "statement.csv", "content": csv},
+			],
+		})
+		files = frappe.get_all("File", filters={
+			"attached_to_doctype": "Journal Entry",
+			"attached_to_name": result["journal_entry"],
+		}, fields=["name", "file_name", "file_url", "is_private"])
+		self.assertEqual(len(files), 2)
+		self.assertTrue(all(row.is_private and row.file_url.startswith("/private/files/") for row in files))
+		history = next(row for row in result["workspace"]["history"] if row.name == result["journal_entry"])
+		self.assertEqual(len(history.attachments), 2)
+		self.assertTrue(frappe.get_doc("File", files[0].name).is_downloadable())
+		frappe.set_user(self.operator)
+		self.assertFalse(frappe.get_doc("File", files[0].name).is_downloadable())
+
+	def test_invalid_proof_is_rejected_before_posting(self):
+		frappe.set_user("Administrator")
+		account = self._account()
+		frappe.set_user(self.manager)
+		with self.assertRaisesRegex(frappe.ValidationError, "does not match its file type"):
+			record_opening_balance({
+				"account": account,
+				"opening_date": get_opening_balances()["default_opening_date"],
+				"side": "Debit",
+				"amount": "125.25",
+				"source_reference": "Invalid test document",
+				"attachments": [{"file_name": "statement.pdf", "content": base64.b64encode(b"not a pdf").decode()}],
+			})
+		self.assertFalse(frappe.db.exists("GL Entry", {"company": SEVAMRITA_COMPANY, "account": account, "is_cancelled": 0}))
 
 	def test_payable_opening_requires_a_named_party(self):
 		frappe.set_user("Administrator")

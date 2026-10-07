@@ -20,6 +20,12 @@ test("Accounts Manager can prepare an opening balance with a balanced preview", 
   await expect(preview).toBeVisible();
   await expect(preview.locator(".preview-row")).toHaveCount(2);
   await expect(preview).toContainText("Temporary Opening");
+  const proof = page.getByLabel("Proof documents (optional)");
+  await expect(proof).toBeVisible();
+  await proof.setInputFiles({ name: "opening-statement.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\n%%EOF\n") });
+  await expect(page.getByText("opening-statement.pdf")).toBeVisible();
+  await page.getByRole("button", { name: "Remove opening-statement.pdf" }).click();
+  await expect(page.getByText("opening-statement.pdf")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Post opening balance" })).toBeVisible();
 });
 

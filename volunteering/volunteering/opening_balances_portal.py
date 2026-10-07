@@ -7,7 +7,12 @@ unexplained difference is a donation or a fund balance.
 
 from __future__ import annotations
 
+import base64
+import binascii
 from decimal import Decimal, InvalidOperation
+from io import BytesIO
+from pathlib import PurePath
+from zipfile import BadZipFile, ZipFile
 
 import frappe
 from frappe import _
@@ -20,6 +25,9 @@ from volunteering.volunteering.chart_of_accounts_portal import (
 
 MARKER = "Sevamrita Home opening balance:"
 PARTY_TYPES = {"Receivable": {"Customer", "Employee"}, "Payable": {"Supplier", "Employee"}}
+MAX_PROOF_FILES = 3
+MAX_PROOF_BYTES = 5 * 1024 * 1024
+PROOF_EXTENSIONS = {"pdf", "png", "jpg", "jpeg", "docx", "xlsx", "csv"}
 
 
 def _require_manager():
@@ -127,6 +135,54 @@ def _existing_opening(account, party_type, party):
 	return frappe.db.exists("GL Entry", filters)
 
 
+def _proof_documents(raw):
+	if raw is None:
+		return []
+	if not isinstance(raw, list) or len(raw) > MAX_PROOF_FILES:
+		frappe.throw(_("Attach no more than three proof documents."))
+	documents = []
+	for item in raw:
+		if not isinstance(item, dict) or set(item) != {"file_name", "content"}:
+			frappe.throw(_("Invalid opening-balance proof document."))
+		name = PurePath(cstr(item["file_name"]).replace("\\", "/")).name
+		extension = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+		encoded = item["content"]
+		if not name or len(name) > 140 or extension not in PROOF_EXTENSIONS or not isinstance(encoded, str):
+			frappe.throw(_("Attach a PDF, PNG, JPEG, DOCX, XLSX or CSV document."))
+		if len(encoded) > ((MAX_PROOF_BYTES + 2) // 3) * 4:
+			frappe.throw(_("Each proof document must be 5 MB or smaller."))
+		try:
+			content = base64.b64decode(encoded, validate=True)
+		except (ValueError, binascii.Error):
+			frappe.throw(_("An opening-balance proof document could not be read."))
+		if not content or len(content) > MAX_PROOF_BYTES:
+			frappe.throw(_("Each proof document must be 5 MB or smaller."))
+		valid = (
+			(extension == "pdf" and content.startswith(b"%PDF-"))
+			or (extension == "png" and content.startswith(b"\x89PNG\r\n\x1a\n"))
+			or (extension in {"jpg", "jpeg"} and content.startswith(b"\xff\xd8\xff"))
+		)
+		if extension in {"docx", "xlsx"}:
+			try:
+				with ZipFile(BytesIO(content)) as archive:
+					names = set(archive.namelist())
+					valid = "[Content_Types].xml" in names and (
+						"word/document.xml" in names if extension == "docx" else "xl/workbook.xml" in names
+					)
+			except BadZipFile:
+				valid = False
+		if extension == "csv":
+			try:
+				content.decode("utf-8-sig")
+				valid = b"\x00" not in content
+			except UnicodeDecodeError:
+				valid = False
+		if not valid:
+			frappe.throw(_("The proof document does not match its file type."))
+		documents.append((name, content))
+	return documents
+
+
 def _workspace():
 	currency = _company_currency()
 	temporary = _temporary_account()
@@ -153,6 +209,12 @@ def _workspace():
 			fields=["account", "party_type", "party", "debit_in_account_currency", "credit_in_account_currency"],
 			order_by="idx asc")
 		record["rows"] = [row for row in rows if row.account != temporary]
+		record["attachments"] = frappe.get_all(
+			"File",
+			filters={"attached_to_doctype": "Journal Entry", "attached_to_name": record.name, "is_private": 1},
+			fields=["file_name", "file_url"],
+			order_by="creation asc",
+		)
 	temporary_balance = 0
 	if temporary:
 		temporary_balance = frappe.db.sql(
@@ -190,8 +252,9 @@ def record_opening_balance(details):
 	"""Post one reviewed starting balance, paired with Temporary Opening."""
 	_require_manager()
 	data = frappe.parse_json(details)
-	if not isinstance(data, dict) or set(data) - {"account", "opening_date", "side", "amount", "party_type", "party", "source_reference"}:
+	if not isinstance(data, dict) or set(data) - {"account", "opening_date", "side", "amount", "party_type", "party", "source_reference", "attachments"}:
 		frappe.throw(_("Invalid opening balance details."))
+	proof_documents = _proof_documents(data.get("attachments"))
 	currency = _company_currency()
 	date = _opening_date(data.get("opening_date"))
 	amount = _amount(data.get("amount"))
@@ -224,4 +287,9 @@ def record_opening_balance(details):
 		"credit_in_account_currency" if side == "Debit" else "debit_in_account_currency": float(amount)})
 	je.insert(ignore_permissions=True)
 	je.submit()
+	if proof_documents:
+		from frappe.utils.file_manager import save_file
+
+		for filename, content in proof_documents:
+			save_file(filename, content, "Journal Entry", je.name, is_private=1)
 	return {"journal_entry": je.name, "workspace": _workspace()}
