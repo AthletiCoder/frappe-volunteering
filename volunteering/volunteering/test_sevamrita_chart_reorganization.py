@@ -1,8 +1,11 @@
 """The Sevamrita chart transition keeps existing references and is repeatable."""
 
+from unittest.mock import patch
+
 import frappe
 from frappe.tests import IntegrationTestCase, UnitTestCase
 
+from volunteering.patches import reorganize_sevamrita_production_chart as production_patch
 from volunteering.volunteering.donation_accounting_setup import DONATION_INCOME_NAME
 from volunteering.volunteering.sevamrita_chart_reorganization import (
 	ALIASES,
@@ -14,6 +17,27 @@ from volunteering.volunteering.sevamrita_chart_reorganization import (
 
 
 class UnitTestSevamritaChartReorganization(UnitTestCase):
+	def test_production_patch_skips_other_sites(self):
+		with (
+			patch.object(production_patch.frappe.local, "site", "sevamrita.local"),
+			patch.object(production_patch, "apply_reviewed_chart") as apply_chart,
+		):
+			production_patch.execute()
+			apply_chart.assert_not_called()
+
+	def test_production_patch_refuses_posted_ledger_entries(self):
+		with (
+			patch.object(
+				production_patch,
+				"preview_sevamrita_chart",
+				return_value={"conflicts": [], "posted_gl_entries": 1},
+			),
+			patch.object(production_patch, "apply_sevamrita_chart") as apply_chart,
+		):
+			with self.assertRaises(frappe.ValidationError):
+				production_patch.apply_reviewed_chart()
+			apply_chart.assert_not_called()
+
 	def test_expenses_use_nature_not_direct_indirect(self):
 		labels = {label for kind, label, _parent, _group, _type in NODES if kind == "Expense"}
 		self.assertIn("Programme Expenses", labels)
@@ -56,6 +80,7 @@ class IntegrationTestSevamritaChartReorganization(IntegrationTestCase):
 
 		result = apply_sevamrita_chart(confirmed=True, allow_posted_entries=True)
 		self.assertEqual(result["preview"]["conflicts"], [])
+		production_patch.verify_bank_tree()
 		self.assertEqual(
 			frappe.db.get_value("Company", company, "default_expense_claim_payable_account"),
 			frappe.db.get_value("Account", {"company": company, "account_name": "Employee Reimbursements Payable"}, "name"),

@@ -84,6 +84,12 @@ Links; it creates missing accounts but never deletes or merges an account. If
 an old and a PDF account already coexist, the old record moves under an
 explicit Legacy group; its transactions are not silently combined with the
 preferred ledger. The requested bank grouping is the only Application of
-Funds change. It is not an automatic deploy hook.
+Funds change. Production uses a one-time, site-scoped patch in
+`volunteering/patches.txt`. After deploying that commit, run **In-Place Migrate
+Site** in Frappe Cloud; deploying Python code alone does not apply the database
+reorganisation. The patch stops before changing accounts if the live chart has
+conflicts or any posted GL entries. Frappe records successful patches so later
+migrations do not repeat the change. On other sites, the explicit preview/apply
+commands above remain available for a reviewed rehearsal.
 Existing submitted claims may retain their original payable account; the new
 Company default applies to claims created after the change.
