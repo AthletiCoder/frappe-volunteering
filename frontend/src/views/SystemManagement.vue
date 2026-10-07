@@ -5,11 +5,11 @@
 			subtitle="Create login accounts and control system access through roles."
 			eyebrow="Access"
 		>
-			<template #actions
-				><button v-if="!editing" type="button" class="btn-primary" @click="beginNew">
-					Add user</button
-				><RouterLink to="/home" class="btn-secondary">Back to Home</RouterLink></template
-			>
+			<template #actions>
+				<RouterLink to="/fiscal-years" class="btn-secondary">Fiscal years</RouterLink>
+				<button v-if="!editing" type="button" class="btn-primary" @click="beginNew">Add user</button>
+				<RouterLink to="/home" class="btn-secondary">Back to Home</RouterLink>
+			</template>
 		</PageHeader>
 		<p v-if="loading" class="text-muted" role="status">Loading users…</p>
 		<p v-if="error" class="message-error" role="alert">{{ error }}</p>

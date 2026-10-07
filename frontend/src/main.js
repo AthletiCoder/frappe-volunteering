@@ -26,6 +26,7 @@ import ChartOfAccounts from "./views/ChartOfAccounts.vue";
 import ExpenseApprovalLimits from "./views/ExpenseApprovalLimits.vue";
 import Donations from "./views/Donations.vue";
 import OpeningBalances from "./views/OpeningBalances.vue";
+import FiscalYears from "./views/FiscalYears.vue";
 
 initTheme();
 
@@ -36,6 +37,7 @@ const router = createRouter({
 		{ path: "/home", component: Home, name: "Home" },
 		{ path: "/donations", component: Donations, name: "Donations" },
 		{ path: "/opening-balances", component: OpeningBalances, name: "OpeningBalances" },
+		{ path: "/fiscal-years", component: FiscalYears, name: "FiscalYears" },
 		{ path: "/profile", component: Profile, name: "Profile" },
 		{ path: "/todos", component: Todos, name: "Todos" },
 		{ path: "/budget-health", component: BudgetHealth, name: "BudgetHealth" },

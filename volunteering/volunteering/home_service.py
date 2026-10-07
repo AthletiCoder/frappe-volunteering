@@ -256,7 +256,13 @@ def _system_management_actions():
 			"label": _("Users and roles"),
 			"hint": _("Create login accounts, enable or disable access, and assign roles."),
 			"route": "/volunteering/system-management",
-		}
+		},
+		{
+			"id": "fiscal_years",
+			"label": _("Fiscal years"),
+			"hint": _("Keep prior and current accounting years available for posting."),
+			"route": "/volunteering/fiscal-years",
+		},
 	]
 
 

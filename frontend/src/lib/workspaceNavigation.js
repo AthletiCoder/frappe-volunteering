@@ -7,6 +7,7 @@ const ACTION_ICONS = {
 	log_work: "clock", wfh: "home", leave: "calendar-away", fix_attendance: "calendar-check",
 	my_team: "people", donations: "coins", chart_of_accounts: "chart", opening_balances: "bank",
 	project_account_mapping: "folder", manage_employees: "user-plus", manage_users: "user-shield",
+	fiscal_years: "calendar-check",
 };
 
 function actionLinks(actions, ids) {
@@ -86,6 +87,7 @@ export function homeFocus(payload) {
 	const accountsManager = accounts.some((action) => action.id === "chart_of_accounts");
 	const roleActions = [
 		...pick(actions.system_management || [], ["manage_users"]),
+		...pick(actions.system_management || [], ["fiscal_years"]),
 		...pick(actions.hr_management || [], ["manage_employees"]),
 		...pick(actions.projects || [], ["review_project_proposals"]),
 		...(accountsManager ? [{ id: "classify_claims", label: "Classify expense claims", hint: "Choose the ledger accounts before approval and settlement.", route: "/volunteering/expense-claim-workflow?view=classification" }] : []),

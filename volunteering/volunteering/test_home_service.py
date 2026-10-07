@@ -21,6 +21,7 @@ from volunteering.volunteering.home_service import (
 	_employee_draft_todos,
 	_member_project_cards,
 	_money_actions,
+	_system_management_actions,
 	_show_member_projects,
 	_time_actions,
 	get_home_payload,
@@ -137,6 +138,10 @@ class UnitTestHomeAccess(UnitTestCase):
 		self.assertTrue(flags["allowed"])
 		self.assertTrue(flags["show_system_management"])
 		self.assertFalse(flags["show_hr_management"])
+		self.assertIn(
+			("fiscal_years", "/volunteering/fiscal-years"),
+			{(action["id"], action["route"]) for action in _system_management_actions()},
+		)
 
 	def test_coordinator_sees_programs_and_budget(self):
 		flags = classify_home_access(["Employee", "NGO Coordinator"], has_employee=True, grade="Manager")
