@@ -1,0 +1,61 @@
+{
+ "actions": [],
+ "creation": "2026-10-19 11:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "api_section",
+  "api_key",
+  "confirmation_section",
+  "confirmation_template"
+ ],
+ "fields": [
+  {
+   "fieldname": "api_section",
+   "fieldtype": "Section Break",
+   "label": "Interakt API"
+  },
+  {
+   "description": "Shared secret for header X-Pledge-Api-Key. After save it is hidden — use Show API Key (System Manager only).",
+   "fieldname": "api_key",
+   "fieldtype": "Password",
+   "label": "API Key",
+   "reqd": 1
+  },
+  {
+   "fieldname": "confirmation_section",
+   "fieldtype": "Section Break",
+   "label": "Confirmation Message"
+  },
+  {
+   "default": "Thank you for taking the de-addiction pledge. Your pledge ID is {pledge_uuid}. People covered: {people_count}.",
+   "description": "Placeholders: {pledge_uuid}, {people_count}, {mobile_number}, {language}, {state}",
+   "fieldname": "confirmation_template",
+   "fieldtype": "Small Text",
+   "label": "Confirmation Template",
+   "reqd": 1
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-10-19 11:00:00",
+ "modified_by": "Administrator",
+ "module": "Volunteering",
+ "name": "De Addiction Pledge Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

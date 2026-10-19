@@ -66,6 +66,9 @@ doctype_list_js = {
 	"Participation": [
 		"volunteering/doctype/participation/participation_list.js",
 	],
+	"De Addiction Pledge": [
+		"volunteering/doctype/de_addiction_pledge/de_addiction_pledge_list.js",
+	],
 }
 doctype_js = {
 	"Employee": "volunteering/doctype/daily_work_log/employee_daily_work_log.js",

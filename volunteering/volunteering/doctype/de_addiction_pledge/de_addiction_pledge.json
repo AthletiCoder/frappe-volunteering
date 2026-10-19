@@ -1,0 +1,197 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-10-19 11:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+  "field_order": [
+  "naming_series",
+  "pledge_section",
+  "pledge_uuid",
+  "mobile_number",
+  "status",
+  "started_on",
+  "column_break_pledge",
+  "source",
+  "people_count",
+  "language",
+  "state",
+  "completed_on",
+  "details_section",
+  "group_photo",
+  "column_break_details",
+  "confirmation_sent",
+  "confirmation_sent_on",
+  "meta_section",
+  "raw_payload",
+  "notes"
+ ],
+ "fields": [
+  {
+   "default": "PLDG-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Naming Series",
+   "options": "PLDG-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "pledge_section",
+   "fieldtype": "Section Break",
+   "label": "Pledge"
+  },
+  {
+   "fieldname": "pledge_uuid",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Pledge UUID",
+   "read_only": 1,
+   "search_index": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "mobile_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Mobile Number",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Draft\nCompleted",
+   "reqd": 1
+  },
+  {
+   "fieldname": "started_on",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Started On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_pledge",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Interakt",
+   "fieldname": "source",
+   "fieldtype": "Data",
+   "label": "Source"
+  },
+  {
+   "fieldname": "people_count",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "People Count",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "language",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Language"
+  },
+  {
+   "fieldname": "state",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "State"
+  },
+  {
+   "fieldname": "completed_on",
+   "fieldtype": "Datetime",
+   "label": "Completed On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "details_section",
+   "fieldtype": "Section Break",
+   "label": "Completion"
+  },
+  {
+   "fieldname": "group_photo",
+   "fieldtype": "Attach Image",
+   "label": "Group Photo"
+  },
+  {
+   "fieldname": "column_break_details",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "confirmation_sent",
+   "fieldtype": "Check",
+   "label": "Confirmation Sent",
+   "read_only": 1
+  },
+  {
+   "fieldname": "confirmation_sent_on",
+   "fieldtype": "Datetime",
+   "label": "Confirmation Sent On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "meta_section",
+   "fieldtype": "Section Break",
+   "label": "Meta"
+  },
+  {
+   "fieldname": "raw_payload",
+   "fieldtype": "Long Text",
+   "label": "Raw Payload",
+   "read_only": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "links": [],
+ "modified": "2026-10-19 11:00:00",
+ "modified_by": "Administrator",
+ "module": "Volunteering",
+ "name": "De Addiction Pledge",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "NGO Admin",
+   "write": 1
+  }
+ ],
+ "search_fields": "pledge_uuid,mobile_number,status,state,language",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "pledge_uuid",
+ "track_changes": 1
+}
