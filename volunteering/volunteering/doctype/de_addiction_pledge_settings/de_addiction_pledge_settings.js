@@ -31,7 +31,7 @@ function show_api_key(frm) {
 				message: `
 					<p>${__("Use this value in the X-Pledge-Api-Key header:")}</p>
 					<p><code style="user-select:all;word-break:break-all;">${frappe.utils.escape_html(key)}</code></p>
-					<p class="text-muted">${__("Keep this secret. Anyone with this key can create and complete pledges.")}</p>
+					<p class="text-muted">${__("Keep this secret. Anyone with this key can confirm pledges.")}</p>
 				`,
 			});
 			if (navigator.clipboard && navigator.clipboard.writeText) {

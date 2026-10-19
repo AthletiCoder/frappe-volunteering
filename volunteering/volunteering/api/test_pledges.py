@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Vadiraj Tirtha Das and Contributors
 # See license.txt
 
-"""Unit + integration tests for De Addiction Pledge Interakt APIs."""
+"""Unit + integration tests for De Addiction Pledge Interakt API."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ from volunteering.volunteering.doctype.de_addiction_pledge_settings.de_addiction
 from volunteering.volunteering.test_utils import unique_mobile
 
 TEST_API_KEY = "test-pledge-api-key"
+TEST_PHOTO_URL = "https://cdn.example.com/pledges/group.jpg"
 
 
 class TestPledgeHelpersUnit(UnitTestCase):
@@ -62,11 +63,11 @@ class TestPledgeHelpersUnit(UnitTestCase):
 	def test_require_positive_int(self):
 		self.assertEqual(pledges_api._require_positive_int({"n": 3}, "n"), 3)
 		self.assertEqual(pledges_api._require_positive_int({"n": "4"}, "n"), 4)
-		with self.assertRaises(frappe.ValidationError):
+		with self.assertRaises(pledges_api.PledgeApiError):
 			pledges_api._require_positive_int({}, "n")
-		with self.assertRaises(frappe.ValidationError):
+		with self.assertRaises(pledges_api.PledgeApiError):
 			pledges_api._require_positive_int({"n": 0}, "n")
-		with self.assertRaises(frappe.ValidationError):
+		with self.assertRaises(pledges_api.PledgeApiError):
 			pledges_api._require_positive_int({"n": "x"}, "n")
 
 
@@ -87,54 +88,83 @@ class IntegrationTestPledgeApis(IntegrationTestCase):
 			side_effect=lambda h: key if h == pledges_api.API_KEY_HEADER else None,
 		)
 
-	def test_start_pledge_creates_draft(self):
-		mobile = unique_mobile("91")
-		with self._with_api_key():
-			result = pledges_api.start_pledge(mobile_number=mobile)
+	def _confirm(self, **overrides):
+		payload = {
+			"mobile_number": unique_mobile("91"),
+			"people_count": 5,
+			"language": "Hindi",
+			"state": "Rajasthan",
+			"photo_url": TEST_PHOTO_URL,
+		}
+		payload.update(overrides)
+		return pledges_api.confirm_pledge(**payload)
 
+	def test_confirm_pledge_happy_path(self):
+		mobile = unique_mobile("94")
+		with self._with_api_key():
+			result = self._confirm(
+				mobile_number=mobile,
+				people_count=5,
+				language="Hindi",
+				state="Rajasthan",
+			)
+
+		self.assertTrue(result["ok"])
 		self.assertTrue(result["pledge_uuid"])
 		self.assertEqual(len(result["pledge_uuid"]), PLEDGE_UUID_LENGTH)
 		self.assertNotEqual(result["pledge_uuid"][0], "0")
 		self.assertTrue(result["name"].startswith("PLDG-"))
-		self.assertEqual(result["status"], "Draft")
+		self.assertIn(result["pledge_uuid"], result["confirmation_message"])
+		self.assertIn("5", result["confirmation_message"])
+		self.assertNotIn("status", result)
 
 		doc = frappe.get_doc("De Addiction Pledge", result["name"])
 		self.assertEqual(doc.pledge_uuid, result["pledge_uuid"])
-		self.assertEqual(doc.status, "Draft")
+		self.assertEqual(doc.people_count, 5)
+		self.assertEqual(doc.language, "Hindi")
+		self.assertEqual(doc.state, "Rajasthan")
+		self.assertEqual(doc.photo_url, TEST_PHOTO_URL)
 		self.assertEqual(doc.source, "Interakt")
 		self.assertTrue(doc.mobile_number)
-		self.assertTrue(doc.started_on)
-		self.assertFalse(doc.completed_on)
+		self.assertTrue(doc.creation)
+		self.assertTrue(doc.raw_payload)
 
-	def test_start_pledge_rejects_bad_api_key(self):
+	def test_confirm_pledge_rejects_bad_api_key(self):
 		with self._with_api_key("wrong-key"):
-			with self.assertRaises(frappe.AuthenticationError):
-				pledges_api.start_pledge(mobile_number=unique_mobile("92"))
+			result = self._confirm(mobile_number=unique_mobile("92"))
+		self.assertEqual(result, {"ok": False, "message": "Invalid API key"})
 
-	def test_start_pledge_rejects_missing_mobile(self):
+	def test_confirm_pledge_rejects_missing_mobile(self):
 		with self._with_api_key():
-			with self.assertRaises(frappe.ValidationError) as ctx:
-				pledges_api.start_pledge()
-			self.assertIn("mobile_number is required", str(ctx.exception))
+			result = pledges_api.confirm_pledge(
+				people_count=1,
+				language="Hindi",
+				state="Delhi",
+				photo_url=TEST_PHOTO_URL,
+			)
+		self.assertFalse(result["ok"])
+		self.assertIn("mobile_number is required", result["message"])
 
-	def test_start_pledge_rejects_empty_mobile(self):
+	def test_confirm_pledge_rejects_empty_mobile(self):
 		with self._with_api_key():
-			with self.assertRaises(frappe.ValidationError) as ctx:
-				pledges_api.start_pledge(mobile_number="")
-			self.assertIn("mobile_number is required", str(ctx.exception))
+			result = self._confirm(mobile_number="")
+		self.assertFalse(result["ok"])
+		self.assertIn("mobile_number is required", result["message"])
 
-	def test_start_pledge_rejects_invalid_mobile(self):
+	def test_confirm_pledge_rejects_invalid_mobile(self):
 		with self._with_api_key():
-			with self.assertRaises(frappe.ValidationError) as ctx:
-				pledges_api.start_pledge(mobile_number="123")
-			self.assertIn("mobile_number is invalid", str(ctx.exception))
+			result = self._confirm(mobile_number="123")
+		self.assertFalse(result["ok"])
+		self.assertIn("mobile_number is invalid", result["message"])
 
 	def test_duplicate_phone_creates_two_pledges(self):
 		mobile = unique_mobile("93")
 		with self._with_api_key():
-			a = pledges_api.start_pledge(mobile_number=mobile)
-			b = pledges_api.start_pledge(mobile_number=mobile)
+			a = self._confirm(mobile_number=mobile)
+			b = self._confirm(mobile_number=mobile)
 
+		self.assertTrue(a["ok"])
+		self.assertTrue(b["ok"])
 		self.assertNotEqual(a["pledge_uuid"], b["pledge_uuid"])
 		self.assertNotEqual(a["name"], b["name"])
 		formatted = frappe.db.get_value("De Addiction Pledge", a["name"], "mobile_number")
@@ -143,113 +173,33 @@ class IntegrationTestPledgeApis(IntegrationTestCase):
 			2,
 		)
 
-	def test_complete_pledge_happy_path(self):
-		mobile = unique_mobile("94")
-		with self._with_api_key():
-			started = pledges_api.start_pledge(mobile_number=mobile)
-			result = pledges_api.complete_pledge(
-				pledge_uuid=started["pledge_uuid"],
-				people_count=5,
-				language="Hindi",
-				state="Rajasthan",
-			)
-
-		self.assertEqual(result["pledge_uuid"], started["pledge_uuid"])
-		self.assertEqual(result["status"], "Completed")
-		self.assertIn(started["pledge_uuid"], result["confirmation_message"])
-		self.assertIn("5", result["confirmation_message"])
-
-		doc = frappe.get_doc("De Addiction Pledge", result["name"])
-		self.assertEqual(doc.status, "Completed")
-		self.assertEqual(doc.people_count, 5)
-		self.assertEqual(doc.language, "Hindi")
-		self.assertEqual(doc.state, "Rajasthan")
-		self.assertEqual(doc.confirmation_sent, 1)
-		self.assertTrue(doc.started_on)
-		self.assertTrue(doc.completed_on)
-		self.assertTrue(doc.raw_payload)
-
-	def test_complete_pledge_missing_uuid(self):
-		with self._with_api_key():
-			with self.assertRaises(frappe.ValidationError) as ctx:
-				pledges_api.complete_pledge(
-					people_count=1, language="Hindi", state="Delhi"
-				)
-			self.assertIn("pledge_uuid is required", str(ctx.exception))
-
-	def test_complete_pledge_unknown_uuid(self):
-		with self._with_api_key():
-			with self.assertRaises(frappe.DoesNotExistError) as ctx:
-				pledges_api.complete_pledge(
-					pledge_uuid="does-not-exist",
-					people_count=1,
-					language="Hindi",
-					state="Delhi",
-				)
-			self.assertIn("No pledge found", str(ctx.exception))
-
-	def test_complete_pledge_requires_people_count_language_state(self):
+	def test_confirm_pledge_requires_people_count_language_state_photo(self):
 		mobile = unique_mobile("96")
 		with self._with_api_key():
-			started = pledges_api.start_pledge(mobile_number=mobile)
-			uuid = started["pledge_uuid"]
-
-			with self.assertRaises(frappe.ValidationError) as ctx:
-				pledges_api.complete_pledge(
-					pledge_uuid=uuid, language="Hindi", state="Delhi"
-				)
-			self.assertIn("people_count is required", str(ctx.exception))
-
-			with self.assertRaises(frappe.ValidationError) as ctx:
-				pledges_api.complete_pledge(
-					pledge_uuid=uuid, people_count=0, language="Hindi", state="Delhi"
-				)
-			self.assertIn("whole number of 1 or more", str(ctx.exception))
-
-			with self.assertRaises(frappe.ValidationError) as ctx:
-				pledges_api.complete_pledge(
-					pledge_uuid=uuid, people_count="abc", language="Hindi", state="Delhi"
-				)
-			self.assertIn("whole number of 1 or more", str(ctx.exception))
-
-			with self.assertRaises(frappe.ValidationError) as ctx:
-				pledges_api.complete_pledge(
-					pledge_uuid=uuid, people_count=2, language="", state="Delhi"
-				)
-			self.assertIn("language is required", str(ctx.exception))
-
-			with self.assertRaises(frappe.ValidationError) as ctx:
-				pledges_api.complete_pledge(
-					pledge_uuid=uuid, people_count=2, language="Hindi", state="  "
-				)
-			self.assertIn("state is required", str(ctx.exception))
-
-	def test_complete_pledge_retry_last_write_wins(self):
-		mobile = unique_mobile("95")
-		with self._with_api_key():
-			started = pledges_api.start_pledge(mobile_number=mobile)
-			first = pledges_api.complete_pledge(
-				pledge_uuid=started["pledge_uuid"],
-				people_count=2,
-				language="English",
+			result = pledges_api.confirm_pledge(
+				mobile_number=mobile,
+				language="Hindi",
 				state="Delhi",
+				photo_url=TEST_PHOTO_URL,
 			)
-			second = pledges_api.complete_pledge(
-				pledge_uuid=started["pledge_uuid"],
-				people_count=7,
-				language="Marathi",
-				state="Maharashtra",
-			)
+			self.assertEqual(result, {"ok": False, "message": "people_count is required"})
 
-		self.assertEqual(first["status"], "Completed")
-		self.assertEqual(second["status"], "Completed")
-		self.assertIn("7", second["confirmation_message"])
+			result = self._confirm(mobile_number=mobile, people_count=0)
+			self.assertFalse(result["ok"])
+			self.assertIn("whole number of 1 or more", result["message"])
 
-		doc = frappe.get_doc("De Addiction Pledge", started["name"])
-		self.assertEqual(doc.people_count, 7)
-		self.assertEqual(doc.language, "Marathi")
-		self.assertEqual(doc.state, "Maharashtra")
-		self.assertEqual(doc.confirmation_sent, 1)
+			result = self._confirm(mobile_number=mobile, people_count="abc")
+			self.assertFalse(result["ok"])
+			self.assertIn("whole number of 1 or more", result["message"])
+
+			result = self._confirm(mobile_number=mobile, language="")
+			self.assertEqual(result, {"ok": False, "message": "language is required"})
+
+			result = self._confirm(mobile_number=mobile, state="  ")
+			self.assertEqual(result, {"ok": False, "message": "state is required"})
+
+			result = self._confirm(mobile_number=mobile, photo_url="")
+			self.assertEqual(result, {"ok": False, "message": "photo_url is required"})
 
 
 def _ensure_test_pledge_settings():

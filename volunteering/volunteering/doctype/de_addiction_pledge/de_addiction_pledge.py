@@ -6,7 +6,6 @@ import string
 
 import frappe
 from frappe.model.document import Document
-from frappe.utils import now_datetime
 
 from volunteering.volunteering.doctype.volunteer.volunteer import format_mobile_number
 
@@ -35,10 +34,7 @@ class DeAddictionPledge(Document):
 	def before_validate(self):
 		if not self.pledge_uuid:
 			self.pledge_uuid = generate_pledge_uuid()
-		self.status = self.status or "Draft"
 		self.source = self.source or "Interakt"
-		if not self.started_on:
-			self.started_on = now_datetime()
 
 	def validate(self):
 		if self.mobile_number:
@@ -46,5 +42,5 @@ class DeAddictionPledge(Document):
 			if formatted:
 				self.mobile_number = formatted
 
-		if self.people_count is not None and self.people_count < 0:
-			frappe.throw("People count cannot be negative")
+		if self.people_count is not None and self.people_count < 1:
+			frappe.throw("People count must be a whole number of 1 or more")
