@@ -21,6 +21,30 @@ from volunteering.volunteering.doctype.volunteer.volunteer import format_mobile_
 
 API_KEY_HEADER = "X-Pledge-Api-Key"
 
+# Fields Interakt must send; extra DocType fields in the body are stored automatically.
+REQUIRED_TEXT_FIELDS = ("language", "state", "city", "photo_url")
+CORE_BODY_FIELDS = frozenset(
+	{"mobile_number", "phone", "people_count", "language", "state", "city", "photo_url", "source"}
+)
+PROTECTED_PLEDGE_FIELDS = frozenset(
+	{
+		"name",
+		"naming_series",
+		"pledge_uuid",
+		"raw_payload",
+		"doctype",
+		"owner",
+		"creation",
+		"modified",
+		"modified_by",
+		"docstatus",
+		"idx",
+	}
+)
+LAYOUT_FIELDTYPES = frozenset(
+	{"Section Break", "Column Break", "Tab Break", "HTML", "Button", "Heading", "Fold"}
+)
+
 
 class PledgeApiError(Exception):
 	"""Validation / auth failure returned as a clean JSON body to Interakt."""
@@ -119,6 +143,18 @@ def _parse_mobile_number(data: dict) -> str:
 	return formatted
 
 
+def _apply_extra_doctype_fields(doc, data: dict) -> None:
+	"""Copy unknown request keys onto matching writable DocType fields."""
+	meta = frappe.get_meta(doc.doctype)
+	for key, value in data.items():
+		if key in CORE_BODY_FIELDS or key in PROTECTED_PLEDGE_FIELDS or str(key).startswith("_"):
+			continue
+		df = meta.get_field(key)
+		if not df or df.fieldtype in LAYOUT_FIELDTYPES or cint(df.read_only):
+			continue
+		doc.set(key, value)
+
+
 def _build_confirmation_message(doc, settings) -> str:
 	template = (settings.confirmation_template or "").strip() or DEFAULT_CONFIRMATION_TEMPLATE
 	try:
@@ -128,6 +164,7 @@ def _build_confirmation_message(doc, settings) -> str:
 			mobile_number=doc.mobile_number or "",
 			language=doc.language or "",
 			state=doc.state or "",
+			city=doc.city or "",
 		)
 	except (KeyError, ValueError, IndexError):
 		return DEFAULT_CONFIRMATION_TEMPLATE.format(
@@ -149,9 +186,7 @@ def confirm_pledge(**kwargs):
 
 		formatted = _parse_mobile_number(kwargs)
 		people_count = _require_positive_int(kwargs, "people_count")
-		language = _require_non_empty_str(kwargs, "language")
-		state = _require_non_empty_str(kwargs, "state")
-		photo_url = _require_non_empty_str(kwargs, "photo_url")
+		text_fields = {key: _require_non_empty_str(kwargs, key) for key in REQUIRED_TEXT_FIELDS}
 
 		payload = {
 			k: v
@@ -164,14 +199,16 @@ def confirm_pledge(**kwargs):
 				"doctype": "De Addiction Pledge",
 				"mobile_number": formatted,
 				"people_count": people_count,
-				"language": language,
-				"state": state,
-				"photo_url": photo_url,
+				"language": text_fields["language"],
+				"state": text_fields["state"],
+				"city": text_fields["city"],
+				"photo_url": text_fields["photo_url"],
 				"source": (str(kwargs.get("source")).strip() if kwargs.get("source") else None)
 				or "Interakt",
 				"raw_payload": json.dumps(payload, default=str, ensure_ascii=False),
 			}
 		)
+		_apply_extra_doctype_fields(doc, kwargs)
 		doc.insert(ignore_permissions=True)
 		frappe.db.commit()
 
