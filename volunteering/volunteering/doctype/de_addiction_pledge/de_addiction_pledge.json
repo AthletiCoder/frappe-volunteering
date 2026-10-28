@@ -15,6 +15,7 @@
   "people_count",
   "language",
   "state",
+  "city",
   "details_section",
   "photo_url",
   "meta_section",
@@ -90,6 +91,14 @@
    "reqd": 1
   },
   {
+   "fieldname": "city",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "City",
+   "reqd": 1
+  },
+  {
    "fieldname": "details_section",
    "fieldtype": "Section Break",
    "label": "Photo"
@@ -119,7 +128,7 @@
   }
  ],
  "links": [],
- "modified": "2026-10-19 17:40:00",
+ "modified": "2026-10-27 20:27:00",
  "modified_by": "Administrator",
  "module": "Volunteering",
  "name": "De Addiction Pledge",
@@ -149,7 +158,7 @@
    "write": 1
   }
  ],
- "search_fields": "pledge_uuid,mobile_number,state,language",
+ "search_fields": "pledge_uuid,mobile_number,state,city,language",
  "sort_field": "creation",
  "sort_order": "DESC",
  "states": [],
