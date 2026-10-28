@@ -27,6 +27,7 @@ import ExpenseApprovalLimits from "./views/ExpenseApprovalLimits.vue";
 import Donations from "./views/Donations.vue";
 import OpeningBalances from "./views/OpeningBalances.vue";
 import FiscalYears from "./views/FiscalYears.vue";
+import VendorPurchases from "./views/VendorPurchases.vue";
 
 initTheme();
 
@@ -35,6 +36,9 @@ const router = createRouter({
 	routes: [
 		{ path: "/", redirect: "/home" },
 		{ path: "/home", component: Home, name: "Home" },
+		{ path: "/vendor-purchases", component: VendorPurchases, name: "VendorPurchases", props: { workspaceView: "requests" }, beforeEnter: to => to.query.view === "payments" ? { path: "/purchase-accounts", query: to.query } : undefined },
+		{ path: "/purchase-approvals", component: VendorPurchases, name: "PurchaseApprovals", props: { workspaceView: "approvals" } },
+		{ path: "/purchase-accounts", component: VendorPurchases, name: "PurchaseAccounts", props: { workspaceView: "accounts" } },
 		{ path: "/donations", component: Donations, name: "Donations" },
 		{ path: "/opening-balances", component: OpeningBalances, name: "OpeningBalances" },
 		{ path: "/fiscal-years", component: FiscalYears, name: "FiscalYears" },

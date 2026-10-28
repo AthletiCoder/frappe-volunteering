@@ -187,7 +187,7 @@ class IntegrationTestPeopleManagement(IntegrationTestCase):
 			return_value="https://example.com/private-reset-link",
 		) as reset:
 			result = send_managed_user_password_reset(created["name"])
-			self.assertEqual(result, {"user": created["name"]})
+			self.assertEqual(result, {"user": created["name"], "modified": str(created["modified"])})
 			reset.assert_called_once_with(send_email=True)
 
 			for user in (self.employee, self.hr):
@@ -198,6 +198,34 @@ class IntegrationTestPeopleManagement(IntegrationTestCase):
 			with self.assertRaises(frappe.PermissionError):
 				send_managed_user_password_reset("Administrator")
 			reset.assert_called_once()
+
+	def test_reset_returns_updated_version_for_following_save(self):
+		frappe.set_user(self.system)
+		details = self._new_user()
+		created = save_managed_user(details)["user"]
+		with patch("frappe.core.doctype.user.user.User.password_reset_mail") as mail:
+			result = send_managed_user_password_reset(
+				created["name"], expected_modified=created["modified"]
+			)
+			mail.assert_called_once()
+		self.assertNotEqual(result["modified"], str(created["modified"]))
+		self.assertEqual(result["modified"], str(frappe.db.get_value("User", created["name"], "modified")))
+		self.assertEqual(set(result), {"user", "modified"})
+		saved = save_managed_user(
+			{**details, "first_name": "Pending edit", "enabled": False},
+			name=created["name"], expected_modified=result["modified"],
+		)["user"]
+		self.assertEqual(saved["first_name"], "Pending edit")
+		self.assertFalse(saved["enabled"])
+
+	def test_reset_rejects_stale_editor_without_advancing_its_version(self):
+		frappe.set_user(self.system)
+		created = save_managed_user(self._new_user())["user"]
+		frappe.db.set_value("User", created["name"], "first_name", "Another administrator")
+		with patch("frappe.core.doctype.user.user.User._reset_password") as reset:
+			with self.assertRaisesRegex(frappe.ValidationError, "changed after you opened"):
+				send_managed_user_password_reset(created["name"], expected_modified=created["modified"])
+			reset.assert_not_called()
 
 	def test_disabled_user_cannot_receive_reset_link(self):
 		frappe.set_user(self.system)

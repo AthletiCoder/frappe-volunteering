@@ -9,7 +9,7 @@ import frappe
 from frappe import _
 from frappe.utils import flt, format_datetime, formatdate
 
-from volunteering.volunteering.authority import get_employee_for_user, get_grade_for_user
+from volunteering.volunteering.authority import get_employee_for_user, get_grade_for_user, user_has_board_of_directors
 from volunteering.volunteering.desk_routes import desk_route
 from volunteering.volunteering.employee_advance_controls import (
 	SETTLED_STATUSES,
@@ -99,6 +99,7 @@ def get_home_payload():
 				"organisation": [],
 				"hr_management": [],
 				"system_management": [],
+			"purchasing": [],
 			},
 			"status": [],
 			"member_projects": [],
@@ -147,6 +148,7 @@ def get_home_payload():
 			"organisation": _organisation_actions(),
 			"hr_management": _hr_management_actions() if flags["show_hr_management"] else [],
 			"system_management": (_system_management_actions() if flags["show_system_management"] else []),
+			"purchasing": _purchasing_actions(user, employee),
 		},
 		"status": status,
 		"member_projects": _member_project_cards(user, employee) if flags["show_member_projects"] else [],
@@ -159,12 +161,8 @@ def get_home_payload():
 
 
 def _show_member_projects(user, employee, roles, can_review_projects):
-	return bool(
-		employee
-		and user != "Administrator"
-		and not can_review_projects
-		and not {"Accounts User", "Accounts Manager"}.intersection(roles)
-	)
+	"""Personal active projects come first for every linked employee, at every level."""
+	return bool(employee)
 
 
 def _member_project_cards(user, employee):
@@ -219,6 +217,7 @@ def _member_project_cards(user, employee):
 		)
 	)
 	cards = []
+	can_place_purchase_order = not user_has_board_of_directors(user)
 	for project in projects:
 		if project.operational_status != "Active" or budget_statuses.get(project.name) == "Closed":
 			continue
@@ -233,6 +232,7 @@ def _member_project_cards(user, employee):
 				"ends_on": project.expected_end_date,
 				"can_submit_expense": project.name in active_labels,
 				"can_request_advance": True,
+				"can_place_purchase_order": can_place_purchase_order,
 			}
 		)
 	return sorted(cards, key=lambda card: card["project_name"].casefold())
@@ -288,6 +288,21 @@ def _team_actions():
 	]
 
 
+def _purchasing_actions(user, employee):
+	roles = set(frappe.get_roles(user))
+	links = []
+	if employee or user == "Administrator":
+		links.append({"id": "my_purchase_requests", "label": _("My purchase requests"), "hint": _("Raise a purchase request and track only the orders you submitted."), "route": "/volunteering/vendor-purchases"})
+		can_review = user == "Administrator" or "Expense Approver" in roles or user_has_board_of_directors(user) or bool(
+			frappe.db.exists("Employee", {"reports_to": employee, "status": "Active"}) if employee else False
+		) or bool(frappe.db.exists("Purchase Order", {"pending_approver": user, "workflow_state": "Pending Approval", "home_purchase_request_key": ["is", "set"]}))
+		if can_review:
+			links.append({"id": "purchase_approvals", "label": _("Purchase approvals"), "hint": _("Review pending purchase requests assigned to you."), "route": "/volunteering/purchase-approvals"})
+	if user == "Administrator" or {"Accounts User", "Accounts Manager"}.intersection(roles):
+		links.append({"id": "approved_purchases", "label": _("Approved purchases — Accounts"), "hint": _("Process approved orders, supplier advances, deliveries, bills and payments."), "route": "/volunteering/purchase-accounts"})
+	return links
+
+
 def _accounts_actions(user):
 	roles = set(frappe.get_roles(user))
 	is_manager = user == "Administrator" or "Accounts Manager" in roles
@@ -306,6 +321,12 @@ def _accounts_actions(user):
 			"hint": _("After receiving the funds, settle the unused balance against the advance."),
 			"route": "/volunteering/advance-workflow?view=return",
 		},
+		{
+			"id": "chart_of_accounts",
+			"label": _("Chart of Accounts"),
+			"hint": _("View each account's dated ledger; Accounts Managers can also manage the chart."),
+			"route": "/volunteering/chart-of-accounts",
+		},
 	]
 	if not is_manager:
 		return links
@@ -322,12 +343,6 @@ def _accounts_actions(user):
 			"label": _("Expense Claim approval limits"),
 			"hint": _("Set the individual-claim authority for every employee grade."),
 			"route": "/volunteering/expense-approval-limits",
-		},
-		{
-			"id": "chart_of_accounts",
-			"label": _("Chart of Accounts"),
-			"hint": _("Create, organise, rename, disable or remove ledger accounts and groups."),
-			"route": "/volunteering/chart-of-accounts",
 		},
 		{
 			"id": "opening_balances",
@@ -798,6 +813,8 @@ def _pending_approver_inbox(doctype, kind, user):
 		filters["workflow_state"] = "Pending Approval"
 	if doctype in ("Expense Claim", "Purchase Order"):
 		filters.update(home_project_filter())
+		if doctype == "Purchase Order":
+			filters["home_purchase_request_key"] = ["is", "set"]
 	elif doctype == "Employee Advance":
 		filters.update(home_project_filter("intended_project"))
 	rows = frappe.get_all(
@@ -829,6 +846,8 @@ def _pending_approver_inbox(doctype, kind, user):
 					if doctype == "Expense Claim"
 					else f"/volunteering/advance-workflow?advance={row.name}"
 					if doctype == "Employee Advance"
+					else f"/volunteering/purchase-approvals?order={row.name}"
+					if doctype == "Purchase Order"
 					else desk_route(doctype, row.name)
 				),
 				"bucket": "review",
@@ -900,6 +919,15 @@ def _accounts_queues():
 				"route": "/volunteering/expense-claim-workflow?view=reimbursement",
 			}
 		)
+	vendor_payments = _safe_count("Purchase Invoice", {
+		"docstatus": 1, "outstanding_amount": [">", 0],
+		"home_purchase_request_key": ["is", "set"], **home_project_filter(),
+	})
+	if vendor_payments:
+		queues.append({
+			"id": "vendor_pay", "label": _("Supplier bills to pay"),
+			"count": vendor_payments, "route": "/volunteering/purchase-accounts?view=payments",
+		})
 	if residual:
 		queues.append(
 			{

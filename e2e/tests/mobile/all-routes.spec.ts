@@ -433,7 +433,7 @@ test("project list, proposal form, approved detail and manager queue", async ({
       page,
       projectProposer,
       "/volunteering/projects",
-      "Projects",
+      "Approved projects",
     );
     await auditMobileLayout(page, testInfo, "projects");
     const openProject = page.getByText("Open project →").first();
@@ -461,4 +461,18 @@ test("project list, proposal form, approved detail and manager queue", async ({
     );
     await auditMobileLayout(page, testInfo, "project-manager-queue");
   });
+});
+
+test("purchasing responsibilities and fiscal years fit mobile", async ({ page }, testInfo) => {
+  for (const [route, ready, actor, label] of [
+    ["/volunteering/vendor-purchases", "My purchase requests", PERSONAS.employee, "purchase-requests"],
+    ["/volunteering/purchase-approvals", "Purchase approvals", PERSONAS.manager, "purchase-approvals"],
+    ["/volunteering/purchase-accounts", "Approved purchases — Accounts", PERSONAS.accounts, "purchase-accounts"],
+    ["/volunteering/fiscal-years", "Fiscal years", PERSONAS.admin, "fiscal-years"],
+  ] as const) {
+    await test.step(label, async () => {
+      await openRoute(page, actor, route, ready);
+      await auditMobileLayout(page, testInfo, label);
+    });
+  }
 });

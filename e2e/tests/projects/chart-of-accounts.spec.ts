@@ -52,6 +52,15 @@ test("Accounts Manager opens Home Chart of Accounts and an account detail", asyn
   await expect(
     page.getByText("ERPNext protects root accounts from editing or deletion."),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Back to chart" }).click();
+  await page.locator('select:has(option[value="Ledgers"])').selectOption("Ledgers");
+  await page.getByRole("button", { name: /^View ledger for / }).first().click();
+  await expect(page.getByRole("heading", { name: "Transactions" })).toBeVisible();
+  await expect(page.getByText("Opening balance", { exact: true })).toBeVisible();
+  await expect(page.getByText("Closing balance", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit account" })).toBeVisible();
+  await page.getByRole("button", { name: "Back to chart" }).click();
+  await expect(page.locator('select:has(option[value="Ledgers"])')).toHaveValue("Ledgers");
 });
 
 test("ordinary employee cannot open Home Chart of Accounts", async ({
@@ -64,9 +73,27 @@ test("ordinary employee cannot open Home Chart of Accounts", async ({
   );
   await page.goto("/volunteering/chart-of-accounts");
   await expect(page.getByRole("alert")).toContainText(
-    /Only Accounts Managers and Administrator/,
+    /Only Accounts Users, Accounts Managers and Administrator/,
   );
   await expect(page.getByRole("button", { name: "Add account" })).toHaveCount(
     0,
   );
+});
+
+test("ledger view remains usable on a phone", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await loginViaAPI(page.request, PERSONAS.accounts.email, PERSONAS.accounts.password);
+  await page.goto("/volunteering/chart-of-accounts");
+  await page.locator('select:has(option[value="Ledgers"])').selectOption("Ledgers");
+  await page.getByRole("button", { name: /^View ledger for / }).first().click();
+  await expect(page.getByRole("heading", { name: "Transactions" })).toBeVisible();
+  await expect(page.locator(".ledger-summary")).toBeVisible();
+  if (await page.locator(".ledger-mobile-entry").count()) {
+    await expect(page.locator(".ledger-mobile-entry").first()).toBeVisible();
+    await expect(page.locator(".ledger-table-wrap")).toBeHidden();
+  }
+  const panelFits = await page.locator(".ledger-panel").evaluate(
+    (element) => element.scrollWidth <= element.clientWidth + 1,
+  );
+  expect(panelFits).toBe(true);
 });

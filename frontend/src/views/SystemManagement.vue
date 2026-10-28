@@ -33,7 +33,7 @@
 						v-if="form.name"
 						type="button"
 						class="btn-secondary"
-						:disabled="!form.enabled || resetting"
+						:disabled="!form.enabled || resetting || saving"
 						@click="resetPassword"
 					>
 						{{ resetting ? "Sending…" : "Reset password" }}
@@ -190,7 +190,7 @@
 					so historical approvals and transactions remain attributable.
 				</div>
 				<div class="flex justify-end">
-					<button type="submit" class="btn-primary" :disabled="saving">
+					<button type="submit" class="btn-primary" :disabled="saving || resetting">
 						{{ saving ? "Saving…" : "Save user and access" }}
 					</button>
 				</div>
@@ -358,6 +358,7 @@ async function edit(name) {
 	}
 }
 async function save() {
+	if (saving.value || resetting.value) return;
 	saving.value = true;
 	error.value = "";
 	success.value = "";
@@ -377,14 +378,24 @@ async function save() {
 	}
 }
 async function resetPassword() {
-	if (!form.name || !form.enabled || resetting.value) return;
+	if (!form.name || !form.enabled || resetting.value || saving.value) return;
 	if (!window.confirm(`Send a password reset link to ${form.name}?`)) return;
+	const name = form.name;
+	const modified = form.modified;
 	resetting.value = true;
 	error.value = "";
 	success.value = "";
 	try {
-		await call(`${API}send_managed_user_password_reset`, { name: form.name });
-		success.value = `A password reset link was sent to ${form.name}.`;
+		const result = await call(`${API}send_managed_user_password_reset`, {
+			name,
+			expected_modified: modified,
+		});
+		// Reset changes only the server-side password fields. Keep pending form
+		// edits; never replace them or advance a different/reopened editor.
+		if (form.name === name && form.modified === modified) {
+			form.modified = result.modified;
+			success.value = `A password reset link was sent to ${name}.`;
+		}
 	} catch (e) {
 		error.value = e.message || String(e);
 	} finally {

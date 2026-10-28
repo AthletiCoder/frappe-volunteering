@@ -8,6 +8,8 @@ const ACTION_ICONS = {
 	my_team: "people", donations: "coins", chart_of_accounts: "chart", opening_balances: "bank",
 	project_account_mapping: "folder", manage_employees: "user-plus", manage_users: "user-shield",
 	fiscal_years: "calendar-check",
+	vendor_purchases: "invoice",
+	my_purchase_requests: "invoice", purchase_approvals: "clipboard-check", approved_purchases: "wallet",
 };
 
 function actionLinks(actions, ids) {
@@ -42,6 +44,7 @@ export function buildSidebarItems(payload) {
 	const advances = actionLinks(money, ["advance"]);
 	if (nav.advances && !advances.length) advances.push({ href: "/volunteering/advances", label: "Advance requests", icon: "wallet" });
 	addGroup(work, "advances", "Advances", "wallet", advances);
+	addGroup(work, "purchasing", "Purchasing", "invoice", actionLinks(actions.purchasing || []));
 	addGroup(work, "time", "Time & leave", "clock", actionLinks(actions.time || []));
 	const team = actionLinks(actions.team || []);
 	if (nav.team && !team.length) team.push({ href: "/volunteering/team", label: "My team", icon: "people" });
@@ -52,7 +55,7 @@ export function buildSidebarItems(payload) {
 	const accounts = actionLinks(actions.accounts || []);
 	if (actions.accounts?.length) {
 		accounts.unshift({ href: "/volunteering/expense-claim-workflow?view=reimbursement", label: "Settle expense claims", icon: "money-out" });
-		if (actions.accounts.some((action) => action.id === "chart_of_accounts"))
+		if (actions.accounts.some((action) => action.id === "expense_approval_limits"))
 			accounts.unshift({ href: "/volunteering/expense-claim-workflow?view=classification", label: "Classify expense claims", icon: "receipt" });
 	}
 	if (nav.budget_health) accounts.push({ href: "/volunteering/budget-health", label: "Budget health", icon: "chart" });
@@ -84,7 +87,7 @@ function pick(actions, ids) {
 export function homeFocus(payload) {
 	const actions = payload?.actions || {};
 	const accounts = actions.accounts || [];
-	const accountsManager = accounts.some((action) => action.id === "chart_of_accounts");
+	const accountsManager = accounts.some((action) => action.id === "expense_approval_limits");
 	const roleActions = [
 		...pick(actions.system_management || [], ["manage_users"]),
 		...pick(actions.system_management || [], ["fiscal_years"]),

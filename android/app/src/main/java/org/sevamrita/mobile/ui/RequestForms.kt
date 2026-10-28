@@ -49,7 +49,7 @@ import java.io.ByteArrayOutputStream
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
-private data class Evidence(val name: String, val base64: String)
+internal data class Evidence(val name: String, val base64: String)
 
 @Composable
 fun AdvanceRequestScreen(form: JSONObject, projectHint: String, busy: Boolean, submit: (JSONObject) -> Unit) {
@@ -194,7 +194,7 @@ fun ExpenseRequestScreen(
                 submit(payload)
             }
         }, enabled = !busy && projects.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("Submit for receipt review") } }
-        item { Text("For several invoices with different dates, submit each separately. The portal also supports a bundled submission, which is not yet in this Android app.") }
+        item { Text("Have several invoices with different dates? Use the separate multi-invoice claim option so each bill keeps its own accounting date.") }
     }
 }
 
@@ -229,21 +229,24 @@ internal fun DateField(label: String, value: String, set: (String) -> Unit) {
     }
 }
 
-private fun readEvidence(context: Context, uri: Uri): Evidence {
+internal fun readEvidence(
+    context: Context, uri: Uri,
+    maxBytes: Int = 5 * 1024 * 1024,
+    extensions: Set<String> = setOf("pdf", "png", "jpg", "jpeg")
+): Evidence {
     val resolver = context.contentResolver
     val name = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
         if (cursor.moveToFirst()) cursor.getString(0) else null
     } ?: "receipt.pdf"
     val ext = name.substringAfterLast('.', "").lowercase()
-    require(ext in setOf("pdf", "png", "jpg", "jpeg")) { "Choose a PDF, PNG or JPEG file." }
-    val max = 5 * 1024 * 1024
+    require(ext in extensions) { "Choose a supported document type: ${extensions.joinToString()}" }
     val buffer = ByteArray(8192)
     val output = ByteArrayOutputStream()
     resolver.openInputStream(uri)?.use { input ->
         while (true) {
             val count = input.read(buffer)
             if (count < 0) break
-            require(output.size() + count <= max) { "Receipt must be 5 MB or smaller." }
+            require(output.size() + count <= maxBytes) { "Document must be ${maxBytes / (1024 * 1024)} MB or smaller." }
             output.write(buffer, 0, count)
         }
     } ?: throw IllegalArgumentException("The selected file could not be opened.")

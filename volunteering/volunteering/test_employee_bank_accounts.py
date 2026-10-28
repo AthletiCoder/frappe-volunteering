@@ -91,16 +91,16 @@ class UnitTestEmployeeBankDetails(UnitTestCase):
 
 	def test_only_accounts_manager_gets_home_review_action(self):
 		for roles, expected in (
-			(["Accounts User"], ["advance_disbursement", "advance_returns"]),
+			(["Accounts User"], ["advance_disbursement", "advance_returns", "chart_of_accounts"]),
 			(["System Manager"], []),
 			(
 				["Accounts Manager"],
 				[
 					"advance_disbursement",
 					"advance_returns",
+					"chart_of_accounts",
 					"donations",
 					"expense_approval_limits",
-					"chart_of_accounts",
 					"opening_balances",
 					"bank_account",
 					"project_account_mapping",

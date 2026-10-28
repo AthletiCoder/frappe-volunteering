@@ -29,6 +29,7 @@ website_redirects = [
 # All authenticated accounts land on Home after login. Explicit login redirect
 # targets may still take precedence; the Desk root has a client-side fallback.
 on_session_creation = "volunteering.volunteering.home_access.set_staff_login_home"
+on_login = "volunteering.volunteering.login_session.install_session_metadata_isolation"
 get_website_user_home_page = "volunteering.volunteering.home_access.get_staff_home_page"
 
 # Includes in <head>
@@ -389,8 +390,9 @@ scheduler_events = {
 	},
 }
 
-# CORS for Vercel donate site (also set site_config allow_cors)
+# Session activity compatibility and donation-site CORS (also set allow_cors).
 before_request = [
+	"volunteering.volunteering.login_session.install_session_metadata_isolation",
 	"volunteering.volunteering.api.cors.handle_donation_cors_preflight",
 ]
 after_request = [

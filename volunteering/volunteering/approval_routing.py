@@ -648,6 +648,8 @@ def notify_pending_approvers(doc):
 		if doc.doctype == "Expense Claim"
 		else frappe.utils.get_url(f"/volunteering/advance-workflow?advance={doc.name}")
 		if doc.doctype == "Employee Advance"
+		else frappe.utils.get_url(f"/volunteering/purchase-approvals?order={doc.name}")
+		if doc.doctype == "Purchase Order" and doc.get("home_purchase_request_key")
 		else frappe.utils.get_url_to_form(doc.doctype, doc.name)
 	)
 	message = _('{0} <a href="{1}">{2}</a> is awaiting your approval at stage: {3}.').format(

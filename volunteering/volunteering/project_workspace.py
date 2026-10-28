@@ -542,7 +542,8 @@ def validate_project_claim_access(doc, method=None):
 		if doc.doctype == "Expense Claim"
 		else doc.owner
 	)
-	if not user or not _is_member(project, user):
+	accounts_purchase = doc.doctype == "Purchase Order" and bool(doc.flags.get("authorized_home_purchase_creator"))
+	if not accounts_purchase and (not user or not _is_member(project, user)):
 		frappe.throw(
 			_("The claimant must be a listed project member. Every project member can submit bills."),
 			frappe.PermissionError,

@@ -40,7 +40,7 @@ test("combined management roles keep every permitted link but Home shows selecte
 		nav: { projects: true, budget_health: true, volunteering: true },
 		actions: {
 			projects: [action("create_project", "projects"), action("approved_projects", "projects"), action("my_project_requests", "projects"), action("review_project_proposals", "projects")],
-			accounts: [action("advance_disbursement", "accounts"), action("advance_returns", "accounts"), action("donations", "accounts"), action("chart_of_accounts", "accounts"), action("opening_balances", "accounts"), action("project_account_mapping", "accounts")],
+			accounts: [action("advance_disbursement", "accounts"), action("advance_returns", "accounts"), action("donations", "accounts"), action("chart_of_accounts", "accounts"), action("expense_approval_limits", "accounts"), action("opening_balances", "accounts"), action("project_account_mapping", "accounts")],
 			hr_management: [action("manage_employees", "hr")],
 			system_management: [action("manage_users", "system")],
 			team: [action("my_team", "team")],
@@ -61,15 +61,31 @@ test("combined management roles keep every permitted link but Home shows selecte
 	assert.ok(!focus.roleActions.some((row) => row.id === "chart_of_accounts"));
 });
 
-test("accounts users get settlement but not manager-only classification", () => {
-	const menuLinks = buildSidebarItems({ actions: { accounts: [action("advance_disbursement", "accounts")] } })
+test("accounts users get settlement and read-only ledgers but not manager-only classification", () => {
+	const payload = { actions: { accounts: [action("advance_disbursement", "accounts"), action("chart_of_accounts", "accounts")] } };
+	const menuLinks = buildSidebarItems(payload)
 		.flatMap((item) => item.children || []).map((child) => child.href);
 	assert.ok(menuLinks.includes("/volunteering/expense-claim-workflow?view=reimbursement"));
+	assert.ok(menuLinks.includes("/volunteering/accounts/chart_of_accounts"));
 	assert.ok(!menuLinks.includes("/volunteering/expense-claim-workflow?view=classification"));
+	assert.ok(!homeFocus(payload).roleActions.some((row) => row.id === "classify_claims"));
 });
 
 test("unassigned users see no role-specific links", () => {
 	const items = buildSidebarItems({ actions: {}, nav: {}, waiting_count: 0 });
 	assert.deepEqual(items.map((item) => item.label), ["Home", "My Work", "Profile"]);
 	assert.deepEqual(homeFocus({ actions: {}, flags: {} }), { roleActions: [], projectActions: [], personalActions: [] });
+});
+
+test("vendor purchases have a dedicated Home menu section", () => {
+	const items = buildSidebarItems({ actions: { purchasing: [
+		{ id: "my_purchase_requests", label: "My purchase requests", route: "/volunteering/vendor-purchases" },
+		{ id: "purchase_approvals", label: "Purchase approvals", route: "/volunteering/purchase-approvals" },
+		{ id: "approved_purchases", label: "Approved purchases — Accounts", route: "/volunteering/purchase-accounts" },
+	] } });
+	const purchasing = items.find(item => item.id === "purchasing");
+	assert.equal(purchasing.label, "Purchasing");
+	assert.equal(purchasing.children[0].href, "/volunteering/vendor-purchases");
+	assert.deepEqual(purchasing.children.map(row => row.label), ["My purchase requests", "Purchase approvals", "Approved purchases — Accounts"]);
+	assert.deepEqual(purchasing.children.map(row => row.href), ["/volunteering/vendor-purchases", "/volunteering/purchase-approvals", "/volunteering/purchase-accounts"]);
 });

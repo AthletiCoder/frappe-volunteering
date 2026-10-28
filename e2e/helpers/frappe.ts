@@ -121,7 +121,7 @@ export async function refreshPersonaAuth(persona: PersonaKey = DEFAULT_PERSONA):
 	}
 	const cookieHeader = [...cookieMap.entries()].map(([k, v]) => `${k}=${v}`).join('; ');
 
-	const landing = persona === 'volunteer' ? '/' : '/desk';
+	const landing = persona === 'volunteer' ? '/' : '/volunteering/home';
 	const deskResponse = await fetch(`${apiBaseUrl()}${landing}`, {
 		headers: cookieHeader ? { Cookie: cookieHeader } : {},
 	});

@@ -1,5 +1,7 @@
 package org.sevamrita.mobile.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -25,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
@@ -61,6 +64,17 @@ fun ProposalsScreen(state: PortalState, model: PortalViewModel) {
 fun ProposalScreen(state: PortalState, model: PortalViewModel) {
     val proposal = state.data
     val data = proposal.optJSONObject("data") ?: JSONObject()
+    val context = LocalContext.current
+    var visibility by remember(proposal.text("name")) { mutableStateOf("Basic") }
+    var uploadError by remember(proposal.text("name")) { mutableStateOf("") }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) try {
+            val document = readEvidence(context, uri, 10 * 1024 * 1024,
+                setOf("pdf", "png", "jpg", "jpeg", "docx", "xlsx"))
+            model.uploadProposalDocument(document.name, document.base64, visibility)
+            uploadError = ""
+        } catch (exception: Exception) { uploadError = exception.message ?: "Could not read the supporting document." }
+    }
     var comments by remember(proposal.text("modified")) { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -104,8 +118,26 @@ fun ProposalScreen(state: PortalState, model: PortalViewModel) {
                 if (event.text("comment").isNotBlank()) Text(event.text("comment"))
             } }
         }
-        if (proposal.optBoolean("can_edit") && proposal.text("request_kind") == "New Project") item {
-            OutlinedButton(onClick = { model.open(Page.PROPOSAL_FORM, proposal.text("name")) }, modifier = Modifier.fillMaxWidth()) { Text("Edit proposal") }
+        if (proposal.items("attachments").isNotEmpty() || proposal.optBoolean("can_edit")) item { SectionCard {
+            Text("Supporting records", fontWeight = FontWeight.SemiBold)
+            proposal.items("attachments").forEach { file ->
+                Text("${file.display("file_name")} · ${file.display("project_visibility", "Basic")} access")
+                if (file.text("file_url").endsWith(".pdf", true) || file.text("file_url").endsWith(".png", true) || file.text("file_url").endsWith(".jpg", true) || file.text("file_url").endsWith(".jpeg", true))
+                    TextButton(onClick = { model.openReceipt(file.text("file_url"), Page.PROPOSAL) }) { Text("Open private file") }
+            }
+            if (proposal.optBoolean("can_edit")) {
+                SelectField("New document visibility", visibility,
+                    if (proposal.optBoolean("can_view_financials")) listOf("Basic" to "Basic", "Financial" to "Financial")
+                    else listOf("Basic" to "Basic")) { visibility = it }
+                OutlinedButton(onClick = { picker.launch(arrayOf("application/pdf", "image/png", "image/jpeg",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) }, enabled = !state.busy,
+                    modifier = Modifier.fillMaxWidth()) { Text("Add supporting document") }
+            }
+            if (uploadError.isNotBlank()) Text(uploadError)
+        } }
+        if (proposal.optBoolean("can_edit")) item {
+            OutlinedButton(onClick = { model.open(Page.PROPOSAL_FORM, proposal.text("name")) }, modifier = Modifier.fillMaxWidth()) { Text("Edit request") }
         }
         if (proposal.optBoolean("can_submit")) item {
             Button(onClick = { model.submitSavedProposal() }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text("Submit for approval") }
@@ -121,6 +153,9 @@ fun ProposalScreen(state: PortalState, model: PortalViewModel) {
             OutlinedButton(onClick = {
                 if (comments.isBlank()) error = "Comments are required." else model.reviewProposal("reject", comments)
             }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text("Reject") }
+            if (proposal.optBoolean("stale")) OutlinedButton(onClick = {
+                if (comments.isBlank()) error = "Explain why the approved baseline should be refreshed." else model.reviewProposal("rebase", comments)
+            }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text("Refresh approved baseline") }
         } }
     }
 }
@@ -131,6 +166,8 @@ fun ProposalFormScreen(state: PortalState, model: PortalViewModel) {
     val proposal = state.data
     val initial = remember(proposal) { proposal.optJSONObject("data") ?: JSONObject() }
     val editing = state.detailId.isNotBlank()
+    val isChange = proposal.text("request_kind") == "Project Change"
+    val canFinance = !isChange || proposal.optBoolean("can_view_financials")
     var name by remember(initial) { mutableStateOf(initial.text("project_name")) }
     var purpose by remember(initial) { mutableStateOf(initial.text("project_purpose")) }
     var outcomes by remember(initial) { mutableStateOf(initial.text("project_outcomes")) }
@@ -141,6 +178,7 @@ fun ProposalFormScreen(state: PortalState, model: PortalViewModel) {
     var costCenter by remember(initial) { mutableStateOf(initial.text("cost_center")) }
     var budget by remember(initial) { mutableStateOf(initial.text("total_approved_budget").ifBlank { "0" }) }
     var approver by remember(proposal) { mutableStateOf(proposal.text("assigned_approver")) }
+    var reason by remember(proposal) { mutableStateOf(proposal.text("request_reason")) }
     var error by remember { mutableStateOf("") }
     val members = remember(initial, options) {
         val existing = initial.optJSONArray("participants")
@@ -157,38 +195,45 @@ fun ProposalFormScreen(state: PortalState, model: PortalViewModel) {
     val users = options.items("users")
     val managers = options.items("project_managers")
     val costCentres = options.items("cost_centres")
+    val suggestedLabels = (options.optJSONArray("expense_breakup_labels") ?: JSONArray()).let { values ->
+        (0 until values.length()).map { values.optString(it) }.filter { it.isNotBlank() }
+    }
     val submitted = proposal.text("proposal_status") == "Pending Approval"
     fun payload(): JSONObject {
         val rows = JSONArray()
         breakup.forEach { row -> rows.put(JSONObject().put("budget_key", row.key)
             .put("employee_label", row.label.trim()).put("approved_amount", row.amount.toDoubleOrNull() ?: 0.0).put("is_active", 1)) }
-        return JSONObject().put("project_name", name.trim()).put("project_purpose", purpose.trim())
+        val details = JSONObject().put("project_name", name.trim()).put("project_purpose", purpose.trim())
             .put("project_outcomes", outcomes.trim()).put("project_owner", owner)
             .put("operational_status", status).put("expected_start_date", start)
-            .put("expected_end_date", end).put("priority", "Medium")
-            .put("cost_center", costCenter).put("total_approved_budget", budget.toDoubleOrNull() ?: 0.0)
-            .put("project_budget_control", "No Control").put("account_budget_control", "No Control")
+            .put("expected_end_date", end).put("priority", initial.text("priority").ifBlank { "Medium" })
             .put("participants", JSONArray().apply { members.forEach { put(it) } })
+        if (canFinance) details.put("cost_center", costCenter)
+            .put("total_approved_budget", budget.toDoubleOrNull() ?: 0.0)
+            .put("project_budget_control", initial.text("project_budget_control").ifBlank { "No Control" })
+            .put("account_budget_control", initial.text("account_budget_control").ifBlank { "No Control" })
             .put("account_budgets", rows)
+        return details
     }
     fun save(submitNow: Boolean) {
         val amount = budget.toDoubleOrNull()
         error = when {
-            amount == null || !amount.isFinite() || amount < 0 -> "Enter a valid project budget."
-            breakup.any { it.label.isBlank() || (it.amount.toDoubleOrNull() ?: -1.0) < 0 } -> "Complete each expense break-up row."
-            breakup.sumOf { it.amount.toDoubleOrNull() ?: 0.0 } > (amount ?: 0.0) -> "Expense break-up cannot exceed the total budget."
+            canFinance && submitNow && (amount == null || !amount.isFinite() || amount < 0) -> "Enter a valid project budget."
+            canFinance && submitNow && breakup.any { it.label.isBlank() || (it.amount.toDoubleOrNull() ?: -1.0) < 0 } -> "Complete each expense break-up row."
+            canFinance && submitNow && breakup.sumOf { it.amount.toDoubleOrNull() ?: 0.0 } > (amount ?: 0.0) -> "Expense break-up cannot exceed the total budget."
             submitNow && name.isBlank() -> "Enter the project name."
             submitNow && purpose.isBlank() -> "Enter the project purpose."
             submitNow && owner.isBlank() -> "Choose the project owner."
             submitNow && members.isEmpty() -> "Add at least one project member."
-            submitNow && costCenter.isBlank() -> "Choose a cost centre."
+            canFinance && submitNow && costCenter.isBlank() -> "Choose a cost centre."
+            isChange && submitNow && reason.isBlank() -> "Explain why the approved project needs to change."
             submitNow && approver.isBlank() -> "Choose the Projects Manager who will review this."
             else -> ""
         }
-        if (error.isBlank()) model.saveProposal(payload(), approver, submitNow)
+        if (error.isBlank()) model.saveProposal(payload(), approver, submitNow, reason)
     }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item { Heading(if (editing) "Edit project proposal" else "Propose a project", "A draft can be saved before all details are known") }
+        item { Heading(if (isChange) "Propose project changes" else if (editing) "Edit project proposal" else "Propose a project", "A draft can be saved before all details are known") }
         item { SectionCard {
             Text("01 · Scope and ownership", fontWeight = FontWeight.Bold)
             OutlinedTextField(name, { name = it }, label = { Text("Project name *") }, modifier = Modifier.fillMaxWidth())
@@ -210,12 +255,14 @@ fun ProposalFormScreen(state: PortalState, model: PortalViewModel) {
                 TextButton(onClick = { members.remove(person) }) { Text("Remove") }
             } }
         } }
-        item { SectionCard {
+        if (canFinance) item { SectionCard {
             Text("03 · Budget", fontWeight = FontWeight.Bold)
             SelectField("Cost centre *", costCenter, costCentres.map { it.text("name") to it.display("name") }) { costCenter = it }
             OutlinedTextField(budget, { budget = it }, label = { Text("Total project budget (INR) *") }, modifier = Modifier.fillMaxWidth())
             Text("Expense break-up is optional. Any remainder becomes Others when approved.")
             breakup.forEachIndexed { index, row ->
+                if (suggestedLabels.isNotEmpty()) SelectField("Use an approved label (optional)", row.label,
+                    suggestedLabels.map { it to it }) { breakup[index] = row.copy(label = it) }
                 OutlinedTextField(row.label, { breakup[index] = row.copy(label = it) }, label = { Text("Expense label ${index + 1}") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(row.amount, { breakup[index] = row.copy(amount = it) }, label = { Text("Allocation (INR)") }, modifier = Modifier.fillMaxWidth())
                 TextButton(onClick = { breakup.removeAt(index) }) { Text("Remove label") }
@@ -224,6 +271,7 @@ fun ProposalFormScreen(state: PortalState, model: PortalViewModel) {
         } }
         item { SectionCard {
             Text("04 · Send for approval", fontWeight = FontWeight.Bold)
+            if (isChange) OutlinedTextField(reason, { reason = it }, label = { Text("Reason for change *") }, modifier = Modifier.fillMaxWidth())
             SelectField("Assigned Projects Manager *", approver, managers.map {
                 it.text("name") to it.display("full_name", it.display("name"))
             }) { approver = it }

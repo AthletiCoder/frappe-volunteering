@@ -22,12 +22,14 @@ class PortalApi(private val session: SecureSessionStore) {
 
     fun hasSession() = session.sid() != null
     fun server() = session.server
+    fun localAddress() = session.localAddress
     fun setServer(server: Server) { session.server = server; csrf = null }
+    fun setLocalAddress(address: String) { session.localAddress = address; csrf = null }
 
     fun login(username: String, password: String) {
         val body = FormBody.Builder().add("usr", username).add("pwd", password).build()
         val response = client.newCall(
-            Request.Builder().url("${session.server.url}/api/method/login").post(body).build()
+            Request.Builder().url("${session.baseUrl}/api/method/login").post(body).build()
         ).execute()
         response.use {
             val parsed = parse(it.code, it.body?.string().orEmpty())
@@ -59,7 +61,7 @@ class PortalApi(private val session: SecureSessionStore) {
     fun call(method: String, args: JSONObject = JSONObject(), get: Boolean = false): JSONObject {
         require(method.matches(Regex("[A-Za-z_][A-Za-z0-9_.]*")))
         val sid = session.sid() ?: throw IOException("Please sign in again.")
-        val url = "${session.server.url}/api/method/$method"
+        val url = "${session.baseUrl}/api/method/$method"
         val builder = Request.Builder().url(url).header("Cookie", "sid=$sid")
             .header("Accept", "application/json")
         if (get) {
@@ -83,7 +85,7 @@ class PortalApi(private val session: SecureSessionStore) {
             "Only private receipt attachments can be opened here."
         }
         val sid = session.sid() ?: throw IOException("Please sign in again.")
-        client.newCall(Request.Builder().url(session.server.url + path).header("Cookie", "sid=$sid").get().build())
+        client.newCall(Request.Builder().url(session.baseUrl + path).header("Cookie", "sid=$sid").get().build())
             .execute().use { response ->
                 if (!response.isSuccessful) throw IOException("Receipt cannot be opened (${response.code}).")
                 val body = response.body ?: throw IOException("Receipt is empty.")
@@ -123,5 +125,8 @@ class PortalApi(private val session: SecureSessionStore) {
 fun JSONObject.text(key: String): String = optString(key).takeUnless { it == "null" } ?: ""
 fun JSONObject.items(key: String): List<JSONObject> = (optJSONArray(key) ?: JSONArray()).let { array ->
     (0 until array.length()).mapNotNull { array.optJSONObject(it) }
+}
+fun JSONObject.strings(key: String): List<String> = (optJSONArray(key) ?: JSONArray()).let { array ->
+    (0 until array.length()).mapNotNull { array.optString(it).takeIf { value -> value.isNotBlank() } }
 }
 fun JSONObject.display(key: String, fallback: String = "—"): String = text(key).ifBlank { fallback }

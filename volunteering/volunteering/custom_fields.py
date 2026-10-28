@@ -404,6 +404,23 @@ ACCOUNTING_CUSTOM_FIELDS = {
 	],
 	"Purchase Order": [
 		{
+			"fieldname": "party_account_currency",
+			"label": "Supplier account currency",
+			"fieldtype": "Link", "options": "Currency",
+			"read_only": 1, "hidden": 1, "insert_after": "currency",
+			"description": "Resolved by Home purchasing so employees do not need ledger read permission.",
+		},
+		{
+			"fieldname": "home_purchase_request_key",
+			"label": "Home purchase request key",
+			"fieldtype": "Data",
+			"unique": 1,
+			"read_only": 1,
+			"hidden": 1,
+			"no_copy": 1,
+			"insert_after": "project",
+		},
+		{
 			"fieldname": "department",
 			"label": "Department",
 			"fieldtype": "Link",
@@ -428,6 +445,13 @@ ACCOUNTING_CUSTOM_FIELDS = {
 		},
 	],
 	"Purchase Invoice": [
+		{
+			"fieldname": "home_purchase_tax_breakup",
+			"label": "Home purchase tax breakup",
+			"fieldtype": "Code", "options": "JSON",
+			"read_only": 1, "hidden": 1, "no_copy": 1, "permlevel": 1,
+			"description": "Accounts-only record of non-recoverable tax included in gross purchase costs; does not create input tax credit.",
+		},
 		{
 			"fieldname": "department",
 			"label": "Department",
@@ -615,6 +639,12 @@ ACCOUNTING_CUSTOM_FIELDS = {
 }
 
 # Budget section follows vendor override on Expense Claim
+for _doctype in ("Purchase Receipt", "Purchase Invoice", "Payment Entry"):
+	ACCOUNTING_CUSTOM_FIELDS.setdefault(_doctype, []).append({
+		"fieldname": "home_purchase_request_key", "label": "Home purchase request key",
+		"fieldtype": "Data", "unique": 1, "read_only": 1, "hidden": 1, "no_copy": 1,
+	})
+
 for _field in ACCOUNTING_CUSTOM_FIELDS["Expense Claim"]:
 	if _field.get("fieldname") == "budget_section":
 		_field["insert_after"] = "vendor_override_reason"

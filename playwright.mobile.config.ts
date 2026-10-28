@@ -13,7 +13,7 @@ export default defineConfig({
   testDir: "./e2e/tests/mobile",
   outputDir: "./test-results/mobile",
   workers: 1,
-  reporter: "line",
+  reporter: [["line"], ["json", { outputFile: "test-results/mobile-results.json" }]],
   timeout: 90000,
   projects: [
     {

@@ -22,13 +22,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Wallet
 import androidx.compose.material3.Button
@@ -83,6 +83,30 @@ import org.sevamrita.mobile.ui.ProposalFormScreen
 import org.sevamrita.mobile.ui.Page
 import org.sevamrita.mobile.ui.PortalState
 import org.sevamrita.mobile.ui.PortalViewModel
+import org.sevamrita.mobile.ui.ChartScreen
+import org.sevamrita.mobile.ui.LedgerScreen
+import org.sevamrita.mobile.ui.AccountFormScreen
+import org.sevamrita.mobile.ui.BankAccountScreen
+import org.sevamrita.mobile.ui.OfficeAddressesScreen
+import org.sevamrita.mobile.ui.OfficeAddressFormScreen
+import org.sevamrita.mobile.ui.TeamScreen
+import org.sevamrita.mobile.ui.OpeningBalancesScreen
+import org.sevamrita.mobile.ui.ProjectMappingScreen
+import org.sevamrita.mobile.ui.ProjectMappingDetailScreen
+import org.sevamrita.mobile.ui.ClaimLimitsScreen
+import org.sevamrita.mobile.ui.FiscalYearsScreen
+import org.sevamrita.mobile.ui.DonationScreen
+import org.sevamrita.mobile.ui.HRManagementScreen
+import org.sevamrita.mobile.ui.ManagedEmployeeFormScreen
+import org.sevamrita.mobile.ui.SystemManagementScreen
+import org.sevamrita.mobile.ui.ManagedUserFormScreen
+import org.sevamrita.mobile.ui.InvoiceScreen
+import org.sevamrita.mobile.ui.InvoiceResultScreen
+import org.sevamrita.mobile.ui.MultiClaimScreen
+import org.sevamrita.mobile.ui.MultiResultScreen
+import org.sevamrita.mobile.ui.BudgetHealthScreen
+import org.sevamrita.mobile.ui.CombinedClaimScreen
+import org.sevamrita.mobile.ui.CorrectClaimScreen
 
 private val green = Color(0xFF08745E)
 private val ink = Color(0xFF1D3035)
@@ -144,9 +168,9 @@ private fun PortalApp(model: PortalViewModel) {
             NavigationBar(containerColor = Color.White) {
                 val entries = listOf(
                     Triple(Page.HOME, "Home", Icons.Default.Home),
-                    Triple(Page.WORK, "My work", Icons.Default.Assignment),
+                    Triple(Page.WORK, "My work", Icons.AutoMirrored.Filled.Assignment),
                     Triple(Page.PROJECTS, "Projects", Icons.Default.Folder),
-                    Triple(Page.CLAIMS, "Expenses", Icons.Default.ReceiptLong),
+                    Triple(Page.CLAIMS, "Expenses", Icons.AutoMirrored.Filled.ReceiptLong),
                     Triple(Page.PROFILE, "Profile", Icons.Default.AccountCircle)
                 )
                 for ((page, label, icon) in entries) NavigationBarItem(
@@ -173,14 +197,39 @@ private fun PortalApp(model: PortalViewModel) {
                 Page.ADVANCE -> AdvanceScreen(state)
                 Page.NEW_ADVANCE -> AdvanceRequestScreen(state.form, state.detailId, state.busy, model::submitAdvance)
                 Page.CLAIMS -> ClaimsScreen(state, model)
-                Page.CLAIM -> ClaimScreen(state)
+                Page.CLAIM -> ClaimScreen(state, model)
+                Page.CORRECT_CLAIM -> CorrectClaimScreen(state, model)
                 Page.NEW_CLAIM -> ExpenseRequestScreen(state.form, state.data, state.detailId, state.busy, model::projectAccounts, model::submitClaim)
+                Page.COMBINED_START -> CombinedClaimScreen(state, model)
+                Page.COMBINED_INVOICE -> InvoiceScreen(state, model, integrated = true)
+                Page.MULTI_CLAIM -> MultiClaimScreen(state, model)
+                Page.MULTI_RESULT -> MultiResultScreen(state, model)
                 Page.ADVANCE_QUEUE -> AdvanceQueueScreen(state, model)
                 Page.ADVANCE_REVIEW -> AdvanceReviewScreen(state, model)
                 Page.CLAIM_QUEUE -> ClaimQueueScreen(state, model)
                 Page.CLAIM_REVIEW -> ClaimReviewScreen(state, model)
                 Page.RECEIPT -> ReceiptScreen(state)
                 Page.PROFILE -> ProfileScreen(state, model)
+                Page.CHART -> ChartScreen(state, model)
+                Page.LEDGER -> LedgerScreen(state, model)
+                Page.ACCOUNT_FORM -> AccountFormScreen(state, model)
+                Page.BANK_ACCOUNT -> BankAccountScreen(state, model)
+                Page.OFFICE_ADDRESSES -> OfficeAddressesScreen(state, model)
+                Page.OFFICE_ADDRESS_FORM -> OfficeAddressFormScreen(state, model)
+                Page.TEAM -> TeamScreen(state, model)
+                Page.OPENING_BALANCES -> OpeningBalancesScreen(state, model)
+                Page.PROJECT_MAPPING -> ProjectMappingScreen(state, model)
+                Page.PROJECT_MAPPING_DETAIL -> ProjectMappingDetailScreen(state, model)
+                Page.CLAIM_LIMITS -> ClaimLimitsScreen(state, model)
+                Page.FISCAL_YEARS -> FiscalYearsScreen(state, model)
+                Page.DONATIONS -> DonationScreen(state, model)
+                Page.HR_MANAGEMENT -> HRManagementScreen(state, model)
+                Page.EMPLOYEE_FORM -> ManagedEmployeeFormScreen(state, model)
+                Page.SYSTEM_MANAGEMENT -> SystemManagementScreen(state, model)
+                Page.USER_FORM -> ManagedUserFormScreen(state, model)
+                Page.INVOICE -> InvoiceScreen(state, model)
+                Page.INVOICE_RESULT -> InvoiceResultScreen(state, model)
+                Page.BUDGET_HEALTH -> BudgetHealthScreen(state, model)
                 Page.UNAVAILABLE -> UnavailableScreen(state)
             }
         }
@@ -196,11 +245,34 @@ private fun pageTitle(state: PortalState) = when (state.page) {
     Page.ADVANCE_QUEUE -> "Advance approvals"; Page.ADVANCE_REVIEW -> state.detailId
     Page.CLAIM_QUEUE -> "Expense review"; Page.CLAIM_REVIEW -> state.detailId
     Page.RECEIPT -> state.receiptName
+    Page.CHART -> "Chart of Accounts"; Page.LEDGER -> "Account ledger"; Page.ACCOUNT_FORM -> "Account details"
+    Page.BANK_ACCOUNT -> "Bank account"; Page.OFFICE_ADDRESSES -> "Office addresses"
+    Page.OFFICE_ADDRESS_FORM -> "Office address"; Page.TEAM -> "My team"
+    Page.OPENING_BALANCES -> "Opening balances"
+    Page.PROJECT_MAPPING -> "Project account mapping"; Page.PROJECT_MAPPING_DETAIL -> "Project account mapping"
+    Page.CLAIM_LIMITS -> "Expense approval limits"; Page.FISCAL_YEARS -> "Fiscal Years"
+    Page.DONATIONS -> "Donations"
+    Page.HR_MANAGEMENT -> "Employees"; Page.EMPLOYEE_FORM -> "Employee"
+    Page.SYSTEM_MANAGEMENT -> "Users"; Page.USER_FORM -> "User"
+    Page.INVOICE -> "Prepare an invoice"; Page.INVOICE_RESULT -> "Generated invoice"
+    Page.MULTI_CLAIM -> "Multiple invoices"; Page.MULTI_RESULT -> "Invoices submitted"
+    Page.COMBINED_START -> "Invoice and expense"; Page.COMBINED_INVOICE -> "Sign invoice"
+    Page.CORRECT_CLAIM -> "Correct claim"
+    Page.BUDGET_HEALTH -> "Budget health"
 }
 private fun parentOf(page: Page) = when (page) {
     Page.PROJECT -> Page.PROJECTS; Page.ADVANCE, Page.NEW_ADVANCE -> Page.ADVANCES
     Page.PROPOSAL, Page.PROPOSAL_FORM -> Page.PROPOSALS
-    Page.CLAIM, Page.NEW_CLAIM -> Page.CLAIMS; else -> Page.HOME
+    Page.CLAIM, Page.NEW_CLAIM -> Page.CLAIMS
+    Page.LEDGER, Page.ACCOUNT_FORM -> Page.CHART
+    Page.OFFICE_ADDRESS_FORM -> Page.OFFICE_ADDRESSES
+    Page.PROJECT_MAPPING_DETAIL -> Page.PROJECT_MAPPING
+    Page.EMPLOYEE_FORM -> Page.HR_MANAGEMENT; Page.USER_FORM -> Page.SYSTEM_MANAGEMENT
+    Page.INVOICE_RESULT -> Page.INVOICE
+    Page.MULTI_CLAIM, Page.MULTI_RESULT -> Page.CLAIMS
+    Page.COMBINED_START -> Page.CLAIMS; Page.COMBINED_INVOICE -> Page.COMBINED_START
+    Page.CORRECT_CLAIM -> Page.CLAIM
+    else -> Page.HOME
 }
 
 @Composable
@@ -208,6 +280,7 @@ private fun LoginScreen(state: PortalState, model: PortalViewModel) {
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
+    var localAddress by remember(state.localAddress) { mutableStateOf(state.localAddress) }
     LazyColumn(
         Modifier.fillMaxSize().background(canvas), contentPadding = PaddingValues(24.dp),
         verticalArrangement = Arrangement.Center
@@ -231,11 +304,19 @@ private fun LoginScreen(state: PortalState, model: PortalViewModel) {
                         }
                     }
                 }
+                if (state.server == Server.LOCAL) {
+                    OutlinedTextField(
+                        localAddress, { localAddress = it },
+                        label = { Text("Laptop Wi-Fi IP address") },
+                        supportingText = { Text("Port 8001 · use 10.0.2.2 only in the Android emulator") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth()
+                    )
+                }
                 OutlinedTextField(username, { username = it }, label = { Text("Email or username") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(password, { password = it }, label = { Text("Password") }, singleLine = true,
                     visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(10.dp))
-                Button(onClick = { model.login(username, password) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = { model.login(username, password, if (state.server == Server.LOCAL) localAddress else null) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
                     Text(if (state.busy) "Signing in…" else "Sign in")
                 }
             }
@@ -267,6 +348,7 @@ private fun HomeScreen(state: PortalState, model: PortalViewModel) {
                         SmallAction("Expense", Modifier.weight(1f), enabled = project.optBoolean("can_submit_expense")) { model.open(Page.NEW_CLAIM, project.text("name")) }
                         SmallAction("Advance", Modifier.weight(1f)) { model.open(Page.NEW_ADVANCE, project.text("name")) }
                     }
+                    OutlinedButton(onClick = { model.open(Page.INVOICE) }, modifier = Modifier.fillMaxWidth()) { Text("Prepare an invoice") }
                     TextButton(onClick = { model.open(Page.PROJECT, project.text("name")) }) { Text("View project →") }
                 }
             }
@@ -360,6 +442,15 @@ private fun ProjectScreen(state: PortalState, model: PortalViewModel) {
             Text("Expense break-up", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
             project.items("permitted_accounts").forEach { Text(it.display("employee_label"), color = ink) }
         } }
+        if (project.items("attachments").isNotEmpty()) item { SectionCard {
+            Text("Supporting records", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            project.items("attachments").forEach { file ->
+                Text("${file.display("file_name")} · ${file.display("project_visibility", "Basic")} access")
+                val path = file.text("file_url")
+                if (listOf(".pdf", ".png", ".jpg", ".jpeg").any { path.endsWith(it, true) })
+                    TextButton(onClick = { model.openReceipt(path, Page.PROJECT) }) { Text("Open private file") }
+            }
+        } }
         val currentUser = project.optJSONObject("capabilities")?.text("current_user").orEmpty()
         val isMember = (project.optJSONArray("participants") ?: org.json.JSONArray()).let { people ->
             (0 until people.length()).any { people.optString(it) == currentUser }
@@ -367,6 +458,9 @@ private fun ProjectScreen(state: PortalState, model: PortalViewModel) {
         if (isMember && project.text("operational_status") == "Active") {
             item { Button(onClick = { model.open(Page.NEW_CLAIM, state.detailId) }, modifier = Modifier.fillMaxWidth()) { Text("Submit an expense") } }
             item { OutlinedButton(onClick = { model.open(Page.NEW_ADVANCE, state.detailId) }, modifier = Modifier.fillMaxWidth()) { Text("Request an advance") } }
+        }
+        if (project.optJSONObject("capabilities")?.optBoolean("can_propose_changes") == true) item {
+            OutlinedButton(onClick = model::openChangeRequest, modifier = Modifier.fillMaxWidth()) { Text("Propose changes to this project") }
         }
     }
 }
@@ -408,6 +502,8 @@ private fun ClaimsScreen(state: PortalState, model: PortalViewModel) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Heading("Your expense claims", "Review progress and payment status") }
         item { Button(onClick = { model.open(Page.NEW_CLAIM) }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Text(" New claim") } }
+        item { OutlinedButton(onClick = { model.open(Page.MULTI_CLAIM) }, modifier = Modifier.fillMaxWidth()) { Text("Submit multiple invoices") } }
+        item { OutlinedButton(onClick = { model.open(Page.COMBINED_START) }, modifier = Modifier.fillMaxWidth()) { Text("Prepare invoice and submit expense") } }
         if (claims.isEmpty() && !state.busy) item { EmptyState("No expense claims yet") }
         items(claims) { row -> ActionRow(row.display("name"), "${row.display("project_name")} · ${money(row.optDouble("claimed_amount"))} · ${row.display("stage")}") {
             model.open(Page.CLAIM, row.text("name"))
@@ -416,7 +512,7 @@ private fun ClaimsScreen(state: PortalState, model: PortalViewModel) {
 }
 
 @Composable
-private fun ClaimScreen(state: PortalState) {
+private fun ClaimScreen(state: PortalState, model: PortalViewModel) {
     val claim = state.data
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { Heading(state.detailId, claim.display("project_name")) }
@@ -428,7 +524,11 @@ private fun ClaimScreen(state: PortalState) {
             LabelValue("Payment", claim.display("payment_status"))
             LabelValue("Receipt review", claim.display("receipt_review_status"))
             if (claim.text("pending_with").isNotBlank()) LabelValue("Pending with", claim.text("pending_with"))
+            if (claim.text("receipt_review_notes").isNotBlank()) LabelValue("Review notes", claim.text("receipt_review_notes"))
         } }
+        if (claim.optBoolean("can_correct")) item {
+            Button(onClick = model::startCorrection, modifier = Modifier.fillMaxWidth()) { Text("Correct and resubmit this claim") }
+        }
         item { Heading("Expense items") }
         items(claim.items("expenses")) { row -> SectionCard {
             Text(row.display("description"), fontWeight = FontWeight.SemiBold)
@@ -437,6 +537,7 @@ private fun ClaimScreen(state: PortalState) {
             LabelValue("Category", row.display("category"))
             LabelValue("Supplier", row.display("supplier_name"))
             LabelValue("Receipt", if (row.text("receipt_attachment").isBlank()) "Not attached" else "Attached privately")
+            if (row.text("receipt_attachment").isNotBlank()) TextButton(onClick = { model.openReceipt(row.text("receipt_attachment"), Page.CLAIM) }) { Text("Open private receipt") }
         } }
         if (claim.items("timeline").isNotEmpty()) {
             item { Heading("History") }

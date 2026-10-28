@@ -204,10 +204,26 @@ def get_budget_commitment_breakdown(project):
 		else:
 			pending_claims += amount
 
-	purchase_orders = sum(
-		_get_budget_document_amount(frappe.get_doc("Purchase Order", row.name))
-		for row in _active_budget_documents("Purchase Order", project)
-	)
+	purchase_orders = 0
+	supplier_bills = 0
+	for row in _active_budget_documents("Purchase Order", project):
+		order = frappe.get_doc("Purchase Order", row.name)
+		committed = _get_budget_document_amount(order)
+		billed = 0
+		if order.get("home_purchase_request_key"):
+			# A posted bill replaces the corresponding order commitment. Bank
+			# payments settle the payable and never consume the budget again.
+			billed = sum(
+				flt(item.base_amount)
+				for item in frappe.get_all(
+					"Purchase Invoice Item", filters={"purchase_order": order.name, "docstatus": 1},
+					fields=["base_amount"], limit_page_length=0,
+				)
+			)
+			billed = max(0, min(committed, billed))
+		purchase_orders += committed - billed
+		supplier_bills += billed
+	approved_expenditure += supplier_bills
 	pending_commitments = pending_claims + purchase_orders
 	total_committed = pending_commitments + approved_expenditure
 	return {
@@ -215,6 +231,7 @@ def get_budget_commitment_breakdown(project):
 		"approved_budget": allocated,
 		"pending_claim_commitments": pending_claims,
 		"purchase_order_commitments": purchase_orders,
+		"posted_supplier_bills": supplier_bills,
 		"pending_commitments": pending_commitments,
 		"approved_expenditure": approved_expenditure,
 		"total_committed": total_committed,

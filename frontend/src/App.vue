@@ -65,7 +65,7 @@ const initials = computed(() => fullName.value.split(/\s+/).slice(0, 2).map((par
 const roleLabel = computed(() => {
 	if (actions.value.system_management?.length) return "System management";
 	if (actions.value.hr_management?.length) return "HR management";
-	if (actions.value.accounts?.some((row) => row.id === "chart_of_accounts")) return "Accounts manager";
+	if (actions.value.accounts?.some((row) => row.id === "expense_approval_limits")) return "Accounts manager";
 	if (actions.value.accounts?.length) return "Accounts team";
 	if (actions.value.projects?.some((row) => row.id === "review_project_proposals")) return "Projects manager";
 	if (actions.value.team?.length) return "Team lead";

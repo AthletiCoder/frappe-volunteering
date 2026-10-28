@@ -286,7 +286,7 @@
 						<p class="text-lg font-semibold mt-1">
 							{{ currency(saved.financial_status.approved_expenditure) }}
 						</p>
-						<p class="text-xs text-muted mt-1">Sanctioned expense claims</p>
+						<p class="text-xs text-muted mt-1">Sanctioned claims and posted supplier bills</p>
 					</div>
 					<div class="rounded-xl border border-line bg-accent-soft p-4">
 						<span class="text-xs text-muted">Available after commitments</span>

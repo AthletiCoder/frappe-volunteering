@@ -40,7 +40,7 @@ def _warn_prefer_vendor_payment(doc):
 	reason = (doc.get("vendor_override_reason") or "").strip()
 	message = _(
 		"Amount {0} is above the vendor payment threshold ({1}). "
-		"Prefer a <a href='/app/purchase-order/new'>Purchase Order</a> / vendor payment. "
+		"Prefer a <a href='/volunteering/vendor-purchases?new=1'>Purchase Order</a> / vendor payment. "
 		"To continue as reimbursement, enter a Vendor Payment Override Reason. "
 		'<a href="{2}" target="_blank">How to spend</a>'
 	).format(

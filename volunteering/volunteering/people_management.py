@@ -444,15 +444,18 @@ def save_managed_user(details, name=None, expected_modified=None):
 
 
 @frappe.whitelist(methods=["POST"])
-def send_managed_user_password_reset(name):
+def send_managed_user_password_reset(name, expected_modified=None):
 	"""Email Frappe's one-time password-reset link without exposing it to staff."""
 	_require_user_manager()
 	name = _text(name, 140, _("User"), required=True)
 	if name in STANDARD_USERS:
 		frappe.throw(_("Standard system users cannot be reset from this portal."), frappe.PermissionError)
-	doc = frappe.get_doc("User", name)
+	# Keep the version check and reset in one locked transaction. The editor may
+	# retain unsaved changes, so it must not adopt a concurrent admin's version.
+	doc = frappe.get_doc("User", name, for_update=True)
+	_check_modified(doc, expected_modified, _("user"))
 	if not cint(doc.enabled):
 		frappe.throw(_("Enable this user account before sending a password reset link."))
 	doc.validate_reset_password()
 	doc._reset_password(send_email=True)
-	return {"user": doc.name}
+	return {"user": doc.name, "modified": str(doc.modified)}

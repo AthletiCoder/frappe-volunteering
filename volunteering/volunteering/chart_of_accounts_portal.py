@@ -1,13 +1,15 @@
-"""Accounts-Manager-only Chart of Accounts administration for Home."""
+"""Chart of Accounts administration and read-only ledgers for Home."""
 
 from __future__ import annotations
 
 import frappe
 from frappe import _
-from frappe.utils import cint, cstr, flt
+from frappe.utils import cint, cstr, flt, getdate, nowdate
 
 SEVAMRITA_COMPANY = "Sevamrita Foundation"
 MANAGER_ROLE = "Accounts Manager"
+READER_ROLES = frozenset({"Accounts Manager", "Accounts User"})
+LEDGER_PAGE_SIZE = 50
 EDITABLE_FIELDS = {
 	"account_name",
 	"account_number",
@@ -25,6 +27,19 @@ EDITABLE_FIELDS = {
 def can_manage(user=None):
 	user = user or frappe.session.user
 	return user == "Administrator" or (user != "Guest" and MANAGER_ROLE in frappe.get_roles(user))
+
+
+def can_view_ledgers(user=None):
+	user = user or frappe.session.user
+	return user == "Administrator" or (user != "Guest" and bool(READER_ROLES.intersection(frappe.get_roles(user))))
+
+
+def _require_reader():
+	if not can_view_ledgers():
+		frappe.throw(
+			_("Only Accounts Users, Accounts Managers and Administrator may view account ledgers."),
+			frappe.PermissionError,
+		)
 
 
 def _require_manager():
@@ -105,9 +120,14 @@ def _serialize_accounts(company):
 def _workspace(saved_account=None):
 	company = _require_company()
 	accounts = _serialize_accounts(company)
+	today = getdate(nowdate())
+	fy_start_year = today.year if today.month >= 4 else today.year - 1
 	return {
 		"company": company,
 		"company_currency": frappe.db.get_value("Company", company, "default_currency") or "INR",
+		"can_manage": can_manage(),
+		"default_from_date": f"{fy_start_year}-04-01",
+		"default_to_date": today.isoformat(),
 		"accounts": accounts,
 		"parent_accounts": [
 			{
@@ -175,8 +195,121 @@ def _parse_details(details):
 
 @frappe.whitelist(methods=["POST"])
 def get_chart_of_accounts():
-	_require_manager()
+	_require_reader()
 	return _workspace()
+
+
+def _ledger_dates(from_date, to_date):
+	try:
+		start = getdate(from_date)
+		end = getdate(to_date)
+	except (TypeError, ValueError):
+		frappe.throw(_("Choose valid From and To dates."))
+	if not from_date or not to_date or start > end:
+		frappe.throw(_("Choose a valid date range with From on or before To."))
+	return start, end
+
+
+@frappe.whitelist(methods=["POST"])
+def get_account_ledger(account, from_date, to_date, page=1):
+	"""A bounded, read-only statement for one Sevamrita posting account.
+
+	Debit-positive balances are displayed as Dr; credit-positive as Cr. The
+	opening amount includes every non-cancelled GL entry before the selected
+	date range, so pagination never changes the statement's totals.
+	"""
+	_require_reader()
+	company = _require_company()
+	account = cstr(account).strip()
+	details = frappe.db.get_value(
+		"Account", {"name": account, "company": company},
+		["name", "account_name", "account_number", "is_group", "root_type", "disabled"],
+		as_dict=True,
+	)
+	if not details:
+		frappe.throw(_("Choose a ledger in Sevamrita Foundation's Chart of Accounts."), frappe.PermissionError)
+	if cint(details.is_group):
+		frappe.throw(_("Choose a ledger account, not a group."))
+	start, end = _ledger_dates(from_date, to_date)
+	try:
+		page = int(page)
+	except (TypeError, ValueError):
+		frappe.throw(_("Choose a valid page number."))
+	if page < 1 or page > 10000:
+		frappe.throw(_("Choose a valid page number."))
+
+	base = {"company": company, "account": account, "start": start, "end": end}
+	opening = frappe.db.sql(
+		"""SELECT COALESCE(SUM(debit - credit), 0) AS balance
+		FROM `tabGL Entry`
+		WHERE company = %(company)s AND account = %(account)s AND is_cancelled = 0
+		AND posting_date < %(start)s""",
+		base, as_dict=True,
+	)[0].balance
+	summary = frappe.db.sql(
+		"""SELECT COUNT(*) AS entry_count, COALESCE(SUM(debit), 0) AS debit,
+		COALESCE(SUM(credit), 0) AS credit
+		FROM `tabGL Entry`
+		WHERE company = %(company)s AND account = %(account)s AND is_cancelled = 0
+		AND posting_date BETWEEN %(start)s AND %(end)s""",
+		base, as_dict=True,
+	)[0]
+	rows = frappe.db.sql(
+		"""SELECT name, posting_date, voucher_type, voucher_no, remarks, against,
+		party_type, party, debit, credit, creation
+		FROM `tabGL Entry`
+		WHERE company = %(company)s AND account = %(account)s AND is_cancelled = 0
+		AND posting_date BETWEEN %(start)s AND %(end)s
+		ORDER BY posting_date ASC, creation ASC, name ASC
+		LIMIT %(limit)s OFFSET %(offset)s""",
+		{**base, "limit": LEDGER_PAGE_SIZE, "offset": (page - 1) * LEDGER_PAGE_SIZE},
+		as_dict=True,
+	)
+	page_opening = flt(opening)
+	if rows and page > 1:
+		first = rows[0]
+		page_opening += flt(frappe.db.sql(
+			"""SELECT COALESCE(SUM(debit - credit), 0) AS balance
+			FROM `tabGL Entry`
+			WHERE company = %(company)s AND account = %(account)s AND is_cancelled = 0
+			AND posting_date BETWEEN %(start)s AND %(end)s
+			AND (posting_date < %(first_date)s
+			OR (posting_date = %(first_date)s AND creation < %(first_creation)s)
+			OR (posting_date = %(first_date)s AND creation = %(first_creation)s AND name < %(first_name)s))""",
+			{**base, "first_date": first.posting_date, "first_creation": first.creation, "first_name": first.name},
+			as_dict=True,
+		)[0].balance)
+	balance = page_opening
+	entries = []
+	for row in rows:
+		balance += flt(row.debit) - flt(row.credit)
+		entries.append({
+			"name": row.name,
+			"posting_date": str(row.posting_date),
+			"voucher_type": row.voucher_type or "",
+			"voucher_no": row.voucher_no or "",
+			"remarks": row.remarks or "",
+			"against": row.against or "",
+			"party_type": row.party_type or "",
+			"party": row.party or "",
+			"debit": flt(row.debit),
+			"credit": flt(row.credit),
+			"balance": flt(balance),
+		})
+	return {
+		"account": details,
+		"currency": frappe.db.get_value("Company", company, "default_currency") or "INR",
+		"from_date": start.isoformat(),
+		"to_date": end.isoformat(),
+		"opening_balance": flt(opening),
+		"total_debit": flt(summary.debit),
+		"total_credit": flt(summary.credit),
+		"closing_balance": flt(opening) + flt(summary.debit) - flt(summary.credit),
+		"entry_count": cint(summary.entry_count),
+		"page": page,
+		"page_size": LEDGER_PAGE_SIZE,
+		"entries": entries,
+	}
 
 
 @frappe.whitelist(methods=["POST"])

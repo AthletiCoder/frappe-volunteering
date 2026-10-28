@@ -21,6 +21,7 @@ from volunteering.volunteering.home_service import (
 	_employee_draft_todos,
 	_member_project_cards,
 	_money_actions,
+	_purchasing_actions,
 	_system_management_actions,
 	_show_member_projects,
 	_time_actions,
@@ -202,18 +203,21 @@ class UnitTestHomeAccess(UnitTestCase):
 
 
 class UnitTestHomePayload(UnitTestCase):
-	def test_project_cards_only_for_non_accounts_employee_members(self):
+	def test_project_cards_are_shown_for_every_employee_level_and_management_role(self):
 		self.assertTrue(_show_member_projects("employee@example.com", "EMP-1", ["Employee"], False))
-		self.assertFalse(_show_member_projects("manager@example.com", "EMP-2", ["Projects Manager"], True))
-		self.assertFalse(_show_member_projects("accounts@example.com", "EMP-3", ["Accounts User"], False))
-		self.assertFalse(_show_member_projects("accounts@example.com", "EMP-3", ["Accounts Manager"], False))
-		self.assertFalse(_show_member_projects("Administrator", "EMP-4", ["Employee"], False))
+		self.assertTrue(_show_member_projects("manager@example.com", "EMP-2", ["Projects Manager"], True))
+		self.assertTrue(_show_member_projects("accounts@example.com", "EMP-3", ["Accounts User"], False))
+		self.assertTrue(_show_member_projects("accounts@example.com", "EMP-3", ["Accounts Manager"], False))
+		self.assertTrue(_show_member_projects("hr@example.com", "EMP-4", ["HR Manager"], False))
+		self.assertTrue(_show_member_projects("Administrator", "EMP-5", ["Employee"], False))
 		self.assertFalse(_show_member_projects("employee@example.com", None, ["Employee"], False))
+		self.assertFalse(_show_member_projects("accounts@example.com", None, ["Accounts Manager"], False))
 
 	@patch("volunteering.volunteering.home_service.frappe.get_list")
 	@patch("volunteering.volunteering.home_service.frappe.get_all")
 	@patch("volunteering.volunteering.home_service.frappe.db.get_value", return_value="Sevamrita Foundation")
-	def test_member_project_cards_only_return_basic_details_and_eligible_actions(self, _company, get_all, get_list):
+	@patch("volunteering.volunteering.home_service.user_has_board_of_directors", return_value=False)
+	def test_member_project_cards_only_return_basic_details_and_eligible_actions(self, _board, _company, get_all, get_list):
 		get_all.side_effect = [
 			["PROJ-1", "PROJ-2"],
 			[frappe._dict(name="PROJ-1", budget_status="Active"), frappe._dict(name="PROJ-2", budget_status="Closed")],
@@ -235,6 +239,7 @@ class UnitTestHomePayload(UnitTestCase):
 		self.assertEqual([card["name"] for card in cards], ["PROJ-1"])
 		self.assertTrue(cards[0]["can_submit_expense"])
 		self.assertTrue(cards[0]["can_request_advance"])
+		self.assertTrue(cards[0]["can_place_purchase_order"])
 		self.assertNotIn("budget_status", cards[0])
 		self.assertNotIn("total_approved_budget", cards[0])
 		filters = get_list.call_args.kwargs["filters"]
@@ -242,6 +247,17 @@ class UnitTestHomePayload(UnitTestCase):
 		self.assertEqual(filters["is_archived"], 0)
 		self.assertEqual(filters["operational_status"], "Active")
 		self.assertEqual(filters["company"], "Sevamrita Foundation")
+
+	@patch("volunteering.volunteering.home_service.frappe.get_list")
+	@patch("volunteering.volunteering.home_service.frappe.get_all")
+	@patch("volunteering.volunteering.home_service.frappe.db.get_value", return_value="Sevamrita Foundation")
+	@patch("volunteering.volunteering.home_service.user_has_board_of_directors", return_value=True)
+	def test_board_employee_still_sees_project_but_cannot_place_order(self, _board, _company, get_all, get_list):
+		get_all.side_effect = [["PROJ-1"], [frappe._dict(name="PROJ-1", budget_status="Active")], ["PROJ-1"]]
+		get_list.return_value = [frappe._dict(name="PROJ-1", project_name="Board member project", project_purpose="Training", project_type="", operational_status="Active", expected_start_date=None, expected_end_date=None)]
+		cards = _member_project_cards("board@example.com", "EMP-6")
+		self.assertEqual(len(cards), 1)
+		self.assertFalse(cards[0]["can_place_purchase_order"])
 
 	@patch("volunteering.volunteering.home_cutover.home_project_names", return_value=[])
 	def test_empty_governed_project_filter_does_not_match_blank_legacy_links(self, _names):
@@ -346,9 +362,23 @@ class UnitTestHomePayload(UnitTestCase):
 	@patch("volunteering.volunteering.home_service.frappe.get_all", return_value=[])
 	@patch("volunteering.volunteering.home_service._safe_count", return_value=1)
 	@patch("volunteering.volunteering.home_service.frappe.get_roles", return_value=[])
-	def test_accounts_queue_hides_unfinished_vendor_payment(self, _roles, safe_count, _advances, _residual):
-		self.assertNotIn("vendor_pay", [row["id"] for row in _accounts_queues()])
-		self.assertNotIn("Purchase Invoice", [call.args[0] for call in safe_count.call_args_list])
+	def test_vendor_payment_queue_opens_home_and_excludes_legacy_bills(self, _roles, safe_count, _advances, _residual):
+		queue = next(row for row in _accounts_queues() if row["id"] == "vendor_pay")
+		self.assertEqual(queue["route"], "/volunteering/purchase-accounts?view=payments")
+		invoice_call = next(call for call in safe_count.call_args_list if call.args[0] == "Purchase Invoice")
+		self.assertEqual(invoice_call.args[1]["home_purchase_request_key"], ["is", "set"])
+
+	@patch("volunteering.volunteering.home_service.frappe.get_roles", return_value=["Employee", "Accounts Manager", "Expense Approver"])
+	def test_accounts_approver_home_has_three_distinct_purchase_pages(self, _roles):
+		actions = _purchasing_actions("accounts@example.com", "EMP-1")
+		self.assertEqual([row["id"] for row in actions], ["my_purchase_requests", "purchase_approvals", "approved_purchases"])
+		self.assertEqual([row["route"] for row in actions], ["/volunteering/vendor-purchases", "/volunteering/purchase-approvals", "/volunteering/purchase-accounts"])
+
+	@patch("volunteering.volunteering.home_service.frappe.get_roles", return_value=["Employee"])
+	@patch("volunteering.volunteering.home_service.user_has_board_of_directors", return_value=False)
+	@patch("volunteering.volunteering.home_service.frappe.db.exists", return_value=None)
+	def test_employee_without_review_responsibility_has_only_personal_purchase_page(self, _exists, _board, _roles):
+		self.assertEqual([row["id"] for row in _purchasing_actions("employee@example.com", "EMP-1")], ["my_purchase_requests"])
 
 	@patch("volunteering.volunteering.home_service.frappe.db.exists", return_value=True)
 	@patch("volunteering.volunteering.home_service.frappe.db.has_column", return_value=True)

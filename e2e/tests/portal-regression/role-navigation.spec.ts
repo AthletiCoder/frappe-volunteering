@@ -49,6 +49,7 @@ test("employee Home retains active-project actions as the first content section"
   await expect(project.getByRole("link", { name: "Submit an expense" })).toBeVisible();
   await expect(project.getByRole("link", { name: "Request an advance" })).toBeVisible();
   await expect(project.getByRole("link", { name: "Prepare an invoice" })).toBeVisible();
-  await expect(project.getByRole("link", { name: "View project" })).toBeVisible();
+  await expect(project.getByRole("link", { name: "Place purchase order" })).toBeVisible();
+  await expect(project.getByRole("heading", { level: 2 }).getByRole("link")).toBeVisible();
   await expect(page.getByText("Everything you can do")).toHaveCount(0);
 });

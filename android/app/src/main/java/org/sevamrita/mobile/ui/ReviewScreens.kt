@@ -49,16 +49,19 @@ import java.io.File
 @Composable
 fun AdvanceQueueScreen(state: PortalState, model: PortalViewModel) {
     val queues = state.data.optJSONObject("queues") ?: JSONObject()
-    val approvals = queues.items("approval")
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Heading("Advance approvals", "Requests assigned to you") }
-        if (approvals.isEmpty() && !state.busy) item { SectionCard { Text("No advances await your decision.") } }
-        items(approvals) { row -> ActionRow(row.display("employee_name"), "${row.display("name")} · ${money(row.optDouble("amount"))}") {
-            model.open(Page.ADVANCE_REVIEW, row.text("name"))
-        } }
-        if (queues.items("disbursement").isNotEmpty() || queues.items("return").isNotEmpty()) item {
-            SectionCard { Text("Accounts disbursement and advance returns need dedicated mobile controls and are not available in this build.") }
+        item { Heading("Advance work", "Approvals, disbursements and unused returns") }
+        for ((key, title) in listOf("approval" to "Manager approval", "disbursement" to "Accounts disbursement", "return" to "Unused advance return")) {
+            val rows = queues.items(key)
+            if (rows.isNotEmpty()) {
+                item { Text(title, fontWeight = FontWeight.Bold) }
+                items(rows) { row -> ActionRow(row.display("employee_name"), "${row.display("name")} · ${money(row.optDouble(if (key == "return") "residual_amount" else "amount"))}") {
+                    model.open(Page.ADVANCE_REVIEW, row.text("name"))
+                } }
+            }
         }
+        if (listOf("approval", "disbursement", "return").all { queues.items(it).isEmpty() } && !state.busy)
+            item { SectionCard { Text("No advances await your action.") } }
     }
 }
 
@@ -95,6 +98,12 @@ fun AdvanceReviewScreen(state: PortalState, model: PortalViewModel) {
                 }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text("Reject") }
             } }
         }
+        if (item.optJSONObject("access")?.optBoolean("disbursement") == true) item {
+            AdvanceDisbursementForm(item, state.busy, model::disburseAdvance)
+        }
+        if (item.optJSONObject("access")?.optBoolean("return") == true) item {
+            AdvanceReturnForm(item, state.busy, model::recordAdvanceReturn)
+        }
     }
 }
 
@@ -103,7 +112,7 @@ fun ClaimQueueScreen(state: PortalState, model: PortalViewModel) {
     val queues = state.data.optJSONObject("queues") ?: JSONObject()
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Heading("Expense review", "Items assigned to your role") }
-        for ((key, title) in listOf("receipt_review" to "Receipt review", "approval" to "Manager approval")) {
+        for ((key, title) in listOf("receipt_review" to "Receipt review", "approval" to "Manager approval", "classification" to "Accounts classification", "reimbursement" to "Reimbursement")) {
             val rows = queues.items(key)
             if (rows.isNotEmpty()) {
                 item { Text(title, fontWeight = FontWeight.Bold) }
@@ -112,11 +121,8 @@ fun ClaimQueueScreen(state: PortalState, model: PortalViewModel) {
                 } }
             }
         }
-        if (queues.items("receipt_review").isEmpty() && queues.items("approval").isEmpty() && !state.busy) item {
+        if (listOf("receipt_review", "approval", "classification", "reimbursement").all { queues.items(it).isEmpty() } && !state.busy) item {
             SectionCard { Text("No expense claims await your review.") }
-        }
-        if (queues.items("classification").isNotEmpty() || queues.items("reimbursement").isNotEmpty()) item {
-            SectionCard { Text("Accounts classification and reimbursement need dedicated mobile controls and are not available in this build.") }
         }
     }
 }
@@ -192,6 +198,12 @@ fun ClaimReviewScreen(state: PortalState, model: PortalViewModel) {
                 else model.decideClaim("reject", reason, JSONObject())
             }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text("Reject") }
         } }
+        if (access.optBoolean("classification")) item {
+            ClaimClassificationForm(item, state.busy, model::classifyClaim)
+        }
+        if (access.optBoolean("reimbursement")) item {
+            ClaimReimbursementForm(item, state.busy, model::reimburseClaim)
+        }
     }
 }
 

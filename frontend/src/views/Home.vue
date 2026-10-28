@@ -15,7 +15,7 @@
 						<div class="flex flex-wrap items-start justify-between gap-3">
 							<div class="min-w-0 max-w-4xl">
 								<p class="text-xs font-semibold uppercase tracking-wide text-muted">{{ project.name }}</p>
-								<h3 class="mt-2 text-xl font-bold leading-snug text-ink">{{ project.project_name }}</h3>
+								<h2 class="mt-2 text-xl font-bold leading-snug text-ink"><RouterLink :to="{ path: '/projects', query: { project: project.name } }" class="inline-flex max-w-full rounded-md text-left hover:text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent">{{ project.project_name }}</RouterLink></h2>
 								<p v-if="project.project_type" class="mt-1 text-sm text-muted">{{ project.project_type }}</p>
 								<p class="mt-3 whitespace-pre-line text-sm leading-relaxed text-muted">{{ project.purpose || "No project summary has been added yet." }}</p>
 								<p v-if="project.starts_on || project.ends_on" class="mt-3 text-xs text-muted">{{ project.starts_on ? projectDate(project.starts_on) : "Start date not set" }} – {{ project.ends_on ? projectDate(project.ends_on) : "End date not set" }}</p>
@@ -27,7 +27,8 @@
 								<RouterLink v-if="project.can_submit_expense" :to="{ path: '/expense-claim', query: { project: project.name } }" class="btn-primary min-h-11 w-full text-center">Submit an expense</RouterLink>
 								<RouterLink v-if="project.can_request_advance" :to="{ path: '/advances', query: { new: '1', project: project.name } }" class="btn-secondary min-h-11 w-full text-center">Request an advance</RouterLink>
 								<RouterLink to="/invoice-generator" class="btn-secondary min-h-11 w-full text-center">Prepare an invoice</RouterLink>
-								<RouterLink :to="{ path: '/projects', query: { project: project.name } }" class="btn-secondary min-h-11 w-full text-center">View project</RouterLink>
+								<RouterLink v-if="project.can_place_purchase_order !== false" :to="{ path: '/vendor-purchases', query: { new: '1', project: project.name } }" class="btn-secondary min-h-11 w-full text-center">Place purchase order</RouterLink>
+								<button v-else type="button" class="btn-secondary min-h-11 w-full text-center disabled:cursor-not-allowed disabled:opacity-50" disabled title="Your current approval grade cannot raise purchase orders.">Place purchase order</button>
 							</div>
 							<p v-if="project.can_request_advance && !project.can_submit_expense" class="mt-3 text-xs text-muted">Expense claims will be available when the project has an approved expense category.</p>
 						</div>
