@@ -40,6 +40,12 @@ class RouteTargetTest {
         assertNull(routeTarget("https://example.org/desk"))
     }
 
+    @Test fun collaborationRoutesUseComposeScreens() {
+        assertEquals(Page.COLLABORATION to "", routeTarget("/volunteering/collaboration"))
+        assertEquals(Page.COLLABORATION to "work", routeTarget("/volunteering/collaboration?view=work"))
+        assertNull(routeTarget("/desk/collaboration-space"))
+    }
+
     @Test fun homeActionRoutesHaveNativeTargets() {
         val paths = listOf(
             "/volunteering/home", "/volunteering/todos", "/volunteering/projects?view=approved",

@@ -16,8 +16,8 @@ npm run test:frontend
 
 Set `BASE_URL` to the isolated site's port (for example,
 `http://127.0.0.1:8002`), along with `E2E_ADMIN_PASSWORD`, `E2E_PASSWORD`,
-`E2E_PROJECT_PASSWORD`, and a separate `E2E_AUTH_DIR`. Both suites default to
-port 8001 if omitted. Run the live desktop and mobile suites sequentially;
+`E2E_PROJECT_PASSWORD`, and a separate `E2E_AUTH_DIR`. Both full Home suites default to
+localhost:8002 and reject the review site on port 8001. Run the live desktop and mobile suites sequentially;
 concurrent same-user logins are tested explicitly, not hidden by retries.
 Set `PORTAL_REPORT_NAME=portal-regression-followup` for a targeted desktop rerun
 without overwriting the original evidence.

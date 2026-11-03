@@ -14,6 +14,7 @@
 			v-if="name === 'home'"
 			d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z"
 		/>
+		<path v-else-if="name === 'chat'" d="M4 4h16v12H9l-5 4V4zM8 8h8M8 12h5" />
 		<path
 			v-else-if="name === 'check'"
 			d="M9 11.5 11 14l4-5M7 4h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"

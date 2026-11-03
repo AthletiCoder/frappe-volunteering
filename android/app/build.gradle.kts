@@ -1,8 +1,22 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+val localPortalHost = providers.gradleProperty("sevamritaLocalHost").orElse("10.0.2.2").get()
+val localPortalOnly = providers.gradleProperty("sevamritaLocalOnly").orElse("false").get().toBooleanStrict()
+val localOctets = localPortalHost.split('.').map { it.toIntOrNull() }
+require(localOctets.size == 4 && localOctets.all { it != null && it in 0..255 } &&
+    (localOctets[0] == 10 || (localOctets[0] == 172 && localOctets[1] in 16..31) ||
+        (localOctets[0] == 192 && localOctets[1] == 168))) {
+    "sevamritaLocalHost must be a private Wi-Fi IPv4 address."
+}
+
+val releaseKey = rootProject.file("release-keystore.properties")
+val releaseSigning = Properties().apply { if (releaseKey.exists()) releaseKey.inputStream().use { load(it) } }
 
 android {
     namespace = "org.sevamrita.mobile"
@@ -12,16 +26,38 @@ android {
         applicationId = "org.sevamrita.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 14
+        versionName = "0.4.1"
+        manifestPlaceholders["appLabel"] = "SF Tasks"
+        buildConfigField("String", "APP_NAME", "\"SF Tasks\"")
+        buildConfigField("String", "DEFAULT_LOCAL_HOST", "\"\"")
+        buildConfigField("boolean", "LOCAL_PORTAL_ONLY", "false")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        if (releaseKey.exists()) create("sfTasks") {
+            storeFile = rootProject.file(releaseSigning.getProperty("storeFile"))
+            storePassword = releaseSigning.getProperty("storePassword")
+            keyAlias = releaseSigning.getProperty("keyAlias")
+            keyPassword = releaseSigning.getProperty("keyPassword")
+        }
     }
 
     buildTypes {
         debug {
             manifestPlaceholders["cleartextAllowed"] = "true"
+            buildConfigField("String", "DEFAULT_LOCAL_HOST", "\"$localPortalHost\"")
+            buildConfigField("boolean", "LOCAL_PORTAL_ONLY", localPortalOnly.toString())
+            if (localPortalOnly) {
+                applicationIdSuffix = ".local"
+                versionNameSuffix = "-local"
+                manifestPlaceholders["appLabel"] = "SF testing"
+                buildConfigField("String", "APP_NAME", "\"SF testing\"")
+            }
         }
         release {
+            if (releaseKey.exists()) signingConfig = signingConfigs.getByName("sfTasks")
             isMinifyEnabled = true
             manifestPlaceholders["cleartextAllowed"] = "false"
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -34,6 +70,7 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
+    testOptions.unitTests.all { it.systemProperty("sevamrita.manifest", project.file("src/main/AndroidManifest.xml").absolutePath) }
 }
 
 dependencies {

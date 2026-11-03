@@ -1,7 +1,31 @@
 package org.sevamrita.mobile
 
 import android.os.Bundle
+import android.os.Build
+import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import org.sevamrita.mobile.reminders.WorkReminders
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.material3.AlertDialog
+import org.sevamrita.mobile.ui.ChatView
+import org.sevamrita.mobile.ui.TrackerFilter
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -30,6 +54,9 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.Wallet
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -56,6 +83,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -67,6 +95,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.json.JSONObject
 import org.sevamrita.mobile.data.Server
+import org.sevamrita.mobile.data.DemoLogins
 import org.sevamrita.mobile.data.display
 import org.sevamrita.mobile.data.items
 import org.sevamrita.mobile.data.text
@@ -107,6 +136,7 @@ import org.sevamrita.mobile.ui.MultiResultScreen
 import org.sevamrita.mobile.ui.BudgetHealthScreen
 import org.sevamrita.mobile.ui.CombinedClaimScreen
 import org.sevamrita.mobile.ui.CorrectClaimScreen
+import org.sevamrita.mobile.ui.CollaborationScreen
 
 private val green = Color(0xFF08745E)
 private val ink = Color(0xFF1D3035)
@@ -114,9 +144,25 @@ private val muted = Color(0xFF637378)
 private val canvas = Color(0xFFF5F7F4)
 private val pale = Color(0xFFE5F3ED)
 
+private data class WorkLink(val item: String, val room: String, val kind: String)
+
 class MainActivity : ComponentActivity() {
+    private var pendingWork by mutableStateOf<WorkLink?>(null)
+    private fun readWorkLink(intent: Intent?) {
+        val item = intent?.getStringExtra("work_item").orEmpty()
+        val room = intent?.getStringExtra("work_room").orEmpty()
+        val kind = intent?.getStringExtra("work_kind").orEmpty()
+        if (item.isNotBlank() && room.isNotBlank() && kind in listOf("Task", "Tracker")) pendingWork = WorkLink(item, room, kind)
+        intent?.removeExtra("work_item")
+    }
+    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); readWorkLink(intent) }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        readWorkLink(intent)
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.light(android.graphics.Color.WHITE, android.graphics.Color.WHITE)
+        )
         setContent {
             MaterialTheme(colorScheme = lightColorScheme(
                 primary = green, onPrimary = Color.White, background = canvas,
@@ -124,120 +170,130 @@ class MainActivity : ComponentActivity() {
                 secondaryContainer = pale, onSecondaryContainer = ink
             )) {
                 val model: PortalViewModel = viewModel()
-                PortalApp(model)
+                PortalApp(model, onExit = { finish() }, workLink = pendingWork, onWorkLinkHandled = { pendingWork = null })
             }
         }
     }
 }
 
 @Composable
-private fun PortalApp(model: PortalViewModel) {
+private fun PortalApp(model: PortalViewModel, onExit: () -> Unit, workLink: WorkLink?, onWorkLinkHandled: () -> Unit) {
     val state = model.state.value
+    val context = LocalContext.current
+    var reminderSettings by remember { mutableStateOf(false) }
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        WorkReminders.reschedule(context); WorkReminders.requestSync(context)
+    }
+    LaunchedEffect(state.signedIn, state.user) {
+        if (state.signedIn && Build.VERSION.SDK_INT >= 33 && !WorkReminders.notificationsAllowed(context)) {
+            val prefs = context.getSharedPreferences("reminder_permission", android.content.Context.MODE_PRIVATE)
+            if (!prefs.getBoolean("asked", false)) { prefs.edit().putBoolean("asked", true).apply(); notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }
+        }
+    }
+    LaunchedEffect(state.signedIn, workLink) {
+        if (state.signedIn && workLink != null) {
+            if (workLink.kind == "Tracker") model.openTracker(workLink.room, workLink.item) else model.openTask(workLink.room, workLink.item)
+            onWorkLinkHandled()
+        }
+    }
+    var confirmExit by remember { mutableStateOf(false) }
     if (state.booting) {
-        Box(Modifier.fillMaxSize().background(canvas), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
+        Box(Modifier.fillMaxSize().background(canvas).safeDrawingPadding(), contentAlignment = Alignment.Center) {
+            Text(BuildConfig.APP_NAME, color = green, fontWeight = FontWeight.Bold, fontSize = 30.sp)
         }
         return
     }
     if (!state.signedIn) { LoginScreen(state, model); return }
+    BackHandler { if (!model.backInChat()) confirmExit = true }
+    val screenStates = rememberSaveableStateHolder()
+    val route = state.chatNavigation.current
+    val roomChat = state.page != Page.RECEIPT && route.view == ChatView.CHAT
+    var menuExpanded by remember { mutableStateOf(false) }
+    val canGoBack = state.page == Page.RECEIPT || state.chatNavigation.canGoBack
+    val title = if (state.page == Page.RECEIPT) state.receiptName else when (route.view) {
+        ChatView.CONVERSATIONS -> "Chats"
+        ChatView.MY_TASKS -> "My tasks"
+        ChatView.TASKS -> "Tasks"
+        ChatView.TRACKERS -> "Trackers"
+        ChatView.MY_TRACKERS -> "My trackers"
+        ChatView.TRACKER -> "Tracker"
+        ChatView.TASK -> "Task"
+        ChatView.CHAT -> state.chatRoom.optJSONObject("space")?.text("title").orEmpty().ifBlank { "Chat" }
+    }
     Scaffold(
         containerColor = canvas,
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
-            Column {
-                Row(
-                    Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (state.page !in listOf(Page.HOME, Page.WORK, Page.PROJECTS, Page.ADVANCES, Page.CLAIMS, Page.PROFILE)) {
-                        IconButton(onClick = { if (state.page == Page.RECEIPT) model.closeReceipt() else model.open(parentOf(state.page)) }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                        }
+            Column(Modifier.fillMaxWidth().background(Color.White).windowInsetsPadding(
+                WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))) {
+                if (!roomChat) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    if (canGoBack) IconButton(onClick = { model.backInChat() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                     Column(Modifier.weight(1f)) {
-                        Text("SEVAMRITA", color = green, fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 2.sp)
-                        Text(pageTitle(state), fontWeight = FontWeight.SemiBold, fontSize = 21.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(if (route.view == ChatView.CONVERSATIONS && state.page != Page.RECEIPT) BuildConfig.APP_NAME else title,
+                            color = if (route.view == ChatView.CONVERSATIONS) green else ink,
+                            fontWeight = FontWeight.Bold, fontSize = 25.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    if (state.page == Page.HOME) IconButton(onClick = { model.refreshHome() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh Home", tint = green)
+                    val trackerList = route.view in listOf(ChatView.TRACKERS, ChatView.MY_TRACKERS)
+                    if (state.page != Page.RECEIPT && trackerList) TrackerFilter(state.trackerFilter, model::setTrackerFilter)
+                    if (state.page != Page.RECEIPT && !trackerList && route.view != ChatView.MY_TASKS) IconButton(onClick = model::showPersonalTasks) {
+                        Icon(Icons.Default.Checklist, "My tasks", tint = green)
+                    }
+                    if (state.page != Page.RECEIPT && !trackerList && route.view != ChatView.MY_TRACKERS) IconButton(onClick = model::showPersonalTrackers) {
+                        Icon(Icons.Default.Timeline, "My trackers", tint = green)
+                    }
+                    Box {
+                        IconButton(onClick = { menuExpanded = true }) { Icon(Icons.Default.MoreVert, "More options", tint = muted) }
+                        DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                            DropdownMenuItem(text = { Text("Chats") }, onClick = { menuExpanded = false; model.showChatConversations() })
+                            DropdownMenuItem(text = { Text("My tasks") }, onClick = { menuExpanded = false; model.showPersonalTasks() })
+                            DropdownMenuItem(text = { Text("My trackers") }, onClick = { menuExpanded = false; model.showPersonalTrackers() })
+                            DropdownMenuItem(text = { Text("Reminders") }, onClick = { menuExpanded = false; reminderSettings = true })
+                            DropdownMenuItem(text = { Text("Refresh") }, onClick = { menuExpanded = false; model.refreshChat() })
+                            DropdownMenuItem(text = { Text("Switch user") }, onClick = { menuExpanded = false; model.logout() }, enabled = !state.busy)
+                        }
                     }
                 }
-                if (state.busy) androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
-            }
-        },
-        bottomBar = {
-            NavigationBar(containerColor = Color.White) {
-                val entries = listOf(
-                    Triple(Page.HOME, "Home", Icons.Default.Home),
-                    Triple(Page.WORK, "My work", Icons.AutoMirrored.Filled.Assignment),
-                    Triple(Page.PROJECTS, "Projects", Icons.Default.Folder),
-                    Triple(Page.CLAIMS, "Expenses", Icons.AutoMirrored.Filled.ReceiptLong),
-                    Triple(Page.PROFILE, "Profile", Icons.Default.AccountCircle)
-                )
-                for ((page, label, icon) in entries) NavigationBarItem(
-                    selected = state.page == page,
-                    onClick = { if (page == Page.HOME) model.open(page).also { model.refreshHome() } else model.open(page) },
-                    icon = { Icon(icon, contentDescription = null) },
-                    label = { Text(label, fontSize = 10.sp) }
-                )
             }
         }
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
+        Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
             if (state.error.isNotBlank()) MessageBar(state.error, isError = true, onDismiss = model::dismissMessage)
             if (state.notice.isNotBlank()) MessageBar(state.notice, isError = false, onDismiss = model::dismissMessage)
-            when (state.page) {
-                Page.HOME -> HomeScreen(state, model)
-                Page.WORK -> WorkScreen(state, model)
-                Page.PROJECTS -> ProjectsScreen(state, model)
-                Page.PROJECT -> ProjectScreen(state, model)
-                Page.PROPOSALS -> ProposalsScreen(state, model)
-                Page.PROPOSAL -> ProposalScreen(state, model)
-                Page.PROPOSAL_FORM -> ProposalFormScreen(state, model)
-                Page.ADVANCES -> AdvancesScreen(state, model)
-                Page.ADVANCE -> AdvanceScreen(state)
-                Page.NEW_ADVANCE -> AdvanceRequestScreen(state.form, state.detailId, state.busy, model::submitAdvance)
-                Page.CLAIMS -> ClaimsScreen(state, model)
-                Page.CLAIM -> ClaimScreen(state, model)
-                Page.CORRECT_CLAIM -> CorrectClaimScreen(state, model)
-                Page.NEW_CLAIM -> ExpenseRequestScreen(state.form, state.data, state.detailId, state.busy, model::projectAccounts, model::submitClaim)
-                Page.COMBINED_START -> CombinedClaimScreen(state, model)
-                Page.COMBINED_INVOICE -> InvoiceScreen(state, model, integrated = true)
-                Page.MULTI_CLAIM -> MultiClaimScreen(state, model)
-                Page.MULTI_RESULT -> MultiResultScreen(state, model)
-                Page.ADVANCE_QUEUE -> AdvanceQueueScreen(state, model)
-                Page.ADVANCE_REVIEW -> AdvanceReviewScreen(state, model)
-                Page.CLAIM_QUEUE -> ClaimQueueScreen(state, model)
-                Page.CLAIM_REVIEW -> ClaimReviewScreen(state, model)
-                Page.RECEIPT -> ReceiptScreen(state)
-                Page.PROFILE -> ProfileScreen(state, model)
-                Page.CHART -> ChartScreen(state, model)
-                Page.LEDGER -> LedgerScreen(state, model)
-                Page.ACCOUNT_FORM -> AccountFormScreen(state, model)
-                Page.BANK_ACCOUNT -> BankAccountScreen(state, model)
-                Page.OFFICE_ADDRESSES -> OfficeAddressesScreen(state, model)
-                Page.OFFICE_ADDRESS_FORM -> OfficeAddressFormScreen(state, model)
-                Page.TEAM -> TeamScreen(state, model)
-                Page.OPENING_BALANCES -> OpeningBalancesScreen(state, model)
-                Page.PROJECT_MAPPING -> ProjectMappingScreen(state, model)
-                Page.PROJECT_MAPPING_DETAIL -> ProjectMappingDetailScreen(state, model)
-                Page.CLAIM_LIMITS -> ClaimLimitsScreen(state, model)
-                Page.FISCAL_YEARS -> FiscalYearsScreen(state, model)
-                Page.DONATIONS -> DonationScreen(state, model)
-                Page.HR_MANAGEMENT -> HRManagementScreen(state, model)
-                Page.EMPLOYEE_FORM -> ManagedEmployeeFormScreen(state, model)
-                Page.SYSTEM_MANAGEMENT -> SystemManagementScreen(state, model)
-                Page.USER_FORM -> ManagedUserFormScreen(state, model)
-                Page.INVOICE -> InvoiceScreen(state, model)
-                Page.INVOICE_RESULT -> InvoiceResultScreen(state, model)
-                Page.BUDGET_HEALTH -> BudgetHealthScreen(state, model)
-                Page.UNAVAILABLE -> UnavailableScreen(state)
-            }
+            if (state.page == Page.RECEIPT) ReceiptScreen(state) else
+                screenStates.SaveableStateProvider("${state.user}:${route.view}:${route.room}:${route.item}") {
+                    CollaborationScreen(state, model)
+                }
         }
     }
+    if (reminderSettings) AlertDialog(onDismissRequest = { reminderSettings = false },
+        title = { Text("Work reminders") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Reminders use the portal's time zone. Date-only tasks and trackers remind at 09:00.")
+            Text(if (WorkReminders.notificationsAllowed(context)) "Notifications are enabled." else "Notifications are currently blocked.")
+            if (!WorkReminders.notificationsAllowed(context)) TextButton(onClick = {
+                if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+            }) { Text("Enable notifications") }
+            Text(if (WorkReminders.precise(context)) "Precise timing is enabled." else "Allow precise timing for reminders at the chosen time. Otherwise Android may delay them.")
+            if (Build.VERSION.SDK_INT >= 31 && !WorkReminders.precise(context)) TextButton(onClick = {
+                context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}")))
+            }) { Text("Enable precise timing") }
+        } }, confirmButton = { TextButton(onClick = { reminderSettings = false; WorkReminders.reschedule(context); WorkReminders.requestSync(context) }) { Text("Done") } })
+    if (confirmExit) AlertDialog(
+        onDismissRequest = { confirmExit = false },
+        title = { Text("Exit ${BuildConfig.APP_NAME}?") },
+        text = { Text("You are on the first screen. Your session will remain signed in.") },
+        confirmButton = { TextButton(onClick = { confirmExit = false; onExit() }) { Text("Exit") } },
+        dismissButton = { TextButton(onClick = { confirmExit = false }) { Text("Stay") } }
+    )
 }
 
 private fun pageTitle(state: PortalState) = when (state.page) {
     Page.HOME -> "Home"; Page.WORK -> "My work"; Page.PROJECTS -> "Projects"
+    Page.COLLABORATION -> "Chat & workspaces"
     Page.PROJECT -> state.detailId; Page.ADVANCES -> "Advances"; Page.ADVANCE -> state.detailId
     Page.PROPOSALS -> "Project proposals"; Page.PROPOSAL -> state.detailId; Page.PROPOSAL_FORM -> "Project proposal"
     Page.NEW_ADVANCE -> "Request an advance"; Page.CLAIMS -> "Expense claims"; Page.CLAIM -> state.detailId
@@ -277,12 +333,17 @@ private fun parentOf(page: Page) = when (page) {
 
 @Composable
 private fun LoginScreen(state: PortalState, model: PortalViewModel) {
-    var username by remember { mutableStateOf("") }
+    var username by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
     var expanded by remember { mutableStateOf(false) }
+    val demoAccounts = DemoLogins.accounts(state.server)
+    var demoEmail by remember { mutableStateOf(demoAccounts.firstOrNull()?.email.orEmpty()) }
+    var demoExpanded by remember { mutableStateOf(false) }
+    var manualLogin by remember { mutableStateOf(false) }
     var localAddress by remember(state.localAddress) { mutableStateOf(state.localAddress) }
     LazyColumn(
-        Modifier.fillMaxSize().background(canvas), contentPadding = PaddingValues(24.dp),
+        Modifier.fillMaxSize().background(canvas).safeDrawingPadding().imePadding(), contentPadding = PaddingValues(24.dp),
         verticalArrangement = Arrangement.Center
     ) {
         item {
@@ -290,19 +351,24 @@ private fun LoginScreen(state: PortalState, model: PortalViewModel) {
                 Box(contentAlignment = Alignment.Center) { Text("S", fontSize = 30.sp, color = Color.White, fontWeight = FontWeight.Bold) }
             }
             Spacer(Modifier.height(22.dp))
-            Text("Sevamrita", fontSize = 34.sp, fontWeight = FontWeight.Bold, color = ink)
-            Text("Your projects, expenses and advances in one place.", color = muted, fontSize = 16.sp)
+            Text(BuildConfig.APP_NAME, fontSize = 34.sp, fontWeight = FontWeight.Bold, color = ink)
+            Text("Conversations and tasks for your team.", color = muted, fontSize = 16.sp)
             Spacer(Modifier.height(30.dp))
             SectionCard {
                 Text("Sign in", fontWeight = FontWeight.SemiBold, fontSize = 21.sp)
                 Spacer(Modifier.height(16.dp))
-                Box {
+                if (Server.available().size > 1) Box {
                     OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) { Text("Server: ${state.server.label}") }
                     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                         Server.available().forEach { server ->
                             DropdownMenuItem(text = { Text(server.label) }, onClick = { expanded = false; model.selectServer(server) })
                         }
                     }
+                }
+                if (BuildConfig.LOCAL_PORTAL_ONLY) {
+                    Text("Local testing only", color = green, fontWeight = FontWeight.SemiBold)
+                    Text("Connect this phone and your laptop to the same Wi-Fi.", color = muted, fontSize = 13.sp)
+                    Spacer(Modifier.height(10.dp))
                 }
                 if (state.server == Server.LOCAL) {
                     OutlinedTextField(
@@ -312,20 +378,51 @@ private fun LoginScreen(state: PortalState, model: PortalViewModel) {
                         singleLine = true, modifier = Modifier.fillMaxWidth()
                     )
                 }
-                OutlinedTextField(username, { username = it }, label = { Text("Email or username") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(password, { password = it }, label = { Text("Password") }, singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(10.dp))
-                Button(onClick = { model.login(username, password, if (state.server == Server.LOCAL) localAddress else null) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (state.busy) "Signing in…" else "Sign in")
+                if (demoAccounts.isNotEmpty() && !manualLogin) {
+                    Text("Choose a demo user", fontWeight = FontWeight.Medium)
+                    Box {
+                        OutlinedButton(onClick = { demoExpanded = true }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
+                            Text("${demoAccounts.firstOrNull { it.email == demoEmail }?.label ?: "Select a user"} ▾")
+                        }
+                        DropdownMenu(expanded = demoExpanded, onDismissRequest = { demoExpanded = false }) {
+                            demoAccounts.forEach { account -> DropdownMenuItem(
+                                text = { Column { Text(account.label); Text(account.email, fontSize = 12.sp, color = muted) } },
+                                onClick = { demoEmail = account.email; demoExpanded = false; model.dismissMessage() }
+                            ) }
+                        }
+                    }
+                    Text("No password entry needed for these local demo accounts.", color = muted, fontSize = 13.sp)
+                    Button(onClick = { model.loginDemo(demoEmail, localAddress) }, enabled = !state.busy && demoAccounts.any { it.email == demoEmail }, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (state.busy) "Signing in…" else "Sign in")
+                    }
+                    TextButton(onClick = { manualLogin = true; model.dismissMessage() }, enabled = !state.busy) { Text("Sign in with another account") }
+                } else {
+                    OutlinedTextField(username, { username = it }, label = { Text("ERP email address") }, singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Email),
+                        modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(password, { password = it }, label = { Text("Password") }, singleLine = true,
+                        visualTransformation = if (passwordVisible) androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = { TextButton(onClick = { passwordVisible = !passwordVisible }) { Text(if (passwordVisible) "Hide" else "Show") } },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(10.dp))
+                    Button(onClick = { model.login(username, password, if (state.server == Server.LOCAL) localAddress else null) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (state.busy) "Signing in…" else "Sign in")
+                    }
+                    TextButton(onClick = { model.requestPasswordReset(username, localAddress) }, enabled = !state.busy) { Text("Forgot password?") }
+                    if (demoAccounts.isNotEmpty()) TextButton(onClick = { manualLogin = false; password = ""; model.dismissMessage() }, enabled = !state.busy) { Text("Back to demo users") }
                 }
             }
             if (state.error.isNotBlank()) {
                 Spacer(Modifier.height(12.dp))
                 Text(state.error, color = MaterialTheme.colorScheme.error)
             }
+            if (state.notice.isNotBlank()) {
+                Spacer(Modifier.height(12.dp))
+                Text(state.notice, color = green)
+            }
             Spacer(Modifier.height(16.dp))
-            Text("This is a native app. Your account and permissions are the same as the Sevamrita portal.", color = muted, fontSize = 13.sp)
+            Text("Use your Sevamrita ERP account. App chat access must be enabled for your user.", color = muted, fontSize = 13.sp)
         }
     }
 }
@@ -368,7 +465,7 @@ private fun HomeScreen(state: PortalState, model: PortalViewModel) {
             } }
         }
         item { Heading("Explore", "Only the actions available to your account are shown") }
-        val sections = listOf("projects" to "Projects", "money" to "Money", "accounts" to "Accounts", "team" to "Team", "time" to "Time & leave", "hr_management" to "HR", "system_management" to "System", "organisation" to "Organisation")
+        val sections = listOf("collaboration" to "Collaboration", "projects" to "Projects", "money" to "Money", "accounts" to "Accounts", "team" to "Team", "time" to "Time & leave", "hr_management" to "HR", "system_management" to "System", "organisation" to "Organisation")
         sections.forEach { (key, label) ->
             val rows = actions.items(key).filterNot { it.text("route").startsWith("/desk/") }
             if (rows.isNotEmpty()) {

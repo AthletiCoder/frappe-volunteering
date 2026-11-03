@@ -1,10 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const baseURL = process.env.BASE_URL || "http://127.0.0.1:8001";
+const baseURL = process.env.BASE_URL || "http://127.0.0.1:8002";
 const reportName = process.env.PORTAL_REPORT_NAME || "portal-regression";
 if (!/^[a-z0-9-]+$/.test(reportName)) throw new Error("Use a simple report name.");
-if (!["127.0.0.1", "localhost", "sevamrita.local"].includes(new URL(baseURL).hostname)) {
-  throw new Error("The complete portal regression suite is restricted to the local demo site.");
+if (!["127.0.0.1", "localhost"].includes(new URL(baseURL).hostname) || new URL(baseURL).port !== "8002") {
+  throw new Error("The complete portal regression suite requires the isolated localhost:8002 database, not the review site.");
 }
 
 export default defineConfig({
@@ -19,7 +19,7 @@ export default defineConfig({
     "**/release/expense-lifecycle.spec.ts",
   ],
   // Kept as a separate legacy suite, not part of the Home release gate.
-  testIgnore: "**/projects/layout.spec.ts",
+  testIgnore: ["**/projects/layout.spec.ts", "**/portal-regression/collaboration.spec.ts"],
   outputDir: `./test-results/${reportName}`,
   workers: 1,
   reporter: [

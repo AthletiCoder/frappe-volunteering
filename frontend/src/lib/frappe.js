@@ -31,7 +31,7 @@ export async function call(method, args = {}) {
 		if (typeof msg === "string") {
 			msg = msg.replace(/<[^>]+>/g, "");
 		}
-		throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+		throw Object.assign(new Error(typeof msg === "string" ? msg : JSON.stringify(msg)), { status: res.status });
 	}
 	return data.message;
 }

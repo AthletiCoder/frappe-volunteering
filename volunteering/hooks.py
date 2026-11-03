@@ -167,6 +167,11 @@ override_doctype_class = {
 # Permission Query Conditions
 # This restricts which records appear in List View/Search
 permission_query_conditions = {
+	"Collaboration Space": "volunteering.volunteering.collaboration.space_query",
+	"Collaboration Entry": "volunteering.volunteering.collaboration.entry_query",
+	"Collaboration Item": "volunteering.volunteering.collaboration.item_query",
+	"Collaboration Member": "volunteering.volunteering.collaboration.member_query",
+	"Collaboration Read State": "volunteering.volunteering.collaboration.read_query",
 	"Employee Bank Account Request": "volunteering.volunteering.employee_bank_accounts.get_permission_query_conditions",
 	"Project Proposal": "volunteering.volunteering.project_proposals.get_permission_query_conditions",
 	"Project Budget Revision": "volunteering.volunteering.overrides.project.revision_query",
@@ -185,6 +190,11 @@ permission_query_conditions = {
 
 # Override "Has Permission" logic for specific row-level updates
 has_permission = {
+	"Collaboration Space": "volunteering.volunteering.collaboration.has_permission",
+	"Collaboration Entry": "volunteering.volunteering.collaboration.has_permission",
+	"Collaboration Item": "volunteering.volunteering.collaboration.has_permission",
+	"Collaboration Member": "volunteering.volunteering.collaboration.has_permission",
+	"Collaboration Read State": "volunteering.volunteering.collaboration.has_permission",
 	"Employee Bank Account Request": "volunteering.volunteering.employee_bank_accounts.has_permission",
 	"Project Proposal": "volunteering.volunteering.project_proposals.has_permission",
 	"Project Budget Revision": "volunteering.volunteering.overrides.project.revision_permission",
@@ -353,6 +363,7 @@ doc_events = {
 }
 
 after_migrate = [
+	"volunteering.volunteering.collaboration_setup.ensure_chat_role",
 	"volunteering.volunteering.leave_setup.after_migrate",
 	"volunteering.volunteering.workspace_setup.ensure_defaults",
 	"volunteering.volunteering.workspace_setup.backfill_participation_relationship_managers",

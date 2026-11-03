@@ -16,6 +16,7 @@ HR_ROLES = frozenset({"HR Manager", "HR User"})
 APPROVER_ROLES = frozenset({"Leave Approver", "Expense Approver", "Expense Receipt Reviewer"})
 STAFF_HOME_ROLES = frozenset(
 	{
+		"Web chat access",
 		"Employee",
 		"Accounts User",
 		"Accounts Manager",

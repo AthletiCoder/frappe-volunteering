@@ -10,6 +10,16 @@ const action = (id, group) => ({
 	list_label: `${id} history`,
 });
 
+test("Collaboration appears only when authorized actions are supplied", () => {
+	assert.equal(buildSidebarItems({ actions: {} }).some(item => item.id === "collaboration"), false);
+	const group = buildSidebarItems({ actions: { collaboration: [
+		{ id: "chat", label: "Chat & workspaces", route: "/volunteering/collaboration" },
+		{ id: "collaboration_work", label: "My collaboration work", route: "/volunteering/collaboration?view=work" },
+	] } }).find(item => item.id === "collaboration");
+	assert.equal(group.label, "Collaboration");
+	assert.deepEqual(group.children.map(item => item.href), ["/volunteering/collaboration", "/volunteering/collaboration?view=work"]);
+});
+
 test("employee Home keeps a small personal focus while sidebar retains all work options", () => {
 	const payload = {
 		flags: { show_member_projects: true, can_create_projects: true },
@@ -88,4 +98,14 @@ test("vendor purchases have a dedicated Home menu section", () => {
 	assert.equal(purchasing.children[0].href, "/volunteering/vendor-purchases");
 	assert.deepEqual(purchasing.children.map(row => row.label), ["My purchase requests", "Purchase approvals", "Approved purchases — Accounts"]);
 	assert.deepEqual(purchasing.children.map(row => row.href), ["/volunteering/vendor-purchases", "/volunteering/purchase-approvals", "/volunteering/purchase-accounts"]);
+});
+
+
+test("app chat access alone preserves the ERP sidebar and Home focus", () => {
+    const previous = { flags: { show_member_projects: true, can_create_projects: true },
+        nav: { projects: true, advances: true }, actions: { projects: [action("create_project", "projects")],
+            money: [action("claim", "money"), action("advance", "money")], time: [action("log_work", "time")] } };
+    const appOnly = { ...previous, flags: { ...previous.flags, show_chat: false }, actions: { ...previous.actions, collaboration: [] } };
+    assert.deepEqual(buildSidebarItems(appOnly), buildSidebarItems(previous));
+    assert.deepEqual(homeFocus(appOnly), homeFocus(previous));
 });

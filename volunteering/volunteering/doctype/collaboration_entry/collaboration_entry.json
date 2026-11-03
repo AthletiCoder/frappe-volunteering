@@ -1,0 +1,89 @@
+{
+ "doctype": "DocType",
+ "name": "Collaboration Entry",
+ "module": "Volunteering",
+ "autoname": "hash",
+ "engine": "InnoDB",
+ "field_order": [
+  "space",
+  "body",
+  "entry_kind",
+  "source_entry",
+  "item",
+  "snapshot",
+  "edited_at",
+  "is_deleted",
+  "request_key"
+ ],
+ "fields": [
+  {
+   "fieldname": "space",
+   "fieldtype": "Link",
+   "label": "Space",
+   "reqd": 1,
+   "options": "Collaboration Space"
+  },
+  {
+   "fieldname": "body",
+   "fieldtype": "Long Text",
+   "label": "Body"
+  },
+  {
+   "fieldname": "entry_kind",
+   "fieldtype": "Select",
+   "label": "Entry Kind",
+   "reqd": 1,
+   "options": "Message\nNote\nProgress\nDecision\nBlocker\nMilestone\nSystem"
+  },
+  {
+   "fieldname": "source_entry",
+   "fieldtype": "Link",
+   "label": "Source Entry",
+   "options": "Collaboration Entry"
+  },
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "label": "Item",
+   "options": "Collaboration Item"
+  },
+  {
+   "fieldname": "snapshot",
+   "fieldtype": "JSON",
+   "label": "Snapshot"
+  },
+  {
+   "fieldname": "edited_at",
+   "fieldtype": "Datetime",
+   "label": "Edited At"
+  },
+  {
+   "fieldname": "is_deleted",
+   "fieldtype": "Check",
+   "label": "Is Deleted",
+   "default": "0"
+  },
+  {
+   "fieldname": "request_key",
+   "fieldtype": "Data",
+   "label": "Request Key",
+   "unique": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Web chat access",
+   "read": 1,
+   "select": 1
+  },
+  {
+   "role": "App chat access",
+   "read": 1,
+   "select": 1
+  }
+ ],
+ "istable": 0,
+ "track_changes": 0,
+ "sort_field": "creation",
+ "sort_order": "ASC"
+}

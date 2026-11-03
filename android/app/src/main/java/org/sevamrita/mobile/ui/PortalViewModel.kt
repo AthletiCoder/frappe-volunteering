@@ -9,18 +9,24 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import org.sevamrita.mobile.data.PortalApi
+import org.sevamrita.mobile.data.ChatSnapshotCache
+import org.sevamrita.mobile.data.PortalSessionRequiredException
+import org.sevamrita.mobile.reminders.WorkReminders
+import org.sevamrita.mobile.data.PortalApiException
+import org.sevamrita.mobile.data.DemoLogins
 import org.sevamrita.mobile.data.SecureSessionStore
 import org.sevamrita.mobile.data.Server
 import org.sevamrita.mobile.data.display
 import org.sevamrita.mobile.data.text
+import org.sevamrita.mobile.data.items
 
-enum class Page { HOME, WORK, PROJECTS, PROJECT, PROPOSALS, PROPOSAL, PROPOSAL_FORM, ADVANCES, ADVANCE, NEW_ADVANCE, CLAIMS, CLAIM, CORRECT_CLAIM, NEW_CLAIM, COMBINED_START, COMBINED_INVOICE, MULTI_CLAIM, MULTI_RESULT, ADVANCE_QUEUE, ADVANCE_REVIEW, CLAIM_QUEUE, CLAIM_REVIEW, RECEIPT, PROFILE, INVOICE, INVOICE_RESULT, BUDGET_HEALTH, CHART, LEDGER, ACCOUNT_FORM, OPENING_BALANCES, DONATIONS, BANK_ACCOUNT, OFFICE_ADDRESSES, OFFICE_ADDRESS_FORM, TEAM, PROJECT_MAPPING, PROJECT_MAPPING_DETAIL, CLAIM_LIMITS, FISCAL_YEARS, HR_MANAGEMENT, EMPLOYEE_FORM, SYSTEM_MANAGEMENT, USER_FORM, UNAVAILABLE }
+enum class Page { HOME, WORK, PROJECTS, PROJECT, PROPOSALS, PROPOSAL, PROPOSAL_FORM, ADVANCES, ADVANCE, NEW_ADVANCE, CLAIMS, CLAIM, CORRECT_CLAIM, NEW_CLAIM, COMBINED_START, COMBINED_INVOICE, MULTI_CLAIM, MULTI_RESULT, ADVANCE_QUEUE, ADVANCE_REVIEW, CLAIM_QUEUE, CLAIM_REVIEW, RECEIPT, PROFILE, INVOICE, INVOICE_RESULT, BUDGET_HEALTH, CHART, LEDGER, ACCOUNT_FORM, OPENING_BALANCES, DONATIONS, BANK_ACCOUNT, OFFICE_ADDRESSES, OFFICE_ADDRESS_FORM, TEAM, PROJECT_MAPPING, PROJECT_MAPPING_DETAIL, CLAIM_LIMITS, FISCAL_YEARS, HR_MANAGEMENT, EMPLOYEE_FORM, SYSTEM_MANAGEMENT, USER_FORM, COLLABORATION, UNAVAILABLE }
 
 data class PortalState(
     val signedIn: Boolean = false,
     val booting: Boolean = true,
     val busy: Boolean = false,
-    val page: Page = Page.HOME,
+    val page: Page = Page.COLLABORATION,
     val server: Server = Server.PRODUCTION,
     val localAddress: String = "10.0.2.2",
     val user: String = "",
@@ -36,21 +42,51 @@ data class PortalState(
     val receiptReturn: Page = Page.CLAIM_REVIEW,
     val proposalFilter: String = "mine",
     val ledgerFrom: String = "",
-    val ledgerTo: String = ""
+    val ledgerTo: String = "",
+    val chatHome: JSONObject = JSONObject(),
+    val chatRoom: JSONObject = JSONObject(),
+    val chatWork: JSONObject = JSONObject(),
+    val chatNavigation: ChatNavigation = ChatNavigation(),
+    val trackerFilter: String = DEFAULT_TRACKER_FILTER,
+    val chatLoading: Boolean = false
 )
 
 class PortalViewModel(application: Application) : AndroidViewModel(application) {
     private val api = PortalApi(SecureSessionStore(application))
     private var navigationRevision = 0
+    @Volatile private var sessionGeneration = 0
+    private val snapshotRevision = java.util.concurrent.atomic.AtomicLong()
+    private var chatChangeVersion = 0
+    private var chatRefreshing = false
+    private var foregroundTasks = 0
+    private val snapshots = ChatSnapshotCache(application)
+    private val chatScreens = linkedMapOf<String, JSONObject>()
     var state = androidx.compose.runtime.mutableStateOf(PortalState(server = api.server(), localAddress = api.localAddress()))
         private set
 
     init {
+        val generation = sessionGeneration
         if (!api.hasSession()) state.value = state.value.copy(booting = false)
-        else runTask(onFailure = { api.logoutLocal(); state.value = state.value.copy(signedIn = false, booting = false) }) {
+        else runTask(showBusy = false, silent = true, onFailure = {
+            state.value = state.value.copy(booting = false,
+                error = if (state.value.signedIn) "" else "Unable to connect. Check the laptop Wi-Fi address and try again.")
+        }) {
+            val saved = snapshots.read(api.endpoint(), api.rememberedUser())
+            if (generation != sessionGeneration) return@runTask
+            if (saved != null) {
+                synchronized(chatScreens) { saved.optJSONObject("screens")?.let { rooms -> rooms.keys().forEach { key -> chatScreens[key] = rooms.getJSONObject(key) } } }
+                state.value = state.value.copy(signedIn = true, booting = false, user = api.rememberedUser(),
+                    chatHome = saved.optJSONObject("home") ?: JSONObject(), chatWork = saved.optJSONObject("work") ?: JSONObject())
+            }
             api.bootstrap()
-            val home = api.call(HOME, get = true)
-            state.value = state.value.copy(signedIn = true, booting = false, home = home, user = api.currentUser)
+            val chat = api.call(CHAT + "get_collaboration_home")
+            val work = api.call(CHAT + "get_my_work")
+            if (generation != sessionGeneration) return@runTask
+            state.value = state.value.copy(signedIn = true, booting = false, page = Page.COLLABORATION,
+                chatHome = chat, chatWork = work, user = api.currentUser)
+            persistChatScreens()
+            startBackgroundReminders()
+            prefetchChatScreens()
         }
     }
 
@@ -79,15 +115,50 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
                 return
             }
         }
-        runTask {
+        sessionGeneration++
+        runTask(onFailure = { if (!state.value.signedIn) api.logoutLocal() }) {
             api.login(username.trim(), password)
-            val home = api.call(HOME, get = true)
-            state.value = state.value.copy(signedIn = true, booting = false, home = home, user = api.currentUser, page = Page.HOME)
+            val chat = api.call(CHAT + "get_collaboration_home")
+            val work = api.call(CHAT + "get_my_work")
+            state.value = state.value.copy(signedIn = true, booting = false, home = JSONObject(),
+                chatHome = chat, chatRoom = JSONObject(), chatWork = work, chatNavigation = ChatNavigation(),
+                user = api.currentUser, page = Page.COLLABORATION)
+            persistChatScreens()
+            startBackgroundReminders()
+            prefetchChatScreens()
         }
     }
 
+    fun loginDemo(email: String, localAddress: String) {
+        val password = DemoLogins.password(email, api.server())
+        if (password == null) { error("Select a local demo account."); return }
+        login(email, password, localAddress)
+    }
+
+    fun requestPasswordReset(email: String, address: String) {
+        if (email.isBlank()) { error("Enter your email address first."); return }
+        if (api.server() == Server.LOCAL) {
+            try { api.setLocalAddress(address) }
+            catch (exception: IllegalArgumentException) { error(exception.message.orEmpty()); return }
+        }
+        runTask {
+            api.requestPasswordReset(email)
+            state.value = state.value.copy(notice = "If this email is registered, password reset instructions will be sent to it. Check your inbox.")
+        }
+    }
+
+    private fun startBackgroundReminders() {
+        if (!WorkReminders.start(getApplication())) state.value = state.value.copy(
+            notice = "You are signed in. Background reminders are unavailable; you can continue using chats and trackers.")
+    }
+
     fun logout() {
+        sessionGeneration++
+        snapshotRevision.incrementAndGet()
         navigationRevision++
+        synchronized(chatScreens) { chatScreens.clear() }
+        snapshots.clear()
+        WorkReminders.clear(getApplication())
         runTask {
             api.logout()
             state.value = PortalState(booting = false, server = api.server(), localAddress = api.localAddress())
@@ -102,6 +173,7 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
     fun open(page: Page, id: String = "") {
         val revision = ++navigationRevision
         state.value = state.value.copy(page = page, detailId = id, error = "", notice = "", data = JSONObject(), form = JSONObject())
+        if (page == Page.COLLABORATION) { refreshChat(); return }
         val method = when (page) {
             Page.PROJECTS -> "volunteering.volunteering.project_workspace.get_projects"
             Page.PROJECT -> "volunteering.volunteering.project_workspace.get_project"
@@ -623,20 +695,236 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
     fun error(message: String) { state.value = state.value.copy(error = message) }
     fun dismissMessage() { state.value = state.value.copy(error = "", notice = "") }
 
-    private fun runTask(onFailure: (() -> Unit)? = null, action: suspend () -> Unit) {
+    private fun screenKey(route: ChatRoute) = if (route.item.isNotBlank()) "item:${route.item}" else "room:${route.room}"
+
+    private fun persistChatScreens() {
+        val current = state.value
+        if (!current.signedIn) return
+        val screens = JSONObject()
+        synchronized(chatScreens) { chatScreens.entries.toList().takeLast(25).forEach { (key, value) -> screens.put(key, value) } }
+        val generation = sessionGeneration
+        val revision = snapshotRevision.incrementAndGet()
+        val endpoint = api.endpoint()
+        val snapshot = JSONObject().put("home", current.chatHome).put("work", current.chatWork).put("screens", screens)
+        viewModelScope.launch(Dispatchers.IO) {
+            snapshots.write(endpoint, current.user, snapshot) { generation == sessionGeneration && revision == snapshotRevision.get() }
+        }
+    }
+
+    private fun seedChatScreen(route: ChatRoute): JSONObject {
+        synchronized(chatScreens) { chatScreens[screenKey(route)]?.let { return it } }
+        val room = synchronized(chatScreens) { chatScreens["room:${route.room}"] }
+        if (route.item.isBlank() && room != null) return room
+        val work = (state.value.chatWork.items("trackers") + state.value.chatWork.items("open_progress") + state.value.chatWork.items("calendar"))
+        val item = room?.items("items")?.firstOrNull { it.text("name") == route.item } ?: work.firstOrNull { it.text("name") == route.item }
+        if (route.item.isNotBlank() && item != null) {
+            val member = state.value.chatHome.items("spaces").firstOrNull { it.text("name") == route.room }
+            val meta = member ?: JSONObject().put("name", route.room).put("title", item.text("space_title"))
+                .put("access_level", "SharedView").put("can_post", false).put("members", JSONArray()).put("item_only", true)
+            return JSONObject().put("space", meta).put("items", JSONArray().put(item)).put("entries", JSONArray())
+        }
+        return JSONObject().put("space", JSONObject().put("name", route.room))
+    }
+
+    private fun prefetchChatScreens() {
+        val generation = sessionGeneration
+        val rooms = state.value.chatHome.items("spaces").filterNot { it.optBoolean("archived") }.take(8)
+        runTask(showBusy = false, silent = true) {
+            for (room in rooms) {
+                if (generation != sessionGeneration) break
+                val version = chatChangeVersion
+                val data = api.call(CHAT + "get_space", JSONObject().put("name", room.text("name")))
+                if (generation == sessionGeneration && version == chatChangeVersion) synchronized(chatScreens) { chatScreens["room:${room.text("name")}"] = data }
+            }
+            if (generation == sessionGeneration) persistChatScreens()
+        }
+    }
+
+    fun refreshChat() {
+        if (chatRefreshing || !state.value.signedIn) return
+        chatRefreshing = true
+        val generation = sessionGeneration
+        val version = chatChangeVersion
+        runTask(showBusy = false, silent = true, onFailure = { chatRefreshing = false }) {
+            try {
+                val home = api.call(CHAT + "get_collaboration_home")
+                val work = api.call(CHAT + "get_my_work")
+                if (generation != sessionGeneration || version != chatChangeVersion) return@runTask
+                val workChanged = work.toString() != state.value.chatWork.toString()
+                if (state.value.page == Page.COLLABORATION) state.value = state.value.copy(chatHome = home, chatWork = work)
+                if (workChanged) WorkReminders.requestSync(getApplication())
+                // Drop snapshots whose chat membership or individual share is no longer present.
+                val allowedRooms = home.items("spaces").map { it.text("name") }.toSet()
+                val allowedItems = (work.items("trackers") + work.items("open_progress") + work.items("calendar")).map { it.text("name") }.toSet()
+                synchronized(chatScreens) { chatScreens.entries.removeAll { (key, value) ->
+                    value.optJSONObject("space")?.text("name") !in allowedRooms && (key.startsWith("room:") || key.removePrefix("item:") !in allowedItems)
+                } }
+                val name = state.value.chatNavigation.current.room
+                if (name.isNotBlank() && state.value.page == Page.COLLABORATION) reloadChatRoom(name)
+                persistChatScreens()
+            } finally {
+                chatRefreshing = false
+                if (generation == sessionGeneration && version != chatChangeVersion) withContext(Dispatchers.Main) { refreshChat() }
+            }
+        }
+    }
+
+    private fun reloadChatRoom(name: String) {
+        val route = state.value.chatNavigation.current
+        val generation = sessionGeneration
+        val version = chatChangeVersion
+        val args = JSONObject().put("name", name)
+        val detail = route.view in listOf(ChatView.TRACKER, ChatView.TASK) && route.room == name
+        val room = if (detail) api.call(CHAT + "get_work_item", JSONObject().put("name", route.item)) else api.call(CHAT + "get_space", args)
+        if (generation != sessionGeneration || version != chatChangeVersion || state.value.page != Page.COLLABORATION || state.value.chatNavigation.current != route || state.value.chatRoom.optJSONObject("space")?.text("name") != name) return
+        val current = state.value.chatRoom
+        if (!detail && current.items("entries").isNotEmpty()) {
+            val entries = (current.items("entries") + room.items("entries")).associateBy { it.text("name") }.values.sortedBy { it.text("creation") }
+            room.put("entries", JSONArray(entries)).put("older_cursor", current.opt("older_cursor"))
+        }
+        synchronized(chatScreens) { chatScreens[screenKey(route)] = room }
+        state.value = state.value.copy(chatRoom = room, chatLoading = false)
+        persistChatScreens()
+        room.items("entries").lastOrNull()?.let { api.call(CHAT + "mark_read", JSONObject().put("space", name).put("entry", it.text("name"))) }
+    }
+
+    fun openChatRoom(name: String) {
+        moveChat(state.value.chatNavigation.navigate(ChatRoute(ChatView.CHAT, name)))
+    }
+
+    fun closeChatRoom() { showChatConversations() }
+
+    fun showChatConversations() = moveChat(state.value.chatNavigation.navigate(ChatRoute()))
+    fun showPersonalTasks() = moveChat(state.value.chatNavigation.navigate(ChatRoute(ChatView.MY_TASKS)))
+    fun showPersonalTrackers() = moveChat(state.value.chatNavigation.navigate(ChatRoute(ChatView.MY_TRACKERS)))
+    fun showRoomTrackers() {
+        val room = state.value.chatNavigation.current.room
+        if (room.isNotBlank()) openTrackers(room)
+    }
+    fun openTrackers(room: String) = moveChat(state.value.chatNavigation.navigate(ChatRoute(ChatView.TRACKERS, room)))
+    fun openTracker(room: String, item: String) = moveChat(state.value.chatNavigation.navigate(ChatRoute(ChatView.TRACKER, room, item)))
+    fun openTask(room: String, item: String) = moveChat(state.value.chatNavigation.navigate(ChatRoute(ChatView.TASK, room, item)))
+    fun setTrackerFilter(filter: String) {
+        if (filter in TRACKER_FILTERS) state.value = state.value.copy(trackerFilter = filter)
+    }
+    fun showRoomTasks() {
+        val room = state.value.chatNavigation.current.room
+        if (room.isNotBlank()) moveChat(state.value.chatNavigation.navigate(ChatRoute(ChatView.TASKS, room)))
+    }
+
+    fun backInChat(): Boolean {
+        if (state.value.page == Page.RECEIPT) { closeReceipt(); return true }
+        val navigation = state.value.chatNavigation
+        if (!navigation.canGoBack) return false
+        moveChat(navigation.back())
+        return true
+    }
+
+    private fun moveChat(navigation: ChatNavigation) {
+        val previousRoute = state.value.chatNavigation.current
+        val room = navigation.current.room
+        navigationRevision++
+        val seeded = if (room.isBlank()) JSONObject() else seedChatScreen(navigation.current)
+        state.value = state.value.copy(page = Page.COLLABORATION, chatNavigation = navigation,
+            error = "", notice = "", chatRoom = seeded, chatLoading = room.isNotBlank() && seeded.optJSONObject("space")?.has("access_level") != true)
+        if (room.isNotBlank() && previousRoute != navigation.current) runTask(showBusy = false) { reloadChatRoom(room) }
+    }
+
+    fun olderChatMessages() = runTask {
+        val current = state.value.chatRoom
+        val name = current.optJSONObject("space")?.text("name").orEmpty()
+        val cursor = current.text("older_cursor")
+        if (name.isBlank() || cursor.isBlank()) return@runTask
+        val older = api.call(CHAT + "get_space", JSONObject().put("name", name).put("before", cursor))
+        if (state.value.page == Page.COLLABORATION && state.value.chatRoom.optJSONObject("space")?.text("name") == name) {
+            state.value = state.value.copy(chatRoom = JSONObject(current.toString()).put("entries", JSONArray(older.items("entries") + current.items("entries"))).put("older_cursor", older.opt("older_cursor")))
+        }
+    }
+
+    private fun applyChatItem(item: JSONObject) {
+        if (item.text("item_kind") !in listOf("Task", "Tracker")) return
+        val id = item.text("name")
+        // Mutation responses contain the item only. Keep its chat heading while the feed refreshes.
+        if (item.text("space_title").isBlank()) {
+            val title = state.value.chatHome.items("spaces").firstOrNull { it.text("name") == item.text("space") }?.text("title")
+                ?: (state.value.chatWork.items("trackers") + state.value.chatWork.items("open_progress"))
+                    .firstOrNull { it.text("name") == id }?.text("space_title")
+            if (!title.isNullOrBlank()) item.put("space_title", title)
+        }
+        val open = item.text("status") in listOf("Open", "In progress")
+        fun replace(json: JSONObject, field: String, add: Boolean, keep: Boolean = true): JSONObject {
+            val rows = json.items(field)
+            val index = rows.indexOfFirst { it.text("name") == id }
+            val updated = rows.filter { it.text("name") != id }.toMutableList()
+            if (keep && (index >= 0 || add)) updated.add(if (index >= 0) minOf(index, updated.size) else 0, item)
+            return JSONObject(json.toString()).put(field, JSONArray(updated))
+        }
+        val mine = item.text("owner") == state.value.user || item.text("assignee") == state.value.user || item.optBoolean("shared_with_me") ||
+            item.optJSONObject("item_data")?.items("stages")?.any { it.text("assignee") == state.value.user } == true
+        var work = state.value.chatWork
+        work = replace(work, "trackers", mine && item.text("item_kind") == "Tracker", item.text("item_kind") == "Tracker")
+        work = replace(work, "open_progress", mine && open, open)
+        work = replace(work, "today", false, open)
+        synchronized(chatScreens) { chatScreens.keys.toList().forEach { key ->
+            val cached = chatScreens.getValue(key)
+            if (cached.optJSONObject("space")?.text("name") == item.text("space")) chatScreens[key] = replace(cached, "items", key.startsWith("room:"))
+        } }
+        val route = state.value.chatNavigation.current
+        val room = if (route.room == item.text("space")) replace(state.value.chatRoom, "items", route.item.isBlank() || route.item == id) else state.value.chatRoom
+        state.value = state.value.copy(chatWork = work, chatRoom = room)
+        persistChatScreens()
+    }
+
+    fun chatCall(method: String, args: JSONObject = JSONObject(), success: (JSONObject) -> Unit = {}) {
+        val generation = sessionGeneration
+        val changed = !method.startsWith("get_")
+        runTask(showBusy = changed) {
+            val result = api.call(CHAT + method, args)
+            if (generation != sessionGeneration) return@runTask
+            withContext(Dispatchers.Main) {
+                if (changed) { chatChangeVersion++; applyChatItem(result) }
+                success(result)
+            }
+            if (changed) {
+                WorkReminders.requestSync(getApplication())
+                refreshChat()
+            }
+        }
+    }
+
+    private fun runTask(onFailure: (() -> Unit)? = null, showBusy: Boolean = true, silent: Boolean = false, action: suspend () -> Unit) {
+        val generation = sessionGeneration
         viewModelScope.launch {
-            state.value = state.value.copy(busy = true, error = "")
+            if (showBusy) { foregroundTasks++; state.value = state.value.copy(busy = true, error = "") }
             try { withContext(Dispatchers.IO) { action() } }
             catch (exception: Exception) {
+                if (exception is kotlinx.coroutines.CancellationException) throw exception
+                if (generation != sessionGeneration) return@launch
                 onFailure?.invoke()
-                state.value = state.value.copy(error = exception.message ?: "Something went wrong.", booting = false)
+                if (exception is PortalSessionRequiredException) {
+                    sessionGeneration++
+                    snapshotRevision.incrementAndGet()
+                    WorkReminders.clear(getApplication())
+                    api.logoutLocal()
+                    synchronized(chatScreens) { chatScreens.clear() }; snapshots.clear()
+                    state.value = PortalState(booting = false, server = api.server(), localAddress = api.localAddress(), error = exception.message.orEmpty())
+                    return@launch
+                }
+                if (exception is PortalApiException && exception.status == 403 && state.value.page == Page.COLLABORATION) {
+                    snapshotRevision.incrementAndGet()
+                    synchronized(chatScreens) { chatScreens.clear() }; snapshots.clear()
+                    state.value = state.value.copy(chatHome = JSONObject(), chatRoom = JSONObject(), chatWork = JSONObject())
+                }
+                state.value = state.value.copy(chatLoading = false)
+                if (!silent) state.value = state.value.copy(error = exception.message ?: "Something went wrong.", booting = false)
             }
-            finally { state.value = state.value.copy(busy = false) }
+            finally { if (showBusy) { foregroundTasks = (foregroundTasks - 1).coerceAtLeast(0); state.value = state.value.copy(busy = foregroundTasks > 0) } }
         }
     }
 
     companion object {
         private const val HOME = "volunteering.volunteering.home_service.get_home_payload"
+        private const val CHAT = "volunteering.volunteering.collaboration_mobile."
     }
 }
 
@@ -648,6 +936,7 @@ fun routeTarget(route: String): Pair<Page, String>? {
         ?.substringAfter('=', "")?.let { java.net.URLDecoder.decode(it, "UTF-8") } ?: ""
     return when {
         path == "/volunteering/home" -> Page.HOME to ""
+        path == "/volunteering/collaboration" -> Page.COLLABORATION to query("view")
         path == "/volunteering/todos" -> Page.WORK to ""
         path == "/volunteering/projects" && params.contains("new=1") -> Page.PROPOSAL_FORM to ""
         path == "/volunteering/projects" && query("proposal").isNotBlank() -> Page.PROPOSAL to query("proposal")

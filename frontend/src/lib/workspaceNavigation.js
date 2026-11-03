@@ -1,6 +1,7 @@
 // Keep navigation based on the server's permission-filtered Home payload.
 // The sidebar is the complete action catalogue; Home only highlights likely starts.
 const ACTION_ICONS = {
+	chat: "chat", collaboration_work: "calendar-check",
 	create_project: "document-plus", approved_projects: "folder-check", my_project_requests: "document-history",
 	review_project_proposals: "clipboard-check", claim: "receipt", invoice_generator: "invoice",
 	invoice_expense_claim: "invoice-claim", advance: "coins", bank_account: "bank",
@@ -36,6 +37,7 @@ export function buildSidebarItems(payload) {
 	];
 
 	const work = [];
+	addGroup(work, "collaboration", "Collaboration", "chat", actionLinks(actions.collaboration || []));
 	const projects = actionLinks(actions.projects || []);
 	if (nav.projects && !projects.length) projects.push({ href: "/volunteering/projects?view=approved", label: "Approved projects", icon: "folder-check" });
 	addGroup(work, "projects", "Projects", "folder", projects);

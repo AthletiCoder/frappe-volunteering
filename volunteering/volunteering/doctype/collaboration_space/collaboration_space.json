@@ -1,0 +1,84 @@
+{
+ "doctype": "DocType",
+ "name": "Collaboration Space",
+ "module": "Volunteering",
+ "autoname": "hash",
+ "engine": "InnoDB",
+ "field_order": [
+  "title",
+  "space_kind",
+  "parent_space",
+  "root_space",
+  "project",
+  "archived",
+  "direct_key",
+  "members"
+ ],
+ "fields": [
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Title",
+   "reqd": 1
+  },
+  {
+   "fieldname": "space_kind",
+   "fieldtype": "Select",
+   "label": "Space Kind",
+   "reqd": 1,
+   "options": "Direct\nGroup\nWorkspace\nArea"
+  },
+  {
+   "fieldname": "parent_space",
+   "fieldtype": "Link",
+   "label": "Parent Space",
+   "options": "Collaboration Space"
+  },
+  {
+   "fieldname": "root_space",
+   "fieldtype": "Link",
+   "label": "Root Space",
+   "options": "Collaboration Space"
+  },
+  {
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "label": "Project",
+   "options": "Project"
+  },
+  {
+   "fieldname": "archived",
+   "fieldtype": "Check",
+   "label": "Archived",
+   "default": "0"
+  },
+  {
+   "fieldname": "direct_key",
+   "fieldtype": "Data",
+   "label": "Direct Key",
+   "unique": 1
+  },
+  {
+   "fieldname": "members",
+   "fieldtype": "Table",
+   "label": "Members",
+   "options": "Collaboration Member"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Web chat access",
+   "read": 1,
+   "select": 1
+  },
+  {
+   "role": "App chat access",
+   "read": 1,
+   "select": 1
+  }
+ ],
+ "istable": 0,
+ "track_changes": 0,
+ "sort_field": "creation",
+ "sort_order": "ASC"
+}

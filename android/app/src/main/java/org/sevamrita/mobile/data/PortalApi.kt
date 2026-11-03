@@ -10,6 +10,8 @@ import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
+class PortalApiException(message: String, val status: Int) : IOException(message)
+
 class PortalApi(private val session: SecureSessionStore) {
     private val client = OkHttpClient.Builder()
         .followRedirects(false)
@@ -23,6 +25,8 @@ class PortalApi(private val session: SecureSessionStore) {
     fun hasSession() = session.sid() != null
     fun server() = session.server
     fun localAddress() = session.localAddress
+    fun endpoint() = session.baseUrl
+    fun rememberedUser() = session.rememberedUser()
     fun setServer(server: Server) { session.server = server; csrf = null }
     fun setLocalAddress(address: String) { session.localAddress = address; csrf = null }
 
@@ -37,7 +41,8 @@ class PortalApi(private val session: SecureSessionStore) {
             val sid = cookies.firstNotNullOfOrNull { cookie ->
                 Regex("(?:^|;\\s*)sid=([^;]+)").find(cookie)?.groupValues?.get(1)
             } ?: throw IOException("Login did not create a session. Please check the account and server.")
-            if (parsed.optString("message") != "Logged In") throw IOException("Unable to sign in.")
+            // Portal-only users return No App. Bootstrap below still validates the session.
+            if (parsed.optString("message") !in setOf("Logged In", "No App")) throw IOException("Unable to sign in.")
             session.saveSid(sid)
         }
         try { bootstrap() } catch (error: Exception) { logoutLocal(); throw error }
@@ -46,11 +51,22 @@ class PortalApi(private val session: SecureSessionStore) {
     fun bootstrap() {
         val data = call("volunteering.volunteering.mobile_session.get_mobile_session", get = true)
         currentUser = data.optString("user")
+        if (currentUser.isBlank() || currentUser == "Guest") throw PortalSessionRequiredException()
+        session.rememberUser(currentUser)
         csrf = data.optString("csrf_token").takeIf { it.isNotBlank() }
             ?: throw IOException("The server did not provide a secure session token.")
     }
 
     fun logoutLocal() { csrf = null; currentUser = ""; session.clear() }
+
+    fun requestPasswordReset(user: String) {
+        require(user.isNotBlank()) { "Enter your email address first." }
+        val body = FormBody.Builder().add("user", user.trim()).build()
+        client.newCall(Request.Builder().url("${session.baseUrl}/api/method/frappe.core.doctype.user.user.reset_password")
+            .header("Accept", "application/json").post(body).build()).execute().use {
+            parse(it.code, it.body?.string().orEmpty())
+        }
+    }
 
     fun logout() {
         try { if (session.sid() != null && csrf != null) call("logout") }
@@ -60,8 +76,9 @@ class PortalApi(private val session: SecureSessionStore) {
 
     fun call(method: String, args: JSONObject = JSONObject(), get: Boolean = false): JSONObject {
         require(method.matches(Regex("[A-Za-z_][A-Za-z0-9_.]*")))
-        val sid = session.sid() ?: throw IOException("Please sign in again.")
-        val url = "${session.baseUrl}/api/method/$method"
+        val sid = session.sid() ?: throw PortalSessionRequiredException()
+        val endpoint = session.baseUrl
+        val url = "$endpoint/api/method/$method"
         val builder = Request.Builder().url(url).header("Cookie", "sid=$sid")
             .header("Accept", "application/json")
         if (get) {
@@ -69,12 +86,19 @@ class PortalApi(private val session: SecureSessionStore) {
             require(args.length() == 0)
             builder.get()
         } else {
-            val token = csrf ?: throw IOException("Your session needs to be refreshed. Please sign in again.")
+            if (csrf == null) bootstrap()
+            val token = csrf ?: throw PortalSessionRequiredException()
             builder.header("X-Frappe-CSRF-Token", token)
                 .post(args.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
         }
         client.newCall(builder.build()).execute().use { response ->
-            val parsed = parse(response.code, response.body?.string().orEmpty())
+            if (session.sid() != sid || session.baseUrl != endpoint) throw kotlinx.coroutines.CancellationException("Session changed during request.")
+            if (response.code == 401 || get && method == "volunteering.volunteering.mobile_session.get_mobile_session" && response.code == 403) throw PortalSessionRequiredException()
+            val parsed = try { parse(response.code, response.body?.string().orEmpty()) }
+            catch (error: PortalApiException) {
+                if (isChatAccessRevoked(method, error.status)) throw PortalSessionRequiredException("App chat access is required. Ask your System Manager to enable it.")
+                throw error
+            }
             val message = parsed.opt("message")
             return if (message is JSONObject) message else JSONObject().put("value", message)
         }
@@ -84,9 +108,11 @@ class PortalApi(private val session: SecureSessionStore) {
         require(path.startsWith("/private/files/") && !path.contains("..") && !path.contains('?')) {
             "Only private receipt attachments can be opened here."
         }
-        val sid = session.sid() ?: throw IOException("Please sign in again.")
-        client.newCall(Request.Builder().url(session.baseUrl + path).header("Cookie", "sid=$sid").get().build())
+        val sid = session.sid() ?: throw PortalSessionRequiredException()
+        val endpoint = session.baseUrl
+        client.newCall(Request.Builder().url(endpoint + path).header("Cookie", "sid=$sid").get().build())
             .execute().use { response ->
+                if (session.sid() != sid || session.baseUrl != endpoint) throw kotlinx.coroutines.CancellationException("Session changed during download.")
                 if (!response.isSuccessful) throw IOException("Receipt cannot be opened (${response.code}).")
                 val body = response.body ?: throw IOException("Receipt is empty.")
                 if (body.contentLength() > 10 * 1024 * 1024) throw IOException("Receipt is too large for the mobile viewer.")
@@ -116,11 +142,17 @@ class PortalApi(private val session: SecureSessionStore) {
                 val first = JSONArray(messages).optString(0)
                 JSONObject(first).optString("message")
             } catch (_: Exception) { "" }
-            throw IOException(detail.ifBlank { json.optString("message").ifBlank { "Request failed ($code)." } })
+            throw PortalApiException(detail.ifBlank { json.optString("message").ifBlank { "Request failed ($code)." } }, code)
         }
         return json
     }
 }
+
+/** Only global app-access checks revoke the cached login; individual chat denial does not. */
+internal fun isChatAccessRevoked(method: String, status: Int): Boolean = status == 403 && method in setOf(
+    "volunteering.volunteering.collaboration_mobile.get_collaboration_home",
+    "volunteering.volunteering.collaboration_mobile.get_my_work"
+)
 
 fun JSONObject.text(key: String): String = optString(key).takeUnless { it == "null" } ?: ""
 fun JSONObject.items(key: String): List<JSONObject> = (optJSONArray(key) ?: JSONArray()).let { array ->

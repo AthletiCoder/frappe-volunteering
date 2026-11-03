@@ -4,6 +4,9 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -211,6 +214,12 @@ fun ClaimReviewScreen(state: PortalState, model: PortalViewModel) {
 fun ReceiptScreen(state: PortalState) {
     val bytes = state.receiptBytes ?: return
     val context = LocalContext.current
+    var fileNotice by remember(bytes) { mutableStateOf("") }
+    val saveChatFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        if (uri != null) fileNotice = runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) } ?: error("Unable to save this file"); "File saved." }.getOrElse { it.message ?: "Unable to save file." }
+    }
+    val chatAttachment = state.receiptReturn == Page.COLLABORATION
+    val textAttachment = chatAttachment && state.receiptName.substringAfterLast('.').lowercase() in listOf("txt", "csv")
     var page by remember(bytes) { mutableIntStateOf(0) }
     val isPdf = state.receiptName.lowercase().endsWith(".pdf") || bytes.take(4).toByteArray().contentEquals("%PDF".toByteArray())
     val temp = remember(bytes) {
@@ -237,7 +246,12 @@ fun ReceiptScreen(state: PortalState) {
         }.getOrNull()
     }
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        if (rendered?.first == null) Text("This receipt could not be rendered. It may be damaged or unsupported.")
+        if (chatAttachment) {
+            OutlinedButton(onClick = { saveChatFile.launch(state.receiptName) }) { Text("Save attachment") }
+            if (fileNotice.isNotBlank()) Text(fileNotice)
+        }
+        if (textAttachment) SelectionContainer { Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) { Text(remember(bytes) { bytes.toString(Charsets.UTF_8).take(200_000) }) } }
+        else if (rendered?.first == null) Text(if (chatAttachment) "Save this attachment to open it in a compatible app." else "This receipt could not be rendered. It may be damaged or unsupported.")
         else {
             if (rendered.second > 1) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 TextButton(onClick = { page-- }, enabled = page > 0) { Text("Previous") }

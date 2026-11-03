@@ -1,9 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const baseURL = process.env.BASE_URL || "http://127.0.0.1:8002";
+if (!["127.0.0.1", "localhost"].includes(new URL(baseURL).hostname) || new URL(baseURL).port !== "8002")
+  throw new Error("The mobile portal regression suite requires the isolated localhost:8002 database.");
+
 const baseUse = {
   ...devices["Desktop Chrome"],
   channel: "chrome" as const,
-  baseURL: process.env.BASE_URL || "http://127.0.0.1:8001",
+  baseURL,
   actionTimeout: 15000,
   screenshot: "only-on-failure" as const,
   hasTouch: true,

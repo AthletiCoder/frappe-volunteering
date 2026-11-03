@@ -83,6 +83,13 @@ class IntegrationTestPledgeApis(IntegrationTestCase):
 		super().setUp()
 		frappe.set_user("Administrator")
 		_ensure_test_pledge_settings()
+		# This is the public Interakt API: exercise key validation as Guest.
+		# Administrator intentionally bypasses the external integration key.
+		frappe.set_user("Guest")
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+		super().tearDown()
 
 	def _with_api_key(self, key=TEST_API_KEY):
 		return patch(
@@ -137,6 +144,20 @@ class IntegrationTestPledgeApis(IntegrationTestCase):
 		with self._with_api_key("wrong-key"):
 			result = self._confirm(mobile_number=unique_mobile("92"))
 		self.assertEqual(result, {"ok": False, "message": "Invalid API key"})
+
+	def test_confirm_pledge_allows_authenticated_administrator_without_integration_key(self):
+		frappe.set_user("Administrator")
+		with self._with_api_key(""):
+			result = self._confirm()
+		self.assertTrue(result["ok"])
+
+	def test_confirm_pledge_body_key_authenticates_without_saving_the_secret(self):
+		with self._with_api_key(""):
+			result = self._confirm(api_key=TEST_API_KEY)
+		self.assertTrue(result["ok"])
+		payload = frappe.db.get_value("De Addiction Pledge", result["name"], "raw_payload")
+		self.assertNotIn(TEST_API_KEY, payload)
+		self.assertNotIn("api_key", frappe.parse_json(payload))
 
 	def test_confirm_pledge_rejects_missing_mobile(self):
 		with self._with_api_key():

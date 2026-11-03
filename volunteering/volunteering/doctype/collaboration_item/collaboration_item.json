@@ -1,0 +1,191 @@
+{
+ "doctype": "DocType",
+ "name": "Collaboration Item",
+ "module": "Volunteering",
+ "autoname": "hash",
+ "engine": "InnoDB",
+ "field_order": [
+  "space",
+  "item_kind",
+  "title",
+  "description",
+  "source_entry",
+  "assignee",
+  "status",
+  "priority",
+  "from_date",
+  "until_date",
+  "deadline",
+  "snoozed_until",
+  "repeat_pattern",
+  "repeat_until",
+  "repeat_anchor_day",
+  "series_key",
+  "occurrence_key",
+  "start_at",
+  "end_at",
+  "location",
+  "participants",
+  "item_data",
+  "current_effective_at",
+  "last_reminder_date",
+  "shares"
+ ],
+ "fields": [
+  {
+   "fieldname": "space",
+   "fieldtype": "Link",
+   "label": "Space",
+   "reqd": 1,
+   "options": "Collaboration Space"
+  },
+  {
+   "fieldname": "item_kind",
+   "fieldtype": "Select",
+   "label": "Item Kind",
+   "reqd": 1,
+   "options": "Task\nEvent\nList\nTracker"
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Title",
+   "reqd": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Long Text",
+   "label": "Description"
+  },
+  {
+   "fieldname": "source_entry",
+   "fieldtype": "Link",
+   "label": "Source Entry",
+   "options": "Collaboration Entry"
+  },
+  {
+   "fieldname": "assignee",
+   "fieldtype": "Link",
+   "label": "Assignee",
+   "options": "User"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "default": "Open",
+   "options": "Open\nIn progress\nCompleted\nFailed\nCancelled"
+  },
+  {
+   "fieldname": "priority",
+   "fieldtype": "Select",
+   "label": "Priority",
+   "default": "Medium",
+   "options": "Very low\nLow\nMedium\nHigh\nVery high"
+  },
+  {
+   "fieldname": "from_date",
+   "fieldtype": "Date",
+   "label": "From Date"
+  },
+  {
+   "fieldname": "until_date",
+   "fieldtype": "Date",
+   "label": "Until Date"
+  },
+  {
+   "fieldname": "deadline",
+   "fieldtype": "Date",
+   "label": "Deadline"
+  },
+  {
+   "fieldname": "snoozed_until",
+   "fieldtype": "Date",
+   "label": "Snoozed Until"
+  },
+  {
+   "fieldname": "repeat_pattern",
+   "fieldtype": "Select",
+   "label": "Repeat Pattern",
+   "default": "None",
+   "options": "None\nDaily\nWeekly\nMonthly"
+  },
+  {
+   "fieldname": "repeat_until",
+   "fieldtype": "Date",
+   "label": "Repeat Until"
+  },
+  {
+   "fieldname": "repeat_anchor_day",
+   "fieldtype": "Int",
+   "label": "Repeat Anchor Day"
+  },
+  {
+   "fieldname": "series_key",
+   "fieldtype": "Data",
+   "label": "Series Key"
+  },
+  {
+   "fieldname": "occurrence_key",
+   "fieldtype": "Data",
+   "label": "Occurrence Key",
+   "unique": 1
+  },
+  {
+   "fieldname": "start_at",
+   "fieldtype": "Datetime",
+   "label": "Start At"
+  },
+  {
+   "fieldname": "end_at",
+   "fieldtype": "Datetime",
+   "label": "End At"
+  },
+  {
+   "fieldname": "location",
+   "fieldtype": "Data",
+   "label": "Location"
+  },
+  {
+   "fieldname": "participants",
+   "fieldtype": "JSON",
+   "label": "Participants"
+  },
+  {
+   "fieldname": "item_data",
+   "fieldtype": "JSON",
+   "label": "Item Data"
+  },
+  {
+   "fieldname": "current_effective_at",
+   "fieldtype": "Datetime",
+   "label": "Current Effective At"
+  },
+  {
+   "fieldname": "last_reminder_date",
+   "fieldtype": "Date",
+   "label": "Last Reminder Date"
+  },
+  {
+   "fieldname": "shares",
+   "fieldtype": "JSON",
+   "label": "Individual sharing"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Web chat access",
+   "read": 1,
+   "select": 1
+  },
+  {
+   "role": "App chat access",
+   "read": 1,
+   "select": 1
+  }
+ ],
+ "istable": 0,
+ "track_changes": 0,
+ "sort_field": "creation",
+ "sort_order": "ASC"
+}

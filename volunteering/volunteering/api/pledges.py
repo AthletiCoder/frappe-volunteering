@@ -208,7 +208,7 @@ def confirm_pledge(**kwargs):
 		payload = {
 			k: v
 			for k, v in kwargs.items()
-			if k not in {"cmd", "csrf_token"} and not str(k).startswith("_")
+			if k not in {"cmd", "csrf_token", "api_key"} and not str(k).startswith("_")
 		}
 
 		doc = frappe.get_doc(

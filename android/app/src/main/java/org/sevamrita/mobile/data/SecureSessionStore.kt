@@ -17,7 +17,12 @@ enum class Server(val label: String, val url: String) {
     LOCAL("Local Wi-Fi / emulator", "http://10.0.2.2:8001");
 
     companion object {
-        fun available(): List<Server> = if (BuildConfig.DEBUG) listOf(LOCAL, PRODUCTION, STAGING) else listOf(PRODUCTION)
+        fun available(): List<Server> = available(BuildConfig.DEBUG, BuildConfig.LOCAL_PORTAL_ONLY)
+        internal fun available(debug: Boolean, localOnly: Boolean): List<Server> = when {
+            !debug -> listOf(PRODUCTION)
+            localOnly -> listOf(LOCAL)
+            else -> listOf(LOCAL, PRODUCTION, STAGING)
+        }
     }
 }
 
@@ -30,14 +35,14 @@ class SecureSessionStore(context: Context) {
         get() = Server.available().firstOrNull { it.name == prefs.getString("server", null) }
             ?: if (BuildConfig.DEBUG) Server.LOCAL else Server.PRODUCTION
         set(value) {
-            require(value != Server.LOCAL || BuildConfig.DEBUG)
+            require(value in Server.available()) { "This server is unavailable in this build." }
             if (server != value) clear()
             prefs.edit().putString("server", value.name).apply()
         }
 
     /** Debug-only LAN endpoint. Never copied into release builds or used for production. */
     var localAddress: String
-        get() = prefs.getString("local_address", "10.0.2.2") ?: "10.0.2.2"
+        get() = prefs.getString("local_address", BuildConfig.DEFAULT_LOCAL_HOST) ?: BuildConfig.DEFAULT_LOCAL_HOST
         set(value) {
             require(BuildConfig.DEBUG) { "Local HTTP is only available in debug builds." }
             val address = value.trim()
@@ -48,6 +53,8 @@ class SecureSessionStore(context: Context) {
 
     val baseUrl: String
         get() = if (server == Server.LOCAL) "http://$localAddress:8001" else server.url
+    fun rememberedUser(): String = prefs.getString("session_user", "").orEmpty()
+    fun rememberUser(user: String) { prefs.edit().putString("session_user", user).apply() }
 
     fun saveSid(sid: String) {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -68,7 +75,7 @@ class SecureSessionStore(context: Context) {
         null
     }
 
-    fun clear() { prefs.edit().remove("sid").remove("iv").apply() }
+    fun clear() { prefs.edit().remove("sid").remove("iv").remove("session_user").apply() }
 
     private fun key(): SecretKey {
         val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }

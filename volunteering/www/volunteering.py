@@ -19,30 +19,42 @@ def get_context(context):
 	# Home and Profile are safe for any authenticated account. Preserve the
 	# existing page-level role gate for every other workflow route.
 	if not is_open_home_route(frappe.local.request.path):
-		frappe.only_for(
-			(
-				"Employee",
-				"Accounts User",
-				"Accounts Manager",
-				"System Manager",
-				"HR Manager",
-				"HR User",
-				"NGO Coordinator",
-				"Leave Approver",
-				"Expense Approver",
-				"Expense Receipt Reviewer",
-				"Projects User",
-				"Projects Manager",
-				"Project Proposer",
-				"Project Viewer",
-				"Auditor",
-			)
-		)
+		if frappe.local.request.path.rstrip("/") == "/volunteering/collaboration":
+			from volunteering.volunteering.collaboration import _require
+			_require()
+		else:
+			_check_workflow_role()
 	context.no_cache = 1
 	context.full_width = 1
 	context.no_header = 1
 	context.show_sidebar = 0
 	context.csrf_token = frappe.sessions.get_csrf_token()
+	_load_spa_assets(context)
+
+
+def _check_workflow_role():
+	frappe.only_for(
+		(
+			"Employee",
+			"Accounts User",
+			"Accounts Manager",
+			"System Manager",
+			"HR Manager",
+			"HR User",
+			"NGO Coordinator",
+			"Leave Approver",
+			"Expense Approver",
+			"Expense Receipt Reviewer",
+			"Projects User",
+			"Projects Manager",
+			"Project Proposer",
+			"Project Viewer",
+			"Auditor",
+		)
+	)
+
+
+def _load_spa_assets(context):
 
 	frontend_dir = frappe.get_app_path("volunteering", "public", "frontend", "assets")
 	entry_js = None

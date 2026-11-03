@@ -45,9 +45,11 @@ def get_home_payload():
 		frappe.throw(_("Log in to open Home."), frappe.PermissionError)
 
 	roles = frappe.get_roles(user)
+	from volunteering.volunteering.collaboration_access import has_web_chat_access
 	employee = get_employee_for_user(user)
 	grade = get_grade_for_user(user)
 	flags = classify_home_access(roles, bool(employee), grade)
+	flags["show_chat"] = has_web_chat_access(user)
 	# Administrator is the Frappe superuser even when its effective role list is
 	# unusual. Keep the two management areas independently permissioned.
 	flags["show_hr_management"] = user == "Administrator" or bool(
@@ -114,6 +116,17 @@ def get_home_payload():
 	pending = _own_pending(employee)
 	status = _status_rows(pending)
 	waiting = _compose_waiting(inbox, accounts_queues)
+	if flags["show_chat"]:
+		from volunteering.volunteering.collaboration import get_home_summary
+		summary = get_home_summary()
+		if summary["due"]:
+			waiting.append({"doctype": "Collaboration Item", "title": _("Your collaboration work"),
+				"subtitle": _("{0} actions need attention").format(summary["due"]),
+				"route": "/volunteering/collaboration?view=work", "bucket": "review"})
+		if summary["unread"]:
+			waiting.append({"doctype": "Collaboration Entry", "title": _("Unread conversations"),
+				"subtitle": _("{0} unread updates").format(summary["unread"]),
+				"route": "/volunteering/collaboration", "bucket": "review"})
 	resume = _employee_draft_todos(employee)
 	# Legacy alias: todos = waiting only (no status aggregates / drafts).
 	todos = waiting
@@ -149,6 +162,11 @@ def get_home_payload():
 			"hr_management": _hr_management_actions() if flags["show_hr_management"] else [],
 			"system_management": (_system_management_actions() if flags["show_system_management"] else []),
 			"purchasing": _purchasing_actions(user, employee),
+			"collaboration": ([{"id": "chat", "label": _("Chat & workspaces"),
+				"hint": _("Conversations, shared tasks, events, lists and progress."),
+				"route": "/volunteering/collaboration"}, {"id": "collaboration_work", "label": _("My collaboration work"),
+				"hint": _("Your actions and upcoming events across workspaces."),
+				"route": "/volunteering/collaboration?view=work"}] if flags["show_chat"] else []),
 		},
 		"status": status,
 		"member_projects": _member_project_cards(user, employee) if flags["show_member_projects"] else [],

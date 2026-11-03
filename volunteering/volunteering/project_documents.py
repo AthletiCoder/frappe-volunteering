@@ -35,6 +35,9 @@ def opening_proof(file):
 
 
 def can_read(file, user=None):
+	from volunteering.volunteering.collaboration import file_scoped, can_read_file
+	if file_scoped(file):
+		return can_read_file(file, user)
 	from volunteering.volunteering.employee_bank_accounts import can_read_file, scoped_file
 	from volunteering.volunteering.chart_of_accounts_portal import can_manage
 
@@ -64,6 +67,9 @@ def can_read(file, user=None):
 
 
 def has_permission(doc, user=None, ptype=None, **kwargs):
+	from volunteering.volunteering.collaboration import file_scoped
+	if file_scoped(doc):
+		return ptype in ("read", "select") and can_read(doc, user)
 	from volunteering.volunteering.employee_bank_accounts import scoped_file
 
 	if scoped_file(doc):
@@ -78,6 +84,8 @@ def has_permission(doc, user=None, ptype=None, **kwargs):
 
 
 def validate_change(doc, method=None):
+	from volunteering.volunteering.collaboration import validate_file_change
+	validate_file_change(doc, method)
 	previous = doc.get_doc_before_save()
 	if opening_proof(doc) or (previous and opening_proof(previous)):
 		from volunteering.volunteering.chart_of_accounts_portal import can_manage
@@ -105,7 +113,8 @@ class ProjectAwareFile(File):
 	def get_content(self, encodings=None):
 		from volunteering.volunteering.employee_bank_accounts import scoped_file
 
-		if (scoped(self) or scoped_file(self) or opening_proof(self)) and not _writing.get() and not can_read(self):
+		from volunteering.volunteering.collaboration import file_scoped
+		if (scoped(self) or scoped_file(self) or opening_proof(self) or file_scoped(self)) and not _writing.get() and not can_read(self):
 			frappe.throw(_("You cannot download this private document."), frappe.PermissionError)
 		return super().get_content(encodings)
 
@@ -137,6 +146,10 @@ def publish(doc):
 
 def file_query(user=None):
 	user = user or frappe.session.user
+	from volunteering.volunteering.collaboration import _root_ids
+	roots = _root_ids(user)
+	chat_access = "0=1" if not roots else "cs.root_space in (" + ",".join(frappe.db.escape(value) for value in roots) + ")"
+	chat_scope = f"(`tabFile`.attached_to_doctype IS NULL OR `tabFile`.attached_to_doctype != 'Collaboration Entry' OR EXISTS (SELECT 1 FROM `tabCollaboration Entry` ce JOIN `tabCollaboration Space` cs ON cs.name=ce.space WHERE ce.name=`tabFile`.attached_to_name AND ce.is_deleted=0 AND {chat_access}))" if frappe.db.table_exists("Collaboration Entry") else "1=1"
 	from volunteering.volunteering.employee_bank_accounts import _is_accounts_manager
 	from volunteering.volunteering.chart_of_accounts_portal import can_manage
 	from volunteering.volunteering.opening_balances_portal import MARKER
@@ -155,6 +168,7 @@ def file_query(user=None):
 		f"SELECT 1 FROM `tabJournal Entry` je WHERE je.name=`tabFile`.attached_to_name "
 		f"AND je.user_remark LIKE {frappe.db.escape(MARKER + '%')}))"
 	)
+	bank_scope = f"({bank_scope}) AND {chat_scope}"
 	if workspace.is_project_manager(user):
 		return f"{bank_scope} AND {opening_scope}"
 	escaped = frappe.db.escape(user)
