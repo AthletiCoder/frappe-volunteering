@@ -4,6 +4,17 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class TrackerPresentationTest {
+    @Test fun tilePhaseUsesActualProgressAndExplicitOutcomes() {
+        val empty = TrackerDisplay("Percentage", 0.0)
+        assertEquals(TrackerPhase.WAITING, empty.phase("Open"))
+        assertEquals(TrackerPhase.ACTIVE, empty.copy(value = 50.0).phase("Open"))
+        assertEquals(TrackerPhase.WAITING, TrackerDisplay("Number", 10.0, minimum = 10.0).phase("Open"))
+        assertEquals(TrackerPhase.ACTIVE, TrackerDisplay("Status", stage = "one",
+            stages = listOf(TrackerStage("one", "Requested"))).phase("Open"))
+        assertEquals(TrackerPhase.COMPLETE, empty.phase("Completed"))
+        assertEquals(TrackerPhase.CLOSED, empty.copy(value = 50.0).phase("Failed"))
+    }
+
     @Test fun percentageShowsZeroAndFullProgress() {
         assertEquals("0%", TrackerDisplay("Percentage", 0.0).label)
         assertEquals(0f, TrackerDisplay("Percentage", 0.0).fraction!!, .0001f)

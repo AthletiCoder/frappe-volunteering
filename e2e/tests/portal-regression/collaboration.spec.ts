@@ -7,6 +7,8 @@ const API = 'volunteering.volunteering.collaboration.';
 const password = 'DemoChat!2026';
 const users = { owner: 'demo.chat.ravi@sevamrita.local', member: 'demo.chat.arjun@sevamrita.local', viewer: 'demo.chat.dev@sevamrita.local' };
 async function signIn(page: Page, person: keyof typeof users = 'owner', route = '/volunteering/collaboration') {
+    // Stop the previous account's page requests before replacing its session cookies.
+    await page.goto('about:blank');
     await page.context().clearCookies();
     await loginViaAPI(page.request, users[person], password);
     await page.goto(route);
@@ -133,6 +135,31 @@ test('Create workspace and membership; send a message with a private attachment 
     await expect(page.locator('.read-only')).toContainText('viewing access');
     await expect(page.getByRole('button', { name: 'Send message', exact: true })).toHaveCount(0);
     expect((await page.request.get(fileUrl!)).status()).toBe(200);
+});
+
+test('Opening the web conversation updates message info for the native sender', async ({ page, browser }) => {
+    await signIn(page);
+    const room = await newRoom(page, true);
+    const native = 'volunteering.volunteering.collaboration_mobile.';
+    const entry = await portalCall(page, native + 'post_entry', {
+        space: room.name, body: 'Receipt check from SF Tasks', request_key: `receipt-${Date.now()}`
+    });
+    const recipientPage = await browser.newPage({ baseURL: new URL(page.url()).origin });
+    try {
+        await recipientPage.bringToFront();
+        const seen = recipientPage.waitForResponse(response => response.url().endsWith(API + 'mark_seen') &&
+            response.request().postDataJSON().entry === entry.name);
+        await signIn(recipientPage, 'member', `/volunteering/collaboration?space=${room.name}`);
+        await expect(recipientPage.locator('.message-text')).toContainText('Receipt check from SF Tasks');
+        expect((await seen).ok()).toBeTruthy();
+    } finally {
+        await recipientPage.close();
+    }
+    const info = await portalCall(page, native + 'get_message_info', { name: entry.name });
+    expect(info.recipients).toEqual(expect.arrayContaining([
+        expect.objectContaining({ user: users.member, status: 3 }),
+        expect.objectContaining({ user: users.viewer, status: 1 }),
+    ]));
 });
 
 test('Task from a message keeps its link, dates, recurrence and completion history', async ({ page }) => {

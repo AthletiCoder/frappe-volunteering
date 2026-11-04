@@ -83,13 +83,13 @@ def _root_ids(user=None):
 		"parenttype": PREFIX + "Space"}, pluck="parent", limit_page_length=0)
 
 
-def _space(name, write=False):
+def _space(name, write=False, lock=False):
 	_require()
 	if not frappe.db.exists(PREFIX + "Space", name):
 		_deny()
 	room = frappe.get_doc(PREFIX + "Space", name)
 	root_id = room.root_space or room.name
-	root = frappe.get_doc(PREFIX + "Space", root_id, for_update=write)
+	root = frappe.get_doc(PREFIX + "Space", root_id, for_update=write or lock)
 	member = next((row for row in root.members if row.user == frappe.session.user), None)
 	if not member:
 		_deny()
@@ -235,12 +235,13 @@ def share_item(name, shares, expected_modified):
 
 
 def _entry_payload(doc, level):
+	editable = not doc.is_deleted and doc.entry_kind not in {"System", "Progress"} and level != "Viewer"
 	return {"name": doc.name, "space": doc.space, "body": "Message removed" if doc.is_deleted else doc.body,
 		"entry_kind": doc.entry_kind, "owner": doc.owner, "author_name": _name(doc.owner), "creation": str(doc.creation),
 		"edited_at": doc.edited_at, "modified": str(doc.modified), "is_deleted": bool(doc.is_deleted), "source_entry": doc.source_entry,
 		"item": doc.item, "snapshot": _json(doc.snapshot, {}),
-		"can_edit": not doc.is_deleted and doc.entry_kind not in {"System", "Progress"} and
-			(level in {"Owner", "Manager"} or level == "Member" and doc.owner == frappe.session.user),
+		"can_edit": editable and doc.owner == frappe.session.user,
+		"can_remove": editable and (doc.owner == frappe.session.user or level in {"Owner", "Manager"}),
 		"attachments": [] if doc.is_deleted else frappe.get_all("File", filters={"attached_to_doctype": doc.doctype,
 			"attached_to_name": doc.name, "is_private": 1}, fields=["name", "file_name", "file_url", "file_size"])}
 
@@ -265,12 +266,14 @@ def get_collaboration_home():
 		room, root, level = _space(value.name)
 		payload = _room_payload(room, root, level)
 		last = frappe.get_all(PREFIX + "Entry", filters={"space": room.name},
-			fields=["name", "body", "creation", "entry_kind"], order_by="creation desc", limit_page_length=1)
+			fields=["name", "body", "creation", "entry_kind"], order_by="creation desc, name desc", limit_page_length=1)
 		payload["last_entry"] = last[0] if last else None
-		read = frappe.db.get_value(PREFIX + "Read State", {"space": room.name, "user": user}, "read_at")
+		state = frappe.db.get_value(PREFIX + "Read State", {"space": room.name, "user": user},
+			["read_at", "delivered_through"], as_dict=True) or frappe._dict()
+		payload["delivery_pending"] = bool(last and (not state.delivered_through or last[0].creation > state.delivered_through))
 		filters = {"space": room.name, "owner": ["!=", user], "is_deleted": 0}
-		if read:
-			filters["creation"] = [">", read]
+		if state.read_at:
+			filters["creation"] = [">", state.read_at]
 		payload["unread"] = frappe.db.count(PREFIX + "Entry", filters)
 		output.append(payload)
 	return {"user": user, "spaces": output, "directory": get_directory(), "today": nowdate(),
@@ -401,15 +404,71 @@ def get_space(name, before=None, item=None):
 	rows = frappe.db.sql("select name from `tabCollaboration Entry` where space=%s" + condition +
 		" order by creation desc, name desc limit 51", params, as_dict=True)
 	entries = [_entry_payload(frappe.get_doc(PREFIX + "Entry", row.name), content_level) for row in reversed(rows[:50])]
+	space_payload = _room_payload(room, root, level)
+	receipts = _receipt_cursors(name)
+	own = receipts.get(frappe.session.user, frappe._dict())
+	recipients = _receipt_recipients(space_payload["members"], receipts)
+	receipt_through = {field: min((str(cursor.get(field) or "") for _member, cursor in recipients), default="")
+		for field in ("delivered_through", "seen_through")}
 	items = frappe.get_all(PREFIX + "Item", filters={"space": name}, fields=["name"], order_by="modified desc", limit_page_length=300)
 	if item and item not in {row.name for row in items}:
 		# A direct tracker link can refer to an older item outside the initial list.
 		if not frappe.db.exists(PREFIX + "Item", {"name": item, "space": name}):
 			_deny()
 		items.append(frappe._dict(name=item))
-	return {"space": _room_payload(room, root, level), "entries": entries,
+	return {"space": space_payload, "entries": entries,
+		"delivered_through": str(own.delivered_through or ""), "seen_through": str(own.seen_through or ""),
+		"receipt_through": receipt_through,
+		"current_progress": _current_progress(name),
 		"older_cursor": rows[49].name if len(rows) > 50 else None,
 		"items": [_item_payload(frappe.get_doc(PREFIX + "Item", row.name), content_level) for row in items]}
+
+
+def _current_progress(space):
+	# A later-recorded backdated update is history. Break equal effective dates by record order.
+	rows = frappe.db.sql("""
+		select e.item, e.name
+		from `tabCollaboration Entry` e
+		join `tabCollaboration Item` i on i.name = e.item and i.space = e.space
+		where e.space = %s and e.entry_kind = 'Progress'
+			and cast(json_unquote(json_extract(e.snapshot, '$.effective_at')) as datetime(6)) = i.current_effective_at
+		order by e.creation desc, e.name desc
+	""", (space,))
+	current = {}
+	for item, entry in rows:
+		current.setdefault(item, entry)
+	return current
+
+
+def _receipt_cursors(space):
+	rows = frappe.get_all(PREFIX + "Read State", filters={"space": space},
+		fields=["user", "delivered_through", "seen_through"], limit_page_length=0)
+	return {row.user: row for row in rows}
+
+
+def _receipt_recipients(members, cursors):
+	return [(member, cursors.get(member["user"], frappe._dict())) for member in members
+		if member["user"] != frappe.session.user and member["chat_enabled"]]
+
+
+def _receipt_status(cursor, stamp):
+	if cursor.seen_through and cursor.seen_through >= stamp:
+		return 3
+	if cursor.delivered_through and cursor.delivered_through >= stamp:
+		return 2
+	return 1
+
+
+@frappe.whitelist(methods=["POST"])
+def get_message_info(name):
+	_require()
+	doc = frappe.get_doc(PREFIX + "Entry", name)
+	_room, root, _level = _space(doc.space)
+	if doc.owner != frappe.session.user or doc.is_deleted or doc.entry_kind == "System":
+		_deny()
+	recipients = _receipt_recipients(_members(root), _receipt_cursors(doc.space))
+	return {"recipients": [{"full_name": member["full_name"], "user": member["user"],
+		"status": _receipt_status(cursor, doc.creation)} for member, cursor in recipients]}
 
 
 def _publish(space, root):
@@ -463,9 +522,14 @@ def send_message(payload):
 
 @frappe.whitelist(methods=["POST"])
 def edit_entry(name, body=None, remove=False, expected_modified=None):
-	doc = frappe.get_doc(PREFIX + "Entry", name)
-	_room, root, level = _space(doc.space, write=True)
-	if doc.entry_kind in {"System", "Progress"} or not (level in {"Owner", "Manager"} or doc.owner == frappe.session.user):
+	_require()
+	space = frappe.db.get_value(PREFIX + "Entry", name, "space")
+	_room, root, level = _space(space, write=True)
+	doc = frappe.get_doc(PREFIX + "Entry", name, for_update=True)
+	remove = bool(cint(remove))
+	if doc.is_deleted or doc.entry_kind in {"System", "Progress"} or (
+		doc.owner != frappe.session.user and not (remove and level in {"Owner", "Manager"})
+	):
 		_deny()
 	_version(doc, expected_modified)
 	doc.is_deleted = cint(remove)
@@ -478,21 +542,36 @@ def edit_entry(name, body=None, remove=False, expected_modified=None):
 
 @frappe.whitelist(methods=["POST"])
 def mark_read(space, entry):
-	_room, root, _level = _space(space)
-	frappe.db.get_value(PREFIX + "Space", root.name, "name", for_update=True)
+	return _mark_received(space, entry, ("read_at",))
+
+
+@frappe.whitelist(methods=["POST"])
+def mark_delivered(space, entry):
+	return _mark_received(space, entry, ("delivered_through",))
+
+
+@frappe.whitelist(methods=["POST"])
+def mark_seen(space, entry):
+	return _mark_received(space, entry, ("read_at", "delivered_through", "seen_through"))
+
+
+def _mark_received(space, entry, fields):
+	_space(space, lock=True)
 	stamp = frappe.db.get_value(PREFIX + "Entry", {"name": entry, "space": space}, "creation")
 	if not stamp:
 		_deny()
 	key = hashlib.sha256(f"{space}:{frappe.session.user}".encode()).hexdigest()
-	existing = frappe.db.get_value(PREFIX + "Read State", {"state_key": key}, "name")
+	existing = frappe.db.get_value(PREFIX + "Read State", {"state_key": key}, "name", for_update=True)
 	if existing:
 		doc = frappe.get_doc(PREFIX + "Read State", existing, for_update=True)
-		if not doc.read_at or get_datetime(doc.read_at) < stamp:
-			doc.read_at = stamp
+		updates = {field: stamp for field in fields if not doc.get(field) or get_datetime(doc.get(field)) < stamp}
+		if updates:
+			doc.update(updates)
 			_save(doc)
 	else:
-		_insert("Read State", {"space": space, "user": frappe.session.user, "read_at": stamp, "state_key": key})
-	return {"read": True}
+		_insert("Read State", {"space": space, "user": frappe.session.user, "state_key": key,
+			**dict.fromkeys(fields, stamp)})
+	return {"read": "read_at" in fields}
 
 
 def _dates(data):
@@ -768,7 +847,7 @@ def get_item_history(name):
 	history = [_entry_payload(frappe.get_doc(PREFIX + "Entry", row.name), level) for row in rows]
 	if not can_read_space(room.name):
 		for row in history:
-			row.update(attachments=[], source_entry=None, can_edit=False)
+			row.update(attachments=[], source_entry=None, can_edit=False, can_remove=False)
 	return {"item": _item_payload(doc, level), "history": history}
 
 

@@ -16,6 +16,16 @@ internal fun chatInitials(name: String): String = name.trim().split(Regex("\\s+"
 
 internal fun chatPreview(text: String): String = text.replace(Regex("\\s+"), " ").trim().take(180)
 
+internal enum class ChatReceipt(val label: String) {
+    SENT("Sent"), DELIVERED("Delivered to everyone"), READ("Read by everyone")
+}
+
+internal fun chatReceipt(creation: String, deliveredThrough: String, seenThrough: String): ChatReceipt = when {
+    creation.isNotBlank() && creation <= seenThrough -> ChatReceipt.READ
+    creation.isNotBlank() && creation <= deliveredThrough -> ChatReceipt.DELIVERED
+    else -> ChatReceipt.SENT
+}
+
 internal fun chatTime(timestamp: String): String = runCatching {
     LocalDateTime.parse(timestamp.replace(' ', 'T')).format(DateTimeFormatter.ofPattern("HH:mm", Locale.ENGLISH))
 }.getOrDefault("")

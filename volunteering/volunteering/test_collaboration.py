@@ -147,6 +147,74 @@ class IntegrationTestCollaboration(IntegrationTestCase):
 		self.assertEqual(entry["body"], "Message removed")
 		self.assertTrue(frappe.db.exists(c.PREFIX + "Item", task["name"]))
 
+	def test_only_author_can_edit_and_moderator_can_remove(self):
+		original = c.post_entry(self.room, "Original", request_key="original")["name"]
+		name = c.post_entry(self.room, "Typo", request_key="typo", source_entry=original)["name"]
+		before = c.get_space(self.room)["entries"][-1]
+		c.edit_entry(name, "Corrected", expected_modified=before["modified"])
+		after = c.get_space(self.room)["entries"][-1]
+		self.assertEqual(after["body"], "Corrected")
+		self.assertEqual(after["creation"], before["creation"])
+		self.assertEqual(after["source_entry"], original)
+		self.assertTrue(after["edited_at"])
+		with self.assertRaises(frappe.ValidationError):
+			c.edit_entry(name, "Stale edit", expected_modified=before["modified"])
+		frappe.set_user(self.manager)
+		moderation = c.get_space(self.room)["entries"][-1]
+		self.assertFalse(moderation["can_edit"])
+		self.assertTrue(moderation["can_remove"])
+		with self.assertRaises(frappe.PermissionError):
+			c.edit_entry(name, "Impersonation", expected_modified=after["modified"])
+		c.edit_entry(name, remove=True, expected_modified=after["modified"])
+		frappe.set_user(self.owner)
+		with self.assertRaises(frappe.PermissionError):
+			c.edit_entry(name, "Restore", expected_modified=c.get_space(self.room)["entries"][-1]["modified"])
+
+	def test_receipts_distinguish_delivery_read_and_legacy_unread_markers(self):
+		from volunteering.volunteering import collaboration_mobile as mobile
+
+		first = c.post_entry(self.room, "One", request_key="receipt-one")["name"]
+		second = c.post_entry(self.room, "Two", request_key="receipt-two")["name"]
+		frappe.set_user(self.member)
+		c.get_space(self.room)
+		c.mark_read(self.room, second)  # Old clients update unread counts only.
+		mobile.mark_delivered(self.room, second)
+		mobile.mark_delivered(self.room, first)
+		with self.assertRaises(frappe.PermissionError):
+			mobile.get_message_info(second)
+		frappe.set_user(self.viewer)
+		mobile.mark_seen(self.room, first)
+		frappe.set_user(self.outsider)
+		with self.assertRaises(frappe.PermissionError):
+			mobile.mark_seen(self.room, second)
+		with self.assertRaises(frappe.PermissionError):
+			mobile.get_message_info(first)
+		frappe.set_user(self.owner)
+		self.assertEqual({row["user"]: row["status"] for row in mobile.get_message_info(first)["recipients"]},
+			{self.member: 2, self.viewer: 3, self.manager: 1})
+		self.assertEqual({row["user"]: row["status"] for row in mobile.get_message_info(second)["recipients"]},
+			{self.member: 2, self.viewer: 1, self.manager: 1})
+		self.assertEqual(mobile.get_space(self.room)["receipt_through"], {"delivered_through": "", "seen_through": ""})
+		for user in (self.member, self.viewer, self.manager):
+			frappe.set_user(user)
+			mobile.mark_seen(self.room, second)
+			mobile.mark_seen(self.room, first)
+		frappe.set_user(self.owner)
+		room = mobile.get_space(self.room)
+		self.assertEqual(room["receipt_through"], dict.fromkeys(("delivered_through", "seen_through"),
+			room["entries"][-1]["creation"]))
+
+	def test_current_progress_is_latest_effective_snapshot_with_tie_break(self):
+		tracker = self.tracker()
+		current = now_datetime() - timedelta(hours=1)
+		for value, stamp in ((20, current), (40, current), (5, current - timedelta(minutes=1))):
+			tracker = c.record_progress(tracker["name"], tracker["modified"], f"At {value}", value=value, effective_at=stamp)
+		room = c.get_space(self.room)
+		entries = [entry for entry in room["entries"] if entry["entry_kind"] == "Progress"]
+		self.assertEqual([entry["snapshot"]["item_data"]["value"] for entry in entries], [20, 40, 5])
+		self.assertEqual(room["current_progress"][tracker["name"]], entries[1]["name"])
+		self.assertEqual(c.get_space(self.room, before=entries[-1]["name"])["current_progress"], room["current_progress"])
+
 	def test_read_marker_monotonic_and_viewer_allowed(self):
 		one = c.post_entry(self.room, "One", request_key="one")["name"]
 		two = c.post_entry(self.room, "Two", request_key="two")["name"]

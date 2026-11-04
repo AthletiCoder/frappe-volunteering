@@ -164,7 +164,12 @@
 						</button>
 					</div>
 					<template v-if="tab === 'Chat'">
-						<div ref="thread" class="message-thread" aria-label="Message history">
+						<div
+							ref="thread"
+							class="message-thread"
+							aria-label="Message history"
+							@scroll="acknowledgeVisibleMessages"
+						>
 							<button
 								v-if="room.older_cursor"
 								class="btn-secondary mx-auto block mb-5"
@@ -245,7 +250,7 @@
 										Create {{ kind.toLowerCase() }}</button
 									><button v-if="entry.can_edit" @click="editMessage(entry)">
 										Edit message</button
-									><button v-if="entry.can_edit" @click="removeMessage(entry)">
+									><button v-if="entry.can_remove" @click="removeMessage(entry)">
 										Remove message
 									</button>
 								</details>
@@ -1152,12 +1157,36 @@ async function loadRoom(scroll = false) {
 	}
 	room.value = result;
 	const latest = result.entries.at(-1);
-	if (latest) await call(API + "mark_read", { space: id, entry: latest.name });
-	if (scroll) {
-		await nextTick();
-		if (thread.value) thread.value.scrollTop = thread.value.scrollHeight;
+	await nextTick();
+	if (roomId.value !== id) return;
+	if (scroll && thread.value) thread.value.scrollTop = thread.value.scrollHeight;
+	if (latest && latest.creation > result.delivered_through)
+		await call(API + "mark_delivered", { space: id, entry: latest.name });
+	acknowledgeVisibleMessages();
+}
+const pendingSeen = new Set();
+async function acknowledgeVisibleMessages() {
+	const current = room.value;
+	const pane = thread.value;
+	const latest = current?.entries.findLast((entry) => entry.owner !== home.value.user);
+	if (!latest || !pane || document.visibilityState !== "visible" ||
+		pane.scrollHeight - pane.scrollTop - pane.clientHeight > 12 ||
+		latest.creation <= current.seen_through || pendingSeen.has(latest.name)) return;
+	pendingSeen.add(latest.name);
+	try {
+		await call(API + "mark_seen", { space: current.space.name, entry: latest.name });
+		if (room.value === current) current.seen_through = latest.creation;
+	} catch {
+		// Retry on the next room refresh.
+	} finally {
+		pendingSeen.delete(latest.name);
 	}
 }
+watch(thread, (pane) => {
+	if (!pane) return;
+	pane.scrollTop = pane.scrollHeight;
+	acknowledgeVisibleMessages();
+}, { flush: "post" });
 async function navigate() {
 	error.value = "";
 	reply.value = null;
@@ -1515,6 +1544,7 @@ function closeDialog() {
 }
 let timer;
 onMounted(async () => {
+	document.addEventListener("visibilitychange", acknowledgeVisibleMessages);
 	try {
 		await refreshHome();
 		await navigate();
@@ -1534,7 +1564,10 @@ onMounted(async () => {
 		loading.value = false;
 	}
 });
-onUnmounted(() => clearInterval(timer));
+onUnmounted(() => {
+	clearInterval(timer);
+	document.removeEventListener("visibilitychange", acknowledgeVisibleMessages);
+});
 
 const ItemCard = defineComponent({
 	props: ["item"],

@@ -5,6 +5,13 @@ import org.junit.Test
 import java.time.LocalDate
 
 class ChatPresentationTest {
+    @Test fun receiptUsesTheLeastAdvancedRecipientAndDoesNotReadFutureMessages() {
+        val stamp = "2026-11-04 13:46:12.000001"
+        assertEquals(ChatReceipt.SENT, chatReceipt(stamp, "", ""))
+        assertEquals(ChatReceipt.DELIVERED, chatReceipt(stamp, stamp, "2026-11-04 13:46:12"))
+        assertEquals(ChatReceipt.READ, chatReceipt(stamp, stamp, stamp))
+    }
+
     private val today = LocalDate.of(2026, 11, 2)
     private val kitchen = ChatSummary("kitchen", "Pune Community Kitchen", "Workspace", timestamp = "2026-11-02 11:05:00")
     private val area = ChatSummary("area", "Meal delivery", "Area", parent = "kitchen", timestamp = "2026-11-02 13:00:00", unread = 2)

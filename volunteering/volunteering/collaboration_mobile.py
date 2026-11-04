@@ -69,6 +69,21 @@ def mark_read(space, entry):
 
 
 @frappe.whitelist(methods=["POST"])
+def mark_delivered(space, entry):
+	return _invoke("mark_delivered", space=space, entry=entry)
+
+
+@frappe.whitelist(methods=["POST"])
+def mark_seen(space, entry):
+	return _invoke("mark_seen", space=space, entry=entry)
+
+
+@frappe.whitelist(methods=["POST"])
+def get_message_info(name):
+	return _invoke("get_message_info", name=name)
+
+
+@frappe.whitelist(methods=["POST"])
 def save_item(space, payload, name=None, expected_modified=None):
 	return _invoke("save_item", space=space, payload=payload, name=name, expected_modified=expected_modified)
 

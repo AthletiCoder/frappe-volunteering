@@ -29,8 +29,15 @@ internal data class TrackerDisplay(
         else -> if (value == null || !value.isFinite() || !minimum.isFinite() || !maximum.isFinite() || maximum <= minimum) null
             else ((value - minimum) / (maximum - minimum)).toFloat().coerceIn(0f, 1f)
     }
+    fun phase(outcome: String): TrackerPhase = when {
+        outcome == "Completed" -> TrackerPhase.COMPLETE
+        outcome in listOf("Failed", "Cancelled") -> TrackerPhase.CLOSED
+        outcome == "In progress" || currentIndex >= 0 || (fraction ?: 0f) > 0f -> TrackerPhase.ACTIVE
+        else -> TrackerPhase.WAITING
+    }
 }
 
 internal enum class MilestoneState { DONE, CURRENT, UPCOMING }
+internal enum class TrackerPhase { WAITING, ACTIVE, COMPLETE, CLOSED }
 
 private fun decimalLabel(value: Double) = BigDecimal.valueOf(value).stripTrailingZeros().toPlainString()

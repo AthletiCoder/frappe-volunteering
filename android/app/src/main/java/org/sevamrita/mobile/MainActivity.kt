@@ -9,6 +9,13 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalContext
 import org.sevamrita.mobile.reminders.WorkReminders
 import androidx.activity.ComponentActivity
@@ -39,6 +46,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -207,6 +215,17 @@ private fun PortalApp(model: PortalViewModel, onExit: () -> Unit, workLink: Work
     BackHandler { if (!model.backInChat()) confirmExit = true }
     val screenStates = rememberSaveableStateHolder()
     val route = state.chatNavigation.current
+    val depth = state.chatNavigation.history.size
+    var previousRoute by remember { mutableStateOf(route) }
+    var previousDepth by remember { mutableStateOf(depth) }
+    val motion = remember(route) { Animatable(if (route == previousRoute) 1f else 0f) }
+    val direction = remember(route) { if (depth < previousDepth) -1 else 1 }
+    val layoutDirection = LocalLayoutDirection.current
+    LaunchedEffect(route) {
+        previousRoute = route
+        previousDepth = depth
+        motion.animateTo(1f, tween(durationMillis = 170, easing = FastOutSlowInEasing))
+    }
     val roomChat = state.page != Page.RECEIPT && route.view == ChatView.CHAT
     var menuExpanded by remember { mutableStateOf(false) }
     val canGoBack = state.page == Page.RECEIPT || state.chatNavigation.canGoBack
@@ -226,7 +245,7 @@ private fun PortalApp(model: PortalViewModel, onExit: () -> Unit, workLink: Work
         topBar = {
             Column(Modifier.fillMaxWidth().background(Color.White).windowInsetsPadding(
                 WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))) {
-                if (!roomChat) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                if (!roomChat) Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     if (canGoBack) IconButton(onClick = { model.backInChat() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -262,10 +281,18 @@ private fun PortalApp(model: PortalViewModel, onExit: () -> Unit, workLink: Work
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
             if (state.error.isNotBlank()) MessageBar(state.error, isError = true, onDismiss = model::dismissMessage)
             if (state.notice.isNotBlank()) MessageBar(state.notice, isError = false, onDismiss = model::dismissMessage)
-            if (state.page == Page.RECEIPT) ReceiptScreen(state) else
-                screenStates.SaveableStateProvider("${state.user}:${route.view}:${route.room}:${route.item}") {
-                    CollaborationScreen(state, model)
+            if (state.page == Page.RECEIPT) ReceiptScreen(state) else Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
+                Box(Modifier.fillMaxSize().graphicsLayer {
+                    val remaining = 1f - motion.value
+                    val side = if (layoutDirection == LayoutDirection.Ltr) direction else -direction
+                    translationX = 16.dp.toPx() * side * remaining
+                    alpha = 1f - 0.17f * remaining
+                }) {
+                    screenStates.SaveableStateProvider("${state.user}:${route.view}:${route.room}:${route.item}") {
+                        CollaborationScreen(state, model)
+                    }
                 }
+            }
         }
     }
     if (reminderSettings) AlertDialog(onDismissRequest = { reminderSettings = false },
@@ -691,8 +718,8 @@ private fun UnavailableScreen(state: PortalState) {
 }
 
 @Composable
-internal fun SectionCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(20.dp),
+internal fun SectionCard(color: Color = Color.White, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = color), shape = RoundedCornerShape(20.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
     }

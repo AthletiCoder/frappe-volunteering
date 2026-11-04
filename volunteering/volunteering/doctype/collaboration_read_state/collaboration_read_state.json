@@ -8,6 +8,8 @@
   "space",
   "user",
   "read_at",
+  "delivered_through",
+  "seen_through",
   "state_key"
  ],
  "fields": [
@@ -29,6 +31,16 @@
    "fieldname": "read_at",
    "fieldtype": "Datetime",
    "label": "Read At"
+  },
+  {
+   "fieldname": "delivered_through",
+   "fieldtype": "Datetime",
+   "label": "Delivered Through"
+  },
+  {
+   "fieldname": "seen_through",
+   "fieldtype": "Datetime",
+   "label": "Seen Through"
   },
   {
    "fieldname": "state_key",

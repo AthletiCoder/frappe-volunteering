@@ -104,20 +104,21 @@ internal fun TaskRow(item: JSONObject, enabled: Boolean, action: (String) -> Uni
 internal fun TrackerRow(item: JSONObject, onClick: () -> Unit) {
     val config = item.optJSONObject("item_data") ?: JSONObject()
     val display = trackerDisplay(config)
-    Surface(onClick = onClick, shape = RoundedCornerShape(16.dp), color = Color.White) {
+    val outcome = item.text("status")
+    val phase = display.phase(outcome)
+    Surface(onClick = onClick, shape = RoundedCornerShape(16.dp), color = phase.tileColor) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(item.text("title"), Modifier.weight(1f), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium)
-                WorkStatus(item.text("status"))
+                TrackerPhaseBadge(phase, outcome)
                 Icon(Icons.Default.ChevronRight, null, Modifier.size(18.dp), tint = workMuted)
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text((if (display.stages.isNotEmpty() && display.currentIndex >= 0) "Current: " else "") + display.label,
-                    Modifier.weight(1f), color = workGreen, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Modifier.weight(1f), color = phase.ink, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                 if (display.currentIndex >= 0) Text("${display.currentIndex + 1} / ${display.stages.size}", color = workMuted, style = MaterialTheme.typography.labelSmall)
             }
-            if (display.stages.isNotEmpty()) TrackerMilestoneBar(display, item.text("status"))
-            else display.fraction?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth().height(4.dp), color = workGreen) }
+            TrackerBar(display, outcome, phase.ink)
             workDates(config.text("attention_date"), config.text("attention_until"), item.text("deadline"), "Attention").forEach { Text(it, color = workMuted, fontSize = 12.sp) }
         }
     }

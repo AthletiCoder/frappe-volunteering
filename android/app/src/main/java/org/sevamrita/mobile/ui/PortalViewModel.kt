@@ -730,13 +730,28 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
         val generation = sessionGeneration
         val rooms = state.value.chatHome.items("spaces").filterNot { it.optBoolean("archived") }.take(8)
         runTask(showBusy = false, silent = true) {
-            for (room in rooms) {
-                if (generation != sessionGeneration) break
-                val version = chatChangeVersion
-                val data = api.call(CHAT + "get_space", JSONObject().put("name", room.text("name")))
-                if (generation == sessionGeneration && version == chatChangeVersion) synchronized(chatScreens) { chatScreens["room:${room.text("name")}"] = data }
-            }
+            fetchChatPreviews(rooms, generation)
             if (generation == sessionGeneration) persistChatScreens()
+        }
+    }
+
+    private fun fetchChatPreviews(rooms: List<JSONObject>, generation: Int) {
+        for (room in rooms) {
+            if (generation != sessionGeneration) return
+            val version = chatChangeVersion
+            val name = room.text("name")
+            val data = api.call(CHAT + "get_space", JSONObject().put("name", name))
+            if (generation != sessionGeneration || version != chatChangeVersion) return
+            synchronized(chatScreens) { chatScreens["room:$name"] = data }
+            acknowledgeDelivery(name, data)
+        }
+    }
+
+    private fun acknowledgeDelivery(name: String, room: JSONObject) {
+        if (!room.has("delivered_through")) return
+        val latest = room.items("entries").lastOrNull() ?: return
+        if (latest.text("creation") > room.text("delivered_through")) {
+            api.call(CHAT + "mark_delivered", JSONObject().put("space", name).put("entry", latest.text("name")))
         }
     }
 
@@ -761,6 +776,9 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
                 } }
                 val name = state.value.chatNavigation.current.room
                 if (name.isNotBlank() && state.value.page == Page.COLLABORATION) reloadChatRoom(name)
+                fetchChatPreviews(home.items("spaces").filter {
+                    it.text("name") != name && it.optBoolean("delivery_pending")
+                }.take(8), generation)
                 persistChatScreens()
             } finally {
                 chatRefreshing = false
@@ -779,13 +797,33 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
         if (generation != sessionGeneration || version != chatChangeVersion || state.value.page != Page.COLLABORATION || state.value.chatNavigation.current != route || state.value.chatRoom.optJSONObject("space")?.text("name") != name) return
         val current = state.value.chatRoom
         if (!detail && current.items("entries").isNotEmpty()) {
-            val entries = (current.items("entries") + room.items("entries")).associateBy { it.text("name") }.values.sortedBy { it.text("creation") }
-            room.put("entries", JSONArray(entries)).put("older_cursor", current.opt("older_cursor"))
+            val incoming = room.items("entries")
+            val cached = current.items("entries")
+            val entries = (cached + incoming).associateBy { it.text("name") }.values
+                .sortedWith(compareBy({ it.text("creation") }, { it.text("name") }))
+            room.put("entries", JSONArray(entries))
+            if (entries.firstOrNull()?.text("name") != incoming.firstOrNull()?.text("name"))
+                room.put("older_cursor", current.opt("older_cursor"))
         }
         synchronized(chatScreens) { chatScreens[screenKey(route)] = room }
         state.value = state.value.copy(chatRoom = room, chatLoading = false)
         persistChatScreens()
-        room.items("entries").lastOrNull()?.let { api.call(CHAT + "mark_read", JSONObject().put("space", name).put("entry", it.text("name"))) }
+        if (!detail) acknowledgeDelivery(name, room)
+    }
+
+    fun markChatSeen(name: String, entry: JSONObject) = runTask(showBusy = false, silent = true) {
+        val route = ChatRoute(ChatView.CHAT, name)
+        val generation = sessionGeneration
+        val stamp = entry.text("creation")
+        if (state.value.chatNavigation.current != route || stamp <= state.value.chatRoom.text("seen_through")) return@runTask
+        api.call(CHAT + "mark_seen", JSONObject().put("space", name).put("entry", entry.text("name")))
+        withContext(Dispatchers.Main) {
+            val current = state.value
+            if (sessionGeneration == generation && current.chatNavigation.current == route && stamp > current.chatRoom.text("seen_through")) {
+                val room = JSONObject(current.chatRoom.toString()).put("seen_through", stamp)
+                state.value = current.copy(chatRoom = room)
+            }
+        }
     }
 
     fun openChatRoom(name: String) {

@@ -1,11 +1,9 @@
 package org.sevamrita.mobile.ui
 
-import android.app.TimePickerDialog
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -13,6 +11,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.sevamrita.mobile.data.items
 import org.sevamrita.mobile.data.text
+import java.time.LocalTime
 
 @Composable
 internal fun WorkShareForm(form: JSONObject, initialPeople: List<JSONObject>, model: PortalViewModel, set: (JSONObject) -> Unit) {
@@ -47,12 +46,8 @@ internal fun WorkShareForm(form: JSONObject, initialPeople: List<JSONObject>, mo
 
 @Composable
 internal fun ReminderTimeField(value: String, set: (String) -> Unit) {
-    val context = LocalContext.current
-    val parts = value.ifBlank { "09:00" }.split(':')
-    Text("Reminder", style = MaterialTheme.typography.titleSmall)
-    OutlinedButton(onClick = {
-        TimePickerDialog(context, { _, hour, minute -> set("%02d:%02d".format(hour, minute)) }, parts.getOrNull(0)?.toIntOrNull() ?: 9, parts.getOrNull(1)?.toIntOrNull() ?: 0, true).show()
-    }, modifier = Modifier.fillMaxWidth()) { Text(if (value.isBlank()) "09:00 · morning default" else "$value · portal time") }
-    if (value.isNotBlank()) TextButton(onClick = { set("") }) { Text("Use morning default") }
+    val time = runCatching { LocalTime.parse(value) }.getOrDefault(LocalTime.of(9, 0))
+    EditorTime("Reminder time", time, if (value.isBlank()) "09:00 · morning default" else "$time · portal time",
+        reset = if (value.isNotBlank()) { { set("") } } else null) { set(it.toString()) }
     Text("On scheduled days, or on the deadline. Times follow the portal's time zone.", style = MaterialTheme.typography.bodySmall)
 }
