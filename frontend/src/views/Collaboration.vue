@@ -1332,7 +1332,6 @@ async function saveSpace() {
 function assignmentChanged() {
     if (trackerForm.value.assignment_mode === 'Stages' && !['Stages','Status'].includes(trackerForm.value.scale)) {
         trackerForm.value.scale = 'Stages'; trackerForm.value.value = null; trackerForm.value.stage = null;
-        if (!trackerForm.value.stages?.length) trackerForm.value.stages = ['Planning','Execution','Completion'].map((label,index) => ({key:nonce(),label,position:[30,70,100][index],assignee:''}));
     }
 }
 async function viewWorkItem(item) {
@@ -1357,7 +1356,7 @@ function newItem(kind = "Task", source = null) {
         participants: [], item_data: {},
     };
     trackerForm.value = { assignment_mode: "Single",
-		scale: "Percentage",
+		scale: "Status",
 		minimum: 0,
 		maximum: 100,
 		value: null,

@@ -303,7 +303,15 @@ for (const width of [360, 390]) test(`Phone layout ${width}px opens chat and cre
 test('Divide tracker stages between people and retain its reminder time', async ({ page }) => {
     await signIn(page); const room = await newRoom(page, true);
     const dialog = await createItem(page, 'Tracker', 'Kitchen stage responsibilities');
+    await expect(dialog.getByLabel('Tracking scale')).toHaveValue('Status');
+    await expect(dialog.getByLabel('Stage 1 label', { exact: true })).toHaveCount(0);
     await dialog.getByRole('radio', { name: /Divide by stage/ }).check();
+    await dialog.getByLabel('Tracking scale').selectOption('Stages');
+    for (const [index, label, position] of [[1, 'Confirm menu', '10'], [2, 'Prepare meals', '60'], [3, 'Deliver meals', '100']] as const) {
+        await dialog.getByRole('button', { name: '+ Add stage', exact: true }).click();
+        await dialog.getByLabel(`Stage ${index} label`).fill(label);
+        await dialog.getByLabel(`Stage ${index} percent`).fill(position);
+    }
     await dialog.getByLabel('Stage 1 person').selectOption(users.owner);
     await dialog.getByLabel('Stage 2 person').selectOption(users.member);
     await dialog.getByLabel('Stage 3 person').selectOption(users.owner);

@@ -1,5 +1,20 @@
 # SF Tasks and SF testing
 
+## In-app updates (0.5.0 and later)
+
+Install the signed 0.5.0 APK once over the existing app. Later versions appear in a small update banner, or use **Check for updates** from the login screen, Chats menu or a conversation menu. Checks run quietly at most once every six hours on app foregrounding; a manual check is always available. Downloading is optional and shows progress only in the update panel. Android requires the user to allow installation from this app once and confirm each installation. No ERP login or chat state is changed by checking/downloading an update.
+
+The updater uses public GitHub Releases in `AthletiCoder/frappe-volunteering`, independently of ERP deployment. A fixed `sf-tasks-updates` release hosts `sf-tasks-update.json` and `sf-testing-update.json`. Each feed points to an immutable APK on a versioned release such as `sf-tasks-v0.5.0`. Keep the channels separate: production (`org.sevamrita.mobile`) and local testing (`org.sevamrita.mobile.local`) cannot replace one another. The app verifies HTTPS destinations, size, SHA-256, package, increasing version code and the installed signing certificate before offering the APK to Android's installer. Failed/partial downloads are removed and can be retried. Files are shared only through a private, narrowly scoped FileProvider. No ERP credentials are sent to the release host.
+
+To prepare a future release:
+
+1. Increase both `versionCode` and `versionName`, write release notes under `android/releases/`, run the affected tests, and build both signed variants. Preserve the existing release keystore and local debug key.
+2. Set `JAVA_HOME` to JDK 17, then run `python3 android/prepare_release.py --tasks android/app/build/outputs/apk/release/app-release.apk --testing android/app/build/outputs/apk/debug/app-debug.apk --notes android/releases/0.5.0.md --output output/sf-tasks-0.5.0` (adjust the version and notes). The helper verifies the APK signatures against public certificate fingerprints, package/version metadata and production debuggability before generating APKs, checksum files and feeds. It never uploads or deploys.
+3. Commit and push the matching source to `main`. Use `gh release create sf-tasks-v0.5.0 --target COMMIT_SHA --draft --latest=false --notes-file android/releases/0.5.0.md` and upload the prepared APKs and checksum files to that draft. Download and compare the hosted APK hashes, then publish with `gh release edit sf-tasks-v0.5.0 --draft=false --latest=false`. Never replace an already-published versioned APK; increment the version for a correction.
+4. Only after the versioned APKs are published and verified, upload the two new JSON files to `sf-tasks-updates` using `gh release upload sf-tasks-updates output/sf-tasks-0.5.0/sf-tasks-update.json output/sf-tasks-0.5.0/sf-testing-update.json --clobber`. Create that release first if bootstrapping. Before replacement, compare the prior feeds and require a strictly higher version code. Keep the stable release tag: the apps' URLs depend on it. Verify both public feeds and their APK hashes after publication.
+
+APK publication does not deploy the ERP backend. Changes to server APIs still require the separately authorized ERP deployment. Signing keys, passwords, generated APKs and local test data remain outside Git; releases contain only the APKs, checksums and public feed metadata. Automated coverage includes channel separation, URL/redirect restrictions, download size/hash checks, interrupted-download cleanup/retry, package/version/key validation and the installer/provider contract. The Android installer permission/confirmation flow still requires a physical-device acceptance check for a newly shipped updater.
+
 Native Kotlin/Jetpack Compose client for Sevamrita's role-aware Home services. It has no `WebView`, browser bridge, Desk route, or embedded website. The existing website and its assets are unchanged by this Android project.
 
 ## Build

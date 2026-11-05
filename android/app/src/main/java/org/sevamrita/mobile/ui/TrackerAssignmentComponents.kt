@@ -10,15 +10,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import org.json.JSONArray
 import org.json.JSONObject
-import org.sevamrita.mobile.data.items
 import org.sevamrita.mobile.data.text
-import java.util.UUID
 
 @Composable
 internal fun TrackerAssignmentChoice(form: JSONObject, set: (JSONObject) -> Unit) {
-    val config = form.optJSONObject("item_data") ?: JSONObject().put("scale", "Percentage")
+    val config = form.optJSONObject("item_data") ?: JSONObject().put("scale", "Status")
     val mode = config.text("assignment_mode").ifBlank { "Single" }
     Text("Who is responsible?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
     listOf("Single" to ("One person" to "Assign the entire tracker to one person"),
@@ -28,8 +25,6 @@ internal fun TrackerAssignmentChoice(form: JSONObject, set: (JSONObject) -> Unit
                 val updated = JSONObject(config.toString()).put("assignment_mode", value)
                 if (value == "Stages" && config.text("scale") !in listOf("Stages", "Status")) {
                     updated.put("scale", "Stages").put("value", JSONObject.NULL).put("stage", JSONObject.NULL)
-                    if (config.items("stages").isEmpty()) updated.put("stages", JSONArray(listOf("Planning", "Execution", "Completion").mapIndexed { index, title ->
-                        JSONObject().put("key", UUID.randomUUID().toString()).put("label", title).put("position", listOf(30, 70, 100)[index]) }))
                 }
                 set(JSONObject(form.toString()).put("item_data", updated))
             }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {

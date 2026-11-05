@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PersonOutline
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,9 +20,28 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.json.JSONObject
 import org.sevamrita.mobile.data.text
+import androidx.compose.foundation.BorderStroke
 
 private val workGreen = Color(0xFF08745E)
 private val workMuted = Color(0xFF637378)
+private val pendingRed = Color(0xFFA22C35)
+
+@Composable
+internal fun TrackerPendingSummary(trackers: List<JSONObject>, user: String, archived: Boolean = false) {
+    val mine = if (archived) 0 else trackers.count { trackerPendingWith(it)?.isMe(user) == true }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Surface(color = if (mine > 0) Color(0xFFFCE4E5) else Color(0xFFEDF0F0), shape = RoundedCornerShape(12.dp)) {
+            Text(mine.toString(), Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                color = if (mine > 0) pendingRed else workMuted, fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium)
+        }
+        Column(Modifier.weight(1f)) {
+            Text("Pending with me", fontWeight = FontWeight.SemiBold, color = if (mine > 0) pendingRed else workMuted)
+            Text("${trackers.size} trackers in this view", color = workMuted, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
 
 @Composable
 internal fun TrackerFilter(value: String, onChange: (String) -> Unit) {
@@ -101,24 +121,36 @@ internal fun TaskRow(item: JSONObject, enabled: Boolean, action: (String) -> Uni
 }
 
 @Composable
-internal fun TrackerRow(item: JSONObject, onClick: () -> Unit) {
+internal fun TrackerRow(item: JSONObject, user: String, archived: Boolean = false, onClick: () -> Unit) {
     val config = item.optJSONObject("item_data") ?: JSONObject()
     val display = trackerDisplay(config)
     val outcome = item.text("status")
     val phase = display.phase(outcome)
-    Surface(onClick = onClick, shape = RoundedCornerShape(16.dp), color = phase.tileColor) {
+    val pending = if (archived) null else trackerPendingWith(item)
+    val mine = pending?.isMe(user) == true
+    val accent = if (mine) pendingRed else phase.ink
+    Surface(onClick = onClick, shape = RoundedCornerShape(16.dp),
+        color = if (mine) Color(0xFFFFEEEF) else phase.tileColor,
+        border = if (mine) BorderStroke(1.dp, Color(0xFFE8B7BC)) else null) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(item.text("title"), Modifier.weight(1f), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium)
                 TrackerPhaseBadge(phase, outcome)
                 Icon(Icons.Default.ChevronRight, null, Modifier.size(18.dp), tint = workMuted)
             }
+            if (pending != null) Row(verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Icon(Icons.Default.PersonOutline, null, Modifier.size(16.dp), tint = if (mine) pendingRed else workMuted)
+                Text(if (mine) "Pending with you" else if (pending.user.isBlank()) "Pending · unassigned" else "Pending with ${pending.displayName}",
+                    color = if (mine) pendingRed else workMuted, fontSize = 12.sp,
+                    fontWeight = if (mine) FontWeight.SemiBold else FontWeight.Normal)
+            }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text((if (display.stages.isNotEmpty() && display.currentIndex >= 0) "Current: " else "") + display.label,
-                    Modifier.weight(1f), color = phase.ink, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Modifier.weight(1f), color = accent, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                 if (display.currentIndex >= 0) Text("${display.currentIndex + 1} / ${display.stages.size}", color = workMuted, style = MaterialTheme.typography.labelSmall)
             }
-            TrackerBar(display, outcome, phase.ink)
+            TrackerBar(display, outcome, accent)
             workDates(config.text("attention_date"), config.text("attention_until"), item.text("deadline"), "Attention").forEach { Text(it, color = workMuted, fontSize = 12.sp) }
         }
     }

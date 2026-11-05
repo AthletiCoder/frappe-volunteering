@@ -149,6 +149,7 @@ internal fun ChatThread(
     data: JSONObject, user: String, busy: Boolean, canMarkSeen: Boolean,
     listState: LazyListState, composer: ChatComposerData, actions: ChatThreadActions
 ) {
+    val updates = org.sevamrita.mobile.updates.LocalAppUpdates.current
     val space = data.optJSONObject("space") ?: JSONObject()
     val entries = data.items("entries")
     val work = data.items("items")
@@ -204,6 +205,7 @@ internal fun ChatThread(
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { Text("Tasks") }, onClick = { menu = false; actions.tasks() })
                     DropdownMenuItem(text = { Text("Trackers") }, onClick = { menu = false; actions.trackers() })
+                    DropdownMenuItem(text = { Text("Check for updates") }, onClick = { menu = false; updates.check(manual = true) })
                     if (canPost && !composer.editing) DropdownMenuItem(text = { Text("Message type") }, onClick = { menu = false; kindMenu = true })
                     if (space.optBoolean("can_manage")) DropdownMenuItem(text = { Text("Members & settings") }, onClick = { menu = false; actions.members() })
                     else DropdownMenuItem(text = { Text("Conversation members") }, onClick = { menu = false; actions.members() })
@@ -234,6 +236,8 @@ internal fun ChatThread(
                     } else BoxWithConstraints(Modifier.fillMaxWidth()) {
                         val mine = entry.text("owner") == user
                         val progress = entry.text("entry_kind") == "Progress"
+                        val snapshot = entry.optJSONObject("snapshot")
+                        val hasTrackerSnapshot = progress && snapshot?.optJSONObject("item_data") != null
                         val latestProgress = currentProgress?.text(entry.text("item")).orEmpty()
                         val earlier = progress && latestProgress.isNotBlank() && latestProgress != entry.text("name")
                         val deleted = entry.optBoolean("is_deleted")
@@ -260,12 +264,16 @@ internal fun ChatThread(
                                     itemVerticalAlignment = Alignment.Bottom) {
                                     Text(entry.text("body"), color = if (deleted) greyInk else messageInk, fontSize = 15.sp, lineHeight = 20.sp)
                                     metadata()
-                                } else {
+                                } else if (!hasTrackerSnapshot) {
                                     Text(entry.text("body"), color = if (earlier || deleted) greyInk else messageInk, fontSize = 15.sp, lineHeight = 20.sp)
                                 }
-                                if (progress) entry.optJSONObject("snapshot")?.let {
-                                    TrackerSnapshot(it, earlier = earlier, recordedAt = entry.text("creation"),
+                                if (hasTrackerSnapshot && snapshot != null) {
+                                    TrackerSnapshot(snapshot, earlier = earlier, recordedAt = entry.text("creation"),
+                                        item = items[entry.text("item")], members = members, user = user,
                                         onOpen = { actions.openTracker(entry.text("item")) })
+                                    if (entry.text("body").isNotBlank()) Text(entry.text("body"),
+                                        Modifier.padding(top = 7.dp), color = if (earlier) greyInk else messageInk,
+                                        fontSize = 15.sp, lineHeight = 20.sp)
                                 }
                                 entry.items("attachments").forEach { file -> Row(Modifier.fillMaxWidth().padding(top = 8.dp).background(Color(0x221C7556), RoundedCornerShape(9.dp)).clickable { actions.openFile(file.text("file_url")) }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Default.Description, null, Modifier.size(24.dp), tint = emerald)

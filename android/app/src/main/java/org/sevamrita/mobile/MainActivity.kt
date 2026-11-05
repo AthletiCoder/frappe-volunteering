@@ -9,6 +9,15 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import org.sevamrita.mobile.updates.AppUpdateViewModel
+import org.sevamrita.mobile.updates.LocalAppUpdates
+import org.sevamrita.mobile.updates.AppUpdateBanner
+import org.sevamrita.mobile.updates.AppUpdateDialogs
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -178,7 +187,18 @@ class MainActivity : ComponentActivity() {
                 secondaryContainer = pale, onSecondaryContainer = ink
             )) {
                 val model: PortalViewModel = viewModel()
-                PortalApp(model, onExit = { finish() }, workLink = pendingWork, onWorkLinkHandled = { pendingWork = null })
+                val updates: AppUpdateViewModel = viewModel()
+                val lifecycleOwner = LocalLifecycleOwner.current
+                DisposableEffect(lifecycleOwner, updates) {
+                    val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_START) updates.check() }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    updates.check()
+                    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+                }
+                CompositionLocalProvider(LocalAppUpdates provides updates) {
+                    PortalApp(model, onExit = { finish() }, workLink = pendingWork, onWorkLinkHandled = { pendingWork = null })
+                    AppUpdateDialogs(updates)
+                }
             }
         }
     }
@@ -187,6 +207,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun PortalApp(model: PortalViewModel, onExit: () -> Unit, workLink: WorkLink?, onWorkLinkHandled: () -> Unit) {
     val state = model.state.value
+    val updates = LocalAppUpdates.current
     val context = LocalContext.current
     var reminderSettings by remember { mutableStateOf(false) }
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -270,6 +291,7 @@ private fun PortalApp(model: PortalViewModel, onExit: () -> Unit, workLink: Work
                             DropdownMenuItem(text = { Text("My tasks") }, onClick = { menuExpanded = false; model.showPersonalTasks() })
                             DropdownMenuItem(text = { Text("My trackers") }, onClick = { menuExpanded = false; model.showPersonalTrackers() })
                             DropdownMenuItem(text = { Text("Reminders") }, onClick = { menuExpanded = false; reminderSettings = true })
+                            DropdownMenuItem(text = { Text("Check for updates") }, onClick = { menuExpanded = false; updates.check(manual = true) })
                             DropdownMenuItem(text = { Text("Refresh") }, onClick = { menuExpanded = false; model.refreshChat() })
                             DropdownMenuItem(text = { Text("Switch user") }, onClick = { menuExpanded = false; model.logout() }, enabled = !state.busy)
                         }
@@ -279,6 +301,7 @@ private fun PortalApp(model: PortalViewModel, onExit: () -> Unit, workLink: Work
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
+            AppUpdateBanner()
             if (state.error.isNotBlank()) MessageBar(state.error, isError = true, onDismiss = model::dismissMessage)
             if (state.notice.isNotBlank()) MessageBar(state.notice, isError = false, onDismiss = model::dismissMessage)
             if (state.page == Page.RECEIPT) ReceiptScreen(state) else Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
@@ -360,6 +383,7 @@ private fun parentOf(page: Page) = when (page) {
 
 @Composable
 private fun LoginScreen(state: PortalState, model: PortalViewModel) {
+    val updates = LocalAppUpdates.current
     var username by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
@@ -380,6 +404,8 @@ private fun LoginScreen(state: PortalState, model: PortalViewModel) {
             Spacer(Modifier.height(22.dp))
             Text(BuildConfig.APP_NAME, fontSize = 34.sp, fontWeight = FontWeight.Bold, color = ink)
             Text("Conversations and tasks for your team.", color = muted, fontSize = 16.sp)
+            AppUpdateBanner()
+            TextButton(onClick = { updates.check(manual = true) }) { Text("${BuildConfig.VERSION_NAME} · Check for updates") }
             Spacer(Modifier.height(30.dp))
             SectionCard {
                 Text("Sign in", fontWeight = FontWeight.SemiBold, fontSize = 21.sp)

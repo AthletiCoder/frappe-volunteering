@@ -26,8 +26,8 @@ android {
         applicationId = "org.sevamrita.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 17
-        versionName = "0.4.4"
+        versionCode = 20
+        versionName = "0.5.0"
         manifestPlaceholders["appLabel"] = "SF Tasks"
         buildConfigField("String", "APP_NAME", "\"SF Tasks\"")
         buildConfigField("String", "DEFAULT_LOCAL_HOST", "\"\"")

@@ -215,6 +215,27 @@ class IntegrationTestCollaboration(IntegrationTestCase):
 		self.assertEqual(room["current_progress"][tracker["name"]], entries[1]["name"])
 		self.assertEqual(c.get_space(self.room, before=entries[-1]["name"])["current_progress"], room["current_progress"])
 
+	def test_progress_snapshots_keep_the_person_responsible_after_reassignment(self):
+		tracker = self.tracker()
+		tracker = c.record_progress(tracker["name"], tracker["modified"], "Initial update", value=20)
+		c.save_item(self.room, {"assignee": self.member}, tracker["name"], tracker["modified"])
+		entry = next(row for row in c.get_space(self.room)["entries"] if row["entry_kind"] == "Progress")
+		self.assertEqual(entry["snapshot"]["pending_with"], {
+			"user": self.owner, "full_name": frappe.db.get_value("User", self.owner, "full_name")})
+
+	def test_progress_snapshots_record_the_stage_assignee_and_clear_it_when_complete(self):
+		tracker = self.tracker(scale="Status", assignment_mode="Stages", stages=[
+			{"key": "prepare", "label": "Prepare", "assignee": self.owner},
+			{"key": "review", "label": "Review", "assignee": self.member}])
+		tracker = c.record_progress(tracker["name"], tracker["modified"], "Before starting")
+		tracker = c.record_progress(tracker["name"], tracker["modified"], "For review", stage="review")
+		c.record_progress(tracker["name"], tracker["modified"], "Finished", outcome="Completed")
+		updates = {row["body"]: row["snapshot"]["pending_with"] for row in c.get_space(self.room)["entries"]
+			if row["entry_kind"] == "Progress"}
+		self.assertEqual(updates["Before starting"]["user"], self.owner)
+		self.assertEqual(updates["For review"]["user"], self.member)
+		self.assertIsNone(updates["Finished"])
+
 	def test_read_marker_monotonic_and_viewer_allowed(self):
 		one = c.post_entry(self.room, "One", request_key="one")["name"]
 		two = c.post_entry(self.room, "Two", request_key="two")["name"]

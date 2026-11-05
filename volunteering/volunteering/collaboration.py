@@ -835,9 +835,21 @@ def record_progress(name, expected_modified, note, value=None, stage=None, outco
 		doc.current_effective_at = stamp
 		_save(doc)
 	_entry(doc.space, note, kind="Progress", item=doc.name,
-		snapshot={"title": doc.title, "effective_at": str(stamp), "item_data": data, "status": outcome or doc.status})
+		snapshot={"title": doc.title, "effective_at": str(stamp), "item_data": data, "status": outcome or doc.status,
+			"pending_with": _progress_pending_with(doc, data, outcome or doc.status)})
 	_publish(doc.space, root)
 	return _item_payload(doc, level)
+
+
+def _progress_pending_with(doc, config, status):
+	if status not in OPEN:
+		return None
+	person = doc.assignee or doc.owner
+	if config.get("assignment_mode") == "Stages":
+		stages = config.get("stages", [])
+		stage = next((row for row in stages if row["key"] == config.get("stage")), stages[0] if stages else {})
+		person = stage.get("assignee")
+	return {"user": person or "", "full_name": _name(person) if person else ""}
 
 
 @frappe.whitelist(methods=["POST"])

@@ -28,8 +28,19 @@ import org.sevamrita.mobile.data.text
 internal fun trackerDisplay(config: JSONObject): TrackerDisplay = TrackerDisplay(
     config.text("scale"), if (config.isNull("value")) null else config.optDouble("value").takeIf { it.isFinite() },
     config.optDouble("minimum", 0.0), config.optDouble("maximum", 100.0), config.text("unit"), config.text("stage"),
-    config.items("stages").map { TrackerStage(it.text("key"), it.text("label"), if (it.isNull("position")) null else it.optDouble("position").takeIf { v -> v.isFinite() }, it.text("assignee_name")) }
+    config.items("stages").map { TrackerStage(it.text("key"), it.text("label"),
+        if (it.isNull("position")) null else it.optDouble("position").takeIf { v -> v.isFinite() },
+        it.text("assignee_name"), it.text("assignee")) }
 )
+
+internal fun trackerPendingWith(item: JSONObject): TrackerAssignee? {
+    val config = item.optJSONObject("item_data") ?: JSONObject()
+    return trackerDisplay(config).pendingWith(
+        item.text("status"), config.text("assignment_mode"),
+        TrackerAssignee(item.text("assignee"), item.text("assignee_name")),
+        TrackerAssignee(item.text("owner"))
+    )
+}
 
 internal val TrackerPhase.tileColor: Color get() = when (this) {
     TrackerPhase.WAITING -> Color(0xFFFCF5E7)
@@ -146,22 +157,43 @@ internal fun TrackerBar(display: TrackerDisplay, outcome: String, ink: Color) {
 }
 
 @Composable
-internal fun TrackerSnapshot(snapshot: JSONObject, earlier: Boolean = false, recordedAt: String = "", onOpen: (() -> Unit)? = null) {
+internal fun TrackerSnapshot(
+    snapshot: JSONObject, earlier: Boolean = false, recordedAt: String = "",
+    item: JSONObject? = null, members: List<JSONObject> = emptyList(), user: String = "", onOpen: (() -> Unit)? = null
+) {
     val config = snapshot.optJSONObject("item_data") ?: return
     val display = trackerDisplay(config)
     val status = snapshot.text("status")
     val ink = if (earlier) Color(0xFF596361) else Color(0xFF096651)
     val effective = snapshot.text("effective_at").replace('T', ' ').take(16)
+    val pending = snapshotPendingWith(snapshot, item.takeUnless { earlier }, members)
     Column(Modifier.fillMaxWidth().padding(top = 5.dp).background(ink.copy(alpha = .08f), RoundedCornerShape(8.dp))
         .then(if (onOpen != null) Modifier.clickable(onClickLabel = "Open tracker", onClick = onOpen) else Modifier)
         .padding(horizontal = 9.dp, vertical = 7.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (snapshot.text("title").isNotBlank()) Text(snapshot.text("title"), fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold, color = ink)
+        if (snapshot.text("title").isNotBlank()) Text(snapshot.text("title"), fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold, color = ink)
+        TrackerBar(display, status, ink)
         Text(listOfNotNull(display.label, status.takeIf { it in listOf("Completed", "Failed") }).joinToString(" · "),
             fontSize = 13.sp, lineHeight = 17.sp, fontWeight = FontWeight.Medium, color = ink)
-        TrackerBar(display, status, ink)
+        if (status in listOf("Open", "In progress")) Text(
+            if (pending == null) "Assignee not recorded" else if (pending.user.isBlank()) "Unassigned" else "Pending with ${pending.displayName}",
+            fontSize = 12.sp, lineHeight = 16.sp,
+            color = if (!earlier && pending?.isMe(user) == true) Color(0xFFA22C35) else ink)
         if (earlier || effective.isNotBlank() && effective != recordedAt.replace('T', ' ').take(16))
             Text(listOfNotNull("Earlier update".takeIf { earlier }, "As of $effective".takeIf {
                 effective.isNotBlank() && effective != recordedAt.replace('T', ' ').take(16)
             }).joinToString(" · "), fontSize = 10.sp, lineHeight = 14.sp, color = ink)
     }
+}
+
+private fun snapshotPendingWith(snapshot: JSONObject, current: JSONObject?, members: List<JSONObject>): TrackerAssignee? {
+    val recorded = snapshot.optJSONObject("pending_with")
+    if (recorded != null) return TrackerAssignee(recorded.text("user"), recorded.text("full_name"))
+    val config = snapshot.optJSONObject("item_data") ?: return null
+    if (config.text("assignment_mode") == "Stages") {
+        val pending = trackerDisplay(config).pendingWith(snapshot.text("status"), "Stages", TrackerAssignee(), TrackerAssignee())
+            ?: return null
+        val name = members.firstOrNull { it.text("user") == pending.user }?.text("full_name").orEmpty()
+        return pending.copy(name = pending.name.ifBlank { name })
+    }
+    return current?.let(::trackerPendingWith)
 }

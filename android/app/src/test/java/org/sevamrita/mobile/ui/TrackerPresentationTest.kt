@@ -4,6 +4,50 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class TrackerPresentationTest {
+    private val ravi = TrackerAssignee("ravi@example.com", "Ravi Menon")
+    private val arjun = TrackerAssignee("arjun@example.com", "Arjun Sharma")
+
+    @Test fun aSingleAssignmentIsPendingWithTheAssigneeRatherThanTheCreator() {
+        val pending = TrackerDisplay("Percentage", 30.0).pendingWith("Open", "Single", arjun, ravi)
+        assertEquals(arjun, pending)
+        assertFalse(pending!!.isMe(ravi.user))
+        assertTrue(pending.isMe(arjun.user))
+    }
+
+    @Test fun aStageTrackerFollowsTheCurrentStageAndTheFirstStageBeforeItStarts() {
+        val display = TrackerDisplay("Status", stages = listOf(
+            TrackerStage("plan", "Plan", assigneeUser = ravi.user, assigneeName = ravi.name),
+            TrackerStage("ready", "Ready", assigneeUser = arjun.user, assigneeName = arjun.name)))
+        assertEquals(ravi, display.pendingWith("Open", "Stages", TrackerAssignee(), arjun))
+        assertEquals(arjun, display.copy(stage = "ready").pendingWith("Open", "Stages", TrackerAssignee(), ravi))
+    }
+
+    @Test fun closedTrackersHaveNoPendingAssignee() {
+        for (status in listOf("Completed", "Failed", "Cancelled")) {
+            assertNull(TrackerDisplay("Percentage", 100.0).pendingWith(status, "Single", ravi, ravi))
+            assertNull(TrackerDisplay("Status", stages = listOf(TrackerStage("one", "Requested", assigneeUser = ravi.user)))
+                .pendingWith(status, "Stages", ravi, ravi))
+        }
+    }
+
+    @Test fun legacySingleAssignmentsUseTheOwnerWhenNoAssigneeWasRecorded() {
+        assertEquals(ravi, TrackerDisplay("Number", 10.0).pendingWith("In progress", "", TrackerAssignee(), ravi))
+    }
+
+    @Test fun missingStageAssignmentsRemainUnassignedInsteadOfFallingBackToTheCreator() {
+        val display = TrackerDisplay("Stages", stages = listOf(TrackerStage("one", "Requested", 10.0)))
+        val pending = display.pendingWith("Open", "Stages", arjun, ravi)
+        assertEquals("Unassigned", pending!!.displayName)
+        assertFalse(pending.isMe(ravi.user))
+        assertFalse(pending.isMe(""))
+    }
+
+    @Test fun pendingIdentityUsesTheUserIdWhenPeopleShareADisplayName() {
+        val sameName = arjun.copy(name = ravi.name)
+        assertFalse(sameName.isMe(ravi.user))
+        assertTrue(sameName.isMe(arjun.user))
+    }
+
     @Test fun tilePhaseUsesActualProgressAndExplicitOutcomes() {
         val empty = TrackerDisplay("Percentage", 0.0)
         assertEquals(TrackerPhase.WAITING, empty.phase("Open"))

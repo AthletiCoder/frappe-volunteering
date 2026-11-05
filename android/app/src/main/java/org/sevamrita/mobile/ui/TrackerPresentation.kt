@@ -2,8 +2,16 @@ package org.sevamrita.mobile.ui
 
 import java.math.BigDecimal
 
-internal data class TrackerStage(val key: String, val label: String, val percent: Double? = null, val assigneeName: String = "") {
+internal data class TrackerStage(
+    val key: String, val label: String, val percent: Double? = null,
+    val assigneeName: String = "", val assigneeUser: String = ""
+) {
     val percentLabel: String get() = percent?.takeIf { it.isFinite() }?.let { "${decimalLabel(it)}%" }.orEmpty()
+}
+
+internal data class TrackerAssignee(val user: String = "", val name: String = "") {
+    fun isMe(user: String): Boolean = this.user.isNotBlank() && this.user == user
+    val displayName: String get() = name.ifBlank { user }.ifBlank { "Unassigned" }
 }
 
 internal data class TrackerDisplay(
@@ -34,6 +42,13 @@ internal data class TrackerDisplay(
         outcome in listOf("Failed", "Cancelled") -> TrackerPhase.CLOSED
         outcome == "In progress" || currentIndex >= 0 || (fraction ?: 0f) > 0f -> TrackerPhase.ACTIVE
         else -> TrackerPhase.WAITING
+    }
+
+    fun pendingWith(outcome: String, assignmentMode: String, assignee: TrackerAssignee, owner: TrackerAssignee): TrackerAssignee? {
+        if (outcome !in listOf("Open", "In progress")) return null
+        if (assignmentMode != "Stages") return assignee.takeIf { it.user.isNotBlank() } ?: owner
+        val responsible = stages.getOrNull(currentIndex) ?: stages.firstOrNull()
+        return TrackerAssignee(responsible?.assigneeUser.orEmpty(), responsible?.assigneeName.orEmpty())
     }
 }
 

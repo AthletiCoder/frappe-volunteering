@@ -113,7 +113,7 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
         openEditor("item", JSONObject().put("item_kind", kind).put("title", source?.text("body")?.take(160).orEmpty())
             .put("assignee", state.user).put("priority", "Medium").put("repeat_pattern", "None")
             .put("source_entry", source?.text("name")).put("participants", JSONArray())
-            .put("item_data", if (kind == "Tracker") JSONObject().put("scale", "Percentage") else JSONObject()))
+            .put("item_data", if (kind == "Tracker") JSONObject().put("scale", "Status") else JSONObject()))
     }
     fun historyFor(item: JSONObject) {
         model.chatCall("get_item_history", JSONObject().put("name", item.text("name"))) {
@@ -201,6 +201,7 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
             }
             val work = if (personalTrackers) state.chatWork.items("trackers").filter { trackerMatchesFilter(it.text("status"), state.trackerFilter) }
                 else state.chatWork.items(if (personalTab == "Today") "today" else "open_progress").filter { it.text("item_kind") == "Task" }
+            if (personalTrackers) item(key = "pending-summary") { TrackerPendingSummary(work, state.user) }
             if (work.isEmpty()) item { SectionCard { Text(if (personalTrackers) "No trackers in this view." else "No tasks in this view.") } }
             if (personalTrackers) {
                 groupTrackersByChat(work, { it.text("space") }, { it.text("space_title") }).forEach { group ->
@@ -213,7 +214,7 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
                         }
                     }
                     items(group.trackers, key = { it.text("name") }) { item ->
-                        TrackerRow(item) { model.openTracker(item.text("space"), item.text("name")) }
+                        TrackerRow(item, state.user) { model.openTracker(item.text("space"), item.text("name")) }
                     }
                 }
             } else items(work, key = { it.text("name") }) { item ->
@@ -263,9 +264,10 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
                 removeFile = { uploads = uploads - it }, cancelReply = { reply = null }, cancelEdit = { editTarget = null }, send = ::sendMessage))
         tab == "Trackers" -> LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             val trackers = state.chatRoom.items("items").filter { it.text("item_kind") == "Tracker" && trackerMatchesFilter(it.text("status"), state.trackerFilter) }
+            item(key = "pending-summary") { TrackerPendingSummary(trackers, state.user, space.optBoolean("archived")) }
             if (trackers.isEmpty()) item { SectionCard { Text("No trackers in this view.") } }
             items(trackers, key = { it.text("name") }) { tracker ->
-                TrackerRow(tracker) { model.openTracker(roomId, tracker.text("name")) }
+                TrackerRow(tracker, state.user, space.optBoolean("archived")) { model.openTracker(roomId, tracker.text("name")) }
             }
         }
         else -> LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
