@@ -49,7 +49,7 @@ private val chatMuted = Color(0xFF637378)
 private val importance = listOf("Very low", "Low", "Medium", "High", "Very high")
 private val formSaver = Saver<JSONObject, String>(save = { it.toString() }, restore = { JSONObject(it) })
 private val editorSaver = Saver<String, String>(
-    save = { it.takeIf { kind -> kind in setOf("item", "space", "progress") }.orEmpty() },
+    save = { it.takeIf { kind -> kind in setOf("item", "space", "progress", "trackerFiles") }.orEmpty() },
     restore = { it }
 )
 private fun JSONObject.copyJson() = JSONObject(toString())
@@ -81,6 +81,9 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
     var entryKind by rememberSaveable(roomId) { mutableStateOf("Message") }
     var reply by remember(roomId) { mutableStateOf<JSONObject?>(null) }
     var uploads by remember(roomId) { mutableStateOf(listOf<JSONObject>()) }
+    var trackerUploads by remember(state.user, roomId) { mutableStateOf(listOf<JSONObject>()) }
+    var readingTrackerFiles by remember { mutableStateOf(false) }
+    var trackerUploadError by remember { mutableStateOf("") }
     var editTarget by remember(state.user, roomId) { mutableStateOf<JSONObject?>(null) }
     var editBody by rememberSaveable(state.user, roomId) { mutableStateOf("") }
     var messageInfo by remember(state.user, roomId) { mutableStateOf<List<JSONObject>?>(null) }
@@ -135,9 +138,30 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
     fun progressFor(item: JSONObject) {
         if (!item.optBoolean("can_update", canPost)) { historyFor(item); return }
         selected = item
+        trackerUploads = emptyList(); trackerUploadError = ""
         val config = item.optJSONObject("item_data") ?: JSONObject()
-        openEditor("progress", config.copyJson().put("note", "").put("effective_at", LocalDateTime.now().withSecond(0).withNano(0).toString())
+        openEditor("progress", config.copyJson().put("note", "").put("request_key", UUID.randomUUID().toString())
+            .put("effective_at", LocalDateTime.now().withSecond(0).withNano(0).toString())
             .put("outcome", if (item.text("status") in listOf("Completed", "Failed")) item.text("status") else "Open"))
+    }
+    fun filesFor(item: JSONObject) {
+        selected = item
+        trackerUploads = emptyList(); trackerUploadError = ""
+        openEditor("trackerFiles", JSONObject().put("note", "").put("request_key", UUID.randomUUID().toString()))
+    }
+    val trackerPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) {
+            val request = form.text("request_key")
+            if (trackerUploads.size + uris.size > 5) trackerUploadError = "Choose at most five files per update."
+            else scope.launch {
+                readingTrackerFiles = true; trackerUploadError = ""
+                try {
+                    val added = withContext(Dispatchers.IO) { uris.map { readTrackerAttachment(context, it) } }
+                    if (form.text("request_key") == request && dialog in listOf("progress", "trackerFiles")) trackerUploads = trackerUploads + added
+                } catch (error: Exception) { trackerUploadError = error.message ?: "Unable to read the selected files. Try selecting them again." }
+                finally { readingTrackerFiles = false }
+            }
+        }
     }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
@@ -241,7 +265,9 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
                 val canConfigure = canPost && tracker.optBoolean("can_edit") && (space.text("access_level") in listOf("Owner", "Manager") || tracker.text("owner") == state.user)
                 TrackerDetailScreen(tracker, space.text("title"), state.user, tracker.optBoolean("can_update", canPost) && !state.busy, canConfigure && !state.busy,
                     onUpdate = { progressFor(tracker) }, onConfigure = { openEditor("item", tracker.copyJson()) }, onHistory = { historyFor(tracker) }, onShare = if (tracker.optBoolean("can_share")) { { shareFor(tracker) } } else null,
-                    loadHistory = { ready -> model.loadTrackerHistory(tracker.text("name"), ready) }, onFile = { model.openReceipt(it, Page.COLLABORATION) })
+                    loadHistory = { ready -> model.loadTrackerHistory(tracker.text("name"), ready) }, onFile = { model.openReceipt(it, Page.COLLABORATION) },
+                    loadFiles = { before, ready -> model.loadTrackerFiles(tracker.text("name"), before, ready) },
+                    onAddFiles = if (tracker.optBoolean("can_add_files") && !state.busy) { { filesFor(tracker) } } else null)
             }
         }
         roomId.isBlank() -> ChatInbox(state.chatHome.items("spaces"), listState, model::openChatRoom, { newSpace() },
@@ -317,7 +343,15 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
                 val args = JSONObject().put("name", selected.text("name")).put("expected_modified", selected.text("modified")).put("note", form.text("note"))
                     .put("value", form.text("value").ifBlank { null }).put("stage", form.text("stage")).put("outcome", form.text("outcome"))
                     .put("effective_at", form.text("effective_at")).put("plan", plan)
-                model.chatCall("record_progress", args) { dialog = "" }
+                    .put("request_key", form.text("request_key")).put("attachments", JSONArray(trackerUploads.map { JSONObject().put("filename", it.text("filename")).put("content", it.text("content")) }))
+                model.chatCall("record_progress", args) { dialog = ""; trackerUploads = emptyList() }
+            }
+            "trackerFiles" -> {
+                model.chatCall("add_tracker_files", JSONObject().put("name", selected.text("name"))
+                    .put("expected_modified", selected.text("modified")).put("request_key", form.text("request_key"))
+                    .put("note", form.text("note")).put("attachments", JSONArray(trackerUploads.map { JSONObject().put("filename", it.text("filename")).put("content", it.text("content")) }))) {
+                    dialog = ""; trackerUploads = emptyList()
+                }
             }
             "date" -> model.chatCall("update_task", JSONObject().put("name", selected.text("name")).put("expected_modified", selected.text("modified")).put("action", form.text("action")).put("date", form.text("date").ifBlank { null })) { dialog = "" }
         }
@@ -332,31 +366,46 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
     val kind = form.text("item_kind").lowercase()
     val roomTitle = space.text("title")
     when (dialog) {
-        "item", "progress", "space" -> {
+        "item", "progress", "space", "trackerFiles" -> {
             val title = when (dialog) {
                 "item" -> if (existing) "Edit $kind" else "New $kind"
                 "progress" -> "Update progress"
+                "trackerFiles" -> "Add tracker files"
                 else -> if (existing) "Conversation settings" else if (form.text("parent_space").isNotBlank()) "New subarea" else "New conversation"
             }
             val action = when {
                 dialog == "progress" -> "Post update"
+                dialog == "trackerFiles" -> "Upload files"
                 existing -> "Save changes"
                 dialog == "item" -> "Create $kind"
                 form.text("space_kind") == "Direct" -> "Open chat"
                 else -> "Create conversation"
             }
             val ready = when {
-                dialog == "progress" -> form.text("note").isNotBlank()
+                dialog == "progress" -> form.text("note").isNotBlank() && !readingTrackerFiles
+                dialog == "trackerFiles" -> trackerUploads.isNotEmpty() && !readingTrackerFiles
                 dialog == "space" && form.text("space_kind") == "Direct" -> form.text("person").isNotBlank()
                 else -> form.text("title").isNotBlank()
             }
             key(dialog) {
-                CollaborationEditor(title, if (dialog == "progress") selected.text("title") else roomTitle,
-                    action, state.busy, form.toString() != originalForm, state.error, ready, ::closeForm, ::saveForm) {
+                CollaborationEditor(title, if (dialog in listOf("progress", "trackerFiles")) selected.text("title") else roomTitle,
+                    action, state.busy || readingTrackerFiles, form.toString() != originalForm || trackerUploads.isNotEmpty(), state.error, ready, ::closeForm, ::saveForm) {
                     when (dialog) {
                         "item" -> ChatItemForm(form, members) { form = it }
                         "space" -> ChatSpaceForm(form, state.chatHome, space, state.user) { form = it }
-                        "progress" -> ChatProgressForm(form, selected) { form = it }
+                        "progress" -> {
+                            ChatProgressForm(form, selected) { form = it }
+                            if (selected.optBoolean("can_add_files")) TrackerAttachmentSelection(trackerUploads, readingTrackerFiles, trackerUploadError,
+                                !state.busy, { trackerPicker.launch(TRACKER_ATTACHMENT_MIME_TYPES) }, { index -> trackerUploads = trackerUploads.filterIndexed { i, _ -> i != index } })
+                        }
+                        "trackerFiles" -> {
+                            EditorSection("Files for this tracker") {
+                                Text("Files appear in this tracker's Files tab and as a note in the conversation. Progress stays unchanged.", color = chatMuted, style = MaterialTheme.typography.bodySmall)
+                                EditorText("Note (optional)", form.text("note"), multiline = true) { form = form.changed("note", it) }
+                            }
+                            TrackerAttachmentSelection(trackerUploads, readingTrackerFiles, trackerUploadError,
+                                !state.busy, { trackerPicker.launch(TRACKER_ATTACHMENT_MIME_TYPES) }, { index -> trackerUploads = trackerUploads.filterIndexed { i, _ -> i != index } })
+                        }
                     }
                 }
             }
@@ -390,6 +439,7 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
                                 Text("${entry.text("author_name")} · ${stamp(entry.text("creation"))}", color = chatMuted,
                                     style = MaterialTheme.typography.bodySmall)
                                 entry.optJSONObject("snapshot")?.takeIf { it.has("item_data") }?.let { TrackerSnapshot(it) }
+                                entry.items("attachments").forEach { file -> TextButton(onClick = { closeForm(); model.openReceipt(file.text("file_url"), Page.COLLABORATION) }) { Text(file.text("file_name")) } }
                                 HorizontalDivider()
                             }
                         }

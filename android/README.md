@@ -1,5 +1,7 @@
 # SF Tasks and SF testing
 
+Version **0.5.2 / code 22** adds tracker attachments: open a tracker → **Files → Add files**, or choose attachments in **Update progress**. File-only uploads leave progress unchanged. The native form supports multiple selections, removal, validation and safe retries. Files remain private to conversation members. The matching ERP backend is required for production tracker uploads. App publication and ERP deployment are separate. Physical tracker attachment checks passed on the Android 16 phone; see [PHONE_TRACKER_FILES_TEST_2026-11-08.md](PHONE_TRACKER_FILES_TEST_2026-11-08.md). See [TRACKER_FILES_TEST_2026-11-08.md](TRACKER_FILES_TEST_2026-11-08.md).
+
 Version 0.5.1 adds the tracker dashboard/detail design, grouped due-reminder summaries and native FCM message alerts. The tracker and grouped-reminder flows were checked on the paired Android 16 phone on 7 November 2026; see [PHONE_TEST_2026-11-07.md](PHONE_TEST_2026-11-07.md). Real Firebase delivery, quiet foreground handling, duplicate protection, sign-out cleanup and normal process restart were verified on the paired phone on 8 November; see [FIREBASE_VERIFICATION_2026-11-08.md](FIREBASE_VERIFICATION_2026-11-08.md). See [FIREBASE_SETUP.md](FIREBASE_SETUP.md) for the separately approved production site configuration. Push stays disabled until a site is configured; no Firebase secrets or test data are embedded in either APK.
 
 ## In-app updates (0.5.0 and later)

@@ -30,7 +30,8 @@ private val detailRed = Color(0xFFA52E42)
 @Composable
 internal fun TrackerDetailScreen(item: JSONObject, roomTitle: String, user: String, canUpdate: Boolean, canConfigure: Boolean,
     onUpdate: () -> Unit, onConfigure: () -> Unit, onShare: (() -> Unit)?, onHistory: () -> Unit,
-    loadHistory: ((List<JSONObject>) -> Unit) -> Unit, onFile: (String) -> Unit) {
+    loadHistory: ((List<JSONObject>) -> Unit) -> Unit, onFile: (String) -> Unit,
+    loadFiles: (String?, (JSONObject?) -> Unit) -> Unit, onAddFiles: (() -> Unit)?) {
     var tab by rememberSaveable(item.text("name")) { mutableStateOf("Workflow") }
     var expandedDescription by rememberSaveable(item.text("name")) { mutableStateOf(true) }
     var history by remember(item.text("name")) { mutableStateOf(emptyList<JSONObject>()) }
@@ -42,7 +43,26 @@ internal fun TrackerDetailScreen(item: JSONObject, roomTitle: String, user: Stri
     val phase = display.phase(outcome)
     val pending = trackerPendingWith(item)
     val mine = pending?.isMe(user) == true
-    val files = history.flatMap { it.items("attachments") }.distinctBy { it.text("file_url") }
+    var files by remember(item.text("name")) { mutableStateOf(emptyList<JSONObject>()) }
+    var fileCursor by remember(item.text("name")) { mutableStateOf<String?>(null) }
+    var filesLoading by remember(item.text("name")) { mutableStateOf(false) }
+    var filesLoaded by remember(item.text("name")) { mutableStateOf(false) }
+    var filesError by remember(item.text("name")) { mutableStateOf(false) }
+    var filesRestricted by remember(item.text("name")) { mutableStateOf(false) }
+    fun fetchFiles(before: String? = null) {
+        filesLoading = true; filesError = false
+        loadFiles(before) { result ->
+            filesLoading = false
+            if (result == null) filesError = true
+            else {
+                files = ((if (before == null) emptyList() else files) + result.items("files")).distinctBy { it.text("name") }
+                fileCursor = result.text("next_cursor").ifBlank { null }
+                filesRestricted = result.optBoolean("restricted")
+                filesLoaded = true
+            }
+        }
+    }
+    LaunchedEffect(item.text("name"), item.text("modified"), tab) { if (tab == "Files") fetchFiles() }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 100.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item(key = "identity") {
             Text(roomTitle.ifBlank { item.text("space_title") }, color = detailMuted, fontSize = 13.sp)
@@ -150,13 +170,43 @@ internal fun TrackerDetailScreen(item: JSONObject, roomTitle: String, user: Stri
                     Text(entry.text("creation").take(16), fontSize = 11.sp, color = detailMuted)
                     if (entry.text("entry_kind") == "Progress") entry.optJSONObject("snapshot")?.let { TrackerSnapshot(it, recordedAt = entry.text("creation"), user = user) }
                     Text(entry.text("body"), color = detailInk, fontSize = 14.sp)
+                    entry.items("attachments").forEach { file -> TextButton(onClick = { onFile(file.text("file_url")) }) {
+                        Icon(Icons.Default.AttachFile, null, Modifier.size(18.dp)); Text(file.text("file_name"))
+                    } }
                 } }
             }
             "Files" -> {
-                if (files.isEmpty()) item { DetailPanel { Text("No files are attached to this tracker's updates.", color = detailMuted) } }
-                items(files, key = { it.text("file_url") }) { file -> OutlinedButton(onClick = { onFile(file.text("file_url")) }, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.Description, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text(file.text("file_name"))
+                item(key = "files-heading") { DetailPanel {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Text("Tracker files", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = detailInk)
+                            Text("Private to this conversation", fontSize = 12.sp, color = detailMuted)
+                        }
+                        if (onAddFiles != null) FilledTonalButton(onClick = onAddFiles) { Icon(Icons.Default.Add, null, Modifier.size(18.dp)); Text("Add files") }
+                    }
+                    if (filesRestricted) Text("Files are available only to members of the conversation.", color = detailMuted)
+                    else if (filesLoading && !filesLoaded) Text("Loading files…", color = detailMuted)
+                    else if (!filesError && files.isEmpty()) Text("No files yet. Add supporting documents here or with a progress update.", color = detailMuted)
+                    if (filesError) {
+                        Text("Files could not be loaded. Check your connection and try again.", color = MaterialTheme.colorScheme.error)
+                        OutlinedButton(onClick = { fetchFiles(if (filesLoaded) fileCursor else null) }, enabled = !filesLoading) { Text("Try again") }
+                    }
                 } }
+                items(files, key = { "file:${it.text("name")}" }) { file -> Surface(shape = RoundedCornerShape(18.dp), color = Color.White, border = BorderStroke(1.dp, Color(0xFFE5E9EE)),
+                    onClick = { onFile(file.text("file_url")) }) {
+                    Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+                        Icon(Icons.Default.Description, null, Modifier.size(25.dp), tint = detailBlue)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Text(file.text("file_name"), fontWeight = FontWeight.SemiBold, color = detailInk)
+                            Text("${trackerAttachmentSize(file.optLong("file_size"))} · ${file.text("uploaded_by_name")}", fontSize = 12.sp, color = detailMuted)
+                            Text(file.text("creation").replace('T', ' ').take(16), fontSize = 11.sp, color = detailMuted)
+                            if (file.text("note").isNotBlank()) Text(file.text("note"), fontSize = 13.sp, color = detailMuted, maxLines = 3,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        }
+                        Icon(Icons.Default.ChevronRight, "Open file", tint = detailMuted)
+                    }
+                } }
+                if (fileCursor != null && !filesError) item(key = "more-files") { OutlinedButton(onClick = { fetchFiles(fileCursor) }, enabled = !filesLoading, modifier = Modifier.fillMaxWidth()) { Text(if (filesLoading) "Loading files…" else "Load older files") } }
             }
         }
     }

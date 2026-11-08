@@ -581,3 +581,139 @@ class IntegrationTestCollaboration(IntegrationTestCase):
 		page = c.get_space(self.room)
 		older = c.get_space(self.room, before=page["older_cursor"])
 		self.assertEqual(len({entry["name"] for entry in page["entries"] + older["entries"]}), 53)
+
+
+	def tracker_file(self, item, key="upload", content=b"Kitchen handover checklist", filename="checklist.txt", note="Delivery proof"):
+		return c.add_tracker_files(item["name"], item["modified"], [{"filename": filename, "content": base64.b64encode(content).decode()}], key, note)
+
+	def test_tracker_file_upload_keeps_progress_and_records_private_evidence(self):
+		item = self.tracker()
+		item = c.record_progress(item["name"], item["modified"], "Preparation underway", value=35)
+		before = frappe.get_doc(c.PREFIX + "Item", item["name"])
+		updated = self.tracker_file(item)
+		after = frappe.get_doc(c.PREFIX + "Item", item["name"])
+		self.assertEqual(after.item_data, before.item_data)
+		self.assertEqual(after.current_effective_at, before.current_effective_at)
+		self.assertEqual(after.status, before.status)
+		self.assertNotEqual(updated["modified"], item["modified"])
+		files = c.get_tracker_files(item["name"])
+		self.assertTrue(files["can_add"])
+		self.assertEqual(len(files["files"]), 1)
+		row = files["files"][0]
+		self.assertEqual(row["note"], "Delivery proof")
+		self.assertEqual(row["uploaded_by"], self.owner)
+		self.assertEqual(row["entry_kind"], "Note")
+		self.assertEqual(frappe.db.get_value("File", row["name"], "is_private"), 1)
+		frappe.set_user(self.viewer)
+		self.assertFalse(c.get_tracker_files(item["name"])["can_add"])
+		self.assertTrue(c.can_read_file(frappe.get_doc("File", row["name"]), self.viewer))
+		with self.assertRaises(frappe.PermissionError): self.tracker_file(updated, "viewer")
+		frappe.set_user(self.outsider)
+		with self.assertRaises(frappe.PermissionError): c.get_tracker_files(item["name"])
+
+	def test_tracker_files_and_progress_retries_are_idempotent(self):
+		item = self.tracker()
+		updated = self.tracker_file(item)
+		retry = self.tracker_file(item)
+		self.assertEqual(retry["modified"], updated["modified"])
+		self.assertEqual(len(c.get_tracker_files(item["name"])["files"]), 1)
+		with self.assertRaises(frappe.ValidationError): self.tracker_file(item, content=b"different file")
+		file = {"filename": "signed-note.txt", "content": base64.b64encode(b"Progress evidence").decode()}
+		kwargs = dict(name=item["name"], expected_modified=updated["modified"], note="Supplies delivered", value=70,
+			attachments=[file], request_key="progress-proof")
+		progress = c.record_progress(**kwargs)
+		self.assertEqual(c.record_progress(**kwargs)["modified"], progress["modified"])
+		files = c.get_tracker_files(item["name"])["files"]
+		self.assertEqual(len(files), 2)
+		entry = next(row for row in c.get_item_history(item["name"])["history"] if row["entry_kind"] == "Progress")
+		self.assertEqual(entry["snapshot"]["item_data"]["value"], 70)
+		self.assertEqual(len(entry["attachments"]), 1)
+		with self.assertRaises(frappe.ValidationError): c.record_progress(**(kwargs | {"note": "Other note"}))
+
+	def test_tracker_invalid_attachment_batch_does_not_save_partial_update(self):
+		item = self.tracker()
+		valid = {"filename": "valid.txt", "content": base64.b64encode(b"Valid").decode()}
+		invalid = [{}, {"filename": "invalid.exe", "content": valid["content"]}, {"filename": "fake.pdf", "content": valid["content"]},
+			{"filename": "empty.txt", "content": ""}, {"filename": "bad.txt", "content": "not-base64"},
+			{"filename": "bad.txt", "content": valid["content"], "unexpected": True}]
+		for index, bad in enumerate(invalid):
+			with self.subTest(index=index), self.assertRaises(frappe.ValidationError):
+				c.record_progress(item["name"], item["modified"], "Must not save", value=90, attachments=[valid, bad], request_key=f"invalid-{index}")
+			self.assertEqual(frappe.db.get_value(c.PREFIX + "Item", item["name"], "modified"), get_datetime(item["modified"]))
+			self.assertEqual(c.get_tracker_files(item["name"])["files"], [])
+		self.assertFalse(any(row["body"] == "Must not save" for row in c.get_item_history(item["name"])["history"]))
+		for files in [[], [valid] * 6, False, {"filename": "not-a-list"}]:
+			with self.subTest(files=type(files)), self.assertRaises(frappe.ValidationError):
+				c.add_tracker_files(item["name"], item["modified"], files, "invalid-batch")
+		with self.assertRaises(frappe.ValidationError): c.add_tracker_files(item["name"], item["modified"], [valid], "")
+		with self.assertRaises(frappe.ValidationError): c.add_tracker_files(item["name"], "stale-version", [valid], "stale")
+
+	def test_tracker_shares_do_not_grant_file_access_or_uploads(self):
+		item = self.tracker()
+		item = self.tracker_file(item)
+		row = c.get_tracker_files(item["name"])["files"][0]
+		item = c.share_item(item["name"], [{"user": self.outsider, "access": "Update"}], item["modified"])
+		frappe.set_user(self.outsider)
+		visible = c.get_work_item(item["name"])["items"][0]
+		self.assertFalse(visible["can_add_files"])
+		self.assertTrue(visible["can_update"])
+		self.assertTrue(c.get_tracker_files(item["name"])["restricted"])
+		self.assertEqual(c.get_tracker_files(item["name"])["files"], [])
+		self.assertFalse(c.can_read_file(frappe.get_doc("File", row["name"]), self.outsider))
+		with self.assertRaises(frappe.PermissionError): self.tracker_file(item, "shared-upload")
+		with self.assertRaises(frappe.PermissionError):
+			c.record_progress(item["name"], item["modified"], "Shared proof", value=15,
+				attachments=[{"filename": "proof.txt", "content": base64.b64encode(b"Proof").decode()}], request_key="shared-progress")
+		self.assertEqual(c.record_progress(item["name"], item["modified"], "Shared update without files", value=15)["status"], "Open")
+
+	def test_tracker_files_survive_history_window_and_paginate_without_cross_tracker_access(self):
+		item = self.tracker()
+		for index in range(51): item = self.tracker_file(item, str(index), f"Document {index}".encode(), f"proof-{index}.txt")
+		first = c.get_tracker_files(item["name"])
+		self.assertEqual(len(first["files"]), 50)
+		self.assertTrue(first["next_cursor"])
+		second = c.get_tracker_files(item["name"], first["next_cursor"])
+		self.assertEqual(len(second["files"]), 1)
+		self.assertIsNone(second["next_cursor"])
+		self.assertEqual(len({row["name"] for row in first["files"] + second["files"]}), 51)
+		for index in range(101): c._entry(self.room, f"Later tracker event {index}", item=item["name"])
+		self.assertFalse(any(row["attachments"] for row in c.get_item_history(item["name"])["history"]))
+		self.assertEqual(len(c.get_tracker_files(item["name"])["files"]), 50)
+		other = self.tracker()
+		with self.assertRaises(frappe.PermissionError): c.get_tracker_files(other["name"], first["next_cursor"])
+
+	def test_deleted_tracker_note_and_revoked_membership_hide_files(self):
+		item = self.tracker()
+		item = self.tracker_file(item)
+		row = c.get_tracker_files(item["name"])["files"][0]
+		entry = frappe.get_doc(c.PREFIX + "Entry", row["entry"])
+		c.edit_entry(entry.name, remove=True, expected_modified=str(entry.modified))
+		self.assertEqual(c.get_tracker_files(item["name"])["files"], [])
+		self.assertFalse(c.can_read_file(frappe.get_doc("File", row["name"]), self.viewer))
+		with self.assertRaises(frappe.ValidationError): self.tracker_file(item)
+		item = self.tracker_file(item, "new-evidence")
+		row = c.get_tracker_files(item["name"])["files"][0]
+		frappe.db.delete("Has Role", {"parent": self.member, "role": ["in", c.CHAT_ROLES]})
+		self.assertFalse(c.can_read_file(frappe.get_doc("File", row["name"]), self.member))
+		frappe.set_user(self.member)
+		with self.assertRaises(frappe.PermissionError): c.get_tracker_files(item["name"])
+
+	def test_tracker_native_file_api_requires_app_role_separately(self):
+		from volunteering.volunteering import collaboration_mobile as app
+		frappe.db.delete("Has Role", {"parent": self.owner, "role": c.WEB_ROLE})
+		item = app.save_item(self.room, {"item_kind": "Tracker", "title": "App-only evidence", "item_data": {"scale": "Percentage"}})
+		payload = [{"filename": "native.txt", "content": base64.b64encode(b"Native proof").decode()}]
+		item = app.add_tracker_files(item["name"], item["modified"], payload, "app-only")
+		self.assertEqual(len(app.get_tracker_files(item["name"])["files"]), 1)
+		with self.assertRaises(frappe.PermissionError): c.get_tracker_files(item["name"])
+		item = app.record_progress(item["name"], item["modified"], "App progress proof", value=25, attachments=payload, request_key="app-progress")
+		self.assertEqual(len(app.get_tracker_files(item["name"])["files"]), 2)
+
+	def test_archived_tracker_files_are_read_only(self):
+		item = self.tracker()
+		item = self.tracker_file(item)
+		room = c.get_space(self.room)["space"]
+		c.save_space({"archived": 1}, self.room, room["modified"])
+		self.assertFalse(c.get_tracker_files(item["name"])["can_add"])
+		self.assertEqual(len(c.get_tracker_files(item["name"])["files"]), 1)
+		with self.assertRaises(frappe.PermissionError): self.tracker_file(item, "archived")

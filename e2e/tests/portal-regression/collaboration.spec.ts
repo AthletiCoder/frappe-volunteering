@@ -357,3 +357,82 @@ test('Share a single task with a non-member, then allow status updates without g
     const changed=await portalCall(page,API+'update_task',{name:task.name,expected_modified:task.modified,action:'start'});
     expect(changed.status).toBe('In progress');
 });
+
+
+test('Tracker files upload independently, attach to progress, and remain private for viewers and signed-out users', async ({ page, browser }) => {
+    await signIn(page); const room = await newRoom(page, true);
+    const create = await createItem(page, 'Tracker', 'Kitchen handover evidence');
+    await create.getByLabel('Tracking scale').selectOption('Percentage');
+    const tracker = await saveItem(page);
+    await page.getByRole('button', {name: /^Progress/}).click();
+    const card = page.locator('.work-body .item-card').filter({hasText: tracker.title});
+    await card.getByRole('button', {name: 'Files', exact: true}).click();
+    const dialog = page.getByRole('dialog', {name: 'Tracker files', exact: true});
+    await expect(dialog.getByText('No files have been added yet.')).toBeVisible();
+    await dialog.getByLabel('Note (optional)', {exact: true}).fill('Quotation approved by the kitchen team');
+    await dialog.getByLabel('Tracker attachments', {exact: true}).setInputFiles({name:'quotation.txt', mimeType:'text/plain', buffer:Buffer.from('Private quotation for kitchen supplies')});
+    await expect(dialog.getByRole('button', {name: 'Remove quotation.txt'})).toBeVisible();
+    const added = page.waitForResponse(r => r.url().endsWith(API+'add_tracker_files'));
+    await dialog.getByRole('button', {name:'Upload files', exact:true}).click();
+    expect((await added).ok()).toBeTruthy();
+    const link = dialog.getByRole('link').filter({hasText: /quotation[0-9a-f]*\.txt/});
+    await expect(link).toBeVisible();
+    const fileUrl = await link.getAttribute('href');
+    expect(fileUrl).toMatch(/^\/private\/files\//);
+    const file = await page.request.get(fileUrl!);
+    expect(file.status()).toBe(200);
+    expect(await file.text()).toContain('Private quotation for kitchen supplies');
+    const read = await portalCall(page, API+'get_work_item', {name:tracker.name});
+    expect(read.items[0].item_data).toEqual(tracker.item_data);
+    expect(read.items[0].current_effective_at).toEqual(tracker.current_effective_at);
+    await expect(dialog.getByRole('button',{name:'Close dialog',exact:true})).toBeEnabled();
+    await page.screenshot({path:'output/tracker-files-desktop.png', fullPage:true});
+    await dialog.getByRole('button',{name:'Close dialog',exact:true}).click();
+    await expect(dialog).toHaveCount(0);
+    await card.getByRole('button',{name:'Update progress',exact:true}).click();
+    const progress = page.getByRole('dialog',{name:'Record progress',exact:true});
+    await progress.getByLabel('Progress note',{exact:true}).fill('Goods received with a signed delivery note');
+    await progress.getByLabel('Tracker attachments',{exact:true}).setInputFiles({name:'delivery.txt', mimeType:'text/plain', buffer:Buffer.from('Signed delivery note: utensils received')});
+    const saved = page.waitForResponse(r => r.url().endsWith(API+'record_progress'));
+    await progress.getByRole('button',{name:'Post progress update',exact:true}).click();
+    expect((await saved).ok()).toBeTruthy();
+    await card.getByRole('button',{name:'Files',exact:true}).click();
+    await expect(dialog.getByRole('link').filter({hasText:/delivery[0-9a-f]*\.txt/})).toBeVisible();
+    await signIn(page, 'viewer', `/volunteering/collaboration?space=${room.name}`);
+    await page.getByRole('button',{name:/^Progress/}).click();
+    const viewCard = page.locator('.work-body .item-card').filter({hasText: tracker.title});
+    await viewCard.getByRole('button',{name:'Files',exact:true}).click();
+    await expect(dialog.getByRole('link').filter({hasText:/quotation[0-9a-f]*\.txt/})).toBeVisible();
+    await expect(dialog.getByRole('button',{name:'Upload files',exact:true})).toHaveCount(0);
+    expect((await page.request.get(fileUrl!)).status()).toBe(200);
+    const outsider = await browser.newContext();
+    try { expect((await outsider.request.get(new URL(fileUrl!,page.url()).toString())).status()).not.toBe(200); }
+    finally {await outsider.close();}
+});
+
+test('Tracker file picker validates selections, allows removal and retains files on a stale-update error', async ({ page }) => {
+    await signIn(page); await newRoom(page);
+    await page.setViewportSize({width:390,height:844});
+    const create=await createItem(page,'Tracker','File selection checks');
+    await create.getByLabel('Tracking scale').selectOption('Percentage');
+    const tracker=await saveItem(page);
+    await page.getByRole('button',{name:/^Progress/}).click();
+    const card=page.locator('.work-body .item-card').filter({hasText:tracker.title});
+    await card.getByRole('button',{name:'Files',exact:true}).click();
+    const dialog=page.getByRole('dialog',{name:'Tracker files',exact:true});
+    await dialog.getByLabel('Tracker attachments',{exact:true}).setInputFiles({name:'unsafe.exe', mimeType:'application/octet-stream', buffer:Buffer.from('not allowed')});
+    await expect(dialog.getByRole('alert')).toContainText('Choose a PDF');
+    await expect(dialog.getByRole('button',{name:'Upload files',exact:true})).toBeDisabled();
+    await dialog.getByLabel('Tracker attachments',{exact:true}).setInputFiles({name:'selection.txt',mimeType:'text/plain',buffer:Buffer.from('selected file')});
+    await dialog.getByRole('button',{name:'Remove selection.txt',exact:true}).click();
+    await expect(dialog.getByRole('button',{name:'Upload files',exact:true})).toBeDisabled();
+    await dialog.getByLabel('Tracker attachments',{exact:true}).setInputFiles({name:'selection.txt',mimeType:'text/plain',buffer:Buffer.from('selected file')});
+    await portalCall(page,API+'record_progress',{name:tracker.name,expected_modified:tracker.modified,note:'Changed in another session',value:15});
+    await dialog.getByRole('button',{name:'Upload files',exact:true}).click();
+    await expect(dialog).toContainText('This record changed');
+    await expect(dialog.getByRole('button',{name:'Remove selection.txt',exact:true})).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
+    await page.screenshot({path:'output/tracker-files-mobile.png', fullPage:true});
+    const files=await portalCall(page,API+'get_tracker_files',{name:tracker.name});
+    expect(files.files).toHaveLength(0);
+});

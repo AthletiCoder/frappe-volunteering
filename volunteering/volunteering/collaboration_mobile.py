@@ -94,8 +94,8 @@ def update_task(name, action, expected_modified, date=None):
 
 
 @frappe.whitelist(methods=["POST"])
-def record_progress(name, expected_modified, note, value=None, stage=None, outcome=None, effective_at=None, plan=None):
-	return _invoke("record_progress", name=name, expected_modified=expected_modified, note=note, value=value, stage=stage, outcome=outcome, effective_at=effective_at, plan=plan)
+def record_progress(name, expected_modified, note, value=None, stage=None, outcome=None, effective_at=None, plan=None, attachments=None, request_key=None):
+	return _invoke("record_progress", name=name, expected_modified=expected_modified, note=note, value=value, stage=stage, outcome=outcome, effective_at=effective_at, plan=plan, attachments=attachments, request_key=request_key)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -122,3 +122,13 @@ def get_reminders():
 		return reminders()
 	finally:
 		chat_channel.reset(token)
+
+
+@frappe.whitelist(methods=["POST"])
+def add_tracker_files(name, expected_modified, attachments, request_key, note=""):
+	return _invoke("add_tracker_files", name=name, expected_modified=expected_modified, attachments=attachments, request_key=request_key, note=note)
+
+
+@frappe.whitelist(methods=["POST"])
+def get_tracker_files(name, before=None):
+	return _invoke("get_tracker_files", name=name, before=before)

@@ -847,6 +847,10 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
         val response = api.call(CHAT + "get_item_history", JSONObject().put("name", name))
         if (state.value.chatNavigation.current.item == name) ready(response.items("history"))
     }
+    fun loadTrackerFiles(name: String, before: String?, ready: (JSONObject?) -> Unit) = runTask(showBusy = false, onFailure = { ready(null) }) {
+        val response = api.call(CHAT + "get_tracker_files", JSONObject().put("name", name).put("before", before))
+        if (state.value.chatNavigation.current.item == name) ready(response)
+    }
     fun openTask(room: String, item: String) = moveChat(state.value.chatNavigation.navigate(ChatRoute(ChatView.TASK, room, item)))
     fun setTrackerFilter(filter: String) {
         if (filter in TRACKER_FILTERS) state.value = state.value.copy(trackerFilter = filter)

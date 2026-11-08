@@ -168,7 +168,7 @@ def _item_payload(doc, level=None):
 		"repeat_pattern", "repeat_until", "start_at", "end_at", "location", "current_effective_at")},
 		"owner": doc.owner, "modified": str(doc.modified), "assignee_name": _name(doc.assignee) if doc.assignee else "",
 		"participants": _json(doc.participants, []), "item_data": config,
-		"can_update": bool(can_update), "can_share": _can_share_item(doc, level),
+		"can_update": bool(can_update), "can_add_files": bool(doc.item_kind == "Tracker" and level in {"Owner", "Manager", "Member"}), "can_share": _can_share_item(doc, level),
 		"can_configure": bool(level in {"Owner", "Manager"} or level == "Member" and doc.owner == frappe.session.user),
 		"shares": [{**row, "full_name": _name(row["user"])} for row in _json(doc.get("shares"), [])] if _can_share_item(doc, level) else [],
 		"shared_with_me": bool(_share_level(doc)),
@@ -477,9 +477,9 @@ def _publish(space, root):
 			frappe.publish_realtime("collaboration_changed", {"space": space}, user=member.user, after_commit=True)
 
 
-def _entry(space, body, kind="System", item=None, source=None, snapshot=None):
+def _entry(space, body, kind="System", item=None, source=None, snapshot=None, request_key=None):
 	return _insert("Entry", {"space": space, "body": body, "entry_kind": kind,
-		"source_entry": source, "item": item, "snapshot": snapshot})
+		"source_entry": source, "item": item, "snapshot": snapshot, "request_key": request_key})
 
 
 @frappe.whitelist(methods=["POST"])
@@ -809,12 +809,18 @@ def update_task(name, action, expected_modified, date=None):
 
 
 @frappe.whitelist(methods=["POST"])
-def record_progress(name, expected_modified, note, value=None, stage=None, outcome=None, effective_at=None, plan=None):
+def record_progress(name, expected_modified, note, value=None, stage=None, outcome=None, effective_at=None, plan=None, attachments=None, request_key=None):
 	doc, root, level = _item(name)
 	if doc.item_kind != "Tracker":
 		_deny()
-	_version(doc, expected_modified)
 	note = _text(note, 12000, True)
+	uploads = _tracker_uploads(doc, attachments)
+	key, fingerprint, prior = _tracker_request(doc, "progress", request_key,
+		{"note": note, "value": value, "stage": stage, "outcome": outcome, "effective_at": effective_at, "plan": _json(plan, {}),
+		 "files": [(filename, hashlib.sha256(content).hexdigest()) for filename, content in uploads]})
+	if prior:
+		return _item_payload(doc, level)
+	_version(doc, expected_modified)
 	stamp = get_datetime(effective_at) if effective_at else now_datetime()
 	if stamp > now_datetime():
 		frappe.throw(_("Progress cannot be dated in the future."))
@@ -834,11 +840,92 @@ def record_progress(name, expected_modified, note, value=None, stage=None, outco
 		doc.status = outcome or doc.status
 		doc.current_effective_at = stamp
 		_save(doc)
-	_entry(doc.space, note, kind="Progress", item=doc.name,
+	entry = _entry(doc.space, note, kind="Progress", item=doc.name, request_key=key,
 		snapshot={"title": doc.title, "effective_at": str(stamp), "item_data": data, "status": outcome or doc.status,
-			"pending_with": _progress_pending_with(doc, data, outcome or doc.status)})
+			"pending_with": _progress_pending_with(doc, data, outcome or doc.status), "request_fingerprint": fingerprint})
+	for filename, content in uploads:
+		_store_attachment(entry, filename, content)
 	_publish(doc.space, root)
 	return _item_payload(doc, level)
+
+
+
+def _tracker_uploads(doc, attachments, required=False):
+	values = _json(attachments, []) if isinstance(attachments, str) else [] if attachments is None else attachments
+	if not isinstance(values, list) or len(values) > 5 or required and not values:
+		frappe.throw(_("Choose one to five files, up to 10 MB each.") if required else _("Choose at most five attachments."))
+	if values:
+		# Item-only shares never grant access to the conversation's private evidence.
+		_space(doc.space, write=True)
+	prepared = []
+	for row in values:
+		value = _data(row, {"filename", "content"})
+		prepared.append(_attachment_data(value.get("filename"), value.get("content")))
+	return prepared
+
+
+def _tracker_request(doc, operation, request_key, payload):
+	if not request_key:
+		if payload.get("files"):
+			frappe.throw(_("A request key is required for file uploads. Reopen the form and try again."))
+		return None, None, None
+	key = _text(request_key, 100, True)
+	key = hashlib.sha256(f"tracker:{frappe.session.user}:{doc.name}:{operation}:{key}".encode()).hexdigest()
+	fingerprint = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
+	existing = frappe.db.get_value(PREFIX + "Entry", {"request_key": key}, "name")
+	prior = frappe.get_doc(PREFIX + "Entry", existing) if existing else None
+	if prior and (prior.is_deleted or _json(prior.snapshot, {}).get("request_fingerprint") != fingerprint):
+		frappe.throw(_("This upload was already submitted with different details. Reopen the form before making another update."))
+	return key, fingerprint, prior
+
+
+@frappe.whitelist(methods=["POST"])
+def add_tracker_files(name, expected_modified, attachments, request_key, note=""):
+	doc, root, level = _item(name)
+	if doc.item_kind != "Tracker":
+		_deny()
+	_space(doc.space, write=True)
+	uploads = _tracker_uploads(doc, attachments, required=True)
+	note = _text(note, 12000)
+	key, fingerprint, prior = _tracker_request(doc, "files", request_key,
+		{"note": note, "files": [(filename, hashlib.sha256(content).hexdigest()) for filename, content in uploads]})
+	if prior:
+		return _item_payload(doc, level)
+	_version(doc, expected_modified)
+	_save(doc)  # Refresh Files/Updates without changing the tracker's progress or effective date.
+	entry = _entry(doc.space, note or _("Added files to {0}").format(doc.title), kind="Note", item=doc.name,
+		request_key=key, snapshot={"request_fingerprint": fingerprint})
+	for filename, content in uploads:
+		_store_attachment(entry, filename, content)
+	_publish(doc.space, root)
+	return _item_payload(doc, level)
+
+
+@frappe.whitelist(methods=["POST"])
+def get_tracker_files(name, before=None):
+	doc, room, root, level = _read_item(name)
+	if doc.item_kind != "Tracker":
+		_deny()
+	if not can_read_space(room.name):
+		return {"files": [], "next_cursor": None, "can_add": False, "restricted": True}
+	condition, params = "", [name]
+	if before:
+		anchor = frappe.db.sql("""select f.creation, f.name from `tabFile` f
+			join `tabCollaboration Entry` e on f.attached_to_doctype='Collaboration Entry' and f.attached_to_name=e.name
+			where f.name=%s and e.item=%s and e.is_deleted=0 and f.is_private=1""", [before, name], as_dict=True)
+		if not anchor:
+			_deny()
+		condition = " and (f.creation < %s or (f.creation = %s and f.name < %s))"
+		params.extend([anchor[0].creation, anchor[0].creation, anchor[0].name])
+	rows = frappe.db.sql("""select f.name, f.file_name, f.file_url, f.file_size, f.creation,
+		e.name as entry, e.entry_kind, e.body as note, e.owner as uploaded_by
+		from `tabFile` f join `tabCollaboration Entry` e
+		on f.attached_to_doctype='Collaboration Entry' and f.attached_to_name=e.name
+		where e.item=%s and e.is_deleted=0 and f.is_private=1""" + condition +
+		" order by f.creation desc, f.name desc limit 51", params, as_dict=True)
+	files = [{**row, "uploaded_by_name": _name(row.uploaded_by)} for row in rows[:50]]
+	return {"files": files, "next_cursor": rows[49].name if len(rows) > 50 else None,
+		"can_add": level in {"Owner", "Manager", "Member"}, "restricted": False}
 
 
 def _progress_pending_with(doc, config, status):
@@ -948,6 +1035,13 @@ def upload_attachment(entry, filename, content):
 	_space(doc.space, write=True)
 	if doc.owner != frappe.session.user or doc.is_deleted:
 		_deny()
+	filename, decoded = _attachment_data(filename, content)
+	if frappe.db.count("File", {"attached_to_doctype": doc.doctype, "attached_to_name": doc.name}) >= 5:
+		frappe.throw(_("Use at most five files per update."))
+	return _store_attachment(doc, filename, decoded)
+
+
+def _attachment_data(filename, content):
 	filename = _text(filename, 180, True).replace("\\", "/").split("/")[-1]
 	ext = filename.rsplit(".", 1)[-1].lower()
 	if ext not in {"pdf", "png", "jpg", "jpeg", "gif", "webp", "txt", "csv", "docx", "xlsx"}:
@@ -958,10 +1052,14 @@ def upload_attachment(entry, filename, content):
 		decoded = base64.b64decode(content, validate=True)
 	except Exception:
 		frappe.throw(_("Invalid file content."))
-	if not decoded or len(decoded) > 10 * 1024 * 1024 or frappe.db.count("File", {"attached_to_doctype": doc.doctype, "attached_to_name": doc.name}) >= 5:
+	if not decoded or len(decoded) > 10 * 1024 * 1024:
 		frappe.throw(_("Use at most five non-empty files, up to 10 MB each."))
 	if (ext == "pdf" and not decoded.startswith(b"%PDF-")) or (ext in {"docx", "xlsx"} and not decoded.startswith(b"PK")):
 		frappe.throw(_("The file does not match its extension."))
+	return filename, decoded
+
+
+def _store_attachment(doc, filename, decoded):
 	from frappe.utils.file_manager import save_file
 	token = _writing_file.set(True)
 	try:

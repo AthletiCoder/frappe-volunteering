@@ -105,7 +105,7 @@
 									@action="taskAction(item, $event)"
 									@progress="openProgress(item)"
 									@history="showHistory(item)"
-                                    @share="shareItem(item)"
+                                    @share="shareItem(item)" @files="openTrackerFiles(item)"
 								/>
 							</div>
 							<p v-if="!personalItems.length" class="empty-state">
@@ -233,7 +233,7 @@
 										@action="taskAction(item, $event)"
 										@progress="openProgress(item)"
 										@history="showHistory(item)"
-                                    @share="shareItem(item)"
+                                    @share="shareItem(item)" @files="openTrackerFiles(item)"
 									/>
 								</div>
 								<details
@@ -344,7 +344,7 @@
 									@action="taskAction(item, $event)"
 									@progress="openProgress(item)"
 									@history="showHistory(item)"
-                                    @share="shareItem(item)"
+                                    @share="shareItem(item)" @files="openTrackerFiles(item)"
 								/>
 							</div>
 							<p v-if="!filteredKind(tab).length" class="empty-state">
@@ -373,7 +373,7 @@
 			>
 				<div class="dialog-header">
 					<h2>{{ dialogTitle }}</h2>
-					<button aria-label="Close dialog" @click="closeDialog">×</button>
+					<button aria-label="Close dialog" :disabled="busy" @click="closeDialog">×</button>
 				</div>
 				<p v-if="dialogError" role="alert" class="error-banner">{{ dialogError }}</p>
 				<form v-if="dialog === 'space'" @submit.prevent="saveSpace">
@@ -809,7 +809,24 @@
                     </div><div class="dialog-footer"><button class="btn-primary" :disabled="busy">Save sharing</button></div>
                 </form>
                 <div v-else-if="dialog === 'itemView'" class="dialog-body">
-                    <ItemCard :item="selectedItem" @history="showHistory(selectedItem)" @progress="openProgress(selectedItem)" @action="taskAction(selectedItem,$event)" @share="shareItem(selectedItem)" />
+                    <ItemCard :item="selectedItem" @history="showHistory(selectedItem)" @progress="openProgress(selectedItem)" @action="taskAction(selectedItem,$event)" @share="shareItem(selectedItem)" @files="openTrackerFiles(selectedItem)" />
+                </div>
+                <div v-else-if="dialog === 'trackerFiles'" class="dialog-body tracker-files-panel">
+                    <p class="text-sm text-muted">{{ selectedItem.title }} · Files are private to conversation members.</p>
+                    <p v-if="trackerFileRestricted" class="read-only">Files are available only to members of this conversation.</p>
+                    <form v-if="trackerCanAdd" @submit.prevent="postTrackerFiles" class="tracker-file-upload">
+                        <label>Note (optional)<textarea v-model="trackerFileNote" maxlength="12000" rows="2" :disabled="busy" /></label>
+                        <TrackerFilePicker v-model="trackerFiles" :disabled="busy" />
+                        <button class="btn-primary" :disabled="busy || !trackerFiles.length">{{ busy ? 'Uploading…' : 'Upload files' }}</button>
+                        <p class="text-xs text-muted">Adding files keeps the current progress unchanged.</p>
+                    </form>
+                    <p v-if="trackerFilesLoading" role="status">Loading files…</p>
+                    <p v-else-if="!trackerFileRows.length && !trackerFileRestricted" class="text-sm text-muted">No files have been added yet.</p>
+                    <a v-for="file in trackerFileRows" :key="file.name" :href="file.file_url" target="_blank" rel="noopener" class="tracker-file-link">
+                        <Icon name="claim" :size="22" />
+                        <span><strong>{{ file.file_name }}</strong><small>{{ fileSizeLabel(file.file_size) }} · {{ file.uploaded_by_name }} · {{ dateTime(file.creation) }}</small><span v-if="file.note">{{ file.note }}</span></span>
+                    </a>
+                    <button v-if="trackerFileCursor" class="btn-secondary" :disabled="trackerFilesLoading" @click="loadTrackerFiles(trackerFileCursor)">Load older files</button>
                 </div>
 				<form v-else-if="dialog === 'progress'" @submit.prevent="postProgress">
 					<div class="dialog-body">
@@ -870,7 +887,8 @@
 								maxlength="12000"
 								rows="4"
 							/></label
-						><label>Next action<input v-model="progress.next_action" /></label>
+                        ><TrackerFilePicker v-if="selectedItem.can_add_files" v-model="trackerFiles" :disabled="busy" />
+                        <label>Next action<input v-model="progress.next_action" /></label>
 						<div class="field-grid">
 							<label
 								>Attention from<input
@@ -943,6 +961,7 @@
 							>{{ entry.author_name }} ·
 							{{ dateTime(entry.snapshot?.effective_at || entry.creation) }}</small
 						>
+                        <a v-for="file in entry.attachments" :key="file.name || file.file_url" :href="file.file_url" target="_blank" rel="noopener" class="tracker-history-file">{{ file.file_name }}</a>
 						<p v-if="entry.snapshot?.item_data" class="text-accent">
 							{{ trackerLabel({ item_data: entry.snapshot.item_data }) }} ·
 							{{ entry.snapshot.status }}
@@ -959,6 +978,7 @@ import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, ref, wa
 import { useRoute, useRouter } from "vue-router";
 import { call } from "../lib/frappe";
 import Icon from "../components/Icon.vue";
+import TrackerFilePicker from "../components/TrackerFilePicker.vue";
 const API = "volunteering.volunteering.collaboration.";
 const route = useRoute(),
 	router = useRouter();
@@ -995,6 +1015,8 @@ const dialog = ref(""),
 	progress = ref({}),
 	history = ref([]),
 	messageEdit = ref("");
+const trackerFiles = ref([]), trackerRequestKey = ref(""), trackerFileNote = ref("");
+const trackerFileRows = ref([]), trackerFileCursor = ref(null), trackerFilesLoading = ref(false), trackerCanAdd = ref(false), trackerFileRestricted = ref(false);
 const kinds = ["Task", "Event", "List", "Tracker"],
 	tabs = ["Chat", "Tasks", "Calendar", "Lists", "Progress"],
 	priorities = ["Very low", "Low", "Medium", "High", "Very high"];
@@ -1019,6 +1041,7 @@ const dialogTitle = computed(
 					: "New conversation",
 			item: itemForm.value.name ? "Edit work item" : "Create work item",
 			progress: "Record progress",
+            trackerFiles: "Tracker files",
             share: "Share " + (selectedItem.value?.item_kind || "item").toLowerCase(),
             itemView: selectedItem.value?.title || "Work item",
 			history: "Activity history",
@@ -1246,6 +1269,9 @@ function chooseFiles(event) {
 	}
 	files.value = selected;
 }
+function fileSizeLabel(size) {
+    return size >= 1048576 ? `${(size / 1048576).toFixed(1)} MB` : size >= 1024 ? `${Math.ceil(size / 1024)} KB` : `${size} B`;
+}
 function fileBase64(file) {
 	return new Promise((resolve, reject) => {
 		const reader = new FileReader();
@@ -1452,6 +1478,7 @@ async function saveSchedule() {
 function openProgress(item) {
     if (!item.can_update) return showHistory(item);
 	selectedItem.value = item;
+    trackerFiles.value = []; trackerRequestKey.value = nonce();
 	progress.value = {
 		value: item.item_data.value ?? "",
 		stage: item.item_data.stage || "",
@@ -1474,6 +1501,8 @@ async function postProgress() {
 			name: selectedItem.value.name,
 			expected_modified: selectedItem.value.modified,
 			note: p.note,
+            request_key: trackerRequestKey.value,
+            attachments: await trackerFilePayload(),
 			value: p.value === "" ? null : p.value,
 			stage: p.stage,
 			outcome: p.outcome,
@@ -1486,6 +1515,41 @@ async function postProgress() {
 		});
 		dialog.value = "";
 	});
+}
+async function trackerFilePayload() {
+    return Promise.all(trackerFiles.value.map(async file => ({filename: file.name, content: await fileBase64(file)})));
+}
+async function openTrackerFiles(item) {
+    selectedItem.value = item;
+    trackerFiles.value = []; trackerRequestKey.value = nonce(); trackerFileNote.value = "";
+    trackerFileRows.value = []; trackerFileCursor.value = null; trackerCanAdd.value = false; trackerFileRestricted.value = false;
+    dialogError.value = ""; dialog.value = "trackerFiles";
+    await loadTrackerFiles();
+}
+async function loadTrackerFiles(before = null) {
+    if (trackerFilesLoading.value) return;
+    trackerFilesLoading.value = true;
+    const name = selectedItem.value.name;
+    try {
+        const result = await call(API + "get_tracker_files", {name, before});
+        if (selectedItem.value?.name !== name || dialog.value !== "trackerFiles") return;
+        trackerFileRows.value = [...(before ? trackerFileRows.value : []), ...result.files];
+        trackerFileCursor.value = result.next_cursor;
+        trackerCanAdd.value = result.can_add;
+        trackerFileRestricted.value = result.restricted;
+    } catch (error) {dialogError.value = error.message;}
+    finally {trackerFilesLoading.value = false;}
+}
+async function postTrackerFiles() {
+    await mutate(async () => {
+        const result = await call(API + "add_tracker_files", {name: selectedItem.value.name,
+            expected_modified: selectedItem.value.modified, request_key: trackerRequestKey.value,
+            note: trackerFileNote.value, attachments: await trackerFilePayload()});
+        selectedItem.value = result;
+        trackerFiles.value = []; trackerFileNote.value = ""; trackerRequestKey.value = nonce();
+        await loadTrackerFiles();
+        notice.value = "Files added to the tracker.";
+    });
 }
 async function showHistory(item) {
 	try {
@@ -1570,7 +1634,7 @@ onUnmounted(() => {
 
 const ItemCard = defineComponent({
 	props: ["item"],
-	emits: ["edit", "action", "progress", "history", "share"],
+	emits: ["edit", "action", "progress", "history", "share", "files"],
 	setup(props, { emit }) {
 		return () => {
 			const i = props.item,
@@ -1671,6 +1735,7 @@ const ItemCard = defineComponent({
 					),
 				);
             if (i.can_share) actions.push(h("button", {onClick: () => emit("share")}, "Share"));
+            if (i.item_kind === "Tracker") actions.push(h("button", {onClick: () => emit("files")}, "Files"));
 			actions.push(h("button", { onClick: () => emit("history") }, "History"));
 			nodes.push(h("div", { class: "item-actions" }, actions));
 			return h("div", { class: "item-card" }, nodes);
@@ -2553,4 +2618,11 @@ const CalendarView = defineComponent({
 
 <style scoped>
 .assignment-choice {display:grid;gap:12px;padding:16px;border:1px solid #d9e5e1;border-radius:14px}.assignment-choice label{display:flex;align-items:center;gap:12px;background:#f0f7f4;border-radius:10px;padding:14px}.assignment-choice input{width:auto}.assignment-choice small{display:block;margin-top:4px;color:#637378}.stage-row{display:flex;flex-wrap:wrap;padding:12px;background:#f4f8f6;border-radius:12px}.stage-row input:first-child{min-width:140px;flex:1}.stage-row select{min-width:180px;flex:1}.sharing-row{display:grid;gap:10px;padding:14px;border:1px solid #d9e5e1;border-radius:12px}
+.tracker-files-panel { display: grid; gap: 16px; }
+.tracker-file-upload { display: grid; gap: 12px; padding: 16px; border: 1px solid #dfe8e5; border-radius: 14px; background: #f8fbfa; }
+.tracker-file-link { display: flex; gap: 12px; padding: 14px; border: 1px solid #e1e7e9; border-radius: 12px; color: #146b58; overflow-wrap: anywhere; }
+.tracker-file-link > span { display: grid; gap: 5px; min-width: 0; }
+.tracker-file-link small { color: #68777d; }
+.tracker-file-upload button:disabled, .dialog-header button:disabled { opacity: .45; cursor: not-allowed; }
+.tracker-history-file { display: block; margin: 8px 0; color: #146b58; overflow-wrap: anywhere; }
 </style>
