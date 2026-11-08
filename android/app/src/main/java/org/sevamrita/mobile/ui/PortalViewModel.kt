@@ -8,6 +8,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import org.sevamrita.mobile.data.DurableChat
 import org.sevamrita.mobile.data.PortalApi
 import org.sevamrita.mobile.data.ChatSnapshotCache
 import org.sevamrita.mobile.data.PortalSessionRequiredException
@@ -48,6 +49,9 @@ data class PortalState(
     val chatWork: JSONObject = JSONObject(),
     val chatNavigation: ChatNavigation = ChatNavigation(),
     val trackerFilter: String = DEFAULT_TRACKER_FILTER,
+    val outbox: List<JSONObject> = emptyList(),
+    val searchSpace: String = "",
+    val targetEntry: String = "",
     val chatLoading: Boolean = false
 )
 
@@ -59,6 +63,8 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
     private var chatChangeVersion = 0
     private var chatRefreshing = false
     private var foregroundTasks = 0
+    private val durable = DurableChat(application)
+    private val draftVersions = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private val snapshots = ChatSnapshotCache(application)
     private val chatScreens = linkedMapOf<String, JSONObject>()
     var state = androidx.compose.runtime.mutableStateOf(PortalState(server = api.server(), localAddress = api.localAddress()))
@@ -757,6 +763,8 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun refreshChat() {
+        refreshOutbox()
+        if (state.value.signedIn) DurableChat.schedule(getApplication())
         if (chatRefreshing || !state.value.signedIn) return
         chatRefreshing = true
         val generation = sessionGeneration
@@ -792,7 +800,7 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
         val route = state.value.chatNavigation.current
         val generation = sessionGeneration
         val version = chatChangeVersion
-        val args = JSONObject().put("name", name)
+        val args = JSONObject().put("name", name).put("entry",state.value.targetEntry.ifBlank{null})
         val detail = route.view in listOf(ChatView.TRACKER, ChatView.TASK) && route.room == name
         val room = if (detail) api.call(CHAT + "get_work_item", JSONObject().put("name", route.item)) else api.call(CHAT + "get_space", args)
         if (generation != sessionGeneration || version != chatChangeVersion || state.value.page != Page.COLLABORATION || state.value.chatNavigation.current != route || state.value.chatRoom.optJSONObject("space")?.text("name") != name) return
@@ -807,7 +815,7 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
                 room.put("older_cursor", current.opt("older_cursor"))
         }
         synchronized(chatScreens) { chatScreens[screenKey(route)] = room }
-        state.value = state.value.copy(chatRoom = room, chatLoading = false)
+        state.value = state.value.copy(chatRoom = room, chatLoading = false, targetEntry = "")
         persistChatScreens()
         if (!detail) acknowledgeDelivery(name, room)
     }
@@ -828,6 +836,7 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun openChatRoom(name: String) {
+        state.value=state.value.copy(targetEntry="")
         moveChat(state.value.chatNavigation.navigate(ChatRoute(ChatView.CHAT, name)))
     }
 
@@ -851,6 +860,7 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
         val response = api.call(CHAT + "get_tracker_files", JSONObject().put("name", name).put("before", before))
         if (state.value.chatNavigation.current.item == name) ready(response)
     }
+    fun openChatEntry(room:String,entry:String) { state.value=state.value.copy(targetEntry=entry);moveChat(state.value.chatNavigation.navigate(ChatRoute(ChatView.CHAT,room))) }
     fun openTask(room: String, item: String) = moveChat(state.value.chatNavigation.navigate(ChatRoute(ChatView.TASK, room, item)))
     fun setTrackerFilter(filter: String) {
         if (filter in TRACKER_FILTERS) state.value = state.value.copy(trackerFilter = filter)
@@ -875,7 +885,12 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
         val seeded = if (room.isBlank()) JSONObject() else seedChatScreen(navigation.current)
         state.value = state.value.copy(page = Page.COLLABORATION, chatNavigation = navigation,
             error = "", notice = "", chatRoom = seeded, chatLoading = room.isNotBlank() && seeded.optJSONObject("space")?.has("access_level") != true)
-        if (room.isNotBlank() && previousRoute != navigation.current) runTask(showBusy = false) { reloadChatRoom(room) }
+        if (room.isNotBlank() && previousRoute != navigation.current) runTask(showBusy = false) {
+            try { reloadChatRoom(room) }
+            catch (failure: Exception) {
+                if (!canReadCachedChat(seeded.optJSONObject("space")?.has("access_level") == true, failure)) throw failure
+            }
+        }
     }
 
     fun olderChatMessages() = runTask {
@@ -923,20 +938,46 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
         persistChatScreens()
     }
 
+    fun savedDraft(slot: String): JSONObject = runCatching { durable.read(api.endpoint(),state.value.user,slot) }.getOrElse { error("Saved draft could not be read. It has not been deleted."); JSONObject() }
+    fun saveDraft(slot:String,value:JSONObject) {
+        val endpoint=api.endpoint();val user=state.value.user;val copy=JSONObject(value.toString());val revision=System.nanoTime()
+        draftVersions[slot]=revision
+        viewModelScope.launch(Dispatchers.IO) { runCatching {
+            synchronized(DurableChat.lock) { if(draftVersions[slot]==revision) durable.write(endpoint,user,slot,copy) }
+        }.exceptionOrNull()?.let { failure -> withContext(Dispatchers.Main){error(failure.message ?: "Unable to save draft.")} } }
+    }
+    fun forgetDraft(slot:String) { val endpoint=api.endpoint();val user=state.value.user;draftVersions[slot]=System.nanoTime();durable.delete(endpoint,user,slot) }
+    fun refreshOutbox() { if(state.value.user.isNotBlank()) state.value=state.value.copy(outbox=runCatching { durable.list(api) }.getOrDefault(emptyList())) }
+    fun outboxAction(id:String,retry:Boolean) { runTask {
+        if(retry){durable.retry(api,id);DurableChat.schedule(getApplication())}else durable.remove(api,id)
+        withContext(Dispatchers.Main){refreshOutbox()}
+    } }
+    fun showChatPage(view:ChatView, room:String="") { state.value=state.value.copy(searchSpace=room);moveChat(state.value.chatNavigation.navigate(ChatRoute(view))) }
+    fun featureCall(method:String,args:JSONObject=JSONObject(),ready:(JSONObject)->Unit) = runTask(showBusy=false,onFailure={ready(JSONObject().put("_error",true))}) {
+        val response=api.call(CHAT+method,args)
+        withContext(Dispatchers.Main){ready(response)}
+    }
     fun chatCall(method: String, args: JSONObject = JSONObject(), success: (JSONObject) -> Unit = {}) {
         val generation = sessionGeneration
         val changed = !method.startsWith("get_")
+        val data=JSONObject(args.toString())
+        val id=data.optString("_operation_key").ifBlank { data.optString("request_key").ifBlank {
+            data.optJSONObject("payload")?.optString("request_key").orEmpty().ifBlank { java.util.UUID.randomUUID().toString() }
+        } };data.remove("_operation_key")
+        val queueable=method in setOf("send_message","save_item","update_task","record_progress","add_tracker_files","post_comment","update_subtask")
         runTask(showBusy = changed) {
-            val result = api.call(CHAT + method, args)
+            val result=if(queueable) {
+                val row=durable.enqueue(api,method,data,id)
+                val sent=durable.send(api,row)
+                if(sent==null){DurableChat.schedule(getApplication());JSONObject().put("queued",true)}else sent
+            } else api.call(CHAT+method,data)
             if (generation != sessionGeneration) return@runTask
             withContext(Dispatchers.Main) {
-                if (changed) { chatChangeVersion++; applyChatItem(result) }
+                if (changed) { chatChangeVersion++; if(!result.optBoolean("queued")) applyChatItem(result);refreshOutbox() }
+                if(result.optBoolean("queued"))state.value=state.value.copy(notice="Saved in Outbox. It will send when connected.")
                 success(result)
             }
-            if (changed) {
-                WorkReminders.requestSync(getApplication())
-                refreshChat()
-            }
+            if (changed) { WorkReminders.requestSync(getApplication());refreshChat() }
         }
     }
 

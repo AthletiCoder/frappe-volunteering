@@ -10,3 +10,7 @@ internal fun pendingReminders(events: List<ReminderEvent>, delivered: Set<String
 /** A sync/alarm race may wake several receivers. Consume every due occurrence together. */
 internal fun dueReminders(events: List<ReminderEvent>, delivered: Set<String>, now: Long): List<ReminderEvent> =
     pendingReminders(events, delivered, now).filter { it.at <= now + 1000 }.distinctBy { it.item }
+
+/** Defer eligible occurrences once without reviving old backlog or changing their keys. */
+internal fun quietDeferrals(events: List<ReminderEvent>, delivered: Set<String>, now: Long, until: Long): Map<String, Long> =
+    pendingReminders(events, delivered, now).filter { it.at < until }.associate { it.key to until }

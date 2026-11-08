@@ -51,11 +51,11 @@ internal fun TrackerDashboard(trackers: List<JSONObject>, user: String, filter: 
     LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 90.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                TrackerStat("All trackers", trackers.size, Color(0xFFEEF1FF), Color(0xFF315EB7), Icons.Default.Layers, Modifier.weight(1f)) { choose(TrackerScope.ALL) }
-                TrackerStat("My actions", pending.size, Color(0xFFFFEEF0), Color(0xFFA42E40), Icons.Default.PersonOutline, Modifier.weight(1f)) { choose(TrackerScope.MINE) }
-                TrackerStat("Completed", complete, Color(0xFFE5F5ED), Color(0xFF08745E), Icons.Default.CheckCircleOutline, Modifier.weight(1f)) { choose(TrackerScope.COMPLETED) }
+                TrackerStat("All trackers", trackers.size, appColor(0xFFEEF1FF), appColor(0xFF315EB7), Icons.Default.Layers, Modifier.weight(1f)) { choose(TrackerScope.ALL) }
+                TrackerStat("My actions", pending.size, appColor(0xFFFFEEF0), appColor(0xFFA42E40), Icons.Default.PersonOutline, Modifier.weight(1f)) { choose(TrackerScope.MINE) }
+                TrackerStat("Completed", complete, appColor(0xFFE5F5ED), appColor(0xFF08745E), Icons.Default.CheckCircleOutline, Modifier.weight(1f)) { choose(TrackerScope.COMPLETED) }
             }
-            if (hasMore) Text("Counts show the trackers currently loaded.", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = Color(0xFF687778))
+            if (hasMore) Text("Counts show the trackers currently loaded.", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = appColor(0xFF687778))
         }
         if (attention.isNotEmpty()) {
             item {
@@ -80,12 +80,12 @@ internal fun TrackerDashboard(trackers: List<JSONObject>, user: String, filter: 
             }
         }
         if (grouped.isEmpty()) item {
-            Surface(shape = RoundedCornerShape(20.dp), color = Color.White, border = BorderStroke(1.dp, Color(0xFFE6EAED))) {
-                Text(if (attention.isNotEmpty()) "You're seeing your pending work above. Choose a filter to explore more." else "No trackers match this view.", Modifier.padding(20.dp), color = Color(0xFF687778))
+            Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, appColor(0xFFE6EAED))) {
+                Text(if (attention.isNotEmpty()) "You're seeing your pending work above. Choose a filter to explore more." else "No trackers match this view.", Modifier.padding(20.dp), color = appColor(0xFF687778))
             }
         }
         groupTrackersByChat(grouped, { it.text("space") }, { it.text("space_title") }).forEach { group ->
-            item(key = "group:${group.chatId}") { Text(group.title, Modifier.padding(top = 8.dp), color = Color(0xFF52636A), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold) }
+            item(key = "group:${group.chatId}") { Text(group.title, Modifier.padding(top = 8.dp), color = appColor(0xFF52636A), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold) }
             items(group.trackers, key = { it.text("name") }) { item -> TrackerRow(item, user) { onOpen(item) } }
         }
     }
@@ -97,7 +97,7 @@ private fun TrackerStat(label: String, count: Int, background: Color, ink: Color
     Surface(onClick = onClick, modifier = modifier, shape = RoundedCornerShape(20.dp), color = background) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Icon(icon, null, tint = ink, modifier = Modifier.size(24.dp))
-            Text(count.toString(), fontSize = 28.sp, color = Color(0xFF172A38), fontWeight = FontWeight.Bold)
+            Text(count.toString(), fontSize = 28.sp, color = appColor(0xFF172A38), fontWeight = FontWeight.Bold)
             Text(label, fontSize = 12.sp, lineHeight = 16.sp, color = ink)
         }
     }

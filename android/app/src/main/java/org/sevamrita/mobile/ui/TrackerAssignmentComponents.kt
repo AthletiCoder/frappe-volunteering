@@ -20,7 +20,7 @@ internal fun TrackerAssignmentChoice(form: JSONObject, set: (JSONObject) -> Unit
     Text("Who is responsible?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
     listOf("Single" to ("One person" to "Assign the entire tracker to one person"),
         "Stages" to ("Divide by stage" to "Choose a responsible person for each stage")).forEach { (value, labels) ->
-        Surface(color = if (mode == value) Color(0xFFE4F2EC) else Color(0xFFF5F7F7), shape = RoundedCornerShape(12.dp)) {
+        Surface(color = if (mode == value) appColor(0xFFE4F2EC) else appColor(0xFFF5F7F7), shape = RoundedCornerShape(12.dp)) {
             Row(Modifier.fillMaxWidth().clickable {
                 val updated = JSONObject(config.toString()).put("assignment_mode", value)
                 if (value == "Stages" && config.text("scale") !in listOf("Stages", "Status")) {
@@ -31,7 +31,7 @@ internal fun TrackerAssignmentChoice(form: JSONObject, set: (JSONObject) -> Unit
                 RadioButton(selected = mode == value, onClick = null)
                 Column(Modifier.padding(start = 12.dp)) {
                     Text(labels.first, fontWeight = FontWeight.Medium)
-                    Text(labels.second, style = MaterialTheme.typography.bodySmall, color = Color(0xFF637378))
+                    Text(labels.second, style = MaterialTheme.typography.bodySmall, color = appColor(0xFF637378))
                 }
             }
         }

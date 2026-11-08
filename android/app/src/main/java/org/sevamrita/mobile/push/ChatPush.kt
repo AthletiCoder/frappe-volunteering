@@ -150,7 +150,7 @@ internal object ChatPush {
     }
 
     private fun show(context: Context, message: JSONObject) {
-        if (!WorkReminders.notificationsAllowed(context)) return
+        if (!WorkReminders.notificationsAllowed(context) || !NotificationPreferences(context).chat(message.text("space"),message.optBoolean("mentioned"),message.optBoolean("assigned"))) return
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(CHANNEL, "Chat messages", NotificationManager.IMPORTANCE_HIGH))
         val room = message.text("space")

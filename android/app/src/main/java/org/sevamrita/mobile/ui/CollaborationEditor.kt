@@ -179,8 +179,9 @@ private fun EditorField(label: String, value: String, onClick: () -> Unit, trail
 @Composable
 internal fun EditorTime(label: String, time: LocalTime, display: String = time.toString(), reset: (() -> Unit)? = null, set: (LocalTime) -> Unit) {
     val context = LocalContext.current
+    val pickerContext = android.view.ContextThemeWrapper(context, if (LocalAppDark.current) android.R.style.Theme_Material_Dialog_Alert else android.R.style.Theme_Material_Light_Dialog_Alert)
     val pick = {
-        TimePickerDialog(context, { _, hour, minute -> set(LocalTime.of(hour, minute)) },
+        TimePickerDialog(pickerContext, { _, hour, minute -> set(LocalTime.of(hour, minute)) },
             time.hour, time.minute, true).show()
     }
     EditorField(label, display, onClick = pick) {
@@ -217,11 +218,12 @@ internal fun EditorSelect(label: String, selected: String, options: List<Pair<St
 @Composable
 internal fun EditorDate(label: String, value: String, canClear: Boolean = true, set: (String) -> Unit) {
     val context = LocalContext.current
+    val pickerContext = android.view.ContextThemeWrapper(context, if (LocalAppDark.current) android.R.style.Theme_Material_Dialog_Alert else android.R.style.Theme_Material_Light_Dialog_Alert)
     val parsed = remember(value) { runCatching { LocalDate.parse(value) }.getOrNull() }
     val display = parsed?.format(DateTimeFormatter.ofPattern("d MMM yyyy")) ?: value.ifBlank { "Choose date" }
     val pick = {
         val date = parsed ?: LocalDate.now()
-        DatePickerDialog(context, { _, year, month, day ->
+        DatePickerDialog(pickerContext, { _, year, month, day ->
             set(LocalDate.of(year, month + 1, day).toString())
         }, date.year, date.monthValue - 1, date.dayOfMonth).show()
     }

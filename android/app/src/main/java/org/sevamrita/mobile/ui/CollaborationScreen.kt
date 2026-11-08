@@ -44,8 +44,8 @@ import java.time.LocalDateTime
 import java.io.ByteArrayOutputStream
 import java.util.UUID
 
-private val chatGreen = Color(0xFF08745E)
-private val chatMuted = Color(0xFF637378)
+private val chatGreen: Color @Composable get() = appColor(0xFF08745E)
+private val chatMuted: Color @Composable get() = appColor(0xFF637378)
 private val importance = listOf("Very low", "Low", "Medium", "High", "Very high")
 private val formSaver = Saver<JSONObject, String>(save = { it.toString() }, restore = { JSONObject(it) })
 private val editorSaver = Saver<String, String>(
@@ -76,24 +76,31 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
     var personalTab by rememberSaveable { mutableStateOf("Today") }
     var search by rememberSaveable { mutableStateOf("") }
     var showArchived by rememberSaveable { mutableStateOf(false) }
-    var draft by rememberSaveable(state.user, roomId) { mutableStateOf("") }
-    var sendKey by rememberSaveable(state.user, roomId) { mutableStateOf(UUID.randomUUID().toString()) }
+    val savedWork=remember(state.user,roomId){model.savedDraft("workspace:$roomId")}
+    var draft by rememberSaveable(state.user, roomId) { mutableStateOf(savedWork.text("draft")) }
+    var sendKey by rememberSaveable(state.user, roomId) { mutableStateOf(savedWork.text("sendKey").ifBlank{UUID.randomUUID().toString()}) }
     var entryKind by rememberSaveable(roomId) { mutableStateOf("Message") }
-    var reply by remember(roomId) { mutableStateOf<JSONObject?>(null) }
-    var uploads by remember(roomId) { mutableStateOf(listOf<JSONObject>()) }
-    var trackerUploads by remember(state.user, roomId) { mutableStateOf(listOf<JSONObject>()) }
+    var reply by remember(roomId) { mutableStateOf(savedWork.optJSONObject("reply")) }
+    var uploads by remember(roomId) { mutableStateOf(savedWork.items("uploads")) }
+    var trackerUploads by remember(state.user, roomId) { mutableStateOf(savedWork.items("trackerUploads")) }
     var readingTrackerFiles by remember { mutableStateOf(false) }
     var trackerUploadError by remember { mutableStateOf("") }
     var editTarget by remember(state.user, roomId) { mutableStateOf<JSONObject?>(null) }
     var editBody by rememberSaveable(state.user, roomId) { mutableStateOf("") }
     var messageInfo by remember(state.user, roomId) { mutableStateOf<List<JSONObject>?>(null) }
-    var dialog by rememberSaveable(stateSaver = editorSaver) { mutableStateOf("") }
-    var form by rememberSaveable(stateSaver = formSaver) { mutableStateOf(JSONObject()) }
-    var selected by rememberSaveable(stateSaver = formSaver) { mutableStateOf(JSONObject()) }
-    var originalForm by rememberSaveable { mutableStateOf("") }
+    var dialog by rememberSaveable(stateSaver = editorSaver) { mutableStateOf(savedWork.text("dialog")) }
+    var form by rememberSaveable(stateSaver = formSaver) { mutableStateOf(savedWork.optJSONObject("form") ?: JSONObject()) }
+    var selected by rememberSaveable(stateSaver = formSaver) { mutableStateOf(savedWork.optJSONObject("selected") ?: JSONObject()) }
+    var originalForm by rememberSaveable { mutableStateOf(savedWork.text("originalForm")) }
+    LaunchedEffect(draft,sendKey,dialog,form.toString(),selected.toString(),uploads.toString(),trackerUploads.toString(),reply?.toString()) {
+        delay(350)
+        if(roomId.isNotBlank())model.saveDraft("workspace:$roomId",JSONObject().put("draft",draft).put("sendKey",sendKey)
+            .put("dialog",dialog.takeIf{it in listOf("item","progress","trackerFiles","space")}.orEmpty()).put("form",form)
+            .put("reply",reply).put("selected",selected).put("originalForm",originalForm).put("uploads",JSONArray(uploads)).put("trackerUploads",JSONArray(trackerUploads)))
+    }
     fun openEditor(kind: String, initial: JSONObject) {
         model.dismissMessage()
-        form = initial
+        form = initial.put("_operation_key",initial.text("_operation_key").ifBlank{UUID.randomUUID().toString()})
         originalForm = initial.toString()
         dialog = kind
     }
@@ -205,6 +212,7 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
     }
     Box(Modifier.fillMaxSize()) {
     when {
+        state.chatNavigation.current.view in listOf(ChatView.SEARCH,ChatView.MENTIONS,ChatView.SETTINGS,ChatView.OUTBOX) -> CollaborationUtilityScreen(state,model)
         roomId.isNotBlank() && !space.has("access_level") -> Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             if (state.chatLoading) Text("Opening…", color = chatMuted)
             else {
@@ -256,6 +264,7 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
                 TaskRow(task, !state.busy, { taskAction(task, it) }, if (task.optBoolean("can_edit")) { { openEditor("item", task.copyJson()) } } else null,
                     { historyFor(task) }, share = if (task.optBoolean("can_share")) { { shareFor(task) } } else null)
                 if (task.text("description").isNotBlank()) Text(task.text("description"), Modifier.padding(14.dp))
+                SubtaskList(task,space.items("members"),state.user,state.busy){id,status -> model.chatCall("update_subtask",JSONObject().put("name",task.text("name")).put("subtask",id).put("status",status).put("expected_modified",task.text("modified")))}
             }
         }
         trackerDetail -> {
@@ -267,7 +276,8 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
                     onUpdate = { progressFor(tracker) }, onConfigure = { openEditor("item", tracker.copyJson()) }, onHistory = { historyFor(tracker) }, onShare = if (tracker.optBoolean("can_share")) { { shareFor(tracker) } } else null,
                     loadHistory = { ready -> model.loadTrackerHistory(tracker.text("name"), ready) }, onFile = { model.openReceipt(it, Page.COLLABORATION) },
                     loadFiles = { before, ready -> model.loadTrackerFiles(tracker.text("name"), before, ready) },
-                    onAddFiles = if (tracker.optBoolean("can_add_files") && !state.busy) { { filesFor(tracker) } } else null)
+                    onAddFiles = if (tracker.optBoolean("can_add_files") && !state.busy) { { filesFor(tracker) } } else null,
+                    comments = if(!space.optBoolean("item_only")) {{ TrackerComments(tracker.text("name"),space.items("members"),model) }} else null)
             }
         }
         roomId.isBlank() -> ChatInbox(state.chatHome.items("spaces"), listState, model::openChatRoom, { newSpace() },
@@ -275,12 +285,13 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
         tab == "Chat" -> ChatThread(state.chatRoom, state.user,
             state.busy, dialog.isBlank() && messageInfo == null, listState,
             ChatComposerData(if (editTarget == null) draft else editBody, entryKind, reply, uploads, editTarget != null), ChatThreadActions(
+                search={model.showChatPage(ChatView.SEARCH,roomId)},mentions={model.showChatPage(ChatView.MENTIONS)},settings={model.showChatPage(ChatView.SETTINGS)},
                 back = { if (editTarget != null && !state.busy) editTarget = null else model.backInChat() },
                 tasks = model::showRoomTasks, trackers = model::showRoomTrackers,
                 members = { if (space.optBoolean("can_manage")) openEditor("space", space.copyJson()) else dialog = "members" }, newArea = { newSpace(roomId) },
                 refresh = model::refreshChat, signOut = model::logout, older = model::olderChatMessages,
                 reply = { reply = it }, task = { newItem("Task", it) }, tracker = { newItem("Tracker", it) },
-                edit = { editTarget = it; editBody = it.text("body") },
+                edit = { editTarget = it; editBody = it.text("raw_body").ifBlank{it.text("body")} },
                 remove = { selected = it; dialog = "removeMessage" },
                 info = { entry -> model.chatCall("get_message_info", JSONObject().put("name", entry.text("name"))) {
                     if (model.state.value.chatNavigation.current == ChatRoute(ChatView.CHAT, roomId)) messageInfo = it.items("recipients")
@@ -332,9 +343,9 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
                 val payload = JSONObject()
                 listOf("title", "item_kind", "description", "source_entry", "assignee", "priority", "from_date", "until_date", "deadline", "repeat_pattern", "repeat_until", "start_at", "end_at", "location", "participants", "item_data").forEach { key -> if (form.has(key)) payload.put(key, form.opt(key)) }
                 val creatingTracker = form.text("item_kind") == "Tracker" && form.text("name").isBlank()
-                model.chatCall("save_item", JSONObject().put("space", roomId).put("payload", payload).put("name", form.text("name").ifBlank { null }).put("expected_modified", form.text("modified"))) {
+                model.chatCall("save_item", JSONObject().put("_operation_key",form.text("_operation_key")).put("space", roomId).put("payload", payload).put("name", form.text("name").ifBlank { null }).put("expected_modified", form.text("modified"))) {
                     dialog = ""
-                    if (creatingTracker) model.openTracker(roomId, it.text("name"))
+                    if (creatingTracker && !it.optBoolean("queued")) model.openTracker(roomId, it.text("name"))
                 }
             }
             "share" -> model.chatCall("share_item", JSONObject().put("name", selected.text("name")).put("expected_modified", selected.text("modified")).put("shares", form.optJSONArray("shares") ?: JSONArray())) { dialog = "" }
@@ -520,6 +531,7 @@ private fun ChatItemForm(form: JSONObject, members: List<JSONObject>, set: (JSON
         if (kind == "Task") EditorSelect("Assigned to", form.text("assignee"), people) { set(form.changed("assignee", it)) }
         EditorSelect("Priority", form.text("priority").ifBlank { "Medium" }, choices(importance)) { set(form.changed("priority", it)) }
     }
+    if(kind=="Task")SubtaskEditor(config,members){set(form.changed("item_data",it))}
     when (kind) {
         "Task" -> EditorSection("Schedule") {
             val repeat = form.text("repeat_pattern").ifBlank { "None" }

@@ -42,18 +42,18 @@ internal fun trackerPendingWith(item: JSONObject): TrackerAssignee? {
     )
 }
 
-internal val TrackerPhase.tileColor: Color get() = when (this) {
-    TrackerPhase.WAITING -> Color(0xFFFCF5E7)
-    TrackerPhase.ACTIVE -> Color(0xFFEAF2FD)
-    TrackerPhase.COMPLETE -> Color(0xFFE4F4EA)
-    TrackerPhase.CLOSED -> Color(0xFFF9EDEB)
+internal val TrackerPhase.tileColor: Color @Composable get() = when (this) {
+    TrackerPhase.WAITING -> appColor(0xFFFCF5E7)
+    TrackerPhase.ACTIVE -> appColor(0xFFEAF2FD)
+    TrackerPhase.COMPLETE -> appColor(0xFFE4F4EA)
+    TrackerPhase.CLOSED -> appColor(0xFFF9EDEB)
 }
 
-internal val TrackerPhase.ink: Color get() = when (this) {
-    TrackerPhase.WAITING -> Color(0xFF76531F)
-    TrackerPhase.ACTIVE -> Color(0xFF275FAD)
-    TrackerPhase.COMPLETE -> Color(0xFF0B694F)
-    TrackerPhase.CLOSED -> Color(0xFF973D34)
+internal val TrackerPhase.ink: Color @Composable get() = when (this) {
+    TrackerPhase.WAITING -> appColor(0xFF76531F)
+    TrackerPhase.ACTIVE -> appColor(0xFF275FAD)
+    TrackerPhase.COMPLETE -> appColor(0xFF0B694F)
+    TrackerPhase.CLOSED -> appColor(0xFF973D34)
 }
 
 @Composable
@@ -76,19 +76,19 @@ internal fun TrackerCard(item: JSONObject, canUpdate: Boolean, canConfigure: Boo
     val phase = display.phase(status)
     SectionCard(color = phase.tileColor) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(display.scale.uppercase(), color = Color(0xFF687778), fontSize = 11.sp, modifier = Modifier.weight(1f))
+            Text(display.scale.uppercase(), color = appColor(0xFF687778), fontSize = 11.sp, modifier = Modifier.weight(1f))
             TrackerPhaseBadge(phase, status)
         }
         Text(item.text("title"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        if (item.text("description").isNotBlank()) Text(item.text("description"), color = Color(0xFF687778))
+        if (item.text("description").isNotBlank()) Text(item.text("description"), color = appColor(0xFF687778))
         Text(display.label, color = phase.ink, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         TrackerBar(display, status, phase.ink)
-        if (display.scale == "Number") Text("Range: ${config.opt("minimum")}–${config.opt("maximum")}", color = Color(0xFF687778), fontSize = 12.sp)
+        if (display.scale == "Number") Text("Range: ${config.opt("minimum")}–${config.opt("maximum")}", color = appColor(0xFF687778), fontSize = 12.sp)
         if (display.stages.isNotEmpty()) TrackerTimeline(display, onSelect = null, outcome = status)
-        if (item.text("assignee_name").isNotBlank()) Text("Assigned to ${item.text("assignee_name")}", fontSize = 12.sp, color = Color(0xFF687778))
+        if (item.text("assignee_name").isNotBlank()) Text("Assigned to ${item.text("assignee_name")}", fontSize = 12.sp, color = appColor(0xFF687778))
         if (config.text("next_action").isNotBlank()) Text("Next: ${config.text("next_action")}")
         workDates(config.text("attention_date"), config.text("attention_until"), item.text("deadline"), "Attention").forEach {
-            Text(it, color = Color(0xFF687778), fontSize = 12.sp)
+            Text(it, color = appColor(0xFF687778), fontSize = 12.sp)
         }
         if (canUpdate) Button(onClick = onUpdate, modifier = Modifier.fillMaxWidth()) { Text(if (status in listOf("Completed", "Failed")) "Update / reopen tracker" else "Update progress") }
         Row {
@@ -105,25 +105,26 @@ internal fun TrackerTimeline(display: TrackerDisplay, onSelect: ((String) -> Uni
         display.stages.forEachIndexed { index, stage ->
             val selected = display.stage == stage.key
             val done = display.milestoneState(index, outcome) == MilestoneState.DONE
-            Row(Modifier.fillMaxWidth().background(if (selected) Color(0xFFE0F1E8) else Color.Transparent, RoundedCornerShape(9.dp))
+            Row(Modifier.fillMaxWidth().background(if (selected) appColor(0xFFE0F1E8) else Color.Transparent, RoundedCornerShape(9.dp))
                 .then(if (onSelect != null) Modifier.clickable { onSelect(stage.key) } else Modifier).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(22.dp).background(if (done || selected) Color(0xFF08745E) else Color(0xFFE7ECE8), CircleShape), contentAlignment = Alignment.Center) {
-                    if (done) Icon(Icons.Default.Check, null, Modifier.size(15.dp), tint = Color.White)
-                    else if (selected) Box(Modifier.size(8.dp).background(Color.White, CircleShape))
+                Box(Modifier.size(22.dp).background(if (done || selected) appColor(0xFF08745E) else appColor(0xFFE7ECE8), CircleShape), contentAlignment = Alignment.Center) {
+                    if (done) Icon(Icons.Default.Check, null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.surface)
+                    else if (selected) Box(Modifier.size(8.dp).background(MaterialTheme.colorScheme.surface, CircleShape))
                 }
                 Column(Modifier.weight(1f).padding(start = 10.dp)) {
                     Text(stage.label, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
-                    if (stage.assigneeName.isNotBlank()) Text(stage.assigneeName, fontSize = 12.sp, color = Color(0xFF687778))
+                    if (stage.assigneeName.isNotBlank()) Text(stage.assigneeName, fontSize = 12.sp, color = appColor(0xFF687778))
                 }
-                if (selected && !done) Text("Current", color = Color(0xFF08745E), fontSize = 11.sp, modifier = Modifier.padding(end = 8.dp))
-                if (display.scale == "Stages" && stage.percent != null) Text(stage.percentLabel, color = Color(0xFF687778), fontSize = 12.sp)
+                if (selected && !done) Text("Current", color = appColor(0xFF08745E), fontSize = 11.sp, modifier = Modifier.padding(end = 8.dp))
+                if (display.scale == "Stages" && stage.percent != null) Text(stage.percentLabel, color = appColor(0xFF687778), fontSize = 12.sp)
             }
         }
     }
 }
 
 @Composable
-internal fun TrackerMilestoneBar(display: TrackerDisplay, outcome: String = "Open", ink: Color = Color(0xFF08745E)) {
+internal fun TrackerMilestoneBar(display: TrackerDisplay, outcome: String = "Open", ink: Color = appColor(0xFF08745E)) {
+    val circleSurface=MaterialTheme.colorScheme.surface
     val upcoming = ink.copy(alpha = .27f)
     val positions = display.milestonePositions
     if (positions.isEmpty()) return
@@ -141,9 +142,9 @@ internal fun TrackerMilestoneBar(display: TrackerDisplay, outcome: String = "Ope
         positions.forEachIndexed { index, position ->
             val center = Offset(inset + width * position, y)
             when (display.milestoneState(index, outcome)) {
-                MilestoneState.DONE -> { drawCircle(Color.White, 6.dp.toPx(), center); drawCircle(ink, 4.dp.toPx(), center) }
-                MilestoneState.CURRENT -> { drawCircle(Color.White, 9.dp.toPx(), center); drawCircle(ink, 7.dp.toPx(), center); drawCircle(Color.White, 3.dp.toPx(), center) }
-                MilestoneState.UPCOMING -> { drawCircle(Color.White, 6.dp.toPx(), center); drawCircle(upcoming, 4.dp.toPx(), center); drawCircle(Color.White, 2.dp.toPx(), center) }
+                MilestoneState.DONE -> { drawCircle(circleSurface, 6.dp.toPx(), center); drawCircle(ink, 4.dp.toPx(), center) }
+                MilestoneState.CURRENT -> { drawCircle(circleSurface, 9.dp.toPx(), center); drawCircle(ink, 7.dp.toPx(), center); drawCircle(circleSurface, 3.dp.toPx(), center) }
+                MilestoneState.UPCOMING -> { drawCircle(circleSurface, 6.dp.toPx(), center); drawCircle(upcoming, 4.dp.toPx(), center); drawCircle(circleSurface, 2.dp.toPx(), center) }
             }
         }
     }
@@ -164,7 +165,7 @@ internal fun TrackerSnapshot(
     val config = snapshot.optJSONObject("item_data") ?: return
     val display = trackerDisplay(config)
     val status = snapshot.text("status")
-    val ink = if (earlier) Color(0xFF596361) else Color(0xFF096651)
+    val ink = if (earlier) appColor(0xFF596361) else appColor(0xFF096651)
     val effective = snapshot.text("effective_at").replace('T', ' ').take(16)
     val pending = snapshotPendingWith(snapshot, item.takeUnless { earlier }, members)
     Column(Modifier.fillMaxWidth().padding(top = 5.dp).background(ink.copy(alpha = .08f), RoundedCornerShape(8.dp))
@@ -177,7 +178,7 @@ internal fun TrackerSnapshot(
         if (status in listOf("Open", "In progress")) Text(
             if (pending == null) "Assignee not recorded" else if (pending.user.isBlank()) "Unassigned" else "Pending with ${pending.displayName}",
             fontSize = 12.sp, lineHeight = 16.sp,
-            color = if (!earlier && pending?.isMe(user) == true) Color(0xFFA22C35) else ink)
+            color = if (!earlier && pending?.isMe(user) == true) appColor(0xFFA22C35) else ink)
         if (earlier || effective.isNotBlank() && effective != recordedAt.replace('T', ' ').take(16))
             Text(listOfNotNull("Earlier update".takeIf { earlier }, "As of $effective".takeIf {
                 effective.isNotBlank() && effective != recordedAt.replace('T', ' ').take(16)

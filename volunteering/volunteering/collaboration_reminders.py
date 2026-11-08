@@ -21,6 +21,8 @@ def events_for(item, user, now, timezone):
 		stages = config.get("stages", [])
 		current = next((s for s in stages if s["key"] == config.get("stage")), stages[0] if stages else {})
 		responsible = {item.owner, current.get("assignee")}
+	subtasks = [row for row in config.get("subtasks", []) if row.get("status") != "Completed" and (row.get("assignee") or item.assignee) == user]
+	responsible.update(row.get("assignee") for row in subtasks)
 	if user not in responsible and c._share_level(item, user) != "Update":
 		return []
 	start = item.from_date if item.item_kind == "Task" else config.get("attention_date")
@@ -35,6 +37,9 @@ def events_for(item, user, now, timezone):
 			first += timedelta(days=1)
 	if item.deadline and today <= getdate(item.deadline) <= horizon:
 		days.add(getdate(item.deadline))
+	for row in subtasks:
+		if row.get("deadline") and today <= getdate(row["deadline"]) <= horizon:
+			days.add(getdate(row["deadline"]))
 	clock = time.fromisoformat(config.get("reminder_time") or MORNING)
 	zone = ZoneInfo(timezone)
 	return [{"key": sha256(f"{item.name}:{day}:{clock}".encode()).hexdigest(), "item": item.name,

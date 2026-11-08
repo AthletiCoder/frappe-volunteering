@@ -19,6 +19,8 @@ class PortalApi(private val session: SecureSessionStore) {
         .readTimeout(45, TimeUnit.SECONDS)
         .build()
     private var csrf: String? = null
+    private var authenticatedSid: String? = null
+    private var authenticatedEndpoint: String? = null
     var currentUser: String = ""
         private set
 
@@ -27,10 +29,11 @@ class PortalApi(private val session: SecureSessionStore) {
     fun localAddress() = session.localAddress
     fun endpoint() = session.baseUrl
     fun rememberedUser() = session.rememberedUser()
-    fun setServer(server: Server) { session.server = server; csrf = null }
-    fun setLocalAddress(address: String) { session.localAddress = address; csrf = null }
+    fun setServer(server: Server) { session.server = server; csrf = null; authenticatedSid=null;authenticatedEndpoint=null }
+    fun setLocalAddress(address: String) { session.localAddress = address; csrf = null;authenticatedSid=null;authenticatedEndpoint=null }
 
     fun login(username: String, password: String) {
+        authenticatedSid=null;authenticatedEndpoint=null;csrf=null
         val body = FormBody.Builder().add("usr", username).add("pwd", password).build()
         val response = client.newCall(
             Request.Builder().url("${session.baseUrl}/api/method/login").post(body).build()
@@ -49,7 +52,10 @@ class PortalApi(private val session: SecureSessionStore) {
     }
 
     fun bootstrap() {
+        val startingSid=session.sid();val startingEndpoint=session.baseUrl
         val data = call("volunteering.volunteering.mobile_session.get_mobile_session", get = true)
+        if(session.sid()!=startingSid || session.baseUrl!=startingEndpoint)throw PortalSessionRequiredException()
+        authenticatedSid=startingSid;authenticatedEndpoint=startingEndpoint
         currentUser = data.optString("user")
         if (currentUser.isBlank() || currentUser == "Guest") throw PortalSessionRequiredException()
         session.rememberUser(currentUser)
@@ -57,7 +63,7 @@ class PortalApi(private val session: SecureSessionStore) {
             ?: throw IOException("The server did not provide a secure session token.")
     }
 
-    fun logoutLocal() { csrf = null; currentUser = ""; session.clear() }
+    fun logoutLocal() { authenticatedSid=null;authenticatedEndpoint=null;csrf = null; currentUser = ""; session.clear() }
 
     fun requestPasswordReset(user: String) {
         require(user.isNotBlank()) { "Enter your email address first." }
@@ -78,6 +84,7 @@ class PortalApi(private val session: SecureSessionStore) {
         require(method.matches(Regex("[A-Za-z_][A-Za-z0-9_.]*")))
         val sid = session.sid() ?: throw PortalSessionRequiredException()
         val endpoint = session.baseUrl
+        if(authenticatedSid!=null && (authenticatedSid!=sid || authenticatedEndpoint!=endpoint)) throw PortalSessionRequiredException()
         val url = "$endpoint/api/method/$method"
         val builder = Request.Builder().url(url).header("Cookie", "sid=$sid")
             .header("Accept", "application/json")
@@ -110,6 +117,7 @@ class PortalApi(private val session: SecureSessionStore) {
         }
         val sid = session.sid() ?: throw PortalSessionRequiredException()
         val endpoint = session.baseUrl
+        if(authenticatedSid!=null && (authenticatedSid!=sid || authenticatedEndpoint!=endpoint)) throw PortalSessionRequiredException()
         client.newCall(Request.Builder().url(endpoint + path).header("Cookie", "sid=$sid").get().build())
             .execute().use { response ->
                 if (session.sid() != sid || session.baseUrl != endpoint) throw kotlinx.coroutines.CancellationException("Session changed during download.")

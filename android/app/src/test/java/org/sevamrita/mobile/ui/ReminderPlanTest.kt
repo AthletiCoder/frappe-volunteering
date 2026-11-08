@@ -41,4 +41,13 @@ class ReminderPlanTest {
         assertEquals(listOf("work", "other"), dueReminders(rows, emptySet(), now).map { it.item })
         assertTrue(dueReminders(rows, setOf("a", "b", "c"), now).isEmpty())
     }
+    @Test fun longQuietHoursRetainDueRemindersWithoutRevivingOldBacklog() {
+        val until = now + 15 * 60 * 60 * 1000L
+        val rows = listOf(event("due", now), event("later", until + 1000).copy(item = "other"), event("expired", now - 13 * 60 * 60 * 1000L))
+        val delayed = org.sevamrita.mobile.reminders.quietDeferrals(rows, emptySet(), now, until)
+        assertEquals(mapOf("due" to until), delayed)
+        val cached = rows.map { it.copy(at = delayed[it.key] ?: it.at) }
+        assertEquals(listOf("due", "later"), dueReminders(cached, emptySet(), until).map { it.key })
+        assertTrue(org.sevamrita.mobile.reminders.quietDeferrals(rows, setOf("due"), now, until).isEmpty())
+    }
 }

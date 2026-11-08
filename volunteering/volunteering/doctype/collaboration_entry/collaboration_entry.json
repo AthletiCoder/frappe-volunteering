@@ -13,7 +13,8 @@
   "snapshot",
   "edited_at",
   "is_deleted",
-  "request_key"
+  "request_key",
+  "mentions"
  ],
  "fields": [
   {
@@ -33,7 +34,7 @@
    "fieldtype": "Select",
    "label": "Entry Kind",
    "reqd": 1,
-   "options": "Message\nNote\nProgress\nDecision\nBlocker\nMilestone\nSystem"
+   "options": "Message\nNote\nProgress\nDecision\nBlocker\nMilestone\nSystem\nComment"
   },
   {
    "fieldname": "source_entry",
@@ -68,6 +69,11 @@
    "fieldtype": "Data",
    "label": "Request Key",
    "unique": 1
+  },
+  {
+   "fieldname": "mentions",
+   "fieldtype": "JSON",
+   "label": "Mentions"
   }
  ],
  "permissions": [

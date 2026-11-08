@@ -153,13 +153,13 @@ import org.sevamrita.mobile.ui.MultiResultScreen
 import org.sevamrita.mobile.ui.BudgetHealthScreen
 import org.sevamrita.mobile.ui.CombinedClaimScreen
 import org.sevamrita.mobile.ui.CorrectClaimScreen
-import org.sevamrita.mobile.ui.CollaborationScreen
+import org.sevamrita.mobile.ui.*
 
-private val green = Color(0xFF08745E)
-private val ink = Color(0xFF1D3035)
-private val muted = Color(0xFF637378)
-private val canvas = Color(0xFFF5F7F4)
-private val pale = Color(0xFFE5F3ED)
+private val green: Color @Composable get() = appColor(0xFF08745E)
+private val ink: Color @Composable get() = appColor(0xFF1D3035)
+private val muted: Color @Composable get() = appColor(0xFF637378)
+private val canvas: Color @Composable get() = appColor(0xFFF5F7F4)
+private val pale: Color @Composable get() = appColor(0xFFE5F3ED)
 
 private data class WorkLink(val item: String, val room: String, val kind: String)
 
@@ -177,16 +177,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         readWorkLink(intent)
+        Appearance.load(this)
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.light(android.graphics.Color.WHITE, android.graphics.Color.WHITE)
         )
         setContent {
-            MaterialTheme(colorScheme = lightColorScheme(
-                primary = green, onPrimary = Color.White, background = canvas,
-                onBackground = ink, surface = Color.White, onSurface = ink,
-                secondaryContainer = pale, onSecondaryContainer = ink
-            )) {
+            SFTheme {
                 val model: PortalViewModel = viewModel()
                 val updates: AppUpdateViewModel = viewModel()
                 val lifecycleOwner = LocalLifecycleOwner.current
@@ -257,6 +254,10 @@ private fun PortalApp(model: PortalViewModel, onExit: () -> Unit, workLink: Work
     var menuExpanded by remember { mutableStateOf(false) }
     val canGoBack = state.page == Page.RECEIPT || state.chatNavigation.canGoBack
     val title = if (state.page == Page.RECEIPT) state.receiptName else when (route.view) {
+        ChatView.SEARCH -> "Search"
+        ChatView.MENTIONS -> "My mentions"
+        ChatView.SETTINGS -> "Settings"
+        ChatView.OUTBOX -> "Outbox"
         ChatView.CONVERSATIONS -> "Chats"
         ChatView.MY_TASKS -> "My tasks"
         ChatView.TASKS -> "Tasks"
@@ -270,7 +271,7 @@ private fun PortalApp(model: PortalViewModel, onExit: () -> Unit, workLink: Work
         containerColor = canvas,
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
-            Column(Modifier.fillMaxWidth().background(Color.White).windowInsetsPadding(
+            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).windowInsetsPadding(
                 WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))) {
                 if (!roomChat) Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically) {
@@ -293,6 +294,10 @@ private fun PortalApp(model: PortalViewModel, onExit: () -> Unit, workLink: Work
                     Box {
                         IconButton(onClick = { menuExpanded = true }) { Icon(Icons.Default.MoreVert, "More options", tint = muted) }
                         DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                            DropdownMenuItem(text = { Text("Search messages & work") }, onClick = { menuExpanded=false;model.showChatPage(ChatView.SEARCH) })
+                            DropdownMenuItem(text = { Text("My mentions") }, onClick = { menuExpanded=false;model.showChatPage(ChatView.MENTIONS) })
+                            DropdownMenuItem(text = { Text("Outbox (${state.outbox.size})") }, onClick = { menuExpanded=false;model.showChatPage(ChatView.OUTBOX) })
+                            DropdownMenuItem(text = { Text("Appearance & notifications") }, onClick = { menuExpanded=false;model.showChatPage(ChatView.SETTINGS) })
                             DropdownMenuItem(text = { Text("Chats") }, onClick = { menuExpanded = false; model.showChatConversations() })
                             DropdownMenuItem(text = { Text("My tasks") }, onClick = { menuExpanded = false; model.showPersonalTasks() })
                             DropdownMenuItem(text = { Text("My trackers") }, onClick = { menuExpanded = false; model.showPersonalTrackers() })
@@ -405,7 +410,7 @@ private fun LoginScreen(state: PortalState, model: PortalViewModel) {
     ) {
         item {
             Surface(color = green, shape = RoundedCornerShape(18.dp), modifier = Modifier.size(58.dp)) {
-                Box(contentAlignment = Alignment.Center) { Text("S", fontSize = 30.sp, color = Color.White, fontWeight = FontWeight.Bold) }
+                Box(contentAlignment = Alignment.Center) { Text("S", fontSize = 30.sp, color = MaterialTheme.colorScheme.surface, fontWeight = FontWeight.Bold) }
             }
             Spacer(Modifier.height(22.dp))
             Text(BuildConfig.APP_NAME, fontSize = 34.sp, fontWeight = FontWeight.Bold, color = ink)
@@ -750,7 +755,7 @@ private fun UnavailableScreen(state: PortalState) {
 }
 
 @Composable
-internal fun SectionCard(color: Color = Color.White, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+internal fun SectionCard(color: Color = MaterialTheme.colorScheme.surface, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = color), shape = RoundedCornerShape(20.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
@@ -775,7 +780,7 @@ internal fun LabelValue(label: String, value: String) {
 
 @Composable
 internal fun ActionRow(title: String, subtitle: String, onClick: () -> Unit) {
-    Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(17.dp), modifier = Modifier.fillMaxWidth()) {
+    Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(17.dp), modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(title, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -796,9 +801,9 @@ private fun EmptyState(text: String) { SectionCard { Text(text, color = muted) }
 
 @Composable
 private fun MessageBar(text: String, isError: Boolean, onDismiss: () -> Unit) {
-    Surface(color = if (isError) Color(0xFFFFE6E3) else pale, modifier = Modifier.fillMaxWidth()) {
+    Surface(color = if (isError) appColor(0xFFFFE6E3) else pale, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(text, modifier = Modifier.weight(1f), color = if (isError) Color(0xFF9B2D25) else ink, fontSize = 13.sp)
+            Text(text, modifier = Modifier.weight(1f), color = if (isError) appColor(0xFF9B2D25) else ink, fontSize = 13.sp)
             TextButton(onClick = onDismiss) { Text("Dismiss") }
         }
     }

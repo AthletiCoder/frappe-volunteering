@@ -22,16 +22,16 @@ import org.json.JSONObject
 import org.sevamrita.mobile.data.text
 import androidx.compose.foundation.BorderStroke
 
-private val workGreen = Color(0xFF08745E)
-private val workMuted = Color(0xFF637378)
-private val pendingRed = Color(0xFFA22C35)
+private val workGreen: Color @Composable get() = appColor(0xFF08745E)
+private val workMuted: Color @Composable get() = appColor(0xFF637378)
+private val pendingRed: Color @Composable get() = appColor(0xFFA22C35)
 
 @Composable
 internal fun TrackerPendingSummary(trackers: List<JSONObject>, user: String, archived: Boolean = false) {
     val mine = if (archived) 0 else trackers.count { trackerPendingWith(it)?.isMe(user) == true }
     Row(Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Surface(color = if (mine > 0) Color(0xFFFCE4E5) else Color(0xFFEDF0F0), shape = RoundedCornerShape(12.dp)) {
+        Surface(color = if (mine > 0) appColor(0xFFFCE4E5) else appColor(0xFFEDF0F0), shape = RoundedCornerShape(12.dp)) {
             Text(mine.toString(), Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 color = if (mine > 0) pendingRed else workMuted, fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleMedium)
@@ -62,7 +62,7 @@ internal fun TrackerFilter(value: String, onChange: (String) -> Unit) {
 
 @Composable
 internal fun WorkCreateButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
-    FloatingActionButton(onClick = { if (enabled) onClick() }, modifier = modifier, containerColor = workGreen, contentColor = Color.White) {
+    FloatingActionButton(onClick = { if (enabled) onClick() }, modifier = modifier, containerColor = workGreen, contentColor = MaterialTheme.colorScheme.onPrimary) {
         Icon(Icons.Default.Add, contentDescription = label)
     }
 }
@@ -70,7 +70,7 @@ internal fun WorkCreateButton(label: String, onClick: () -> Unit, modifier: Modi
 @Composable
 internal fun WorkStatus(status: String, change: ((String) -> Unit)? = null, enabled: Boolean = true) {
     var expanded by remember { mutableStateOf(false) }
-    val color = when (status) { "Failed" -> Color(0xFFA23C35); "In progress" -> Color(0xFF275FAD); else -> workGreen }
+    val color = when (status) { "Failed" -> appColor(0xFFA23C35); "In progress" -> appColor(0xFF275FAD); else -> workGreen }
     Box {
         if (change != null) TextButton(onClick = { expanded = true }, enabled = enabled,
             colors = ButtonDefaults.textButtonColors(contentColor = color), contentPadding = PaddingValues(horizontal = 8.dp)) {
@@ -92,7 +92,7 @@ internal fun TaskRow(item: JSONObject, enabled: Boolean, action: (String) -> Uni
     var expanded by remember { mutableStateOf(false) }
     val canEdit = item.optBoolean("can_edit")
     val canUpdate = item.optBoolean("can_update", canEdit)
-    Surface(shape = RoundedCornerShape(16.dp), color = Color.White, tonalElevation = 0.dp) {
+    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp) {
         Column(Modifier.fillMaxWidth().then(if (openDetails != null) Modifier.clickable(onClick = openDetails) else Modifier).padding(start = 14.dp, end = 8.dp, top = 6.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             if (item.text("space_title").isNotBlank()) Text(item.text("space_title"), color = workGreen, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -130,8 +130,8 @@ internal fun TrackerRow(item: JSONObject, user: String, archived: Boolean = fals
     val mine = pending?.isMe(user) == true
     val accent = if (mine) pendingRed else phase.ink
     Surface(onClick = onClick, shape = RoundedCornerShape(16.dp),
-        color = if (mine) Color(0xFFFFEEEF) else phase.tileColor,
-        border = if (mine) BorderStroke(1.dp, Color(0xFFE8B7BC)) else null) {
+        color = if (mine) appColor(0xFFFFEEEF) else phase.tileColor,
+        border = if (mine) BorderStroke(1.dp, appColor(0xFFE8B7BC)) else null) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(item.text("title"), Modifier.weight(1f), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium)

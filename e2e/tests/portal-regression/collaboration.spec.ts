@@ -436,3 +436,41 @@ test('Tracker file picker validates selections, allows removal and retains files
     const files=await portalCall(page,API+'get_tracker_files',{name:tracker.name});
     expect(files.files).toHaveLength(0);
 });
+
+test('Native collaboration HTTP flow supports replay, subtasks, tracker comments and mentions', async ({page}) => {
+    await signIn(page);const room=await newRoom(page,true);
+    const native='volunteering.volunteering.collaboration_mobile.';
+    const args={space:room.name,payload:{item_kind:'Task',title:'Native queued kitchen delivery',item_data:{subtasks:[{id:'vendor',title:'Confirm vendor',assignee:users.member,status:'Open'}]}}};
+    const task=await portalCall(page,native+'apply_operation',{method:'save_item',payload:args,request_key:`${room.name}:native-task-operation`});
+    const replay=await portalCall(page,native+'apply_operation',{method:'save_item',payload:args,request_key:`${room.name}:native-task-operation`});
+    expect(replay.name).toBe(task.name);
+    const tracker=await portalCall(page,native+'save_item',{space:room.name,payload:{item_kind:'Tracker',title:'Native delivery evidence',item_data:{scale:'Percentage'}}});
+    const progressArgs={name:tracker.name,expected_modified:tracker.modified,note:'Kitchen preparation started',value:25};
+    const progress=await portalCall(page,native+'apply_operation',{method:'record_progress',payload:progressArgs,request_key:`${room.name}:progress-operation`});
+    expect(progress.item_data.value).toBe(25);
+    expect(typeof progress.current_effective_at).toBe('string');
+    expect(await portalCall(page,native+'apply_operation',{method:'record_progress',payload:progressArgs,request_key:`${room.name}:progress-operation`})).toEqual(progress);
+    const comment=await portalCall(page,native+'apply_operation',{method:'post_comment',payload:{name:tracker.name,body:`@[Arjun Sharma](${users.member}) please review this delivery`,request_key:'comment-mention'},request_key:`${room.name}:comment-operation`});
+    expect((await portalCall(page,native+'get_comments',{name:tracker.name})).comments[0].name).toBe(comment.name);
+    await signIn(page,'member');
+    const mentions=await portalCall(page,native+'get_mentions');
+    expect(mentions.mentions.some((m:any)=>m.name===comment.name && m.unread)).toBeTruthy();
+    await portalCall(page,native+'mark_mention_seen',{entry:comment.name});
+    expect((await portalCall(page,native+'get_mentions',{unread_only:true})).mentions.some((m:any)=>m.name===comment.name)).toBeFalsy();
+    const updated=await portalCall(page,native+'apply_operation',{method:'update_subtask',payload:{name:task.name,subtask:'vendor',status:'Completed',expected_modified:task.modified},request_key:`${room.name}:subtask-operation`});
+    expect(updated.item_data.subtasks[0].status).toBe('Completed');
+    await signIn(page,'viewer');
+    expect((await portalCall(page,native+'get_comments',{name:tracker.name})).can_comment).toBeFalsy();
+});
+
+test('Native search finds old messages and opens their exact conversation context',async({page})=>{
+    await signIn(page);const room=await newRoom(page);
+    const native='volunteering.volunteering.collaboration_mobile.';
+    const old=await portalCall(page,native+'send_message',{payload:{space:room.name,body:'Distinctive old kitchen approval',request_key:'old-search'}});
+    for(let i=0;i<51;i++)await portalCall(page,native+'send_message',{payload:{space:room.name,body:`Newer discussion ${i}`,request_key:`later-${i}`}});
+    const result=await portalCall(page,native+'search_conversation',{query:'Distinctive old',space:room.name,kind:'Messages'});
+    expect(result.results[0].name).toBe(old.name);
+    const context=await portalCall(page,native+'get_space',{name:room.name,entry:old.name});
+    expect(context.entries.some((e:any)=>e.name===old.name)).toBeTruthy();
+    expect(context.target_entry).toBe(old.name);
+});

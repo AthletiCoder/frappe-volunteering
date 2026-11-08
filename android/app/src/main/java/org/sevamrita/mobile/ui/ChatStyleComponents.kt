@@ -44,15 +44,15 @@ import org.json.JSONObject
 import org.sevamrita.mobile.data.items
 import org.sevamrita.mobile.data.text
 
-private val emerald = Color(0xFF08745E)
-private val messageInk = Color(0xFF172B2B)
-private val greyInk = Color(0xFF687778)
-private val chatPaper = Color(0xFFF2EEE7)
+private val emerald: Color @Composable get() = appColor(0xFF08745E)
+private val messageInk: Color @Composable get() = appColor(0xFF172B2B)
+private val greyInk: Color @Composable get() = appColor(0xFF687778)
+private val chatPaper: Color @Composable get() = appColor(0xFFF2EEE7)
 private val avatarTints = listOf(0xFFD8EEE7, 0xFFDDE8F6, 0xFFF1E2EF, 0xFFF9E8D0, 0xFFE7E4F7, 0xFFDDECEC)
 
 @Composable
 internal fun ChatAvatar(title: String, modifier: Modifier = Modifier) {
-    val colour = Color(avatarTints[Math.floorMod(title.lowercase().hashCode(), avatarTints.size)])
+    val colour = appColor(avatarTints[Math.floorMod(title.lowercase().hashCode(), avatarTints.size)])
     Box(modifier.size(50.dp).background(colour, CircleShape).clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
         Text(chatInitials(title), color = emerald, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
     }
@@ -72,18 +72,18 @@ internal fun ChatInbox(
             room.optInt("unread"), room.optBoolean("archived"))
     }
     val rows = chatInboxRows(summaries, expanded.toSet(), search, filter, archived)
-    Box(Modifier.fillMaxSize().background(Color.White)) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         Column {
             TextField(search, onSearch, modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
                 placeholder = { Text("Search chats") }, singleLine = true, shape = RoundedCornerShape(28.dp),
                 leadingIcon = { Icon(Icons.Default.Search, null, tint = greyInk) },
                 trailingIcon = if (search.isNotBlank()) ({ IconButton(onClick = { onSearch("") }) { Icon(Icons.Default.Close, "Clear search") } }) else null,
-                colors = TextFieldDefaults.colors(focusedContainerColor = Color(0xFFF0F3F2), unfocusedContainerColor = Color(0xFFF0F3F2),
+                colors = TextFieldDefaults.colors(focusedContainerColor = appColor(0xFFF0F3F2), unfocusedContainerColor = appColor(0xFFF0F3F2),
                     focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent))
             LazyRow(contentPadding = PaddingValues(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(listOf("All", "Unread", "Groups", "Direct")) { label -> FilterChip(selected = filter == label, onClick = { filter = label },
                     label = { Text(label) }, shape = RoundedCornerShape(20.dp),
-                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Color(0xFFD9EFE4), selectedLabelColor = emerald)) }
+                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = appColor(0xFFD9EFE4), selectedLabelColor = emerald)) }
                 item { FilterChip(selected = archived, onClick = { onArchived(!archived) }, label = { Text("Archived") }, shape = RoundedCornerShape(20.dp)) }
             }
             LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = state, contentPadding = PaddingValues(top = 4.dp, bottom = 94.dp)) {
@@ -104,7 +104,7 @@ internal fun ChatInbox(
                                     Text(if (search.isNotBlank() && room.parent.isNotBlank()) row.path else room.preview.ifBlank { "Start a conversation" },
                                         Modifier.weight(1f), color = greyInk, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     if (room.unread > 0) Box(Modifier.padding(start = 8.dp).sizeIn(minWidth = 22.dp, minHeight = 22.dp).background(emerald, CircleShape).padding(horizontal = 5.dp), contentAlignment = Alignment.Center) {
-                                        Text(if (room.unread > 99) "99+" else room.unread.toString(), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        Text(if (room.unread > 99) "99+" else room.unread.toString(), color = MaterialTheme.colorScheme.onPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                                 if (row.childCount > 0 || room.archived) Text(if (room.archived) "Archived" else "${row.childCount} subareas", color = greyInk, fontSize = 11.sp)
@@ -114,7 +114,7 @@ internal fun ChatInbox(
                                     "${if (room.id in expanded) "Collapse" else "Expand"} ${room.title} subareas", tint = greyInk)
                             }
                         }
-                        HorizontalDivider(Modifier.padding(start = 77.dp), color = Color(0xFFEEF1EF))
+                        HorizontalDivider(Modifier.padding(start = 77.dp), color = appColor(0xFFEEF1EF))
                     }
                 }
                 if (rows.isEmpty()) item { Column(Modifier.fillMaxWidth().padding(36.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -124,7 +124,7 @@ internal fun ChatInbox(
                 } }
             }
         }
-        FloatingActionButton(onClick = onNew, modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp), containerColor = emerald, contentColor = Color.White) {
+        FloatingActionButton(onClick = onNew, modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp), containerColor = emerald, contentColor = MaterialTheme.colorScheme.onPrimary) {
             Icon(Icons.Default.AddComment, "New chat")
         }
     }
@@ -134,6 +134,7 @@ internal data class ChatComposerData(
     val body: String, val kind: String, val reply: JSONObject?, val files: List<JSONObject>, val editing: Boolean
 )
 internal data class ChatThreadActions(
+    val search: () -> Unit, val mentions: () -> Unit, val settings: () -> Unit,
     val back: () -> Unit, val tasks: () -> Unit, val trackers: () -> Unit, val members: () -> Unit, val newArea: () -> Unit,
     val refresh: () -> Unit, val signOut: () -> Unit, val older: () -> Unit,
     val reply: (JSONObject) -> Unit, val task: (JSONObject) -> Unit, val tracker: (JSONObject) -> Unit, val edit: (JSONObject) -> Unit,
@@ -176,6 +177,10 @@ internal fun ChatThread(
         else org.sevamrita.mobile.push.ChatPush.leaveRoom(room)
         onDispose { org.sevamrita.mobile.push.ChatPush.leaveRoom(room) }
     }
+    LaunchedEffect(data.text("target_entry"),entries.size) {
+        val target=data.text("target_entry")
+        if(target.isNotBlank()){val index=messages.indexOfFirst{it.text("name")==target};if(index>=0)listState.scrollToItem(index)}
+    }
     val visibleIncoming by remember(data, listState, user) { derivedStateOf {
         listState.layoutInfo.visibleItemsInfo.asSequence()
             .mapNotNull { messageMap[it.key as? String] }
@@ -197,7 +202,7 @@ internal fun ChatThread(
         }
     }
     Column(Modifier.fillMaxSize().background(chatPaper)) {
-        Row(Modifier.fillMaxWidth().background(Color.White).padding(end = 4.dp).heightIn(min = 66.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(end = 4.dp).heightIn(min = 66.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = actions.back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = emerald) }
             ChatAvatar(space.text("title").ifBlank { "Chat" }, Modifier.size(39.dp))
             Column(Modifier.weight(1f).padding(start = 10.dp, end = 4.dp).clickable(onClick = actions.members)) {
@@ -210,6 +215,9 @@ internal fun ChatThread(
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "Chat options", tint = greyInk) }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text("Search this chat") }, onClick = { menu=false;actions.search() })
+                    DropdownMenuItem(text = { Text("My mentions") }, onClick = { menu=false;actions.mentions() })
+                    DropdownMenuItem(text = { Text("Notification settings") }, onClick = { menu=false;actions.settings() })
                     DropdownMenuItem(text = { Text("Tasks") }, onClick = { menu = false; actions.tasks() })
                     DropdownMenuItem(text = { Text("Trackers") }, onClick = { menu = false; actions.trackers() })
                     DropdownMenuItem(text = { Text("Check for updates") }, onClick = { menu = false; updates.check(manual = true) })
@@ -227,7 +235,7 @@ internal fun ChatThread(
                 }
             }
         }
-        HorizontalDivider(color = Color(0xFFE6EBE7))
+        HorizontalDivider(color = appColor(0xFFE6EBE7))
         Box(Modifier.weight(1f).fillMaxWidth()) {
         LazyColumn(Modifier.fillMaxSize(), state = listState, reverseLayout = true,
             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -235,11 +243,11 @@ internal fun ChatThread(
                 val older = messages.getOrNull(index + 1)
                 Column {
                     if (older == null || older.text("creation").take(10) != entry.text("creation").take(10)) Box(Modifier.fillMaxWidth().padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
-                        Surface(color = Color(0xFFFAF8F3), shape = RoundedCornerShape(9.dp), shadowElevation = 0.5.dp) { Text(chatDay(entry.text("creation")), Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 11.sp, color = greyInk) }
+                        Surface(color = appColor(0xFFFAF8F3), shape = RoundedCornerShape(9.dp), shadowElevation = 0.5.dp) { Text(chatDay(entry.text("creation")), Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 11.sp, color = greyInk) }
                     }
                     if (entry.text("entry_kind") == "System") Box(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
                         Surface(onClick = if (items[entry.text("item")]?.text("item_kind") == "Tracker") actions.trackers else actions.tasks,
-                            color = Color(0xFFFAF8F3), shape = RoundedCornerShape(8.dp)) { Text(entry.text("body"), Modifier.padding(horizontal = 10.dp, vertical = 6.dp), fontSize = 11.sp, color = greyInk) }
+                            color = appColor(0xFFFAF8F3), shape = RoundedCornerShape(8.dp)) { Text(entry.text("body"), Modifier.padding(horizontal = 10.dp, vertical = 6.dp), fontSize = 11.sp, color = greyInk) }
                     } else BoxWithConstraints(Modifier.fillMaxWidth()) {
                         val mine = entry.text("owner") == user
                         val progress = entry.text("entry_kind") == "Progress"
@@ -254,7 +262,7 @@ internal fun ChatThread(
                             entry.items("attachments").isEmpty() && linked.isEmpty()
                         Surface(modifier = Modifier.align(if (mine) Alignment.CenterEnd else Alignment.CenterStart).widthIn(min = 62.dp, max = minOf(maxWidth * .86f, 560.dp))
                             .combinedClickable(onClick = {}, onLongClick = { if (!entry.optBoolean("is_deleted")) options = entry }),
-                            color = when { earlier -> Color(0xFFEAE9E5); mine -> Color(0xFFE0F4DB); else -> Color.White },
+                            color = when { earlier -> appColor(0xFFEAE9E5); mine -> appColor(0xFFE0F4DB); else -> MaterialTheme.colorScheme.surface },
                             shadowElevation = 0.5.dp,
                             shape = RoundedCornerShape(topStart = 13.dp, topEnd = 13.dp, bottomEnd = if (mine) 3.dp else 13.dp, bottomStart = if (mine) 13.dp else 3.dp)) {
                             Column(Modifier.padding(start = 10.dp, end = 10.dp, top = 7.dp, bottom = 5.dp)) {
@@ -282,12 +290,12 @@ internal fun ChatThread(
                                         Modifier.padding(top = 7.dp), color = if (earlier) greyInk else messageInk,
                                         fontSize = 15.sp, lineHeight = 20.sp)
                                 }
-                                entry.items("attachments").forEach { file -> Row(Modifier.fillMaxWidth().padding(top = 8.dp).background(Color(0x221C7556), RoundedCornerShape(9.dp)).clickable { actions.openFile(file.text("file_url")) }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                entry.items("attachments").forEach { file -> Row(Modifier.fillMaxWidth().padding(top = 8.dp).background(appColor(0x221C7556), RoundedCornerShape(9.dp)).clickable { actions.openFile(file.text("file_url")) }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Default.Description, null, Modifier.size(24.dp), tint = emerald)
                                     Text(file.text("file_name"), Modifier.weight(1f).padding(start = 8.dp), fontSize = 13.sp, color = messageInk, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                     Icon(Icons.Default.Download, "Open attachment", Modifier.size(18.dp), tint = emerald)
                                 } }
-                                linked.forEach { task -> Row(Modifier.fillMaxWidth().padding(top = 8.dp).background(Color(0x18107050), RoundedCornerShape(8.dp)).clickable(onClick = if (task.text("item_kind") == "Tracker") actions.trackers else actions.tasks).padding(9.dp), verticalAlignment = Alignment.CenterVertically) {
+                                linked.forEach { task -> Row(Modifier.fillMaxWidth().padding(top = 8.dp).background(appColor(0x18107050), RoundedCornerShape(8.dp)).clickable(onClick = if (task.text("item_kind") == "Tracker") actions.trackers else actions.tasks).padding(9.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Icon(if (task.text("item_kind") == "Tracker") Icons.Default.Timeline else if (task.text("status") == "Completed") Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked, null, Modifier.size(18.dp), tint = emerald)
                                     Text(task.text("title"), Modifier.padding(start = 7.dp), fontSize = 13.sp, fontWeight = FontWeight.Medium, color = messageInk)
                                 } }
@@ -301,10 +309,11 @@ internal fun ChatThread(
             if (messages.isEmpty()) item { Box(Modifier.fillMaxWidth().padding(36.dp), contentAlignment = Alignment.Center) { Text("Start the conversation", color = greyInk) } }
         }
         if (listState.firstVisibleItemIndex > 2) SmallFloatingActionButton(onClick = { scope.launch { listState.animateScrollToItem(0) } },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp), containerColor = Color.White, contentColor = emerald) {
+            modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp), containerColor = MaterialTheme.colorScheme.surface, contentColor = emerald) {
             Icon(Icons.Default.KeyboardArrowDown, "Jump to latest messages")
         }
         }
+        if(canPost) MentionSuggestions(composer.body,members,actions.body)
         if (canPost) Column(Modifier.fillMaxWidth().padding(horizontal = 7.dp, vertical = 7.dp)) {
             if (composer.editing) Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Edit, null, Modifier.size(18.dp), tint = emerald)
@@ -317,22 +326,23 @@ internal fun ChatThread(
             }
             if (!composer.editing && composer.kind != "Message") Row(verticalAlignment = Alignment.CenterVertically) { Text("${composer.kind} ·", color = emerald, fontSize = 12.sp); TextButton(onClick = { actions.kind("Message") }) { Text("Send as message") } }
             Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                TextField(composer.body, actions.body, modifier = Modifier.weight(1f).heightIn(min = 51.dp).focusRequester(focus), placeholder = { Text("Message", color = greyInk) },
-                    shape = RoundedCornerShape(27.dp), maxLines = 5, enabled = !composer.editing || !busy,
+                val messageField = rememberMentionValue(composer.body)
+                TextField(messageField.value, { messageField.value=it;actions.body(it.text) }, modifier = Modifier.weight(1f).heightIn(min = 51.dp).focusRequester(focus), placeholder = { Text("Message", color = greyInk) },
+                    visualTransformation=MentionVisualTransformation(), shape = RoundedCornerShape(27.dp), maxLines = 5, enabled = !composer.editing || !busy,
                     trailingIcon = if (composer.editing) null else { { IconButton(onClick = actions.attach, enabled = !busy && composer.files.size < 5) { Icon(Icons.Default.AttachFile, "Attach file", tint = greyInk) } } },
-                    colors = TextFieldDefaults.colors(focusedContainerColor = Color.White, unfocusedContainerColor = Color.White,
+                    colors = TextFieldDefaults.colors(focusedContainerColor = MaterialTheme.colorScheme.surface, unfocusedContainerColor = MaterialTheme.colorScheme.surface,
                         focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent))
                 FilledIconButton(onClick = actions.send, enabled = !busy && composer.body.isNotBlank(), modifier = Modifier.size(51.dp),
-                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = emerald, contentColor = Color.White)) {
+                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = emerald, contentColor = MaterialTheme.colorScheme.onPrimary)) {
                     Icon(if (composer.editing) Icons.Default.Check else Icons.AutoMirrored.Filled.Send,
                         if (composer.editing) "Save message edit" else "Send message", Modifier.size(23.dp))
                 }
             }
-        } else Box(Modifier.fillMaxWidth().background(Color.White).padding(15.dp), contentAlignment = Alignment.Center) {
+        } else Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(15.dp), contentAlignment = Alignment.Center) {
             Text(if (space.optBoolean("archived")) "This conversation is archived" else "You have viewing access", color = greyInk, fontSize = 13.sp)
         }
     }
-    options?.let { entry -> ModalBottomSheet(onDismissRequest = { options = null }, containerColor = Color.White) {
+    options?.let { entry -> ModalBottomSheet(onDismissRequest = { options = null }, containerColor = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp)) {
             Text(entry.text("body").take(140), color = greyInk, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = 12.dp))
             fun act(action: () -> Unit) { options = null; action() }
@@ -364,7 +374,7 @@ private fun ChatMessageMeta(entry: JSONObject, receiptThrough: JSONObject?) {
         if (receiptThrough != null) {
             val receipt = chatReceipt(creation, receiptThrough.text("delivered_through"), receiptThrough.text("seen_through"))
             Icon(if (receipt == ChatReceipt.SENT) Icons.Default.Check else Icons.Default.DoneAll,
-                receipt.label, Modifier.size(15.dp), tint = if (receipt == ChatReceipt.READ) Color(0xFF006BA8) else greyInk)
+                receipt.label, Modifier.size(15.dp), tint = if (receipt == ChatReceipt.READ) appColor(0xFF006BA8) else greyInk)
         }
     }
 }
@@ -379,7 +389,7 @@ internal fun MessageInfoDialog(recipients: List<JSONObject>, close: () -> Unit) 
                 val people = recipients.filter { it.optInt("status") == status }
                 if (people.isEmpty()) continue
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                    val ink = if (status == 3) Color(0xFF006BA8) else greyInk
+                    val ink = if (status == 3) appColor(0xFF006BA8) else greyInk
                     Icon(if (status == 1) Icons.Default.Check else Icons.Default.DoneAll, null, Modifier.size(18.dp), tint = ink)
                     Text(label, fontWeight = FontWeight.SemiBold, color = ink)
                 }
@@ -393,7 +403,7 @@ internal fun MessageInfoDialog(recipients: List<JSONObject>, close: () -> Unit) 
 
 @Composable
 private fun QuotePreview(name: String, body: String, onClose: (() -> Unit)?, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(bottom = 6.dp).background(Color(0x14167350), RoundedCornerShape(8.dp)).clickable(onClick = onClick).heightIn(min = 45.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().padding(bottom = 6.dp).background(appColor(0x14167350), RoundedCornerShape(8.dp)).clickable(onClick = onClick).heightIn(min = 45.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.width(3.dp).height(42.dp).background(emerald))
         Column(Modifier.weight(1f).padding(horizontal = 9.dp, vertical = 7.dp)) {
             Text(name, color = emerald, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)

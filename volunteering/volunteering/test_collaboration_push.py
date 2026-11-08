@@ -204,3 +204,21 @@ class IntegrationTestCollaborationPush(IntegrationTestCase):
 		self.assertTrue(firebase_config(account, {"org.sevamrita.mobile": client})["enabled"])
 		with self.assertRaises(ValueError): firebase_config(account, {"org.sevamrita.mobile.local": client})
 		with self.assertRaises(ValueError): firebase_config(account | {"project_id": "another-project"}, {"org.sevamrita.mobile": client})
+
+	def test_mention_preview_flags_and_system_assignment_alerts_are_targeted(self):
+		self.register()
+		entry=self.message('plain-preview')
+		frappe.set_user(self.member)
+		self.assertFalse(p.get_notification_entry(entry)['mentioned'])
+		frappe.set_user(self.owner)
+		entry=c.post_entry(self.room,f'@[Member]({self.member}) please check',request_key='mention-preview')['name']
+		frappe.set_user(self.member)
+		self.assertTrue(p.get_notification_entry(entry)['mentioned'])
+		self.assertEqual(p.get_notification_entry(entry)['body'],'@Member please check')
+		frappe.set_user(self.owner)
+		entry=c._entry(self.room,'Assigned task: kitchen delivery',snapshot={'notify_users':[self.member]})
+		self.assertTrue(frappe.db.exists(p.OUTBOX,{'entry':entry.name}))
+		frappe.set_user(self.member)
+		self.assertTrue(p.get_notification_entry(entry.name)['assigned'])
+		frappe.set_user(self.web)
+		with self.assertRaises(frappe.PermissionError): p.get_notification_entry(entry.name)

@@ -80,7 +80,7 @@ def get_notification_entry(name):
 	user = require_chat_access("app")
 	from volunteering.volunteering import collaboration as c
 	doc = frappe.get_doc("Collaboration Entry", name)
-	if not c.can_read_space(doc.space, user) or doc.is_deleted or doc.owner == user or doc.entry_kind == "System":
+	if not c.can_read_space(doc.space, user) or doc.is_deleted or doc.owner == user or doc.entry_kind == "System" and user not in c._json(doc.snapshot, {}).get("notify_users", []):
 		return {"notify": False}
 	seen = frappe.db.get_value("Collaboration Read State", {"space": doc.space, "user": user}, "seen_through")
 	if seen and get_datetime(seen) >= get_datetime(doc.creation):
@@ -90,16 +90,18 @@ def get_notification_entry(name):
 	if root.archived or room.archived:
 		return {"notify": False}
 	return {"notify": True, "entry": doc.name, "space": room.name, "title": room.title,
-		"sender": c._name(doc.owner), "body": doc.body[:400], "created_at": str(doc.creation)}
+		"sender": c._name(doc.owner), "body": c._entry_payload(doc, "Viewer")["body"][:400], "mentioned": user in c._json(doc.get("mentions"), []), "assigned": user in c._json(doc.snapshot, {}).get("notify_users", []), "created_at": str(doc.creation)}
 
 
 def queue_entry(doc, method=None):
-	if not _config().get("enabled") or doc.entry_kind == "System" or doc.is_deleted:
+	if not _config().get("enabled") or doc.is_deleted:
 		return
 	from volunteering.volunteering import collaboration as c
 	room = frappe.get_doc("Collaboration Space", doc.space)
 	root = frappe.get_doc("Collaboration Space", room.root_space or room.name)
 	users = [row.user for row in root.members if row.user != doc.owner and has_app_chat_access(row.user)]
+	if doc.entry_kind == "System":
+		users = [uid for uid in users if uid in c._json(doc.snapshot, {}).get("notify_users", [])]
 	if not users:
 		return
 	# Capture device/session membership now: users added later do not receive old pushes.

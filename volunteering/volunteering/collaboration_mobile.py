@@ -4,11 +4,11 @@ from volunteering.volunteering import collaboration as c
 from volunteering.volunteering.collaboration_access import chat_channel, require_chat_access
 
 
-def _invoke(method, **kwargs):
+def _invoke(action, **kwargs):
 	require_chat_access("app")
 	token = chat_channel.set("app")
 	try:
-		return getattr(c, method)(**kwargs)
+		return getattr(c, action)(**kwargs)
 	finally:
 		chat_channel.reset(token)
 
@@ -44,8 +44,8 @@ def start_direct(user):
 
 
 @frappe.whitelist(methods=["POST"])
-def get_space(name, before=None, item=None):
-	return _invoke("get_space", name=name, before=before, item=item)
+def get_space(name, before=None, item=None, entry=None):
+	return _invoke("get_space", name=name, before=before, item=item, entry=entry)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -132,3 +132,38 @@ def add_tracker_files(name, expected_modified, attachments, request_key, note=""
 @frappe.whitelist(methods=["POST"])
 def get_tracker_files(name, before=None):
 	return _invoke("get_tracker_files", name=name, before=before)
+
+
+@frappe.whitelist(methods=["POST"])
+def get_comments(name, before=None):
+	return _invoke("get_comments", name=name, before=before)
+
+
+@frappe.whitelist(methods=["POST"])
+def post_comment(name, body, request_key):
+	return _invoke("post_comment", name=name, body=body, request_key=request_key)
+
+
+@frappe.whitelist(methods=["POST"])
+def get_mentions(before=None, unread_only=False):
+	return _invoke("get_mentions", before=before, unread_only=unread_only)
+
+
+@frappe.whitelist(methods=["POST"])
+def mark_mention_seen(entry):
+	return _invoke("mark_mention_seen", entry=entry)
+
+
+@frappe.whitelist(methods=["POST"])
+def search_conversation(query, space=None, kind="All", before=None):
+	return _invoke("search_conversation", query=query, space=space, kind=kind, before=before)
+
+
+@frappe.whitelist(methods=["POST"])
+def update_subtask(name, subtask, status, expected_modified):
+	return _invoke("update_subtask", name=name, subtask=subtask, status=status, expected_modified=expected_modified)
+
+
+@frappe.whitelist(methods=["POST"])
+def apply_operation(method, payload, request_key):
+	return _invoke("apply_operation", method=method, payload=payload, request_key=request_key)

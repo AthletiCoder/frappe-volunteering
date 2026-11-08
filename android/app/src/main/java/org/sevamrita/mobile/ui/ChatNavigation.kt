@@ -1,7 +1,7 @@
 package org.sevamrita.mobile.ui
 
 /** Collaboration destinations only; ERP workflows remain on the web. */
-enum class ChatView { CONVERSATIONS, CHAT, TASKS, MY_TASKS, TRACKERS, MY_TRACKERS, TRACKER, TASK }
+enum class ChatView { CONVERSATIONS, CHAT, TASKS, MY_TASKS, TRACKERS, MY_TRACKERS, TRACKER, TASK, SEARCH, MENTIONS, SETTINGS, OUTBOX }
 
 data class ChatRoute(val view: ChatView = ChatView.CONVERSATIONS, val room: String = "", val item: String = "") {
     init {

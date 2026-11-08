@@ -96,9 +96,19 @@ object WorkReminders {
 
     private fun cached(context: Context): List<ReminderEvent> = runCatching {
         JSONObject().put("events", JSONArray(prefs(context).getString("events", "[]"))).items("events").map {
-            ReminderEvent(it.text("key"), it.text("item"), it.text("space"), it.text("kind"), it.text("title"), it.optLong("timestamp_ms"))
+            val postponed = JSONObject(prefs(context).getString("quiet_deferrals", "{}")).optLong(it.text("key"))
+            ReminderEvent(it.text("key"), it.text("item"), it.text("space"), it.text("kind"), it.text("title"), maxOf(it.optLong("timestamp_ms"), postponed))
         }
     }.getOrDefault(emptyList())
+
+    private fun deferQuietReminders(context: Context, delivered: Set<String>, now: Long, until: Long) {
+        val events = cached(context)
+        val prior = JSONObject(prefs(context).getString("quiet_deferrals", "{}"))
+        val next = JSONObject()
+        events.forEach { if (prior.has(it.key) && it.key !in delivered) next.put(it.key, prior.getLong(it.key)) }
+        quietDeferrals(events, delivered, now, until).forEach { (key, at) -> next.put(key, at) }
+        prefs(context).edit().putString("quiet_deferrals", next.toString()).commit()
+    }
 
     fun reschedule(context: Context) = synchronized(lock) {
         if (prefs(context).getString("binding", null) != binding(context) || binding(context) == null) return@synchronized
@@ -111,8 +121,10 @@ object WorkReminders {
         val delivered = prefs(context).getStringSet("delivered", emptySet()).orEmpty()
         val manager = context.getSystemService(AlarmManager::class.java)
         manager.cancel(alarmIntent(context, "batch"))
+        val options = org.sevamrita.mobile.data.NotificationPreferences(context)
+        if (options.bool("reminders", true) && options.quiet()) deferQuietReminders(context, delivered, System.currentTimeMillis(), options.quietEndsAt())
         pendingReminders(cached(context), delivered, System.currentTimeMillis()).firstOrNull()?.let { event ->
-            val at = maxOf(event.at, System.currentTimeMillis() + 1500)
+            val at = maxOf(event.at, System.currentTimeMillis() + 1500, if(options.quiet())options.quietEndsAt() else 0)
             val intent = alarmIntent(context, "batch")
             try {
                 if (precise(context)) manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent)
@@ -134,6 +146,17 @@ object WorkReminders {
         val now = System.currentTimeMillis()
         val due = dueReminders(cached(context), delivered, now)
         if (due.isEmpty()) { reschedule(context); return@synchronized }
+        val options=org.sevamrita.mobile.data.NotificationPreferences(context)
+        if(options.bool("reminders",true) && options.quiet()){
+            deferQuietReminders(context, delivered, now, options.quietEndsAt())
+            val alarm=context.getSystemService(AlarmManager::class.java);val at=options.quietEndsAt()
+            try{if(precise(context))alarm.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at,alarmIntent(context,"batch"))else alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at,alarmIntent(context,"batch"))}
+            catch(_:SecurityException){alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at,alarmIntent(context,"batch"))}
+            return@synchronized
+        }
+        if (!options.bool("reminders",true)) {
+            prefs(context).edit().putStringSet("delivered",(delivered+due.map { it.key }).toList().takeLast(2000).toSet()).commit();reschedule(context);return@synchronized
+        }
         val event = due.first()
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(CHANNEL, "Task and tracker reminders", NotificationManager.IMPORTANCE_HIGH))
@@ -177,6 +200,7 @@ class ReminderSyncJob : JobService() {
     override fun onStartJob(params: JobParameters): Boolean {
         running.add(params.jobId)
         executor.execute {
+            org.sevamrita.mobile.data.DurableChat.schedule(applicationContext)
             val success = WorkReminders.sync(applicationContext)
             org.sevamrita.mobile.push.ChatPush.sync(applicationContext)
             org.sevamrita.mobile.push.ChatPush.drain(applicationContext)

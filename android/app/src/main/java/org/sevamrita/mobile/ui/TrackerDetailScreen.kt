@@ -22,16 +22,16 @@ import org.json.JSONObject
 import org.sevamrita.mobile.data.items
 import org.sevamrita.mobile.data.text
 
-private val detailInk = Color(0xFF182C3A)
-private val detailMuted = Color(0xFF677781)
-private val detailBlue = Color(0xFF2E6CCD)
-private val detailRed = Color(0xFFA52E42)
+private val detailInk: Color @Composable get() = appColor(0xFF182C3A)
+private val detailMuted: Color @Composable get() = appColor(0xFF677781)
+private val detailBlue: Color @Composable get() = appColor(0xFF2E6CCD)
+private val detailRed: Color @Composable get() = appColor(0xFFA52E42)
 
 @Composable
 internal fun TrackerDetailScreen(item: JSONObject, roomTitle: String, user: String, canUpdate: Boolean, canConfigure: Boolean,
     onUpdate: () -> Unit, onConfigure: () -> Unit, onShare: (() -> Unit)?, onHistory: () -> Unit,
     loadHistory: ((List<JSONObject>) -> Unit) -> Unit, onFile: (String) -> Unit,
-    loadFiles: (String?, (JSONObject?) -> Unit) -> Unit, onAddFiles: (() -> Unit)?) {
+    loadFiles: (String?, (JSONObject?) -> Unit) -> Unit, onAddFiles: (() -> Unit)?, comments: (@Composable () -> Unit)? = null) {
     var tab by rememberSaveable(item.text("name")) { mutableStateOf("Workflow") }
     var expandedDescription by rememberSaveable(item.text("name")) { mutableStateOf(true) }
     var history by remember(item.text("name")) { mutableStateOf(emptyList<JSONObject>()) }
@@ -92,7 +92,7 @@ internal fun TrackerDetailScreen(item: JSONObject, roomTitle: String, user: Stri
                         } else display.label, color = detailInk, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         TrackerBar(display, outcome, phase.ink)
                     }
-                    VerticalDivider(Modifier.height(72.dp), color = Color(0xFFE5EAED))
+                    VerticalDivider(Modifier.height(72.dp), color = appColor(0xFFE5EAED))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Responsibility", color = detailMuted, fontSize = 12.sp)
                         Icon(if (mine) Icons.Default.PersonOutline else Icons.Default.PeopleOutline, null, Modifier.size(20.dp), tint = if (mine) detailRed else phase.ink)
@@ -103,12 +103,17 @@ internal fun TrackerDetailScreen(item: JSONObject, roomTitle: String, user: Stri
             }
         }
         item(key = "tabs") {
-            ScrollableTabRow(selectedTabIndex = listOf("Workflow", "Details", "Updates", "Files").indexOf(tab), edgePadding = 0.dp,
-                containerColor = Color.Transparent, divider = { HorizontalDivider(color = Color(0xFFE4E9EC)) }) {
-                listOf("Workflow", "Details", "Updates", "Files").forEach { label -> Tab(selected = label == tab, onClick = { tab = label }, text = { Text(label) }) }
+            TabRow(selectedTabIndex = (listOf("Workflow", "Details", "Updates", "Files") + if(comments!=null) listOf("Comments") else emptyList()).indexOf(tab),
+                containerColor = Color.Transparent, divider = { HorizontalDivider(color = appColor(0xFFE4E9EC)) }) {
+                (listOf("Workflow", "Details", "Updates", "Files") + if(comments!=null) listOf("Comments") else emptyList()).forEach { label ->
+                    Tab(selected = label == tab, onClick = { tab = label }) {
+                        Text(label, modifier = Modifier.padding(horizontal = 2.dp, vertical = 16.dp), style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                    }
+                }
             }
         }
         when (tab) {
+            "Comments" -> item(key="comments"){comments?.invoke()}
             "Workflow" -> {
                 item(key = "workflow") { DetailPanel {
                     Text(if (display.stages.isEmpty()) "Current progress" else "${if (display.scale == "Status") "Statuses" else "Stages"} (${display.stages.size})",
@@ -120,14 +125,14 @@ internal fun TrackerDetailScreen(item: JSONObject, roomTitle: String, user: Stri
                         val milestone = display.milestoneState(index, outcome)
                         val current = milestone == MilestoneState.CURRENT || display.currentIndex < 0 && index == 0 && pending != null
                         val person = stage.assigneeName.ifBlank { pending?.displayName.orEmpty().takeIf { current }.orEmpty() }
-                        Row(Modifier.fillMaxWidth().background(if (current) Color(0xFFEDF2FF) else Color.Transparent, RoundedCornerShape(16.dp)).padding(12.dp),
+                        Row(Modifier.fillMaxWidth().background(if (current) appColor(0xFFEDF2FF) else Color.Transparent, RoundedCornerShape(16.dp)).padding(12.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Box(Modifier.size(27.dp).background(when { milestone == MilestoneState.DONE -> Color(0xFF39A65E); current -> detailBlue; else -> Color(0xFFE8ECEF) }, CircleShape), contentAlignment = Alignment.Center) {
-                                    if (milestone == MilestoneState.DONE) Icon(Icons.Default.Check, null, Modifier.size(18.dp), tint = Color.White)
-                                    else if (current) Box(Modifier.size(9.dp).background(Color.White, CircleShape))
+                                Box(Modifier.size(27.dp).background(when { milestone == MilestoneState.DONE -> appColor(0xFF39A65E); current -> detailBlue; else -> appColor(0xFFE8ECEF) }, CircleShape), contentAlignment = Alignment.Center) {
+                                    if (milestone == MilestoneState.DONE) Icon(Icons.Default.Check, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.surface)
+                                    else if (current) Box(Modifier.size(9.dp).background(MaterialTheme.colorScheme.surface, CircleShape))
                                 }
-                                if (index < display.stages.lastIndex) Box(Modifier.width(2.dp).height(39.dp).background(Color(0xFFDCE3E8)))
+                                if (index < display.stages.lastIndex) Box(Modifier.width(2.dp).height(39.dp).background(appColor(0xFFDCE3E8)))
                             }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                 Text(stage.label, fontWeight = FontWeight.SemiBold, color = detailInk, fontSize = 16.sp)
@@ -141,7 +146,7 @@ internal fun TrackerDetailScreen(item: JSONObject, roomTitle: String, user: Stri
                     if (canUpdate && (display.currentIndex < 0 || outcome in listOf("Completed", "Failed"))) OutlinedButton(onClick = onUpdate, modifier = Modifier.fillMaxWidth()) {
                         Text(if (outcome in listOf("Completed", "Failed")) "Update / reopen tracker" else "Record progress")
                     }
-                    HorizontalDivider(color = Color(0xFFE8ECEF))
+                    HorizontalDivider(color = appColor(0xFFE8ECEF))
                     val dates = workDates(config.text("attention_date"), config.text("attention_until"), item.text("deadline"), "Attention")
                     if (dates.isEmpty()) Text("No dates set", color = detailMuted, fontSize = 12.sp)
                     else dates.forEach { Text(it, color = detailMuted, fontSize = 12.sp) }
@@ -192,7 +197,7 @@ internal fun TrackerDetailScreen(item: JSONObject, roomTitle: String, user: Stri
                         OutlinedButton(onClick = { fetchFiles(if (filesLoaded) fileCursor else null) }, enabled = !filesLoading) { Text("Try again") }
                     }
                 } }
-                items(files, key = { "file:${it.text("name")}" }) { file -> Surface(shape = RoundedCornerShape(18.dp), color = Color.White, border = BorderStroke(1.dp, Color(0xFFE5E9EE)),
+                items(files, key = { "file:${it.text("name")}" }) { file -> Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, appColor(0xFFE5E9EE)),
                     onClick = { onFile(file.text("file_url")) }) {
                     Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
                         Icon(Icons.Default.Description, null, Modifier.size(25.dp), tint = detailBlue)
@@ -214,7 +219,7 @@ internal fun TrackerDetailScreen(item: JSONObject, roomTitle: String, user: Stri
 
 @Composable
 private fun DetailPanel(content: @Composable ColumnScope.() -> Unit) {
-    Surface(shape = RoundedCornerShape(22.dp), color = Color.White, border = BorderStroke(1.dp, Color(0xFFE5E9EE))) {
+    Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, appColor(0xFFE5E9EE))) {
         Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
     }
 }

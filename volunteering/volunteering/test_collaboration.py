@@ -717,3 +717,133 @@ class IntegrationTestCollaboration(IntegrationTestCase):
 		self.assertFalse(c.get_tracker_files(item["name"])["can_add"])
 		self.assertEqual(len(c.get_tracker_files(item["name"])["files"]), 1)
 		with self.assertRaises(frappe.PermissionError): self.tracker_file(item, "archived")
+
+	def test_subtasks_validate_assignment_and_block_parent_completion(self):
+		item=self.task(item_data={'subtasks':[{'id':'prepare','title':'Prepare supplies','assignee':self.member,'status':'Open'}]})
+		with self.assertRaises(frappe.ValidationError): c.update_task(item['name'],'complete',item['modified'])
+		frappe.set_user(self.member)
+		item=c.update_subtask(item['name'],'prepare','In progress',item['modified'])
+		self.assertEqual(item['item_data']['subtasks'][0]['status'],'In progress')
+		item=c.update_subtask(item['name'],'prepare','Completed',item['modified'])
+		frappe.set_user(self.owner)
+		self.assertEqual(c.update_task(item['name'],'complete',item['modified'])['status'],'Completed')
+		with self.assertRaises(frappe.ValidationError): self.task(item_data={'subtasks':[{'id':'a','title':'No viewer','assignee':self.viewer}]})
+
+	def test_subtasks_respect_parent_and_assignee_permissions(self):
+		item=self.task(item_data={'subtasks':[{'id':'a','title':'Check','assignee':self.owner}]})
+		frappe.set_user(self.member)
+		with self.assertRaises(frappe.PermissionError):c.update_subtask(item['name'],'a','Completed',item['modified'])
+		frappe.set_user(self.viewer)
+		with self.assertRaises(frappe.PermissionError):c.update_subtask(item['name'],'a','Completed',item['modified'])
+		frappe.set_user(self.owner)
+		with self.assertRaises(frappe.ValidationError):c.update_subtask(item['name'],'a','invalid',item['modified'])
+
+	def test_tracker_comments_are_scoped_and_idempotent(self):
+		item=self.tracker();before=frappe.get_doc(c.PREFIX+'Item',item['name'])
+		one=c.post_comment(item['name'],'Please review the delivery','comment-key')
+		self.assertEqual(one,c.post_comment(item['name'],'Please review the delivery','comment-key'))
+		self.assertEqual(len(c.get_comments(item['name'])['comments']),1)
+		after=frappe.get_doc(c.PREFIX+'Item',item['name'])
+		self.assertEqual(before.item_data,after.item_data);self.assertEqual(before.current_effective_at,after.current_effective_at)
+		frappe.set_user(self.viewer)
+		self.assertFalse(c.get_comments(item['name'])['can_comment'])
+		with self.assertRaises(frappe.PermissionError):c.post_comment(item['name'],'No','viewer-key')
+		frappe.set_user(self.outsider)
+		with self.assertRaises(frappe.PermissionError):c.get_comments(item['name'])
+
+	def test_individual_share_does_not_disclose_tracker_comments(self):
+		item=self.tracker();c.post_comment(item['name'],'Internal discussion','internal')
+		item=c.get_work_item(item['name'])['items'][0]
+		c.share_item(item['name'],[{'user':self.outsider,'access':'Update'}],item['modified'])
+		frappe.set_user(self.outsider)
+		with self.assertRaises(frappe.PermissionError):c.get_comments(item['name'])
+		self.assertFalse(any(row['entry_kind']=='Comment' for row in c.get_item_history(item['name'])['history']))
+
+	def test_mentions_validate_membership_and_have_private_inbox(self):
+		body=f'Please check @[Member]({self.member})'
+		one=c.post_entry(self.room,body,request_key='mention-one')
+		frappe.set_user(self.member)
+		feed=c.get_mentions();self.assertEqual(feed['unread_count'],1)
+		self.assertEqual(feed['mentions'][0]['body'],'Please check @Member')
+		c.mark_mention_seen(one['name']);self.assertEqual(c.get_mentions(unread_only=True)['mentions'],[])
+		frappe.set_user(self.outsider);self.assertEqual(c.get_mentions()['mentions'],[])
+		with self.assertRaises(frappe.PermissionError):c.mark_mention_seen(one['name'])
+		frappe.set_user(self.owner)
+		with self.assertRaises(frappe.ValidationError):c.post_entry(self.room,f'@[Outsider]({self.outsider})',request_key='bad-mention')
+		with self.assertRaises(frappe.ValidationError):c.post_entry(self.room,f'@[Wrong name]({self.member})',request_key='fake-mention')
+
+	def test_comment_mentions_and_deleted_messages_do_not_leak(self):
+		item=self.tracker();entry=c.post_comment(item['name'],f'@[Member]({self.member}) please verify','tag-comment')
+		frappe.set_user(self.member);self.assertEqual(len(c.get_mentions()['mentions']),1)
+		frappe.set_user(self.owner);doc=frappe.get_doc(c.PREFIX+'Entry',entry['name']);c.edit_entry(doc.name,remove=True,expected_modified=str(doc.modified))
+		frappe.set_user(self.member);self.assertEqual(c.get_mentions()['mentions'],[])
+
+	def test_scoped_search_finds_older_messages_work_and_files(self):
+		old=c.post_entry(self.room,'Unique kitchen confirmation',request_key='search-old')
+		for i in range(55):c._entry(self.room,f'System event {i}')
+		item=self.tracker();item=self.tracker_file(item,'search-file',filename='kitchen-confirmation.txt')
+		self.assertTrue(any(x['name']==old['name'] for x in c.search_conversation('kitchen','', 'Messages')['results']))
+		self.assertEqual(len(c.search_conversation('kitchen',kind='Files')['results']),1)
+		self.assertTrue(c.search_conversation('Meals',kind='Trackers')['results'])
+		self.assertEqual(c.search_conversation('no_match_%')['results'],[])
+		context=c.get_space(self.room,entry=old['name']);self.assertTrue(any(x['name']==old['name'] for x in context['entries']))
+		frappe.set_user(self.outsider);self.assertEqual(c.search_conversation('kitchen')['results'],[])
+		with self.assertRaises(frappe.PermissionError):c.search_conversation('kitchen',space=self.room)
+
+	def test_offline_replay_creation_is_idempotent_and_user_scoped(self):
+		args={'space':self.room,'payload':{'item_kind':'Task','title':'Queued delivery'}}
+		one=c.apply_operation('save_item',args,'queued-task')
+		two=c.apply_operation('save_item',args,'queued-task');self.assertEqual(one,two)
+		self.assertEqual(frappe.db.count(c.PREFIX+'Item',{'space':self.room,'title':'Queued delivery'}),1)
+		with self.assertRaises(frappe.ValidationError):c.apply_operation('save_item',args|{'payload':{'item_kind':'Task','title':'Changed'}},'queued-task')
+		with self.assertRaises(frappe.ValidationError):c.apply_operation('save_space',{},'not-supported')
+		frappe.set_user(self.viewer)
+		with self.assertRaises(frappe.PermissionError):c.apply_operation('save_item',args,'queued-task')
+
+	def test_offline_replay_revalidates_current_permissions(self):
+		args={'payload':{'space':self.room,'body':'Queued hello','request_key':'hello-key'}}
+		c.apply_operation('send_message',args,'operation-hello')
+		room=c.get_space(self.room)['space'];c.save_space({'archived':1},self.room,room['modified'])
+		with self.assertRaises(frappe.PermissionError):c.apply_operation('send_message',args,'operation-hello')
+
+	def test_search_and_mentions_cursor_pagination(self):
+		for i in range(33):c.post_entry(self.room,f'@[Member]({self.member}) paginated message {i}',request_key=f'page-{i}')
+		frappe.set_user(self.member)
+		first=c.get_mentions();second=c.get_mentions(first['next_cursor'])
+		self.assertEqual(len(first['mentions']),30);self.assertEqual(len(second['mentions']),3)
+		search=c.search_conversation('paginated');older=c.search_conversation('paginated',before=search['next_cursor'])
+		self.assertEqual(len(search['results'])+len(older['results']),33)
+		self.assertEqual(len({x['name'] for x in first['mentions']+second['mentions']}),33)
+
+	def test_native_replay_adapter_accepts_action_method_parameter(self):
+		from volunteering.volunteering import collaboration_mobile as app
+		args={'space':self.room,'payload':{'item_kind':'Task','title':'Native queued task'}}
+		one=app.apply_operation('save_item',args,'native-queued')
+		self.assertEqual(app.apply_operation('save_item',args,'native-queued')['name'],one['name'])
+
+	def test_queued_item_only_updates_preserve_sharing_without_chat_or_file_access(self):
+		task=self.task();tracker=self.tracker()
+		task=c.share_item(task['name'],[{'user':self.outsider,'access':'Update'}],task['modified'])
+		tracker=c.share_item(tracker['name'],[{'user':self.outsider,'access':'Update'}],tracker['modified'])
+		frappe.set_user(self.outsider)
+		args={'name':task['name'],'action':'start','expected_modified':task['modified']}
+		one=c.apply_operation('update_task',args,'shared-queued-start')
+		self.assertEqual(one['status'],'In progress')
+		self.assertEqual(c.apply_operation('update_task',args,'shared-queued-start'),one)
+		progress={'name':tracker['name'],'expected_modified':tracker['modified'],'note':'Shared progress','value':20}
+		saved=c.apply_operation('record_progress',progress,'shared-progress')
+		self.assertEqual(saved['item_data']['value'],20)
+		self.assertEqual(c.apply_operation('record_progress',progress,'shared-progress'),saved)
+		with self.assertRaises(frappe.PermissionError):c.apply_operation('post_comment',{'name':tracker['name'],'body':'Private','request_key':'no'},'no-comment')
+		with self.assertRaises(frappe.PermissionError):c.get_space(self.room)
+		frappe.set_user(self.owner)
+		c.share_item(one['name'],[],one['modified'])
+		frappe.set_user(self.outsider)
+		with self.assertRaises(frappe.PermissionError):c.apply_operation('update_task',args,'shared-queued-start')
+
+	def test_recurring_tasks_start_with_open_subtasks_and_shift_their_deadlines(self):
+		item=self.task(from_date='2026-11-08',repeat_pattern='Weekly',item_data={'subtasks':[{'id':'check','title':'Check supplies','status':'Completed','deadline':'2026-11-09'}]})
+		c.update_task(item['name'],'complete',item['modified'])
+		next_task=frappe.get_doc(c.PREFIX+'Item',{'series_key':frappe.db.get_value(c.PREFIX+'Item',item['name'],'series_key'),'from_date':'2026-11-15'})
+		child=c._json(next_task.item_data,{})['subtasks'][0]
+		self.assertEqual(child['status'],'Open');self.assertEqual(child['deadline'],'2026-11-16')

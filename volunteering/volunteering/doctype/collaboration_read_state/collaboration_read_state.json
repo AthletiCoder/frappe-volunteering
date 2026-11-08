@@ -10,7 +10,8 @@
   "read_at",
   "delivered_through",
   "seen_through",
-  "state_key"
+  "state_key",
+  "mentions_seen_through"
  ],
  "fields": [
   {
@@ -47,6 +48,11 @@
    "fieldtype": "Data",
    "label": "State Key",
    "unique": 1
+  },
+  {
+   "fieldname": "mentions_seen_through",
+   "fieldtype": "Datetime",
+   "label": "Mentions seen through"
   }
  ],
  "permissions": [

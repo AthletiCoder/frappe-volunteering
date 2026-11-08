@@ -1,5 +1,6 @@
 """Private, role-gated collaboration shared by Home and the native app."""
 from __future__ import annotations
+from volunteering.volunteering import collaboration_features as features
 
 import base64
 import hashlib
@@ -236,10 +237,10 @@ def share_item(name, shares, expected_modified):
 
 def _entry_payload(doc, level):
 	editable = not doc.is_deleted and doc.entry_kind not in {"System", "Progress"} and level != "Viewer"
-	return {"name": doc.name, "space": doc.space, "body": "Message removed" if doc.is_deleted else doc.body,
+	return {"name": doc.name, "space": doc.space, "body": "Message removed" if doc.is_deleted else features.display_body(doc.body),
 		"entry_kind": doc.entry_kind, "owner": doc.owner, "author_name": _name(doc.owner), "creation": str(doc.creation),
 		"edited_at": doc.edited_at, "modified": str(doc.modified), "is_deleted": bool(doc.is_deleted), "source_entry": doc.source_entry,
-		"item": doc.item, "snapshot": _json(doc.snapshot, {}),
+		"item": doc.item, "snapshot": _json(doc.snapshot, {}), "mentions": _json(doc.get("mentions"), []), "raw_body": "" if doc.is_deleted else doc.body,
 		"can_edit": editable and doc.owner == frappe.session.user,
 		"can_remove": editable and (doc.owner == frappe.session.user or level in {"Owner", "Manager"}),
 		"attachments": [] if doc.is_deleted else frappe.get_all("File", filters={"attached_to_doctype": doc.doctype,
@@ -391,10 +392,15 @@ def start_direct(user):
 
 
 @frappe.whitelist(methods=["POST"])
-def get_space(name, before=None, item=None):
+def get_space(name, before=None, item=None, entry=None):
 	room, root, level = _space(name)
 	content_level = "Viewer" if room.archived or root.archived else level
 	condition, params = "", [name]
+	if entry and not before:
+		anchor = frappe.db.get_value(PREFIX + "Entry", {"space": name, "name": entry}, "creation")
+		if not anchor: _deny()
+		condition = " and (creation < %s or (creation = %s and name <= %s))"
+		params.extend([anchor, anchor, entry])
 	if before:
 		anchor = frappe.db.get_value(PREFIX + "Entry", {"space": name, "name": before}, "creation")
 		if not anchor:
@@ -416,7 +422,7 @@ def get_space(name, before=None, item=None):
 		if not frappe.db.exists(PREFIX + "Item", {"name": item, "space": name}):
 			_deny()
 		items.append(frappe._dict(name=item))
-	return {"space": space_payload, "entries": entries,
+	return {"space": space_payload, "entries": entries, "target_entry": entry,
 		"delivered_through": str(own.delivered_through or ""), "seen_through": str(own.seen_through or ""),
 		"receipt_through": receipt_through,
 		"current_progress": _current_progress(name),
@@ -497,7 +503,8 @@ def post_entry(space, body="", entry_kind="Message", request_key=None, source_en
 			frappe.throw(_("This send key was already used for another message. Refresh before sending."))
 		return {"name": existing}
 	doc = _insert("Entry", {"space": space, "body": body, "entry_kind": entry_kind,
-		"request_key": key, "source_entry": _linked_entry(source_entry, space)})
+		"request_key": key, "source_entry": _linked_entry(source_entry, space),
+		"mentions": features.mentions(body, root)})
 	_publish(space, root)
 	return {"name": doc.name}
 
@@ -534,6 +541,7 @@ def edit_entry(name, body=None, remove=False, expected_modified=None):
 	_version(doc, expected_modified)
 	doc.is_deleted = cint(remove)
 	doc.body = "" if remove else _text(body, 12000, True)
+	doc.mentions = [] if remove else features.mentions(doc.body, root)
 	doc.edited_at = now_datetime()
 	_save(doc)
 	_publish(doc.space, root)
@@ -687,6 +695,7 @@ def save_item(space, payload, name=None, expected_modified=None):
 	data = _data(payload, ITEM_FIELDS)
 	if name:
 		doc = frappe.get_doc(PREFIX + "Item", name, for_update=True)
+		previous_assignee = doc.assignee
 		if doc.space != space or not _can_edit_item(doc, level):
 			_deny()
 		_version(doc, expected_modified)
@@ -745,17 +754,21 @@ def save_item(space, payload, name=None, expected_modified=None):
 		elif not doc.assignee:
 			doc.assignee = _allowed_assignee(frappe.session.user, root)
 	elif doc.item_kind == "Task":
-		config = _data(data.get("item_data", _json(doc.item_data, {})) or {}, {"reminder_time", "scale"})
+		config = _data(data.get("item_data", _json(doc.item_data, {})) or {}, {"reminder_time", "scale", "subtasks"})
 		# Earlier native builds sent this unused tracker default with new tasks.
 		if config.get("scale") == "Percentage":
 			config.pop("scale")
-		config = _data(config, {"reminder_time"})
-		doc.item_data = {"reminder_time": _reminder_time(config.get("reminder_time"))}
+		config = _data(config, {"reminder_time", "subtasks"})
+		doc.item_data = {"reminder_time": _reminder_time(config.get("reminder_time")), "subtasks": features.clean_subtasks(config.get("subtasks", []), root)}
 	elif doc.item_kind == "List":
 		doc.item_data = _list_rows(data.get("item_data", _json(doc.item_data, {})), root)
 	_save(doc)
 	if not name:
-		_entry(space, f"Created {doc.item_kind.lower()}: {doc.title}", item=doc.name, source=doc.source_entry)
+		assigned = [doc.assignee] if doc.assignee else []
+		assigned.extend(x.get("assignee") for x in _json(doc.item_data, {}).get("subtasks", []) if x.get("assignee"))
+		_entry(space, f"Created {doc.item_kind.lower()}: {doc.title}", item=doc.name, source=doc.source_entry, snapshot={"notify_users": list(set(assigned))})
+	elif doc.item_kind in {"Task", "Tracker"} and doc.assignee and previous_assignee != doc.assignee:
+		_entry(space, f"Assigned {doc.item_kind.lower()}: {doc.title}", item=doc.name, snapshot={"notify_users": [doc.assignee]})
 	_publish(space, root)
 	return _item_payload(doc, level)
 
@@ -771,6 +784,8 @@ def update_task(name, action, expected_modified, date=None):
 	if doc.item_kind != "Task" or not _can_edit_item(doc, level):
 		_deny()
 	_version(doc, expected_modified)
+	if action == "complete" and any(row.get("status") != "Completed" for row in _json(doc.item_data, {}).get("subtasks", [])):
+		frappe.throw(_("Complete the subtasks before completing this task."))
 	if action in {"start", "complete", "fail", "reopen"}:
 		previous = doc.status
 		doc.status = {"start": "In progress", "complete": "Completed", "fail": "Failed", "reopen": "Open"}[action]
@@ -803,6 +818,13 @@ def update_task(name, action, expected_modified, date=None):
 				until_date=add_days(doc.until_date, (next_date - start).days) if doc.until_date else None,
 				deadline=add_days(doc.deadline, (next_date - start).days) if doc.deadline else None,
 				snoozed_until=None, series_key=doc.series_key, occurrence_key=key, repeat_anchor_day=doc.repeat_anchor_day)
+			config = _json(doc.item_data, {})
+			if config.get("subtasks"):
+				delta = (next_date - start).days
+				config["subtasks"] = [dict(row, status="Open",
+					deadline=str(add_days(row["deadline"], delta)) if row.get("deadline") else None)
+					for row in config["subtasks"]]
+				values["item_data"] = config
 			_insert("Item", values)
 	_publish(doc.space, root)
 	return _item_payload(doc, level)
@@ -945,6 +967,7 @@ def get_item_history(name):
 	rows = frappe.get_all(PREFIX + "Entry", filters={"item": name}, fields=["name"], order_by="creation desc", limit_page_length=100)
 	history = [_entry_payload(frappe.get_doc(PREFIX + "Entry", row.name), level) for row in rows]
 	if not can_read_space(room.name):
+		history = [row for row in history if row["entry_kind"] != "Comment"]
 		for row in history:
 			row.update(attachments=[], source_entry=None, can_edit=False, can_remove=False)
 	return {"item": _item_payload(doc, level), "history": history}
@@ -965,7 +988,7 @@ def get_my_work(date=None):
 		if root.archived or _room.archived:
 			continue
 		stage_users = {stage.get("assignee") for stage in _json(doc.item_data, {}).get("stages", [])} if doc.item_kind == "Tracker" else set()
-		mine = doc.assignee == user or doc.owner == user or user in stage_users or bool(_share_level(doc, user))
+		mine = doc.assignee == user or doc.owner == user or user in stage_users or bool(_share_level(doc, user)) or any(x.get("assignee")==user and x.get("status")!="Completed" for x in _json(doc.item_data, {}).get("subtasks", []))
 		payload = _item_payload(doc, level)
 		payload["space_title"] = _room.title
 		if doc.item_kind == "Tracker" and mine:
@@ -976,7 +999,8 @@ def get_my_work(date=None):
 			start = doc.from_date if doc.item_kind == "Task" else plan.get("attention_date")
 			end = (doc.until_date or start) if doc.item_kind == "Task" else (plan.get("attention_until") or start)
 			deadline_due = bool(doc.deadline and getdate(doc.deadline) <= day and day == getdate(nowdate()))
-			if deadline_due or start and getdate(start) <= day and (not doc.snoozed_until or getdate(doc.snoozed_until) <= day) and (day == getdate(nowdate()) or day <= getdate(end)):
+			subtask_due = any(x.get("assignee")==user and x.get("status")!="Completed" and x.get("deadline") and getdate(x["deadline"])<=day for x in _json(doc.item_data, {}).get("subtasks", []))
+			if subtask_due or deadline_due or start and getdate(start) <= day and (not doc.snoozed_until or getdate(doc.snoozed_until) <= day) and (day == getdate(nowdate()) or day <= getdate(end)):
 				today.append(payload)
 		if doc.item_kind == "Event" and (not _json(doc.participants, []) or user in _json(doc.participants, [])):
 			calendar.append(payload)
@@ -1120,3 +1144,38 @@ def entry_query(user=None): return _query("Entry", user)
 def item_query(user=None): return _query("Item", user)
 def member_query(user=None): return _query("Member", user)
 def read_query(user=None): return _query("Read State", user)
+
+
+@frappe.whitelist(methods=["POST"])
+def get_comments(name, before=None):
+		return features.get_comments(name=name, before=before)
+
+
+@frappe.whitelist(methods=["POST"])
+def post_comment(name, body, request_key):
+		return features.post_comment(name=name, body=body, request_key=request_key)
+
+
+@frappe.whitelist(methods=["POST"])
+def get_mentions(before=None, unread_only=False):
+		return features.get_mentions(before=before, unread_only=unread_only)
+
+
+@frappe.whitelist(methods=["POST"])
+def mark_mention_seen(entry):
+		return features.mark_mention_seen(entry=entry)
+
+
+@frappe.whitelist(methods=["POST"])
+def search_conversation(query, space=None, kind="All", before=None):
+		return features.search_conversation(query=query, space=space, kind=kind, before=before)
+
+
+@frappe.whitelist(methods=["POST"])
+def update_subtask(name, subtask, status, expected_modified):
+		return features.update_subtask(name=name, subtask=subtask, status=status, expected_modified=expected_modified)
+
+
+@frappe.whitelist(methods=["POST"])
+def apply_operation(method, payload, request_key):
+		return features.apply_operation(method=method, payload=payload, request_key=request_key)
