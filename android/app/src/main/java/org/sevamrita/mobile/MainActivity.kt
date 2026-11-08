@@ -169,8 +169,9 @@ class MainActivity : ComponentActivity() {
         val item = intent?.getStringExtra("work_item").orEmpty()
         val room = intent?.getStringExtra("work_room").orEmpty()
         val kind = intent?.getStringExtra("work_kind").orEmpty()
-        if (item.isNotBlank() && room.isNotBlank() && kind in listOf("Task", "Tracker")) pendingWork = WorkLink(item, room, kind)
+        if (item.isNotBlank() && room.isNotBlank() && kind in listOf("Task", "Tracker") || kind == "Chat" && room.isNotBlank() || kind == "Reminders") pendingWork = WorkLink(item, room, kind)
         intent?.removeExtra("work_item")
+        intent?.removeExtra("work_kind")
     }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); readWorkLink(intent) }
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -221,7 +222,12 @@ private fun PortalApp(model: PortalViewModel, onExit: () -> Unit, workLink: Work
     }
     LaunchedEffect(state.signedIn, workLink) {
         if (state.signedIn && workLink != null) {
-            if (workLink.kind == "Tracker") model.openTracker(workLink.room, workLink.item) else model.openTask(workLink.room, workLink.item)
+            when (workLink.kind) {
+                "Chat" -> model.openChatRoom(workLink.room)
+                "Reminders" -> model.showPersonalTasks()
+                "Tracker" -> model.openTracker(workLink.room, workLink.item)
+                else -> model.openTask(workLink.room, workLink.item)
+            }
             onWorkLinkHandled()
         }
     }

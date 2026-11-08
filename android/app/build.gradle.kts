@@ -26,8 +26,8 @@ android {
         applicationId = "org.sevamrita.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 20
-        versionName = "0.5.0"
+        versionCode = 21
+        versionName = "0.5.1"
         manifestPlaceholders["appLabel"] = "SF Tasks"
         buildConfigField("String", "APP_NAME", "\"SF Tasks\"")
         buildConfigField("String", "DEFAULT_LOCAL_HOST", "\"\"")
@@ -83,6 +83,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.google.firebase:firebase-messaging:24.1.2")
 
     testImplementation("junit:junit:4.13.2")
     debugImplementation("androidx.compose.ui:ui-tooling")

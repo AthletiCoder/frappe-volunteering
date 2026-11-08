@@ -1,5 +1,7 @@
 # SF Tasks and SF testing
 
+Version 0.5.1 adds the tracker dashboard/detail design, grouped due-reminder summaries and native FCM message alerts. The tracker and grouped-reminder flows were checked on the paired Android 16 phone on 7 November 2026; see [PHONE_TEST_2026-11-07.md](PHONE_TEST_2026-11-07.md). Real Firebase delivery, quiet foreground handling, duplicate protection, sign-out cleanup and normal process restart were verified on the paired phone on 8 November; see [FIREBASE_VERIFICATION_2026-11-08.md](FIREBASE_VERIFICATION_2026-11-08.md). See [FIREBASE_SETUP.md](FIREBASE_SETUP.md) for the separately approved production site configuration. Push stays disabled until a site is configured; no Firebase secrets or test data are embedded in either APK.
+
 ## In-app updates (0.5.0 and later)
 
 Install the signed 0.5.0 APK once over the existing app. Later versions appear in a small update banner, or use **Check for updates** from the login screen, Chats menu or a conversation menu. Checks run quietly at most once every six hours on app foregrounding; a manual check is always available. Downloading is optional and shows progress only in the update panel. Android requires the user to allow installation from this app once and confirm each installation. No ERP login or chat state is changed by checking/downloading an update.
@@ -40,7 +42,7 @@ For an APK preconfigured for one laptop and restricted to local testing:
 ./gradlew :app:testDebugUnitTest :app:assembleDebug -PsevamritaLocalHost=192.168.0.5 -PsevamritaLocalOnly=true
 ```
 
-This signed debug build installs separately as **SF testing** (`org.sevamrita.mobile.local`), prefills the laptop address and offers no production/staging option. The address remains editable if Wi-Fi assigns the laptop a new IP. The server must explicitly serve `sevamrita.local`, not a regression clone. It embeds no database password or API key. The local-only debug build includes the three fictional chat-demo credentials described below. Omitting the properties keeps normal emulator/debug behavior; release builds remain production-only.
+This signed debug build installs separately as **SF testing** (`org.sevamrita.mobile.local`), prefills the laptop address and offers no production/staging option. The address remains editable if Wi-Fi assigns the laptop a new IP. For ordinary manual demos, explicitly serve `sevamrita.local`. Disposable automated or phone regression checks must explicitly select the isolated regression site instead, so they cannot modify the review database. It embeds no database password or API key. The local-only debug build includes the three fictional chat-demo credentials described below. Omitting the properties keeps normal emulator/debug behavior; release builds remain production-only.
 
 The app asks for the same username and password as the portal. It stores only Frappe's session cookie, encrypted with an Android Keystore key, and retrieves a same-session CSRF token from `volunteering.volunteering.mobile_session.get_mobile_session`. This endpoint must be deployed on the selected server before the app can sign in there. No API key or elevated permission is created. Logging out deletes the local session.
 

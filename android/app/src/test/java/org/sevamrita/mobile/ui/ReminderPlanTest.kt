@@ -4,6 +4,7 @@ import org.junit.Assert.*
 import org.junit.Test
 import org.sevamrita.mobile.reminders.ReminderEvent
 import org.sevamrita.mobile.reminders.pendingReminders
+import org.sevamrita.mobile.reminders.dueReminders
 
 class ReminderPlanTest {
     private val now = 1_000_000_000L
@@ -33,5 +34,11 @@ class ReminderPlanTest {
         val edited = event(at = now + 60_000)
         assertEquals(edited.at, pendingReminders(listOf(edited), emptySet(), now).single().at)
         assertTrue(pendingReminders(emptyList(), emptySet(), now).isEmpty())
+    }
+
+    @Test fun sameTimeTasksBecomeOneBatchWithEachTaskRepresentedOnce() {
+        val rows = listOf(event("a", now), event("b", now).copy(item = "other"), event("c", now).copy(item = "work"), event("later", now + 60_000))
+        assertEquals(listOf("work", "other"), dueReminders(rows, emptySet(), now).map { it.item })
+        assertTrue(dueReminders(rows, setOf("a", "b", "c"), now).isEmpty())
     }
 }

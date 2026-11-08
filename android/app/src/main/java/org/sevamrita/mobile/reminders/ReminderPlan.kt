@@ -6,3 +6,7 @@ internal data class ReminderEvent(val key: String, val item: String, val room: S
 internal fun pendingReminders(events: List<ReminderEvent>, delivered: Set<String>, now: Long): List<ReminderEvent> =
     events.filter { it.key !in delivered && it.at >= now - 12 * 60 * 60 * 1000L && it.kind in listOf("Task", "Tracker") && it.item.isNotBlank() }
         .distinctBy { it.key }.sortedBy { it.at }.take(100)
+
+/** A sync/alarm race may wake several receivers. Consume every due occurrence together. */
+internal fun dueReminders(events: List<ReminderEvent>, delivered: Set<String>, now: Long): List<ReminderEvent> =
+    pendingReminders(events, delivered, now).filter { it.at <= now + 1000 }.distinctBy { it.item }

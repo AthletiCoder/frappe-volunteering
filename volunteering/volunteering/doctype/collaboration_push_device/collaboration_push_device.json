@@ -1,0 +1,64 @@
+{
+ "doctype": "DocType",
+ "name": "Collaboration Push Device",
+ "module": "Volunteering",
+ "autoname": "hash",
+ "engine": "InnoDB",
+ "field_order": [
+  "user",
+  "installation",
+  "package_name",
+  "token",
+  "token_key",
+  "binding",
+  "enabled",
+  "last_registered"
+ ],
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "User",
+   "options": "User"
+  },
+  {
+   "fieldname": "installation",
+   "fieldtype": "Data",
+   "label": "Installation"
+  },
+  {
+   "fieldname": "package_name",
+   "fieldtype": "Data",
+   "label": "Package"
+  },
+  {
+   "fieldname": "token",
+   "fieldtype": "Password",
+   "label": "FCM token"
+  },
+  {
+   "fieldname": "token_key",
+   "fieldtype": "Data",
+   "label": "Token fingerprint"
+  },
+  {
+   "fieldname": "binding",
+   "fieldtype": "Data",
+   "label": "Session binding"
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "last_registered",
+   "fieldtype": "Datetime",
+   "label": "Last registered"
+  }
+ ],
+ "permissions": [],
+ "track_changes": 0,
+ "sort_field": "creation",
+ "sort_order": "DESC"
+}

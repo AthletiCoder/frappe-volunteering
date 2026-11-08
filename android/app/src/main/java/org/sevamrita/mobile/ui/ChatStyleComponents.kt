@@ -169,6 +169,13 @@ internal fun ChatThread(
         items[entry.text("item")]?.text("item_kind").let { it == null || it in listOf("Task", "Tracker") } }.asReversed()
     val messageMap = entries.associateBy { it.text("name") }
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    DisposableEffect(context, space.text("name"), lifecycle, canMarkSeen) {
+        val room = space.text("name")
+        if (lifecycle == Lifecycle.State.RESUMED && canMarkSeen) org.sevamrita.mobile.push.ChatPush.enterRoom(context, room)
+        else org.sevamrita.mobile.push.ChatPush.leaveRoom(room)
+        onDispose { org.sevamrita.mobile.push.ChatPush.leaveRoom(room) }
+    }
     val visibleIncoming by remember(data, listState, user) { derivedStateOf {
         listState.layoutInfo.visibleItemsInfo.asSequence()
             .mapNotNull { messageMap[it.key as? String] }

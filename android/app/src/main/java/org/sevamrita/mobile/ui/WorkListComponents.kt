@@ -121,7 +121,7 @@ internal fun TaskRow(item: JSONObject, enabled: Boolean, action: (String) -> Uni
 }
 
 @Composable
-internal fun TrackerRow(item: JSONObject, user: String, archived: Boolean = false, onClick: () -> Unit) {
+internal fun TrackerRow(item: JSONObject, user: String, archived: Boolean = false, showChat: Boolean = false, onClick: () -> Unit) {
     val config = item.optJSONObject("item_data") ?: JSONObject()
     val display = trackerDisplay(config)
     val outcome = item.text("status")
@@ -138,6 +138,7 @@ internal fun TrackerRow(item: JSONObject, user: String, archived: Boolean = fals
                 TrackerPhaseBadge(phase, outcome)
                 Icon(Icons.Default.ChevronRight, null, Modifier.size(18.dp), tint = workMuted)
             }
+            if (showChat && item.text("space_title").isNotBlank()) Text(item.text("space_title"), color = workMuted, fontSize = 12.sp)
             if (pending != null) Row(verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 Icon(Icons.Default.PersonOutline, null, Modifier.size(16.dp), tint = if (mine) pendingRed else workMuted)
@@ -151,7 +152,12 @@ internal fun TrackerRow(item: JSONObject, user: String, archived: Boolean = fals
                 if (display.currentIndex >= 0) Text("${display.currentIndex + 1} / ${display.stages.size}", color = workMuted, style = MaterialTheme.typography.labelSmall)
             }
             TrackerBar(display, outcome, accent)
-            workDates(config.text("attention_date"), config.text("attention_until"), item.text("deadline"), "Attention").forEach { Text(it, color = workMuted, fontSize = 12.sp) }
+            val attention = config.text("attention_date")
+            val until = config.text("attention_until")
+            val deadline = item.text("deadline")
+            val dates = if (attention.isNotBlank() && attention == deadline && (until.isBlank() || until == attention))
+                workDates("", "", deadline) else workDates(attention, until, deadline, "Attention")
+            if (dates.isNotEmpty()) Text(dates.joinToString(" · "), color = workMuted, fontSize = 12.sp)
         }
     }
 }

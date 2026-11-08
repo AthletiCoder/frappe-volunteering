@@ -160,6 +160,7 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
         snapshots.clear()
         WorkReminders.clear(getApplication())
         runTask {
+            org.sevamrita.mobile.push.ChatPush.unregister(getApplication(), api)
             api.logout()
             state.value = PortalState(booting = false, server = api.server(), localAddress = api.localAddress())
         }
@@ -841,6 +842,11 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
     }
     fun openTrackers(room: String) = moveChat(state.value.chatNavigation.navigate(ChatRoute(ChatView.TRACKERS, room)))
     fun openTracker(room: String, item: String) = moveChat(state.value.chatNavigation.navigate(ChatRoute(ChatView.TRACKER, room, item)))
+
+    fun loadTrackerHistory(name: String, ready: (List<JSONObject>) -> Unit) = runTask(showBusy = false, silent = true) {
+        val response = api.call(CHAT + "get_item_history", JSONObject().put("name", name))
+        if (state.value.chatNavigation.current.item == name) ready(response.items("history"))
+    }
     fun openTask(room: String, item: String) = moveChat(state.value.chatNavigation.navigate(ChatRoute(ChatView.TASK, room, item)))
     fun setTrackerFilter(filter: String) {
         if (filter in TRACKER_FILTERS) state.value = state.value.copy(trackerFilter = filter)

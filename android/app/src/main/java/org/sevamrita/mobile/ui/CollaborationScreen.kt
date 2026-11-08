@@ -189,6 +189,8 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
                 TextButton(onClick = { model.backInChat() }) { Text("Go back") }
             }
         }
+        personalTrackers -> TrackerDashboard(state.chatWork.items("trackers"), state.user, state.trackerFilter, model::setTrackerFilter,
+            listState, state.chatWork.optBoolean("has_more")) { item -> model.openTracker(item.text("space"), item.text("name")) }
         personal -> LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (!personalTrackers) item {
                 val views = listOf("Today", "Open tasks")
@@ -232,13 +234,14 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
                 if (task.text("description").isNotBlank()) Text(task.text("description"), Modifier.padding(14.dp))
             }
         }
-        trackerDetail -> LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp)) {
+        trackerDetail -> {
             val tracker = state.chatRoom.items("items").firstOrNull { it.text("name") == state.chatNavigation.current.item && it.text("item_kind") == "Tracker" }
-            if (tracker == null) item { Text(if (state.busy) "Loading tracker…" else "This tracker is unavailable. Go back and refresh the list.", Modifier.padding(12.dp)) }
-            else item {
+            if (tracker == null) Text(if (state.busy) "Loading tracker…" else "This tracker is unavailable. Go back and refresh the list.", Modifier.padding(12.dp))
+            else {
                 val canConfigure = canPost && tracker.optBoolean("can_edit") && (space.text("access_level") in listOf("Owner", "Manager") || tracker.text("owner") == state.user)
-                TrackerCard(tracker, tracker.optBoolean("can_update", canPost) && !state.busy, canConfigure && !state.busy,
-                    onUpdate = { progressFor(tracker) }, onConfigure = { openEditor("item", tracker.copyJson()) }, onHistory = { historyFor(tracker) }, onShare = if (tracker.optBoolean("can_share")) { { shareFor(tracker) } } else null)
+                TrackerDetailScreen(tracker, space.text("title"), state.user, tracker.optBoolean("can_update", canPost) && !state.busy, canConfigure && !state.busy,
+                    onUpdate = { progressFor(tracker) }, onConfigure = { openEditor("item", tracker.copyJson()) }, onHistory = { historyFor(tracker) }, onShare = if (tracker.optBoolean("can_share")) { { shareFor(tracker) } } else null,
+                    loadHistory = { ready -> model.loadTrackerHistory(tracker.text("name"), ready) }, onFile = { model.openReceipt(it, Page.COLLABORATION) })
             }
         }
         roomId.isBlank() -> ChatInbox(state.chatHome.items("spaces"), listState, model::openChatRoom, { newSpace() },

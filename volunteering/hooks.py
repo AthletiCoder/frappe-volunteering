@@ -222,6 +222,7 @@ has_permission = {
 # Hook on document methods and events
 
 doc_events = {
+	"Collaboration Entry": {"after_insert": "volunteering.volunteering.collaboration_push.queue_entry"},
 	"Address": {
 		"before_insert": "volunteering.volunteering.office_addresses.validate_office_address_mutation",
 		"before_save": "volunteering.volunteering.office_addresses.validate_office_address_mutation",
@@ -389,6 +390,7 @@ scheduler_events = {
 		"volunteering.volunteering.accounting_dashboard.setup.send_weekly_pending_approval_reminder",
 	],
 	"cron": {
+		"* * * * *": ["volunteering.volunteering.collaboration_push.flush_pending"],
 		"0 12 * * *": [
 			"volunteering.volunteering.api.attendance_digest.run_noon_attendance_jobs",
 		],
