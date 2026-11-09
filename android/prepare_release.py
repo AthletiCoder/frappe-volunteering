@@ -13,7 +13,7 @@ import re
 import shutil
 import subprocess
 
-REPO = "AthletiCoder/frappe-volunteering"
+DOWNLOAD_BASE_URL = "https://sevamrita.m.frappe.cloud/assets/volunteering/android_updates"
 MAX_APK_BYTES = 100 * 1024 * 1024
 
 
@@ -36,7 +36,7 @@ def manifest(metadata, certificate, expected_certificate, content, package, note
         "package_name": package, "version_code": metadata["version_code"], "version_name": name,
         "min_sdk": metadata["min_sdk"], "size_bytes": len(content),
         "sha256": hashlib.sha256(content).hexdigest(),
-        "apk_url": f"https://github.com/{REPO}/releases/download/sf-tasks-v{version}/{filename}",
+        "apk_url": f"{DOWNLOAD_BASE_URL}/{filename}",
         "release_notes": notes.strip()[:4000],
     }
 

@@ -1,10 +1,5 @@
 package org.sevamrita.mobile.updates
 
-import android.content.Intent
-import android.net.Uri
-import android.provider.Settings
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -12,7 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -36,59 +31,56 @@ internal fun AppUpdateBanner() {
 internal fun AppUpdateDialogs(model: AppUpdateViewModel) {
     val state = model.state.value
     if (!state.dialog) return
-    val context = LocalContext.current
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        model.permissionReturned(context.packageManager.canRequestPackageInstalls())
-    }
-    fun install() {
-        if (context.packageManager.canRequestPackageInstalls()) model.install(context::startActivity)
-        else model.permissionNeeded()
-    }
-    AlertDialog(onDismissRequest = model::dismiss,
-        title = { Text(when (state.phase) {
-            UpdatePhase.CHECKING -> "Check for updates"
-            UpdatePhase.CURRENT -> "You're up to date"
-            UpdatePhase.ERROR -> "Update unavailable"
-            UpdatePhase.PERMISSION -> "Allow app updates"
-            UpdatePhase.READY, UpdatePhase.INSTALLER -> "Ready to install"
-            else -> "Update ${state.release?.versionName.orEmpty()}"
-        }) },
-        text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(model.installedLabel, style = MaterialTheme.typography.labelMedium)
+    val uriHandler = LocalUriHandler.current
+    val release = state.release
+    AlertDialog(
+        onDismissRequest = model::dismiss,
+        title = {
+            Text(when (state.phase) {
+                UpdatePhase.CURRENT -> "You're up to date"
+                UpdatePhase.AVAILABLE -> if (state.browserError) "Could not open the browser" else "Update ${release?.versionName.orEmpty()} available"
+                UpdatePhase.ERROR -> "Update check unavailable"
+                else -> "Check for updates"
+            })
+        },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(model.installedLabel, style = MaterialTheme.typography.labelMedium)
+                when (state.phase) {
+                    UpdatePhase.CHECKING -> Text("Checking Sevamrita ERP for updates…")
+                    UpdatePhase.CURRENT -> Text("You have the latest version available on Sevamrita ERP.")
+                    UpdatePhase.ERROR -> Text(state.message)
+                    UpdatePhase.AVAILABLE -> {
+                        if (state.browserError) {
+                            Text("Check that you have a browser and try again.")
+                        } else {
+                            Text("Download the update from Sevamrita ERP in your browser.")
+                            if (release != null && release.notes.isNotBlank()) {
+                                Text("What's new", fontWeight = FontWeight.SemiBold)
+                                Text(release.notes, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+                    UpdatePhase.IDLE -> Unit
+                }
+            }
+        },
+        confirmButton = {
             when (state.phase) {
-                UpdatePhase.CHECKING -> Text("Checking for a newer version…")
-                UpdatePhase.CURRENT -> Text("You have the latest published version.")
-                UpdatePhase.ERROR -> Text(state.message)
-                UpdatePhase.PERMISSION -> Text("In Android settings, enable ‘Allow from this source’ for this app. Return here and tap Install update. Android will ask you to confirm the installation.")
-                UpdatePhase.READY -> Text("Download verified. Tap Install update to open Android's installer. Your account and app data are kept.")
-                UpdatePhase.INSTALLER -> Text("Complete the installation in Android's installer. If you cancelled it, you can open it again below.")
-                UpdatePhase.DOWNLOADING -> {
-                    val fraction = state.downloadedBytes.toFloat() / (state.release?.sizeBytes ?: 1).toFloat()
-                    Text("Downloading update · ${(fraction * 100).toInt()}%")
-                    LinearProgressIndicator(progress = { fraction.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
-                    Text("You can close this panel and continue chatting while it downloads.", style = MaterialTheme.typography.bodySmall)
+                UpdatePhase.AVAILABLE -> TextButton(onClick = { model.openRelease(uriHandler::openUri) }) {
+                    Text(if (state.browserError) "Retry" else "Open ERP downloads")
                 }
-                else -> {
-                    Text("Install the latest version without downloading an APK manually. Android will ask you to confirm installation.")
-                    state.release?.let { Text("Download: %.1f MB".format(it.sizeBytes / 1048576.0), style = MaterialTheme.typography.bodySmall) }
-                }
+                UpdatePhase.ERROR -> TextButton(onClick = { model.check(manual = true) }) { Text("Retry") }
+                UpdatePhase.CURRENT -> TextButton(onClick = model::dismiss) { Text("Done") }
+                else -> Unit
             }
-            if (state.release?.notes?.isNotBlank() == true) {
-                Text("What's new", fontWeight = FontWeight.SemiBold)
-                Text(state.release.notes, style = MaterialTheme.typography.bodyMedium)
+        },
+        dismissButton = {
+            when (state.phase) {
+                UpdatePhase.AVAILABLE -> TextButton(onClick = model::later) { Text("Later") }
+                UpdatePhase.CHECKING, UpdatePhase.ERROR -> TextButton(onClick = model::dismiss) { Text("Close") }
+                else -> Unit
             }
-        } },
-        confirmButton = { when (state.phase) {
-            UpdatePhase.AVAILABLE -> TextButton(onClick = model::download) { Text("Download update") }
-            UpdatePhase.READY, UpdatePhase.INSTALLER -> TextButton(onClick = ::install) { Text("Install update") }
-            UpdatePhase.PERMISSION -> TextButton(onClick = {
-                if (context.packageManager.canRequestPackageInstalls()) { model.permissionReturned(true); install() }
-                else try { permission.launch(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))) }
-                catch (_: Exception) { model.fail("Open Android Settings → Apps → Special app access → Install unknown apps, and allow this app. Then retry.") }
-            }) { Text("Open settings") }
-            UpdatePhase.ERROR -> TextButton(onClick = { if (state.release == null) model.check(manual = true) else model.download() }) { Text("Retry") }
-            UpdatePhase.CURRENT, UpdatePhase.IDLE -> TextButton(onClick = model::dismiss) { Text("Done") }
-            else -> Unit
-        } },
-        dismissButton = { if (state.phase !in listOf(UpdatePhase.CURRENT, UpdatePhase.IDLE)) TextButton(onClick = model::later) { Text(if (state.phase == UpdatePhase.DOWNLOADING) "Continue in app" else "Later") } })
+        }
+    )
 }

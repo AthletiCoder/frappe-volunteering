@@ -1,0 +1,10 @@
+{
+  "package_name": "org.sevamrita.mobile",
+  "version_code": 31,
+  "version_name": "0.6.7",
+  "min_sdk": 26,
+  "size_bytes": 2286998,
+  "sha256": "463d916abc07fe9f90589931930d7274210897b31877d384c230e21ef060854d",
+  "apk_url": "https://sevamrita.m.frappe.cloud/assets/volunteering/android_updates/SF-Tasks-0.6.7.apk",
+  "release_notes": "Check for updates compares your installed version with Sevamrita ERP. It offers the browser download only when a newer release is available."
+}

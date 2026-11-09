@@ -14,7 +14,7 @@ class ReleasePreparationTest(unittest.TestCase):
         data = self.make()
         self.assertEqual(data["size_bytes"], 3)
         self.assertEqual(len(data["sha256"]), 64)
-        self.assertTrue(data["apk_url"].endswith("/sf-tasks-v0.5.0/SF-Tasks-0.5.0.apk"))
+        self.assertEqual(data["apk_url"], "https://sevamrita.m.frappe.cloud/assets/volunteering/android_updates/SF-Tasks-0.5.0.apk")
 
     def test_wrong_signer_debug_build_and_channel_mix_are_rejected(self):
         for changes in ({"debuggable": True}, {"package": "org.sevamrita.mobile.local"},
