@@ -1,0 +1,10 @@
+{
+  "package_name": "org.sevamrita.mobile.local",
+  "version_code": 30,
+  "version_name": "0.6.6-local",
+  "min_sdk": 26,
+  "size_bytes": 19875917,
+  "sha256": "029077889d749d5d0b2ebcf3bffb7e12c5f33a3c4991a7c8623f5a465a0424fc",
+  "apk_url": "https://sevamrita.m.frappe.cloud/assets/volunteering/android_updates/SF-testing-0.6.6.apk",
+  "release_notes": "Get updates opens the Sevamrita ERP download page in your browser."
+}
