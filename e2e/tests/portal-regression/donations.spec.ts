@@ -21,73 +21,57 @@ test.beforeEach(({ baseURL }) => {
   }
 });
 
-test("only Accounts can open donations; type controls fields, ledger and receipt", async ({ page }) => {
+test("only Accounts can list and record donations", async ({ page }) => {
   await loginViaAPI(page.request, PERSONAS.employee.email, PERSONAS.employee.password);
   await page.goto("/volunteering/donations");
-  await expect(page.getByRole("heading", { name: "Register a donation" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "General donation" })).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Not Permitted" })
+      .or(page.getByRole("alert").filter({ hasText: "Only Accounts Managers" })),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Record a donation" })).toHaveCount(0);
 
   await page.context().clearCookies();
   await loginViaAPI(page.request, PERSONAS.accounts.email, PERSONAS.accounts.password);
   await page.goto("/volunteering/donations");
-  await expect(page.getByRole("button", { name: /General donation/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /CSR donation/ })).toBeVisible();
-  await page.getByRole("button", { name: /CSR donation/ }).click();
-  await expect(page.getByRole("heading", { name: "CSR organisation" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Recorded donations" })).toBeVisible();
+  await page.getByRole("button", { name: "Record a donation" }).click();
+  await expect(page.getByRole("heading", { name: "Donor details" })).toBeVisible();
   await expect(page.getByLabel("PAN *")).toBeVisible();
   await expect(page.getByLabel("Phone number")).not.toHaveAttribute("required", "");
-  await expect(page.getByLabel("Donation credit ledger")).toHaveValue(/CSR Grants/);
-  await expect(page.getByRole("button", { name: "Record CSR donation" })).toBeVisible();
-  await expect(page.getByLabel(/Authorised Sevamrita signatory/)).toHaveCount(0);
-  await page.getByRole("button", { name: /General donation/ }).click();
-  await expect(page.getByRole("heading", { name: "Donor details" })).toBeVisible();
-  await expect(page.getByLabel("Phone number *")).toBeVisible();
   await expect(page.getByLabel("Donation credit ledger")).toHaveValue(/General Donations/);
-  await expect(page.getByLabel(/Authorised Sevamrita signatory/)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Record donation and issue receipt" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /CSR donation/ })).toHaveCount(0);
+  await expect(page.getByLabel(/Authorised Sevamrita signatory/)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Record donation", exact: true })).toBeEnabled();
 });
 
-test("CSR posts without a receipt and its donor can be reused", async ({ page }) => {
+test("record first, then issue a signed private receipt from the list", async ({ page }) => {
   test.skip(process.env.E2E_DONATION_WRITES !== "1", "Opt-in local accounting write.");
   await loginViaAPI(page.request, PERSONAS.accounts.email, PERSONAS.accounts.password);
   await page.goto("/volunteering/donations");
-  await page.getByRole("button", { name: /CSR donation/ }).click();
-  const before = await workspace(page);
-  expect(before.accounts.donation_credit_by_type.CSR?.name).toBeTruthy();
-  expect(before.accounts.received_into.length).toBeGreaterThan(0);
-  const donorName = `Local CSR regression ${Date.now()}`;
-  const pan = `TSTAA${String(Date.now() % 10000).padStart(4, "0")}F`;
+  await page.getByRole("button", { name: "Record a donation" }).click();
+  let before = await workspace(page);
+  expect(before.accounts.donation_credit_by_type.General?.name).toBeTruthy();
+  const donorName = `Local general regression ${Date.now()}`;
+  const pan = `TSTAB${String(Date.now() % 10000).padStart(4, "0")}F`;
   await page.getByLabel("Donor name *").fill(donorName);
   await page.getByLabel("PAN *").fill(pan);
-  await page.getByLabel("Full postal address *").fill("1 Local Test Street, Pune, Maharashtra 411001");
-  await page.getByLabel("Amount received (INR) *").fill("11");
+  await page.getByLabel("Full postal address *").fill("2 Local Test Street, Mumbai, Maharashtra 400001");
+  await page.getByLabel("Amount received (INR) *").fill("12");
   await page.getByLabel("Payment method *").selectOption("Bank Transfer");
-  await page.getByLabel("Cheque / transaction reference *").fill(`CSR-LOCAL-${Date.now()}`);
+  await page.getByLabel("Cheque / transaction reference *").fill(`GEN-LOCAL-${Date.now()}`);
   const bank = before.accounts.received_into.find((account: any) => account.account_type === "Bank");
   expect(bank?.name).toBeTruthy();
   await page.getByLabel("Money received into *").selectOption(bank.name);
-  await page.getByRole("button", { name: "Record CSR donation" }).click();
-  await expect(page.getByRole("status")).toContainText("CSR donation recorded without a receipt");
-  await expect(page.getByText("CSR donation recorded", { exact: true })).toBeVisible();
-  const after = await workspace(page);
-  const saved = after.donors.find((donor: any) => donor.donor_name === donorName);
-  expect(saved?.name).toBeTruthy();
-  await page.getByLabel("Donor name *").fill(`${saved.donor_name} · ${saved.name}`);
-  await expect(page.getByLabel("PAN *")).toHaveValue(pan);
-  await expect(page.getByLabel("Full postal address *")).toHaveValue("1 Local Test Street, Pune, Maharashtra 411001");
-  const recorded = after.history.find((row: any) => row.full_name === donorName);
-  expect(recorded?.donation_purpose).toBe("CSR");
-  expect(recorded?.receipt_file).toBeFalsy();
-  expect(recorded?.journal_entry).toBeTruthy();
-});
+  await page.getByRole("button", { name: "Record donation", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Donation recorded" })).toContainText("Receipt pending");
+  await expect(page.getByLabel("Receipt status")).toHaveValue("pending");
+  const pendingRow = page.locator("article").filter({ hasText: donorName });
+  await expect(pendingRow).toContainText("Pending receipt");
+  const posted = (await workspace(page)).history.find((row: any) => row.full_name === donorName);
+  expect(posted?.journal_entry).toBeTruthy();
+  expect(posted?.receipt_number).toBeFalsy();
 
-test("general donation requires phone and produces a signed private receipt", async ({ page }) => {
-  test.skip(process.env.E2E_DONATION_WRITES !== "1", "Opt-in local accounting write.");
-  await loginViaAPI(page.request, PERSONAS.accounts.email, PERSONAS.accounts.password);
-  await page.goto("/volunteering/donations");
-  await page.getByRole("button", { name: /General donation/ }).click();
-  let before = await workspace(page);
-  expect(before.accounts.donation_credit_by_type.General?.name).toBeTruthy();
+  await page.getByRole("button", { name: "Receipt setup", exact: true }).click();
   if (!before.settings.registered_address || !before.settings.contact_email || !before.settings.organisation_name) {
     const setup = page.locator("details.setup-card").filter({ has: page.locator("summary").filter({ hasText: "Receipt identity and registration" }) });
     await setup.locator("summary").click();
@@ -117,25 +101,19 @@ test("general donation requires phone and produces a signed private receipt", as
     before = await workspace(page);
   }
   expect(before.signatories.length).toBeGreaterThan(0);
-  const donorName = `Local general regression ${Date.now()}`;
-  const pan = `TSTAB${String(Date.now() % 10000).padStart(4, "0")}F`;
-  await page.getByLabel("Donor name *").fill(donorName);
-  await page.getByLabel("PAN *").fill(pan);
-  await page.getByLabel("Full postal address *").fill("2 Local Test Street, Mumbai, Maharashtra 400001");
-  await page.getByLabel("Phone number *").fill("9000000000");
-  await page.getByLabel("Amount received (INR) *").fill("12");
-  await page.getByLabel("Payment method *").selectOption("Bank Transfer");
-  await page.getByLabel("Cheque / transaction reference *").fill(`GEN-LOCAL-${Date.now()}`);
-  const bank = before.accounts.received_into.find((account: any) => account.account_type === "Bank");
-  expect(bank?.name).toBeTruthy();
-  await page.getByLabel("Money received into *").selectOption(bank.name);
-  await page.getByLabel("Authorised Sevamrita signatory *").selectOption(before.signatories[0].name);
-  await page.getByRole("button", { name: "Record donation and issue receipt" }).click();
-  await expect(page.getByRole("status")).toContainText(/Donation recorded\. Receipt/);
-  const after = await workspace(page);
-  const recorded = after.history.find((row: any) => row.full_name === donorName);
+  await page.getByRole("button", { name: "Donations list", exact: true }).click();
+  await pendingRow.getByRole("button", { name: "Issue receipt", exact: true }).click();
+  await pendingRow.getByLabel("Authorised Sevamrita signatory *").selectOption(before.signatories[0].name);
+  await pendingRow.getByRole("button", { name: "Issue signed PDF" }).click();
+  await expect(page.getByRole("status").filter({ hasText: /Receipt RE-/ })).toContainText("issued");
+  await page.getByLabel("Receipt status").selectOption("issued");
+  const receiptLink = pendingRow.getByRole("link", { name: /Open PDF/ });
+  await expect(receiptLink).toHaveAttribute("href", /^\/private\/files\//);
+  const receipt = await page.request.get((await receiptLink.getAttribute("href"))!);
+  expect(receipt.ok()).toBeTruthy();
+  expect((await receipt.body()).subarray(0, 4).toString()).toBe("%PDF");
+  const recorded = (await workspace(page)).history.find((row: any) => row.name === posted.name);
   expect(recorded?.donation_purpose).toBe("General");
   expect(recorded?.receipt_number).toBeTruthy();
-  expect(recorded?.receipt_file).toMatch(/^\/private\/files\//);
-  expect(recorded?.journal_entry).toBeTruthy();
+  expect(recorded?.journal_entry).toBe(posted.journal_entry);
 });

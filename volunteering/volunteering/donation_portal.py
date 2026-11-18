@@ -1,8 +1,8 @@
 """Accounts Manager Home workflow for manually received donations.
 
 Cashfree donations remain on their existing path. A staff-recorded donation is
-posted exactly once with a balanced Journal Entry. General donations get a private
-acknowledgement receipt; CSR donations do not issue one.
+posted exactly once with a balanced Journal Entry. A private acknowledgement
+receipt can be issued later without changing the ledger.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from decimal import Decimal, InvalidOperation
 import frappe
 from frappe import _
 from frappe.model.naming import getseries
-from frappe.utils import cstr, formatdate, getdate, money_in_words, nowdate
+from frappe.utils import cint, cstr, formatdate, getdate, money_in_words, nowdate
 from frappe.utils.password import decrypt, encrypt
 from markupsafe import escape
 
@@ -27,8 +27,12 @@ from volunteering.volunteering.doctype.donation.donation import manual_donation_
 DONOR_DOCTYPE = "Donation Donor"
 SIGNATORY_DOCTYPE = "Donation Receipt Signatory"
 SETTINGS_DOCTYPE = "Donation Receipt Settings"
-DONATION_TYPES = {"General", "CSR"}
-DONATION_CREDIT_LABELS = {"General": "General Donations", "CSR": "CSR Grants"}
+DONATION_CREDIT_LABEL = "General Donations"
+OFFICE_SOURCES = ("Office-cash", "Office-online")
+LIST_FIELDS = [
+	"name", "full_name", "amount", "received_on", "donation_purpose", "receipt_number",
+	"receipt_date", "receipt_file", "journal_entry", "payment_method", "payment_reference",
+]
 PAYMENT_METHODS = {"Cash", "Cheque", "Online", "Bank Transfer", "UPI"}
 PAN_RE = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
 PHONE_RE = re.compile(r"^\+?[0-9\s().-]+$")
@@ -37,7 +41,7 @@ PHONE_RE = re.compile(r"^\+?[0-9\s().-]+$")
 def _require_manager():
 	user = frappe.session.user
 	if user != "Administrator" and (user == "Guest" or "Accounts Manager" not in frappe.get_roles(user)):
-		frappe.throw(_("Only Accounts Managers and Administrator can register donations."), frappe.PermissionError)
+		frappe.throw(_("Only Accounts Managers and Administrator can manage donations."), frappe.PermissionError)
 
 
 def _clean(value, label, length=200, required=False):
@@ -49,8 +53,8 @@ def _clean(value, label, length=200, required=False):
 	return value
 
 
-def _phone(value, *, required=False):
-	value = _clean(value, "Donor phone number", 40, required)
+def _phone(value):
+	value = _clean(value, "Donor phone number", 40)
 	if value and (not PHONE_RE.fullmatch(value) or not 7 <= sum(char.isdigit() for char in value) <= 15):
 		frappe.throw(_("Enter a valid donor phone number."))
 	return value
@@ -84,11 +88,10 @@ def _account_rows():
 	return {
 		"received_into": [row for row in rows if row.root_type == "Asset" and row.account_type in ("Bank", "Cash")],
 		"donation_credit_by_type": {
-			donation_type: next(
-				(row for row in rows if row.root_type == "Income" and row.account_name == label),
+			"General": next(
+				(row for row in rows if row.root_type == "Income" and row.account_name == DONATION_CREDIT_LABEL),
 				None,
-			)
-			for donation_type, label in DONATION_CREDIT_LABELS.items()
+			),
 		},
 	}
 
@@ -114,12 +117,39 @@ def get_donation_workspace():
 			"organisation_name", "registered_address", "contact_email", "cin",
 			"organisation_pan", "eighty_g_number", "eighty_g_valid_until"
 		)},
-		"history": frappe.get_all(
-			"Donation", filters={"source": ["in", ["Office-cash", "Office-online"]]},
-			fields=["name", "full_name", "amount", "received_on", "donation_purpose", "receipt_number", "receipt_file", "journal_entry"],
-			order_by="creation desc", limit_page_length=100,
-		),
+		# Kept for existing Android clients. The current donations list is paginated.
+		"history": _donation_rows("all", 0, 100),
 	}
+
+
+def _donation_rows(receipt_status, start, limit):
+	filters = {"source": ["in", OFFICE_SOURCES]}
+	if receipt_status == "pending":
+		filters.update({"donation_purpose": "General", "status": "Success", "journal_entry": ["is", "set"], "receipt_file": ["is", "not set"]})
+	elif receipt_status == "issued":
+		filters["receipt_file"] = ["is", "set"]
+	rows = frappe.get_all(
+		"Donation", filters=filters, fields=[*LIST_FIELDS, "status"],
+		order_by="creation desc, name desc", start=start, limit=limit,
+	)
+	for row in rows:
+		row.receipt_status = (
+			"issued" if row.receipt_file else "pending"
+			if row.donation_purpose == "General" and row.status == "Success" and row.journal_entry
+			else "not_applicable"
+		)
+	return rows
+
+
+@frappe.whitelist(methods=["POST"])
+def get_donation_list(receipt_status="all", page=1):
+	_require_manager()
+	if receipt_status not in ("all", "pending", "issued"):
+		frappe.throw(_("Choose a valid receipt status."))
+	page = max(1, cint(page))
+	page_size = 25
+	rows = _donation_rows(receipt_status, (page - 1) * page_size, page_size + 1)
+	return {"rows": rows[:page_size], "page": page, "has_more": len(rows) > page_size}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -154,7 +184,8 @@ def save_donation_signatory(name, designation, signature_data):
 	_require_manager()
 	name = _clean(name, "Authorised signatory name", 140, True)
 	designation = _clean(designation, "Designation", 140)
-	_signature_png(signature_data)
+	if not _signature_png(signature_data):
+		frappe.throw(_("Draw the authorised signature before saving."))
 	if frappe.db.exists(SIGNATORY_DOCTYPE, name):
 		doc = frappe.get_doc(SIGNATORY_DOCTYPE, name)
 	else:
@@ -197,21 +228,16 @@ def update_donation_donor(donor, details):
 	return get_donation_workspace()
 
 
-def _require_donor_details(doc, donation_type):
+def _require_donor_details(doc):
 	_clean(doc.donor_name, "Donor name", 160, True)
 	_clean(doc.address, "Donor address", 600, True)
 	pan = _clean(doc.pan, "Donor PAN", 10, True).upper()
 	if not PAN_RE.fullmatch(pan):
 		frappe.throw(_("Enter a valid donor PAN."))
-	if donation_type == "General":
-		_phone(doc.mobile_number, required=True)
-	else:
-		_phone(doc.mobile_number)
-	if donation_type == "CSR" and doc.donor_type != "Organisation":
-		frappe.throw(_("A CSR donor must be an organisation."))
+	_phone(doc.mobile_number)
 
 
-def _resolve_donor(raw, donation_type):
+def _resolve_donor(raw):
 	donor_id = _clean(raw.get("donor"), "Donor ID", 140)
 	if donor_id:
 		if not frappe.db.exists(DONOR_DOCTYPE, donor_id):
@@ -220,7 +246,7 @@ def _resolve_donor(raw, donation_type):
 		for field in ("donor_name", "donor_type", "address", "pan", "mobile_number", "email"):
 			if field in raw and cstr(raw[field] or "").strip() != cstr(doc.get(field) or "").strip():
 				frappe.throw(_("Save the changed donor details before recording this donation."))
-		_require_donor_details(doc, donation_type)
+		_require_donor_details(doc)
 		return doc
 	name = _clean(raw.get("donor_name"), "Donor name", 160, True)
 	address = _clean(raw.get("address"), "Donor address", 600, True)
@@ -229,21 +255,19 @@ def _resolve_donor(raw, donation_type):
 		frappe.throw(_("Enter a valid donor PAN."))
 	if pan and frappe.db.exists(DONOR_DOCTYPE, {"pan": pan}):
 		frappe.throw(_("This PAN belongs to a saved donor. Select that donor instead."))
-	donor_type = raw.get("donor_type") or ("Organisation" if donation_type == "CSR" else "Individual")
+	donor_type = raw.get("donor_type") or "Individual"
 	if donor_type not in {"Individual", "Organisation"}:
 		frappe.throw(_("Choose Individual or Organisation."))
-	if donation_type == "CSR" and donor_type != "Organisation":
-		frappe.throw(_("A CSR donor must be an organisation."))
 	doc = frappe.get_doc({
 		"doctype": DONOR_DOCTYPE,
 		"donor_name": name,
 		"donor_type": donor_type,
 		"address": address,
 		"pan": pan,
-		"mobile_number": _phone(raw.get("mobile_number"), required=donation_type == "General"),
+		"mobile_number": _phone(raw.get("mobile_number")),
 		"email": _clean(raw.get("email"), "Email", 140),
 	})
-	_require_donor_details(doc, donation_type)
+	_require_donor_details(doc)
 	doc.insert(ignore_permissions=True)
 	return doc
 
@@ -265,13 +289,12 @@ def _validate_account(name, *, use):
 	return row
 
 
-def _donation_credit_account(donation_type):
-	label = DONATION_CREDIT_LABELS[donation_type]
+def _donation_credit_account():
 	accounts = frappe.get_all(
 		"Account",
 		filters={
 			"company": SEVAMRITA_COMPANY,
-			"account_name": label,
+			"account_name": DONATION_CREDIT_LABEL,
 			"root_type": "Income",
 			"is_group": 0,
 			"disabled": 0,
@@ -281,9 +304,7 @@ def _donation_credit_account(donation_type):
 	)
 	if len(accounts) != 1:
 		frappe.throw(
-			_("Exactly one active Income ledger named {0} is required for {1} donations.").format(
-				label, donation_type
-			)
+			_("Exactly one active Income ledger named {0} is required.").format(DONATION_CREDIT_LABEL)
 		)
 	return accounts[0]
 
@@ -325,9 +346,9 @@ def _validate_donor_signature_proof(raw):
 	try:
 		proof = json.loads(decrypt(raw.get("donor_signature_proof") or ""))
 	except (frappe.ValidationError, ValueError, TypeError):
-		frappe.throw(_("Ask the donor to sign again before issuing this receipt."))
+		frappe.throw(_("Ask the donor to sign again before recording this donation."))
 	if not isinstance(proof, dict):
-		frappe.throw(_("Ask the donor to sign again before issuing this receipt."))
+		frappe.throw(_("Ask the donor to sign again before recording this donation."))
 	signature = _signature_png(raw.get("donor_signature_data"))
 	if (
 		proof.get("purpose") != "donation-donor-signature-v1"
@@ -386,7 +407,7 @@ def _receipt_pdf(donation, settings, signatory):
 
 @frappe.whitelist(methods=["POST"])
 def register_donation(details):
-	"""Post a donation once; issue a private receipt only for General donations."""
+	"""Post a General donation once. Older clients can still request a receipt up front."""
 	_require_manager()
 	raw = _details(details)
 	key = _clean(raw.get("request_key"), "Request key", 100, True)
@@ -397,9 +418,8 @@ def register_donation(details):
 	method = raw.get("payment_method")
 	if method not in PAYMENT_METHODS:
 		frappe.throw(_("Choose a payment method."))
-	purpose = raw.get("donation_purpose")
-	if purpose not in DONATION_TYPES:
-		frappe.throw(_("Choose General donation or CSR donation first."))
+	if (raw.get("donation_purpose") or "General") != "General":
+		frappe.throw(_("Only General donations can be recorded in Home."))
 	if not raw.get("received_on"):
 		frappe.throw(_("Date received is required."))
 	received_on = getdate(raw.get("received_on"))
@@ -411,68 +431,35 @@ def register_donation(details):
 	if method == "Cheque" and not raw.get("cheque_cleared"):
 		frappe.throw(_("Only register a cheque donation after it has cleared."))
 	debit_account = _clean(raw.get("received_into_account"), "Received into account", 140, True)
-	credit_account = _donation_credit_account(purpose)
+	credit_account = _donation_credit_account()
 	provided_credit = _clean(raw.get("donation_account"), "Donation account", 140)
 	if provided_credit and provided_credit != credit_account:
-		frappe.throw(_("The donation type determines its credit ledger; it cannot be changed on this form."))
+		frappe.throw(_("New donations must use the General Donations credit ledger."))
 	debit_row = _validate_account(debit_account, use="receipt")
 	_validate_account(credit_account, use="credit")
 	if method == "Cash" and debit_row.account_type != "Cash":
 		frappe.throw(_("Cash donations must be recorded in a Cash ledger."))
 	if method != "Cash" and debit_row.account_type != "Bank":
 		frappe.throw(_("Non-cash donations must be recorded in a Bank ledger."))
-	signatory = None
-	settings = None
-	donor_signature = ""
-	want_80g = False
-	receipt_number = None
-	if purpose == "General":
-		signatory_name = _clean(raw.get("receipt_signatory"), "Authorised signatory", 140, True)
-		signatory = frappe.get_doc(SIGNATORY_DOCTYPE, signatory_name)
-		if signatory.disabled:
-			frappe.throw(_("Choose an active authorised signatory."))
-		donor_signature = raw.get("donor_signature_data") or ""
-		if method == "Cash" and not donor_signature:
-			frappe.throw(_("Ask the cash donor to sign on screen."))
-		if donor_signature:
-			_signature_png(donor_signature)
-		settings = _settings()
-		for field, label in (("organisation_name", "Organisation name"), ("registered_address", "Registered office address"), ("contact_email", "Contact email")):
-			if not settings.get(field):
-				frappe.throw(_("Set {0} in Receipt Settings before issuing receipts.").format(label))
-		want_80g = bool(raw.get("want_80g"))
-		if want_80g:
-			if method == "Cash" and amount > 2000:
-				frappe.throw(_("A cash donation over ₹2,000 cannot be marked for 80G deduction."))
-			if not settings.eighty_g_number or not settings.eighty_g_valid_until or getdate(settings.eighty_g_valid_until) < received_on:
-				frappe.throw(_("Configure a valid 80G registration covering the donation date first."))
-		if donor_signature:
-			_validate_donor_signature_proof(raw)
-	else:
-		if (
-			raw.get("receipt_signatory")
-			or raw.get("donor_signature_data")
-			or raw.get("donor_signature_proof")
-			or raw.get("want_80g")
-		):
-			frappe.throw(_("CSR donations do not issue a signed receipt or 80G acknowledgement here."))
-	donor = _resolve_donor(raw, purpose)
-	if purpose == "General":
-		# Receipt numbers are assigned at issue time, independent of the donation date.
-		year = getdate(nowdate()).year
-		receipt_number = f"RE-{year}-{getseries(f'RE-{year}-', 5)}"
+	donor_signature = raw.get("donor_signature_data") or ""
+	if method == "Cash" and not donor_signature:
+		frappe.throw(_("Ask the cash donor to sign on screen."))
+	if donor_signature:
+		_validate_donor_signature_proof(raw)
+	signatory_name = _clean(raw.get("receipt_signatory"), "Authorised signatory", 140)
+	if signatory_name:
+		# Existing app releases offer same-step posting and issuance.
+		settings, signatory = _receipt_setup(signatory_name, bool(cint(raw.get("want_80g"))), method, amount, received_on)
+	donor = _resolve_donor(raw)
 	donation = frappe.get_doc({
 		"doctype": "Donation", "full_name": donor.donor_name,
 		"mobile_number": donor.mobile_number or "", "email": donor.email or "",
 		"address": donor.address, "pan": donor.pan or "", "donor": donor.name,
 		"donor_type": donor.donor_type, "amount": float(amount), "currency": "INR",
 		"status": "Success", "source": "Office-cash" if method == "Cash" else "Office-online",
-		"want_80g": int(want_80g), "received_on": received_on,
-		"donation_purpose": purpose, "payment_method": method,
+		"received_on": received_on, "donation_purpose": "General", "payment_method": method,
 		"payment_reference": reference, "received_into_account": debit_account,
-		"donation_account": credit_account, "receipt_number": receipt_number,
-		"receipt_date": nowdate() if signatory else None,
-		"receipt_signatory": signatory.name if signatory else None,
+		"donation_account": credit_account,
 		"donor_signature_data": donor_signature, "registration_key": key,
 	})
 	with manual_donation_write():
@@ -481,19 +468,66 @@ def register_donation(details):
 	je.voucher_type = "Journal Entry"
 	je.company = SEVAMRITA_COMPANY
 	je.posting_date = received_on
-	je.user_remark = f"{purpose} donation {donation.name}" + (f" / receipt {receipt_number}" if receipt_number else "") + f" — {donor.donor_name}"
+	je.user_remark = f"General donation {donation.name} — {donor.donor_name}"
 	je.append("accounts", {"account": debit_account, "debit_in_account_currency": float(amount)})
 	je.append("accounts", {"account": credit_account, "credit_in_account_currency": float(amount)})
 	je.insert(ignore_permissions=True)
 	je.submit()
 	donation.db_set("journal_entry", je.name, update_modified=False)
-	if purpose == "General":
-		from frappe.utils.file_manager import save_file
-
-		pdf = _receipt_pdf(donation, settings, signatory)
-		file = save_file(f"donation-receipt-{receipt_number}.pdf", pdf, "Donation", donation.name, is_private=1)
-		donation.db_set("receipt_file", file.file_url, update_modified=False)
+	if signatory_name:
+		_issue_receipt(donation, settings, signatory, cint(raw.get("want_80g")))
 	return _registered_result(donation.name)
+
+
+@frappe.whitelist(methods=["POST"])
+def issue_donation_receipt(donation, signatory, want_80g=0):
+	"""Issue one acknowledgement for a posted Home donation, without a new ledger entry."""
+	_require_manager()
+	doc = frappe.get_doc("Donation", donation, for_update=True)
+	if doc.source not in OFFICE_SOURCES or doc.donation_purpose != "General":
+		frappe.throw(_("Only staff-recorded General donations can receive a receipt here."))
+	if doc.receipt_file:
+		return _registered_result(doc.name)
+	if doc.status != "Success" or not doc.journal_entry or frappe.db.get_value("Journal Entry", doc.journal_entry, "docstatus") != 1:
+		frappe.throw(_("A submitted donation Journal Entry is required to issue this receipt."))
+	signatory_name = _clean(signatory, "Authorised signatory", 140, True)
+	include_80g = bool(cint(want_80g))
+	settings, signatory_doc = _receipt_setup(signatory_name, include_80g, doc.payment_method, doc.amount, doc.received_on)
+	_issue_receipt(doc, settings, signatory_doc, include_80g)
+	return _registered_result(doc.name)
+
+
+def _receipt_setup(name, want_80g, method, amount, received_on):
+	signatory = frappe.get_doc(SIGNATORY_DOCTYPE, name)
+	if signatory.disabled or not signatory.signature_data:
+		frappe.throw(_("Choose an active authorised signatory."))
+	settings = _settings()
+	for field, label in (("organisation_name", "Organisation name"), ("registered_address", "Registered office address"), ("contact_email", "Contact email")):
+		if not settings.get(field):
+			frappe.throw(_("Set {0} in Receipt Settings before issuing receipts.").format(label))
+	if want_80g:
+		if method == "Cash" and amount > 2000:
+			frappe.throw(_("A cash donation over ₹2,000 cannot be marked for 80G deduction."))
+		if not settings.eighty_g_number or not settings.eighty_g_valid_until or getdate(settings.eighty_g_valid_until) < getdate(received_on):
+			frappe.throw(_("Configure a valid 80G registration covering the donation date first."))
+	return settings, signatory
+
+
+def _issue_receipt(donation, settings, signatory, want_80g):
+	from frappe.utils.file_manager import save_file
+
+	issue_date = nowdate()
+	year = getdate(issue_date).year
+	receipt = {
+		"receipt_number": donation.receipt_number or f"RE-{year}-{getseries(f'RE-{year}-', 5)}",
+		"receipt_date": issue_date,
+		"receipt_signatory": signatory.name,
+		"want_80g": int(bool(want_80g)),
+	}
+	donation.update(receipt)
+	pdf = _receipt_pdf(donation, settings, signatory)
+	file = save_file(f"donation-receipt-{donation.receipt_number}.pdf", pdf, "Donation", donation.name, is_private=1)
+	donation.db_set({**receipt, "receipt_file": file.file_url})
 
 
 def _registered_result(name):

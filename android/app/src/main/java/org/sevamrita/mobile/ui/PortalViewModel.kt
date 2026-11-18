@@ -41,6 +41,7 @@ data class PortalState(
     val receiptBytes: ByteArray? = null,
     val receiptName: String = "",
     val receiptReturn: Page = Page.CLAIM_REVIEW,
+    val donationList: JSONObject = JSONObject(),
     val proposalFilter: String = "mine",
     val ledgerFrom: String = "",
     val ledgerTo: String = "",
@@ -179,7 +180,8 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
 
     fun open(page: Page, id: String = "") {
         val revision = ++navigationRevision
-        state.value = state.value.copy(page = page, detailId = id, error = "", notice = "", data = JSONObject(), form = JSONObject())
+        state.value = state.value.copy(page = page, detailId = id, error = "", notice = "", data = JSONObject(), form = JSONObject(),
+            donationList = if (page == Page.DONATIONS) JSONObject() else state.value.donationList)
         if (page == Page.COLLABORATION) { refreshChat(); return }
         val method = when (page) {
             Page.PROJECTS -> "volunteering.volunteering.project_workspace.get_projects"
@@ -397,7 +399,22 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
         state.value = state.value.copy(data = workspace, notice = "Authorised signatory registered.")
     }
 
-    fun registerDonation(details: JSONObject) = runTask {
+    private suspend fun fetchDonations(filter: String, page: Int): JSONObject =
+        api.call("volunteering.volunteering.donation_portal.get_donation_list",
+            JSONObject().put("receipt_status", filter).put("page", page)).put("filter", filter)
+
+    fun loadDonations(filter: String = "all", page: Int = 1) {
+        val revision = navigationRevision
+        runTask {
+            val list = fetchDonations(filter, page)
+            if (revision == navigationRevision && state.value.page == Page.DONATIONS) {
+                state.value = state.value.copy(donationList = list)
+            }
+        }
+    }
+
+    fun registerDonation(details: JSONObject, onRecorded: () -> Unit) = runTask {
+        val revision = navigationRevision
         if (details.text("donor_signature_data").isNotBlank()) {
             val proof = api.call("volunteering.volunteering.donation_portal.bind_donation_donor_signature",
                 JSONObject().put("details", details.toString()))
@@ -405,9 +422,29 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
         }
         val result = api.call("volunteering.volunteering.donation_portal.register_donation",
             JSONObject().put("details", details.toString()))
+        withContext(Dispatchers.Main) {
+            if (revision == navigationRevision && state.value.page == Page.DONATIONS) {
+                state.value = state.value.copy(notice = "Donation ${result.text("name")} recorded. Receipt pending.")
+                onRecorded()
+            }
+        }
         val workspace = api.call("volunteering.volunteering.donation_portal.get_donation_workspace")
-        state.value = state.value.copy(data = workspace,
-            notice = "Donation ${result.text("name")} posted${if (result.text("receipt_number").isNotBlank()) " · receipt ${result.text("receipt_number")}" else ""}.")
+        val list = fetchDonations("pending", 1)
+        if (revision == navigationRevision && state.value.page == Page.DONATIONS) {
+            state.value = state.value.copy(data = workspace, donationList = list)
+        }
+    }
+
+    fun issueDonationReceipt(donation: String, signatory: String, want80g: Boolean) = runTask {
+        val revision = navigationRevision
+        val result = api.call("volunteering.volunteering.donation_portal.issue_donation_receipt",
+            JSONObject().put("donation", donation).put("signatory", signatory).put("want_80g", if (want80g) 1 else 0))
+        if (revision != navigationRevision || state.value.page != Page.DONATIONS) return@runTask
+        state.value = state.value.copy(notice = "Receipt ${result.text("receipt_number")} issued.")
+        val list = fetchDonations("all", 1)
+        if (revision == navigationRevision && state.value.page == Page.DONATIONS) {
+            state.value = state.value.copy(donationList = list)
+        }
     }
 
     fun openManagedEmployee(name: String = "") {
