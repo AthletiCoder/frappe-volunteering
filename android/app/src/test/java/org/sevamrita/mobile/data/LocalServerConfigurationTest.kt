@@ -9,12 +9,14 @@ class LocalServerConfigurationTest {
     @Test fun localTestBuildHasPrivateDefaultAndCannotSelectRemoteServers() {
         if (!BuildConfig.DEBUG) {
             assertEquals(listOf(Server.PRODUCTION), Server.available())
-            assertEquals("SF Tasks", BuildConfig.APP_NAME)
+            assertEquals(if (BuildConfig.ERP_APP) "SF ERP" else "SF Tasks", BuildConfig.APP_NAME)
             assertTrue(DemoLogins.accounts(Server.PRODUCTION).isEmpty())
             return
         }
         assertTrue(isPrivateIpv4(BuildConfig.DEFAULT_LOCAL_HOST))
-        if (BuildConfig.LOCAL_PORTAL_ONLY) assertEquals("SF testing", BuildConfig.APP_NAME)
+        if (BuildConfig.LOCAL_PORTAL_ONLY) {
+            assertEquals(if (BuildConfig.ERP_APP) "Sevamrita ERP Testing" else "SF testing", BuildConfig.APP_NAME)
+        }
         if (BuildConfig.LOCAL_PORTAL_ONLY) assertEquals(listOf(Server.LOCAL), Server.available())
         else assertEquals(listOf(Server.LOCAL, Server.PRODUCTION, Server.STAGING), Server.available())
     }

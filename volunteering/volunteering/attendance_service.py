@@ -10,17 +10,21 @@ from volunteering.volunteering.leave_setup import WEEKLY_OFF_DAY
 PRESENT_HOURS_THRESHOLD = 6.0
 
 
-def get_present_hours_threshold():
+def get_present_hours_threshold(day=None):
+	from volunteering.volunteering.hr_policy import policy_on
+	if policy_on(day).get("_revision"):
+		return policy_on(day)["full_day_hours"]
 	settings = get_daily_work_log_settings()
 	return flt(settings.get("present_hours_threshold") or PRESENT_HOURS_THRESHOLD)
 
 
 def process_daily_attendance(attendance_date=None, manual=False):
+	explicit_date = attendance_date is not None
 	settings = get_daily_work_log_settings()
 	if not manual and not settings.get("enable_attendance_job"):
 		return {"skipped": True, "reason": "disabled"}
 
-	# 12:00 job finalizes the previous calendar day (grace ends at next-day noon).
+	# Revisit the open logging window and the day whose grace just ended.
 	attendance_date = getdate(attendance_date or add_days(nowdate(), -1))
 	employees = get_active_employees(attendance_date)
 
@@ -34,12 +38,15 @@ def process_daily_attendance(attendance_date=None, manual=False):
 		"errors": 0,
 	}
 
+	from volunteering.volunteering.hr_policy import policy_on
+	dates = [attendance_date] if manual or explicit_date else [getdate(add_days(nowdate(), -offset)) for offset in range(1, max(3, policy_on()["work_log_days"] + 2))]
 	for employee in employees:
 		try:
-			action = process_employee_attendance(employee, attendance_date)
-			summary["processed"] += 1
-			if action in summary:
-				summary[action] += 1
+			for day in dates:
+				action = process_employee_attendance(employee, day)
+				summary["processed"] += 1
+				if action in summary:
+					summary[action] += 1
 		except Exception:
 			summary["errors"] += 1
 			frappe.log_error(
@@ -72,7 +79,7 @@ def cint_docstatus(doc):
 
 
 def get_active_employees(attendance_date):
-	from volunteering.volunteering.employment_type import is_unpaid_employee
+	from volunteering.volunteering.hr_policy import applies_to_employee, policy_on
 
 	employees = frappe.get_all(
 		"Employee",
@@ -86,30 +93,43 @@ def get_active_employees(attendance_date):
 	return [
 		employee.name
 		for employee in employees
-		if not is_unpaid_employee(employee.name)
+		if applies_to_employee(employee.name, attendance_date)
 		and (not employee.relieving_date or getdate(employee.relieving_date) >= attendance_date)
 	]
 
 
 def process_employee_attendance(employee, attendance_date, force_regularized=False):
 	attendance_date = getdate(attendance_date)
+	from volunteering.volunteering.hr_policy import applies_to_employee, policy_on
+	if not applies_to_employee(employee, attendance_date): return "skipped"
+	person = frappe.db.get_value("Employee", employee, ["date_of_joining", "relieving_date"], as_dict=True)
+	if not person or (person.date_of_joining and attendance_date < getdate(person.date_of_joining)) or (person.relieving_date and attendance_date > getdate(person.relieving_date)): return "skipped"
+	from volunteering.volunteering.hr_leave_balances import salary_processed
+	if salary_processed(employee, attendance_date, attendance_date):
+		return "skipped"
 
 	if not force_regularized and has_approved_regularization(employee, attendance_date):
 		return "skipped"
 
 	leave = get_approved_leave(employee, attendance_date)
 	if leave:
+		from volunteering.volunteering.employee_calendars import holiday_on
+		if holiday_on(employee, attendance_date):
+			return ensure_attendance(employee, attendance_date, "Holiday", working_hours=get_submitted_work_log_hours(employee, attendance_date))[1]
+		half = bool(leave.get("half_day") and getdate(leave.get("half_day_date") or leave.from_date) == attendance_date)
+		hours = get_submitted_work_log_hours(employee, attendance_date)
 		_, action = ensure_attendance(
 			employee=employee,
 			attendance_date=attendance_date,
-			status="On Leave",
+			status="Half Day" if half else "On Leave",
 			leave_type=leave.leave_type,
-			working_hours=0,
+			working_hours=hours if half else 0,
+			half_day_status="Present" if half and hours > 0 and hours >= policy_on(attendance_date)["half_day_hours"] else ("Absent" if half else None),
 		)
 		return action
 
 	# Holiday list weekly offs, plus org Wednesday off even if the list is missing.
-	if get_holiday_info(employee, attendance_date) or is_org_weekly_off(attendance_date):
+	if get_holiday_info(employee, attendance_date):
 		hours = get_submitted_work_log_hours(employee, attendance_date)
 		_, action = ensure_attendance(
 			employee=employee,
@@ -122,9 +142,10 @@ def process_employee_attendance(employee, attendance_date, force_regularized=Fal
 	wfh_request = has_approved_wfh_request(employee, attendance_date)
 	hours = get_submitted_work_log_hours(employee, attendance_date)
 	grace_open = is_grace_period_open(attendance_date)
+	pending_leave = frappe.db.exists("Leave Application", {"employee": employee, "docstatus": 0, "status": "Open", "from_date": ["<=", attendance_date], "to_date": [">=", attendance_date]})
 
 	if wfh_request:
-		if hours > 0:
+		if hours >= get_present_hours_threshold(attendance_date):
 			_, action = ensure_attendance(
 				employee=employee,
 				attendance_date=attendance_date,
@@ -132,7 +153,9 @@ def process_employee_attendance(employee, attendance_date, force_regularized=Fal
 				working_hours=hours,
 			)
 			return action
-		if grace_open:
+		if hours > 0 and hours >= policy_on(attendance_date)["half_day_hours"]:
+			return ensure_attendance(employee, attendance_date, "Half Day", working_hours=hours, half_day_status="Absent")[1]
+		if grace_open or pending_leave:
 			return "skipped"
 		_, action = ensure_attendance(
 			employee=employee,
@@ -142,7 +165,7 @@ def process_employee_attendance(employee, attendance_date, force_regularized=Fal
 		)
 		return action
 
-	if hours >= get_present_hours_threshold():
+	if hours >= get_present_hours_threshold(attendance_date):
 		_, action = ensure_attendance(
 			employee=employee,
 			attendance_date=attendance_date,
@@ -151,24 +174,26 @@ def process_employee_attendance(employee, attendance_date, force_regularized=Fal
 		)
 		return action
 
-	if hours > 0:
+	if hours > 0 and hours >= policy_on(attendance_date)["half_day_hours"]:
 		_, action = ensure_attendance(
 			employee=employee,
 			attendance_date=attendance_date,
 			status="Half Day",
 			working_hours=hours,
-			half_day_status="Present",
+			half_day_status="Absent",
 		)
 		return action
 
 	if grace_open:
 		return "skipped"
+	if pending_leave:
+		return "skipped"  # A filed leave request needs a decision, not an unpaid assumption.
 
 	_, action = ensure_attendance(
 		employee=employee,
 		attendance_date=attendance_date,
 		status="Absent",
-		working_hours=0,
+		working_hours=hours,
 	)
 	return action
 
@@ -342,6 +367,9 @@ def get_submitted_work_log_hours(employee, attendance_date):
 
 
 def has_approved_wfh_request(employee, attendance_date):
+	if frappe.db.exists("DocType", "Staff Time Request") and frappe.db.exists("Staff Time Request", {
+		"employee": employee, "request_type": "WFH", "status": "Approved", "from_date": ["<=", attendance_date], "to_date": [">=", attendance_date]}):
+		return True
 	return frappe.db.exists(
 		"Attendance Request",
 		{
@@ -397,23 +425,30 @@ def get_approved_leave(employee, attendance_date):
 			"from_date": ["<=", attendance_date],
 			"to_date": [">=", attendance_date],
 		},
-		["name", "leave_type"],
+		["name", "leave_type", "half_day", "half_day_date", "from_date"],
 		as_dict=True,
 	)
 
 
 def is_org_weekly_off(attendance_date) -> bool:
 	"""Org weekly off is Wednesday (see leave_setup.WEEKLY_OFF_DAY)."""
-	return getdate(attendance_date).weekday() == WEEKLY_OFF_DAY
+	from volunteering.volunteering.hr_policy import policy_on
+	return getdate(attendance_date).weekday() == policy_on(attendance_date)["weekly_off_day"]
 
 
 def get_holiday_info(employee, attendance_date):
 	"""Return holiday row for date, or None. Includes weekly offs."""
 	attendance_date = getdate(attendance_date)
+	from volunteering.volunteering.hr_policy import policy_on
+	if policy_on(attendance_date).get("_revision"):
+		from volunteering.volunteering.employee_calendars import holiday_on
+		return holiday_on(employee, attendance_date)
 	holidays = get_holidays_for_employee(
 		employee, attendance_date, attendance_date, raise_exception=False
 	)
 	if not holidays:
+		if is_org_weekly_off(attendance_date):
+			return {"holiday_date": attendance_date, "weekly_off": 1, "description": "Weekly Off"}
 		return None
 
 	holiday_list = frappe.db.get_value("Employee", employee, "holiday_list")
@@ -442,7 +477,9 @@ def is_weekly_off(employee, attendance_date):
 def is_grace_period_open(attendance_date):
 	"""Employees may complete logs until next day 12:00 PM."""
 	attendance_date = getdate(attendance_date)
-	deadline = get_datetime(f"{add_days(attendance_date, 1)} 12:00:00")
+	from volunteering.volunteering.hr_policy import policy_on, deadline_for_log
+	policy = policy_on(attendance_date)
+	deadline = get_datetime(deadline_for_log(attendance_date, policy)) if policy.get("_revision") else get_datetime(f"{add_days(attendance_date, 1)} 12:00:00")
 	return now_datetime() < deadline
 
 

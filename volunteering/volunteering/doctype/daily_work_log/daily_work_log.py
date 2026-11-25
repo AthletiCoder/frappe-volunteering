@@ -39,8 +39,14 @@ class DailyWorkLog(Document):
 
 		refresh_attendance_for_work_log(self)
 
+	def before_cancel(self):
+		from volunteering.volunteering.hr_leave_balances import require_unprocessed_salary
+		require_unprocessed_salary(self.employee, self.date, self.date)
+
 	def set_total_hours(self):
-		self.total_hours = sum(flt(item.time_spent_hours) for item in self.items)
+		# Minute durations recur in decimal hours; avoid tiny storage-rounding
+		# differences crossing the 6-hour attendance or 24-hour daily limits.
+		self.total_hours = flt(sum(flt(item.time_spent_hours) for item in self.items), 6)
 
 	def validate_items(self):
 		if not self.items:
@@ -78,17 +84,28 @@ class DailyWorkLog(Document):
 			frappe.throw(_("A Daily Work Log already exists for this employee on {0}.").format(self.date))
 
 	def validate_backdate(self):
+		from volunteering.volunteering.hr_policy import policy_on, override_reason
+		if getdate(self.date) > getdate(nowdate()):
+			frappe.throw(_("Work cannot be logged for a future date."))
+		person = frappe.db.get_value("Employee", self.employee, ["date_of_joining", "relieving_date"], as_dict=True)
+		if person and ((person.date_of_joining and getdate(self.date) < getdate(person.date_of_joining))
+			or (person.relieving_date and getdate(self.date) > getdate(person.relieving_date))):
+			frappe.throw(_("The work date must be within the employee's employment dates. Correct the employee record first if needed."))
 		settings = get_daily_work_log_settings()
-		limit_days = cint(settings.get("backdate_limit_days") or 2)
+		policy = policy_on(self.date)
+		limit_days = policy["work_log_days"]
+		exception = override_reason(self)
 		earliest_allowed = add_days(getdate(nowdate()), -limit_days)
 
-		if getdate(self.date) < earliest_allowed:
+		if getdate(self.date) < earliest_allowed and not exception:
 			frappe.throw(
 				_("Daily Work Logs cannot be backdated beyond {0} days. Earliest allowed date is {1}.").format(
 					limit_days,
 					earliest_allowed,
 				)
 			)
+		from volunteering.volunteering.hr_leave_balances import require_unprocessed_salary
+		require_unprocessed_salary(self.employee, self.date, self.date)
 
 	def validate_wfh(self):
 		if not self.employee or not self.date:

@@ -1,0 +1,63 @@
+{
+ "doctype": "DocType",
+ "name": "HR Holiday",
+ "module": "Volunteering",
+ "autoname": "hash",
+ "engine": "InnoDB",
+ "track_changes": 1,
+ "field_order": [
+  "company",
+  "holiday_date",
+  "holiday_name",
+  "kind",
+  "enabled",
+  "change_reason",
+  "unique_key"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "label": "Company",
+   "fieldtype": "Link",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "holiday_date",
+   "label": "Holiday Date",
+   "fieldtype": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "holiday_name",
+   "label": "Holiday Name",
+   "fieldtype": "Data",
+   "reqd": 1
+  },
+  {
+   "fieldname": "kind",
+   "label": "Kind",
+   "fieldtype": "Select",
+   "options": "Fixed\nOptional",
+   "reqd": 1
+  },
+  {
+   "fieldname": "enabled",
+   "label": "Enabled",
+   "fieldtype": "Check",
+   "default": "1"
+  },
+  {
+   "fieldname": "change_reason",
+   "label": "Change Reason",
+   "fieldtype": "Small Text"
+  },
+  {
+   "fieldname": "unique_key",
+   "label": "Unique Key",
+   "fieldtype": "Data",
+   "unique": 1
+  }
+ ],
+ "permissions": []
+}

@@ -49,6 +49,10 @@ def backfill_leave_approvers_from_reports_to():
 		fields=["name", "employee", "leave_approver"],
 	)
 	for app in opens:
+		# The Home service can route extended leave to a Director or a recorded
+		# HR delegate. Do not replace that decision with the immediate manager.
+		if frappe.db.get_value("Leave Application", app.name, "sf_policy_revision"):
+			continue
 		emp_approver = frappe.db.get_value("Employee", app.employee, "leave_approver")
 		if emp_approver and app.leave_approver != emp_approver:
 			frappe.db.set_value(

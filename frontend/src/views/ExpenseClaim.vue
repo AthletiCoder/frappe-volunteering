@@ -77,6 +77,7 @@
 		</div>
 		<form v-else class="space-y-5" @submit.prevent="submitClaim">
 			<div v-if="error" class="error-box" role="alert">{{ error }}</div>
+            <div v-if="submissionStatus" class="warning-box" role="status"><p>{{ submissionStatus }}</p><button v-if="!submitting && submission?.pending?.args" type="button" class="btn-secondary mt-3" @click="retrySavedSubmission">Retry saved submission</button></div>
 			<div v-if="isCorrection && correctionDetail?.receipt_review_notes" class="warning-box">
 				<strong>Why correction was requested</strong>
 				<p class="mt-1 whitespace-pre-wrap">{{ correctionDetail.receipt_review_notes }}</p>
@@ -342,7 +343,7 @@
 							>Receipt evidence *<input
 								type="file"
 								accept=".pdf,.png,.jpg,.jpeg"
-								:required="!item.receipt_attachment"
+								:required="!item.receipt_attachment && !item.receipt_content"
 								:disabled="readingFiles || submitting"
 								class="field-input"
 								@change="chooseReceipt($event, item)"
@@ -446,6 +447,7 @@ import PageHeader from "../components/PageHeader.vue";
 import SearchSelect from "../components/SearchSelect.vue";
 import InvoiceGenerator from "./InvoiceGenerator.vue";
 import { call } from "../lib/frappe";
+import { ExpenseSubmission } from "../lib/expenseSubmission";
 
 const API = "volunteering.volunteering.expense_claim_portal.";
 const route = useRoute();
@@ -495,6 +497,29 @@ const readingFiles = ref(false);
 const submitting = ref(false);
 const error = ref("");
 const result = ref(null);
+const submissionStatus = ref("");
+let submission;
+async function recoverSubmission() {
+    if (isCorrection.value || !defaults.value.employee) return;
+    submission = new ExpenseSubmission({ slot: defaults.value.employee + (isIntegrated.value ? ":combined" : ":single"), call, status: value => submissionStatus.value = value });
+    const recovered = await submission.restore();
+    if (recovered) { result.value = recovered; return; }
+    const saved = submission.pending?.draft;
+    if (saved) {
+        Object.assign(form, saved.form);
+        invoicePath.value = saved.invoicePath || "";
+        itemKey = Math.max(itemKey, ...form.expenses.map(item => Number(item.key) + 1));
+        accountOptions.value = await call(`${API}get_project_accounts`, { project: form.project });
+        submissionStatus.value ||= "Your previous submission is saved on this device. Retry it safely below.";
+    }
+}
+async function retrySavedSubmission() {
+    if (submitting.value || !submission?.pending) return;
+    submitting.value = true; error.value = "";
+    try { result.value = await submission.retry(); }
+    catch (e) { error.value = e.message; }
+    finally { submitting.value = false; }
+}
 const total = computed(() =>
 	form.expenses.reduce((sum, item) => sum + Number(item.amount || 0), 0),
 );
@@ -614,7 +639,7 @@ async function loadDefaults() {
 
 async function loadForm() {
 	await loadDefaults();
-	if (!isCorrection.value || error.value) return;
+	if (!isCorrection.value || error.value) { if (!error.value) await recoverSubmission(); return; }
 	loading.value = true;
 	try {
 		const detail = await call(`${API}get_my_expense_claim`, { name: correctionName.value });
@@ -732,14 +757,11 @@ async function submitClaim() {
 			const invoicePayload = invoiceGenerator.value?.getSubmissionPayload();
 			const payload = { ...form, expenses };
 			delete payload.correction_note;
-			result.value = await call(`${API}submit_generated_invoice_expense_claim`, {
-				claim_payload: payload,
-				invoice_payload: invoicePayload,
-			});
+			result.value = await submission.submit(`${API}submit_generated_invoice_expense_claim`, { claim_payload: payload, invoice_payload: invoicePayload }, { form: JSON.parse(JSON.stringify(form)), invoicePath: invoicePath.value });
 		} else {
 			const payload = { ...form, expenses };
 			delete payload.correction_note;
-			result.value = await call(`${API}submit_expense_claim`, { payload });
+			result.value = await submission.submit(`${API}submit_expense_claim`, { payload }, { form: JSON.parse(JSON.stringify(form)), invoicePath: invoicePath.value });
 		}
 		window.scrollTo({ top: 0, behavior: "smooth" });
 	} catch (e) {
@@ -750,7 +772,8 @@ async function submitClaim() {
 	}
 }
 
-function startAnother() {
+async function startAnother() {
+	await submission?.reset();
 	result.value = null;
 	form.project = "";
 	form.reimbursement_source = "PERSONAL";

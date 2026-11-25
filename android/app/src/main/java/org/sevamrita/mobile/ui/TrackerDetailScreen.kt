@@ -29,7 +29,7 @@ private val detailRed: Color @Composable get() = appColor(0xFFA52E42)
 
 @Composable
 internal fun TrackerDetailScreen(item: JSONObject, roomTitle: String, user: String, canUpdate: Boolean, canConfigure: Boolean,
-    onUpdate: () -> Unit, onConfigure: () -> Unit, onShare: (() -> Unit)?, onHistory: () -> Unit,
+    onUpdate: () -> Unit, onConfigure: () -> Unit, onInsertStage: (String) -> Unit, onEditStage: (String) -> Unit, onShare: (() -> Unit)?, onHistory: () -> Unit,
     loadHistory: ((List<JSONObject>) -> Unit) -> Unit, onFile: (String) -> Unit,
     loadFiles: (String?, (JSONObject?) -> Unit) -> Unit, onAddFiles: (() -> Unit)?, comments: (@Composable () -> Unit)? = null) {
     var tab by rememberSaveable(item.text("name")) { mutableStateOf("Workflow") }
@@ -135,7 +135,17 @@ internal fun TrackerDetailScreen(item: JSONObject, roomTitle: String, user: Stri
                                 if (index < display.stages.lastIndex) Box(Modifier.width(2.dp).height(39.dp).background(appColor(0xFFDCE3E8)))
                             }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Text(stage.label, fontWeight = FontWeight.SemiBold, color = detailInk, fontSize = 16.sp)
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                                    Text(stage.label, Modifier.weight(1f).padding(top = 8.dp), fontWeight = FontWeight.SemiBold, color = detailInk, fontSize = 16.sp)
+                                    if (canConfigure) {
+                                        IconButton(onClick = { onEditStage(stage.key) }, modifier = Modifier.size(40.dp)) {
+                                            Icon(Icons.Default.Edit, "Edit ${stage.label}", Modifier.size(17.dp), tint = detailMuted)
+                                        }
+                                        IconButton(onClick = { onInsertStage(stage.key) }, enabled = display.stages.size < 30, modifier = Modifier.size(40.dp)) {
+                                            Icon(Icons.Default.AddCircleOutline, "Add after ${stage.label}", Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                                        }
+                                    }
+                                }
                                 Text(when { milestone == MilestoneState.DONE -> "Passed"; current && mine -> "Pending with you"; current -> "Current stage"; else -> "Not started" },
                                     color = if (current && mine) detailRed else detailMuted, fontSize = 12.sp)
                                 if (person.isNotBlank() && !(current && mine)) Text(person, color = detailMuted, fontSize = 12.sp)

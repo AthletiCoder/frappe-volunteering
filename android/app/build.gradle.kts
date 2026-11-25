@@ -8,6 +8,8 @@ plugins {
 
 val localPortalHost = providers.gradleProperty("sevamritaLocalHost").orElse("10.0.2.2").get()
 val localPortalOnly = providers.gradleProperty("sevamritaLocalOnly").orElse("false").get().toBooleanStrict()
+val erpApp = providers.gradleProperty("sevamritaErp").orElse("false").get().toBooleanStrict()
+val appName = if (erpApp) "Sevamrita ERP" else "SF Tasks"
 val localOctets = localPortalHost.split('.').map { it.toIntOrNull() }
 require(localOctets.size == 4 && localOctets.all { it != null && it in 0..255 } &&
     (localOctets[0] == 10 || (localOctets[0] == 172 && localOctets[1] in 16..31) ||
@@ -15,7 +17,7 @@ require(localOctets.size == 4 && localOctets.all { it != null && it in 0..255 } 
     "sevamritaLocalHost must be a private Wi-Fi IPv4 address."
 }
 
-val releaseKey = rootProject.file("release-keystore.properties")
+val releaseKey = rootProject.file(if (erpApp) "erp-release-keystore.properties" else "release-keystore.properties")
 val releaseSigning = Properties().apply { if (releaseKey.exists()) releaseKey.inputStream().use { load(it) } }
 
 android {
@@ -23,20 +25,22 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "org.sevamrita.mobile"
+        applicationId = if (erpApp) "org.sevamrita.erp" else "org.sevamrita.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 31
-        versionName = "0.6.7"
-        manifestPlaceholders["appLabel"] = "SF Tasks"
-        buildConfigField("String", "APP_NAME", "\"SF Tasks\"")
+        versionCode = if (erpApp) 1 else 33
+        versionName = if (erpApp) "0.1.0" else "0.6.9"
+        manifestPlaceholders["appLabel"] = appName
+        manifestPlaceholders["appIcon"] = "@drawable/ic_launcher"
+        buildConfigField("String", "APP_NAME", "\"$appName\"")
+        buildConfigField("boolean", "ERP_APP", erpApp.toString())
         buildConfigField("String", "DEFAULT_LOCAL_HOST", "\"\"")
         buildConfigField("boolean", "LOCAL_PORTAL_ONLY", "false")
         testInstrumentationRunner = "org.sevamrita.mobile.FeatureAcceptanceInstrumentation"
     }
 
     signingConfigs {
-        if (releaseKey.exists()) create("sfTasks") {
+        if (releaseKey.exists()) create("appRelease") {
             storeFile = rootProject.file(releaseSigning.getProperty("storeFile"))
             storePassword = releaseSigning.getProperty("storePassword")
             keyAlias = releaseSigning.getProperty("keyAlias")
@@ -52,12 +56,18 @@ android {
             if (localPortalOnly) {
                 applicationIdSuffix = ".local"
                 versionNameSuffix = "-local"
-                manifestPlaceholders["appLabel"] = "SF testing"
-                buildConfigField("String", "APP_NAME", "\"SF testing\"")
+                val testName = if (erpApp) "Sevamrita ERP Testing" else "SF testing"
+                manifestPlaceholders["appLabel"] = testName
+                buildConfigField("String", "APP_NAME", "\"$testName\"")
             }
         }
         release {
-            if (releaseKey.exists()) signingConfig = signingConfigs.getByName("sfTasks")
+            if (releaseKey.exists()) signingConfig = signingConfigs.getByName("appRelease")
+            if (erpApp) {
+                manifestPlaceholders["appLabel"] = "SF ERP"
+                manifestPlaceholders["appIcon"] = "@mipmap/ic_sf_erp"
+                buildConfigField("String", "APP_NAME", "\"SF ERP\"")
+            }
             isMinifyEnabled = true
             manifestPlaceholders["cleartextAllowed"] = "false"
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -71,6 +81,15 @@ android {
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
     testOptions.unitTests.all { it.systemProperty("sevamrita.manifest", project.file("src/main/AndroidManifest.xml").absolutePath) }
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("release")) { variant ->
+        if (erpApp) variant.outputs.forEach { output ->
+            output.versionCode.set(2)
+            output.versionName.set("0.1.1")
+        }
+    }
 }
 
 dependencies {

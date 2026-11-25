@@ -317,7 +317,7 @@
 				>
 					<a class="text-accent hover:underline" :href="claim.route">{{ claim.name }}</a>
 					<span class="text-muted">
-						· {{ formatMoney(claim.allocated_amount) }} · {{ claim.status }}</span
+						· {{ formatMoney(claim.allocated_amount) }} · {{ claim.workflow_state || claim.status }}</span
 					>
 				</div>
 			</details>

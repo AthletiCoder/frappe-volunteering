@@ -12,6 +12,23 @@ class ChatPresentationTest {
         assertEquals(ChatReceipt.READ, chatReceipt(stamp, stamp, stamp))
     }
 
+    @Test fun readReceiptClearsAnInboxBadgeOnlyWhenItCoversTheLatestEntry() {
+        val seen = "2026-11-04 13:46:12.000001"
+        assertTrue(chatPreviewWasSeen(seen, seen))
+        assertTrue(chatPreviewWasSeen("2026-11-04 13:46:11.999999", seen))
+        assertFalse(chatPreviewWasSeen("2026-11-04 13:46:12.000002", seen))
+        assertFalse(chatPreviewWasSeen("", seen))
+    }
+
+    @Test fun recognisesCreationCardsWithOldAndNewServers() {
+        assertEquals("Task", createdChatItemKind("System", "Task", "Recorded"))
+        assertEquals("Tracker", createdChatItemKind("System", "", "Created tracker: Vendor confirmation"))
+        assertEquals("Task", createdChatItemKind("System", "", "Created task: Order supplies"))
+        assertNull(createdChatItemKind("Message", "", "Created task: Order supplies"))
+        assertNull(createdChatItemKind("System", "", "Assigned tracker: Vendor confirmation"))
+        assertNull(createdChatItemKind("Progress", "", "Updated stage"))
+    }
+
     private val today = LocalDate.of(2026, 11, 2)
     private val kitchen = ChatSummary("kitchen", "Pune Community Kitchen", "Workspace", timestamp = "2026-11-02 11:05:00")
     private val area = ChatSummary("area", "Meal delivery", "Area", parent = "kitchen", timestamp = "2026-11-02 13:00:00", unread = 2)

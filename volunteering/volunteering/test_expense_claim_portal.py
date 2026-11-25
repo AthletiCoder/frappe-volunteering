@@ -3,7 +3,7 @@
 
 import base64
 from io import BytesIO
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import frappe
 from frappe.tests import IntegrationTestCase, UnitTestCase
@@ -108,7 +108,7 @@ class IntegrationTestExpenseClaimPortal(IntegrationTestCase):
 					"expense_date": frappe.utils.nowdate(),
 					"account": frappe.db.get_value(
 						"Project Account Budget",
-						{"parent": self.project, "expense_account": self.account},
+						{"parent": self.project, "expense_account": self.account, "employee_label": "Portal project costs"},
 						"budget_key",
 					),
 					"supplier_name": "Portal supplier",
@@ -134,7 +134,7 @@ class IntegrationTestExpenseClaimPortal(IntegrationTestCase):
 		self.assertIn(self.project, [row["value"] for row in defaults["projects"]])
 		accounts = get_project_accounts(self.project)
 		key = frappe.db.get_value(
-			"Project Account Budget", {"parent": self.project, "expense_account": self.account}, "budget_key"
+			"Project Account Budget", {"parent": self.project, "expense_account": self.account, "employee_label": "Portal project costs"}, "budget_key"
 		)
 		self.assertIn(key, [row["value"] for row in accounts])
 		self.assertNotIn(self.account, frappe.as_json(accounts))
@@ -474,7 +474,178 @@ class IntegrationTestExpenseClaimPortal(IntegrationTestCase):
 			save_test_project(project)
 
 
+	def test_submission_retry_returns_same_claim_and_private_receipt(self):
+		from volunteering.volunteering.expense_claim_requests import get_expense_submission_status
+		frappe.set_user(self.user)
+		key = frappe.generate_hash(length=32)
+		payload = self._payload()
+		one = submit_expense_claim(payload, request_key=key)
+		two = submit_expense_claim(payload, request_key=key)
+		self.assertEqual(one, two)
+		self.assertEqual(frappe.db.count("Expense Claim", {"employee": self.employee}), 1)
+		self.assertEqual(frappe.db.count("File", {"attached_to_name": one["name"], "attached_to_doctype": "Expense Claim"}), 1)
+		self.assertEqual(get_expense_submission_status(key), {"found": True, "result": one})
+		payload["expenses"][0]["amount"] = 126
+		with self.assertRaisesRegex(frappe.ValidationError, "different details"):
+			submit_expense_claim(payload, request_key=key)
+		other = get_or_create_user("claim-retry-other@example.com", ["Employee"])
+		get_or_create_employee(other, self.department, "Another claimant")
+		frappe.set_user(other)
+		self.assertFalse(get_expense_submission_status(key)["found"])
+
+	def test_failed_submission_leaves_no_request_or_partial_claim_and_can_retry(self):
+		from volunteering.volunteering.expense_claim_requests import get_expense_submission_status
+		frappe.set_user(self.user)
+		key = frappe.generate_hash(length=32)
+		with patch("volunteering.volunteering.expense_claim_portal.apply_workflow", side_effect=frappe.ValidationError("Temporary validation failure")):
+			with self.assertRaises(frappe.ValidationError):
+				submit_expense_claim(self._payload(), request_key=key)
+		self.assertFalse(get_expense_submission_status(key)["found"])
+		self.assertFalse(frappe.db.exists("Expense Claim", {"employee": self.employee}))
+		result = submit_expense_claim(self._payload(), request_key=key)
+		self.assertTrue(get_expense_submission_status(key)["found"])
+		self.assertTrue(result["name"])
+
+	def test_multiple_invoice_retry_does_not_repeat_any_claim(self):
+		frappe.set_user(self.user)
+		item = self._payload()["expenses"][0]
+		invoice = {"invoice_date": str(frappe.utils.nowdate()), "invoice_number": "RETRY-1", "supplier_name": "Supplier",
+			"receipt_filename": item["receipt_filename"], "receipt_content": item["receipt_content"],
+			"items": [{"account": item["account"], "description": "First item", "amount": 125}]}
+		payload = {"project": self.project, "invoices": [invoice, {**invoice, "invoice_number": "RETRY-2"}]}
+		key = frappe.generate_hash(length=32)
+		one = submit_multi_invoice_expense_claim(payload, request_key=key)
+		self.assertEqual(submit_multi_invoice_expense_claim(payload, request_key=key), one)
+		self.assertEqual(frappe.db.count("Expense Claim", {"employee": self.employee}), 2)
+
+	@patch("volunteering.volunteering.invoice_generator.generate_invoice_documents")
+	def test_generated_retry_does_not_generate_or_number_another_invoice(self, generate):
+		frappe.set_user(self.user)
+		generate.return_value = {"invoice_number": "INV-SAFE-1", "supplier_name": "Supplier", "grand_total": 125,
+			"pdf": {"filename": "safe.pdf", "content_base64": base64.b64encode(_valid_pdf()).decode()}}
+		payload = self._payload()
+		invoice = {"volunteer_signature_data": "signature", "volunteer_signature_proof": "proof-one",
+			"signature_context": _generated_invoice_claim_context(payload)}
+		key = frappe.generate_hash(length=32)
+		original = frappe.as_json(payload)
+		one = submit_generated_invoice_expense_claim(payload, invoice, request_key=key)
+		self.assertEqual(frappe.as_json(payload), original)
+		invoice["volunteer_signature_proof"] = "proof-refreshed"
+		self.assertEqual(submit_generated_invoice_expense_claim(payload, invoice, request_key=key), one)
+		self.assertEqual(generate.call_count, 1)
+		self.assertEqual(frappe.db.count("Expense Claim", {"employee": self.employee}), 1)
+
+	def test_pending_approved_and_withdrawn_amount_labels(self):
+		frappe.set_user(self.user)
+		name = submit_expense_claim(self._payload())["name"]
+		detail = get_my_expense_claim(name)
+		self.assertFalse(detail["is_approved"])
+		self.assertIsNone(detail["approved_amount"])
+		self.assertIsNone(detail["outstanding_amount"])
+		self.assertEqual(detail["sanctioned_amount"], 125)
+		frappe.db.set_value("Expense Claim", name, {"workflow_state": "Pending Accounts Classification", "approval_status": "Approved", "total_sanctioned_amount": 100})
+		detail = get_my_expense_claim(name)
+		self.assertTrue(detail["is_approved"])
+		self.assertEqual(detail["approved_amount"], 100)
+		self.assertEqual(detail["outstanding_amount"], 100)
+		self.assertFalse(detail["can_withdraw"])
+
+	def test_withdrawal_retains_evidence_releases_budget_and_is_terminal(self):
+		from volunteering.volunteering.expense_claim_withdrawal import withdraw_expense_claim
+		from volunteering.volunteering.budget_service import get_consumed_amount
+		frappe.set_user(self.user)
+		before = get_consumed_amount(self.project)
+		name = submit_expense_claim(self._payload())["name"]
+		detail = get_my_expense_claim(name)
+		self.assertEqual(get_consumed_amount(self.project), before + 125)
+		closed = withdraw_expense_claim(name, detail["modified"], "Duplicate submitted after a lost confirmation")
+		self.assertEqual(closed["stage"], "Withdrawn")
+		self.assertEqual(closed["outstanding_amount"], 0)
+		self.assertFalse(closed["can_withdraw"])
+		self.assertFalse(closed["can_correct"])
+		self.assertEqual(closed["expenses"][0]["receipt_attachment"], detail["expenses"][0]["receipt_attachment"])
+		self.assertEqual(get_consumed_amount(self.project), before)
+		self.assertEqual(withdraw_expense_claim(name, detail["modified"], "Retry")["stage"], "Withdrawn")
+		self.assertTrue(any(row["label"] == "Claim withdrawn" for row in closed["timeline"]))
+		self.assertFalse(frappe.db.exists("GL Entry", {"voucher_type": "Expense Claim", "voucher_no": name}))
+		with self.assertRaisesRegex(frappe.ValidationError, "closed"):
+			doc = frappe.get_doc("Expense Claim", name)
+			doc.workflow_state = "Draft"
+			doc.save(ignore_permissions=True)
+		frappe.set_user("Administrator")
+		self.assertNotIn(name, [row["name"] for row in get_expense_claim_work_queue()["queues"]["receipt_review"]])
+
+	def test_withdrawal_requires_owner_reason_current_version_and_pending_state(self):
+		from volunteering.volunteering.expense_claim_withdrawal import withdraw_expense_claim
+		frappe.set_user(self.user)
+		name = submit_expense_claim(self._payload())["name"]
+		detail = get_my_expense_claim(name)
+		for reason, stamp in [("", detail["modified"]), ("Duplicate", "old")]:
+			with self.assertRaises(frappe.ValidationError): withdraw_expense_claim(name, stamp, reason)
+		other = get_or_create_user("claim-withdraw-other@example.com", ["Employee"])
+		get_or_create_employee(other, self.department, "Another employee")
+		frappe.set_user(other)
+		with self.assertRaises(frappe.PermissionError): withdraw_expense_claim(name, detail["modified"], "Not mine")
+		frappe.set_user(self.user)
+		frappe.db.set_value("Expense Claim", name, {"workflow_state": "Pending Accounts Classification", "approval_status": "Approved"})
+		with self.assertRaises(frappe.ValidationError): withdraw_expense_claim(name, detail["modified"], "Too late")
+
+	def test_withdrawn_verified_claim_cannot_be_reopened_by_changing_receipts(self):
+		from volunteering.volunteering.expense_claim_withdrawal import withdraw_expense_claim
+		from volunteering.volunteering.receipt_review import reset_review_after_file_change
+		frappe.set_user(self.user)
+		name = submit_expense_claim(self._payload())["name"]
+		frappe.db.set_value("Expense Claim", name, {"workflow_state": "Pending Approval", "receipt_review_status": "Verified"})
+		detail = get_my_expense_claim(name)
+		withdraw_expense_claim(name, detail["modified"], "Duplicate after receipt review")
+		file = frappe.get_doc("File", frappe.db.get_value("File", {"attached_to_doctype": "Expense Claim", "attached_to_name": name}, "name"))
+		with self.assertRaisesRegex(frappe.ValidationError, "withdrawn"):
+			frappe.delete_doc("File", file.name, ignore_permissions=True)
+		with self.assertRaisesRegex(frappe.ValidationError, "withdrawn"):
+			frappe.get_doc({"doctype": "File", "file_name": "replacement.pdf", "content": _valid_pdf(), "is_private": 1,
+				"attached_to_doctype": "Expense Claim", "attached_to_name": name}).insert(ignore_permissions=True)
+		reset_review_after_file_change(file)
+		self.assertEqual(frappe.db.get_value("Expense Claim", name, "workflow_state"), "Withdrawn")
+		self.assertTrue(frappe.db.exists("File", file.name))
+
+	def test_delete_only_allows_unsubmitted_own_drafts(self):
+		from volunteering.volunteering.expense_claim_withdrawal import delete_expense_claim_draft
+		frappe.set_user(self.user)
+		name = submit_expense_claim(self._payload())["name"]
+		detail = get_my_expense_claim(name)
+		with self.assertRaises(frappe.ValidationError): delete_expense_claim_draft(name, detail["modified"])
+		# This fixture represents a genuine unsubmitted Desk draft.
+		frappe.db.set_value("Expense Claim", name, {"workflow_state": "Draft"})
+		detail = get_my_expense_claim(name)
+		self.assertTrue(detail["can_delete"])
+		delete_expense_claim_draft(name, detail["modified"])
+		self.assertFalse(frappe.db.exists("Expense Claim", name))
+
+
 class UnitTestExpenseClaimPortal(UnitTestCase):
+	def test_snapshot_conflict_retries_after_full_rollback(self):
+		from volunteering.volunteering.expense_claim_requests import _retry_snapshot_conflict
+		op = Mock(side_effect=[frappe.QueryDeadlockError("snapshot changed"), "existing claim"])
+		with patch.object(frappe.db, "transaction_writes", 0), patch.object(frappe.db, "rollback") as rollback:
+			self.assertEqual(_retry_snapshot_conflict(op), "existing claim")
+			rollback.assert_called_once_with()
+
+	def test_snapshot_retry_never_discards_callers_earlier_writes(self):
+		from volunteering.volunteering.expense_claim_requests import _retry_snapshot_conflict
+		op = Mock(side_effect=frappe.QueryDeadlockError("snapshot changed"))
+		with patch.object(frappe.db, "transaction_writes", 1), patch.object(frappe.db, "rollback") as rollback:
+			with self.assertRaises(frappe.QueryDeadlockError): _retry_snapshot_conflict(op)
+			rollback.assert_not_called()
+			self.assertEqual(op.call_count, 1)
+
+	def test_snapshot_retry_is_bounded(self):
+		from volunteering.volunteering.expense_claim_requests import _retry_snapshot_conflict
+		op = Mock(side_effect=frappe.QueryDeadlockError("snapshot changed"))
+		with patch.object(frappe.db, "transaction_writes", 0), patch.object(frappe.db, "rollback") as rollback:
+			with self.assertRaises(frappe.QueryDeadlockError): _retry_snapshot_conflict(op)
+			self.assertEqual(op.call_count, 3)
+			self.assertEqual(rollback.call_count, 2)
+
 	def test_non_finite_amount_is_rejected(self):
 		with self.assertRaises(frappe.ValidationError):
 			_normalise_expenses([{"account": "ACCOUNT", "amount": "nan"}], {"ACCOUNT"})

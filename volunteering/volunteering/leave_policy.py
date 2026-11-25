@@ -3,10 +3,11 @@ from frappe import _
 from frappe.utils import date_diff, flt, getdate, nowdate
 
 from hrms.hr.doctype.leave_application.leave_application import get_number_of_leave_days
+from volunteering.volunteering.hr_policy import policy_on, override_reason
 
 from volunteering.volunteering.authority import BOARD_OF_DIRECTORS, user_has_board_of_directors
 
-LEAVE_CATEGORIES = ("Normal", "Emergency")
+LEAVE_CATEGORIES = ("Normal", "Emergency", "Medical")
 EMERGENCY_MAX_DAYS = 3
 DIRECTOR_APPROVAL_THRESHOLD = 7
 EMERGENCY_REGULARIZE_HOURS = 48
@@ -29,18 +30,31 @@ def validate_leave_application(doc, method=None):
 	from_date = getdate(doc.from_date)
 	category = get_leave_category(doc)
 	leave_days = get_application_leave_days(doc)
+	policy = policy_on(from_date, revision=doc.get("sf_policy_revision"))
+	exception = override_reason(doc)
 
-	if category == "Normal":
-		validate_normal_leave(doc, from_date, today, leave_days)
-	elif category == "Emergency":
+	entry_changed = doc.is_new() or any(doc.has_value_changed(key) for key in ("employee", "leave_type", "from_date", "to_date", "half_day", "half_day_date", "leave_category"))
+	if not entry_changed and doc.get("hr_exception_by") and doc.get("hr_exception_reason"):
+		exception = doc.hr_exception_reason  # Retain the recorded authorisation for this unchanged request.
+	from volunteering.volunteering.hr_special_leave import validate_details, MATERNITY, PATERNITY
+	validate_details(doc, exception)
+	if category == "Normal" and not exception and entry_changed and doc.leave_type not in {MATERNITY,PATERNITY}:
+		validate_normal_leave(doc, from_date, today, leave_days, policy)
+	elif category == "Emergency" and not exception and entry_changed:
 		validate_emergency_leave(doc, from_date, today, leave_days, settings)
-	else:
+	elif category not in LEAVE_CATEGORIES:
 		frappe.throw(_("Leave Category must be Normal or Emergency."))
 
-	validate_director_approval(doc, leave_days)
+	if not exception:
+		validate_director_approval(doc, leave_days, policy)
+		if (doc.status == "Approved" and policy["director_approval_days"] and leave_days > policy["director_approval_days"]
+			and frappe.session.user != "Administrator" and not user_has_director_role(frappe.session.user)):
+			frappe.throw(_("Extended leave must be decided by its Board of Directors approver. HR can authorise an explicit exception."), frappe.PermissionError)
+	from volunteering.volunteering.time_leave_portal import validate_comp_uses
+	validate_comp_uses(doc)
 
 
-HR_OVERRIDE_ROLES = {"HR Manager", "HR User", "System Manager"}
+HR_OVERRIDE_ROLES = {"HR Manager", "System Manager"}
 
 
 def _is_hr_user(user=None):
@@ -58,10 +72,14 @@ def _ensure_leave_approver_from_reports_to(doc):
 	leave_approver, reports_to = frappe.db.get_value(
 		"Employee", doc.employee, ["leave_approver", "reports_to"]
 	) or (None, None)
+	if reports_to and doc.from_date and policy_on(doc.from_date, revision=doc.get("sf_policy_revision")).get("charter_enabled"):
+		# The revised charter routes leave to the direct manager, even when an
+		# older Employee record still names a different leave approver.
+		leave_approver = frappe.db.get_value("Employee", reports_to, "user_id")
 	if not leave_approver and reports_to:
 		leave_approver = frappe.db.get_value("Employee", reports_to, "user_id")
 	if leave_approver and doc.leave_approver != leave_approver:
-		if doc.leave_approver and user_has_board_of_directors(doc.leave_approver):
+		if doc.leave_approver and user_has_board_of_directors(doc.leave_approver) and not policy_on(doc.from_date, revision=doc.get("sf_policy_revision")).get("charter_enabled"):
 			return
 		doc.leave_approver = leave_approver
 		doc.leave_approver_name = frappe.db.get_value("User", leave_approver, "full_name")
@@ -69,7 +87,7 @@ def _ensure_leave_approver_from_reports_to(doc):
 
 def _validate_employee_field_locked(doc):
 	"""Non-HR users may only create leave for themselves."""
-	if _is_hr_user() or frappe.session.user == "Administrator":
+	if _is_hr_user():
 		return
 
 	session_employee = frappe.db.get_value("Employee", {"user_id": frappe.session.user}, "name")
@@ -95,7 +113,7 @@ def _validate_employee_field_locked(doc):
 
 def _validate_no_self_leave_approval(doc):
 	"""Block changing own leave to Approved/Rejected (even with Leave Approver role)."""
-	if _is_hr_user() or frappe.session.user == "Administrator":
+	if frappe.session.user == "Administrator":
 		return
 
 	emp_user = frappe.db.get_value("Employee", doc.employee, "user_id") if doc.employee else None
@@ -103,33 +121,6 @@ def _validate_no_self_leave_approval(doc):
 		return
 
 	if doc.status in ("Approved", "Rejected"):
-		# #region agent log
-		try:
-			import json
-			import time
-
-			with open(
-				"/Users/varunkumar/Documents/coding/erp/erpnext/frappe-bench/.cursor/debug-4c4245.log",
-				"a",
-				encoding="utf-8",
-			) as f:
-				f.write(
-					json.dumps(
-						{
-							"sessionId": "4c4245",
-							"hypothesisId": "B",
-							"location": "leave_policy.py:_validate_no_self_leave_approval",
-							"message": "blocked self approval",
-							"data": {"status": doc.status, "user": frappe.session.user},
-							"timestamp": int(time.time() * 1000),
-							"runId": "post-fix",
-						}
-					)
-					+ "\n"
-				)
-		except Exception:
-			pass
-		# #endregion
 		frappe.throw(
 			_(
 				"You cannot approve or reject your own Leave Application. "
@@ -141,7 +132,7 @@ def _validate_no_self_leave_approval(doc):
 def ensure_leave_type(doc, settings):
 	expected_leave_type = settings.get("default_leave_type") or "Privilege Leave"
 	lwp = settings.get("leave_without_pay_type") or "Leave Without Pay"
-	if doc.leave_type and doc.leave_type not in (expected_leave_type, lwp):
+	if doc.leave_type and doc.leave_type not in (expected_leave_type, lwp, "Compensatory Leave", "Maternity Leave", "Paternity Leave", "Optional Holiday"):
 		frappe.throw(
 			_("Paid leave must use leave type {0}. Use {1} for unpaid leave.").format(
 				expected_leave_type, lwp
@@ -163,19 +154,20 @@ def get_leave_category(doc):
 	return category
 
 
-def validate_normal_leave(doc, from_date, today, leave_days):
+def validate_normal_leave(doc, from_date, today, leave_days, policy=None):
 	if from_date < today:
 		frappe.throw(
 			_("Backdated leave is not allowed for Normal leave. Use Emergency leave or contact HR.")
 		)
 
 	days_until_leave = date_diff(from_date, today)
-	required_notice = max(int(flt(leave_days)), 1)
+	import math
+	policy = policy or policy_on(from_date)
+	required_notice = (policy["extended_notice_days"] if leave_days > policy["short_leave_days"] and not policy.get("_legacy") else max(math.ceil(flt(leave_days)), 1))
 	if days_until_leave < required_notice:
 		frappe.throw(
 			_(
-				"Normal leave of {0} day(s) requires at least {0} day(s) advance notice. "
-				"You applied {1} day(s) in advance. Use Emergency leave for short-notice absence."
+				"This leave requires {0} days' notice; {1} days were given. Contact HR for an exception or use Emergency leave when applicable."
 			).format(required_notice, days_until_leave)
 		)
 
@@ -186,7 +178,8 @@ def validate_emergency_leave(doc, from_date, today, leave_days, settings):
 	Working-day leave counts from HRMS can be shorter than the calendar span
 	(weekends/holidays), but the policy is about consecutive calendar absence.
 	"""
-	max_days = int(settings.get("emergency_max_consecutive_days") or EMERGENCY_MAX_DAYS)
+	policy = policy_on(from_date, revision=doc.get("sf_policy_revision"))
+	max_days = policy["emergency_max_days"]
 	to_date = getdate(doc.to_date or doc.from_date)
 	calendar_days = date_diff(to_date, from_date) + 1
 	if calendar_days > max_days:
@@ -200,7 +193,7 @@ def validate_emergency_leave(doc, from_date, today, leave_days, settings):
 	# Retroactive: must regularize within 48 hours of return (to_date + 48h).
 	# HR / System Manager may backfill beyond the window on behalf of employees.
 	# Approving an already-filed application must not re-apply the window.
-	if from_date < today and date_diff(today, to_date) > 2 and not _is_hr_user():
+	if from_date < today and date_diff(today, to_date) * 24 > policy["emergency_regularize_hours"]:
 		if not (
 			doc.is_new() or doc.has_value_changed("from_date") or doc.has_value_changed("to_date")
 		):
@@ -209,12 +202,13 @@ def validate_emergency_leave(doc, from_date, today, leave_days, settings):
 			_(
 				"Emergency leave must be regularized within {0} hours of return. "
 				"Please contact HR for assistance."
-			).format(EMERGENCY_REGULARIZE_HOURS)
+			).format(policy["emergency_regularize_hours"])
 		)
 
 
-def validate_director_approval(doc, leave_days):
-	if leave_days <= DIRECTOR_APPROVAL_THRESHOLD:
+def validate_director_approval(doc, leave_days, policy=None):
+	threshold = (policy or policy_on(doc.from_date, revision=doc.get("sf_policy_revision")))["director_approval_days"]
+	if not threshold or leave_days <= threshold:
 		return
 
 	approver = doc.get("leave_approver")
@@ -223,7 +217,7 @@ def validate_director_approval(doc, leave_days):
 			_(
 				"Leave of more than {0} consecutive days requires a {1} grade employee "
 				"as Leave Approver."
-			).format(DIRECTOR_APPROVAL_THRESHOLD, BOARD_OF_DIRECTORS)
+			).format(threshold, BOARD_OF_DIRECTORS)
 		)
 
 	if not user_has_director_role(approver):
@@ -231,7 +225,7 @@ def validate_director_approval(doc, leave_days):
 			_(
 				"Leave of more than {0} consecutive days must be approved by an employee "
 				"with the {1} grade."
-			).format(DIRECTOR_APPROVAL_THRESHOLD, BOARD_OF_DIRECTORS)
+			).format(threshold, BOARD_OF_DIRECTORS)
 		)
 
 
@@ -280,37 +274,4 @@ def get_leave_form_defaults():
 	result = {
 		"default_leave_type": settings.get("default_leave_type") or "Privilege Leave",
 	}
-	# #region agent log
-	try:
-		import json
-		import time
-
-		with open(
-			"/Users/varunkumar/Documents/coding/erp/erpnext/frappe-bench/.cursor/debug-4c4245.log",
-			"a",
-			encoding="utf-8",
-		) as f:
-			f.write(
-				json.dumps(
-					{
-						"sessionId": "4c4245",
-						"hypothesisId": "H1",
-						"location": "leave_policy.py:get_leave_form_defaults",
-						"message": "defaults for leave form",
-						"data": {
-							"user": frappe.session.user,
-							"default_leave_type": result["default_leave_type"],
-							"has_lps_read": frappe.has_permission(
-								"Leave Policy Settings", "read"
-							),
-						},
-						"timestamp": int(time.time() * 1000),
-						"runId": "leave-ux",
-					}
-				)
-				+ "\n"
-			)
-	except Exception:
-		pass
-	# #endregion
 	return result

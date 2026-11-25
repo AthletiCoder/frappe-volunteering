@@ -33,8 +33,6 @@ class AttendanceRegularizationRequest(Document):
 			)
 
 	def before_submit(self):
-		if self.status != "Open":
-			return
 		if not _can_approve(self):
 			frappe.throw(
 				_("Only your reporting manager or HR can approve this request."),
@@ -66,7 +64,7 @@ class AttendanceRegularizationRequest(Document):
 			status=self.requested_status,
 			leave_type=leave_type,
 			working_hours=hours,
-			half_day_status="Present" if self.requested_status == "Half Day" else None,
+			half_day_status="Absent" if self.requested_status == "Half Day" else None,
 		)
 		attendance_name = frappe.db.get_value(
 			"Attendance",

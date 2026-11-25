@@ -337,7 +337,7 @@ def _parse_sanctioned_amounts(value) -> dict[str, float]:
 @frappe.whitelist(methods=["POST"])
 def decide_expense_claim(name: str, action: str, sanctioned_amounts=None, reason: str = ""):
 	"""Approve, reject or escalate the claim through its configured workflow."""
-	doc = frappe.get_doc("Expense Claim", cstr(name).strip())
+	doc = frappe.get_doc("Expense Claim", cstr(name).strip(), for_update=True)
 	if not _can_approve(doc, frappe.session.user):
 		frappe.throw(_("Only the current pending approver can decide this claim."), frappe.PermissionError)
 	action = cstr(action).strip().lower()

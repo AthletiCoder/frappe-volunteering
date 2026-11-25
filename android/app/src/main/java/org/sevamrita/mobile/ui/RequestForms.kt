@@ -214,7 +214,11 @@ internal fun SelectField(label: String, selected: String, options: List<Pair<Str
 }
 
 @Composable
-internal fun DateField(label: String, value: String, set: (String) -> Unit) {
+internal fun DateField(label: String, value: String, set: (String) -> Unit) =
+    DateField(label, value, required = false, set = set)
+
+@Composable
+internal fun DateField(label: String, value: String, required: Boolean, set: (String) -> Unit) {
     val context = LocalContext.current
     Column {
         Text(label, fontWeight = FontWeight.Medium)
@@ -224,7 +228,7 @@ internal fun DateField(label: String, value: String, set: (String) -> Unit) {
                 set(LocalDate.of(year, month + 1, day).toString())
             }, date.year, date.monthValue - 1, date.dayOfMonth).show()
         }, modifier = Modifier.fillMaxWidth()) {
-            Text(if (value.isBlank()) "Choose date (optional)" else runCatching { LocalDate.parse(value).format(DateTimeFormatter.ofPattern("dd MMM yyyy")) }.getOrDefault(value))
+            Text(if (value.isBlank()) { if (required) "Choose date" else "Choose date (optional)" } else runCatching { LocalDate.parse(value).format(DateTimeFormatter.ofPattern("dd MMM yyyy")) }.getOrDefault(value))
         }
     }
 }

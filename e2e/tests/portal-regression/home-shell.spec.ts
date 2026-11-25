@@ -23,8 +23,9 @@ test('Home search, own records and forced-light preferences remain available wit
 	const nav = page.getByRole('navigation', { name: 'Sections', exact: true });
 	const records = nav.locator('details').filter({ has: page.locator('summary').filter({ hasText: 'Time & leave' }) });
 	await records.locator('summary').click();
-	for (const route of ['/desk/daily-work-log', '/desk/leave-application', '/desk/attendance-request', '/desk/attendance-regularization-request'])
+	for (const route of ['/volunteering/work-logs?new=1', '/volunteering/work-logs', '/volunteering/time-leave?type=WFH', '/volunteering/time-leave', '/volunteering/time-leave?type=Privilege%20Leave', '/volunteering/time-leave?type=Attendance%20Correction'])
 		await expect(records.locator(`a[href="${route}"]`)).toBeVisible();
+	await expect(records.locator('a[href^="/desk/"]')).toHaveCount(0);
 });
 
 for (const actor of ['manager', 'director', 'chair', 'unpaid', 'coordinator'] as const) {

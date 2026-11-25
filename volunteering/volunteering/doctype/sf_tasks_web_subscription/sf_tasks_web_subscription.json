@@ -1,0 +1,44 @@
+{
+ "doctype": "DocType",
+ "name": "SF Tasks Web Subscription",
+ "module": "Volunteering",
+ "autoname": "hash",
+ "engine": "InnoDB",
+ "field_order": [
+  "user",
+  "subscription",
+  "binding",
+  "enabled",
+  "preferences"
+ ],
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "User",
+   "options": "User"
+  },
+  {
+   "fieldname": "subscription",
+   "fieldtype": "Password",
+   "label": "Subscription"
+  },
+  {
+   "fieldname": "binding",
+   "fieldtype": "Data",
+   "label": "Binding"
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "preferences",
+   "fieldtype": "JSON",
+   "label": "Preferences"
+  }
+ ],
+ "permissions": [],
+ "track_changes": 0
+}

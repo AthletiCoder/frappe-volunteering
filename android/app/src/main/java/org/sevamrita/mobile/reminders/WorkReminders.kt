@@ -191,7 +191,11 @@ class WorkReminderReceiver : BroadcastReceiver() {
 }
 
 class ReminderRestartReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) { WorkReminders.reschedule(context); WorkReminders.start(context) }
+    override fun onReceive(context: Context, intent: Intent) {
+        if (org.sevamrita.mobile.BuildConfig.ERP_APP) return
+        WorkReminders.reschedule(context)
+        WorkReminders.start(context)
+    }
 }
 
 class ReminderSyncJob : JobService() {

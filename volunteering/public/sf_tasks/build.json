@@ -1,0 +1,50 @@
+{
+  "_sync-pdTNp9d8.js": {
+    "file": "assets/sync-pdTNp9d8.js",
+    "name": "sync"
+  },
+  "index.html": {
+    "file": "assets/app-QPZJXVl1.js",
+    "name": "app",
+    "src": "index.html",
+    "isEntry": true,
+    "imports": [
+      "_sync-pdTNp9d8.js"
+    ],
+    "dynamicImports": [
+      "src/PdfPreview.vue"
+    ],
+    "css": [
+      "assets/app-DOzBxl4g.css"
+    ]
+  },
+  "node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs": {
+    "file": "assets/pdf.worker.min-B5Yc7dP4.mjs",
+    "src": "node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs"
+  },
+  "src/PdfPreview.vue": {
+    "file": "assets/PdfPreview-BRhZLOfr.js",
+    "name": "PdfPreview",
+    "src": "src/PdfPreview.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_sync-pdTNp9d8.js"
+    ],
+    "css": [
+      "assets/PdfPreview-CasMHPAf.css"
+    ],
+    "assets": [
+      "assets/pdf.worker.min-B5Yc7dP4.mjs"
+    ]
+  },
+  "src/worker.js": {
+    "file": "assets/worker-DcS6uCID.js",
+    "name": "worker",
+    "src": "src/worker.js",
+    "isEntry": true,
+    "imports": [
+      "_sync-pdTNp9d8.js"
+    ]
+  }
+}

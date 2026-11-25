@@ -1,0 +1,52 @@
+{
+ "doctype": "DocType",
+ "name": "Compensatory Leave Use",
+ "module": "Volunteering",
+ "autoname": "hash",
+ "engine": "InnoDB",
+ "istable": 0,
+ "track_changes": 1,
+ "field_order": [
+  "credit",
+  "application",
+  "employee",
+  "leave_date",
+  "days"
+ ],
+ "fields": [
+  {
+   "fieldname": "credit",
+   "label": "Credit",
+   "fieldtype": "Link",
+   "options": "Staff Time Request",
+   "reqd": 1
+  },
+  {
+   "fieldname": "application",
+   "label": "Application",
+   "fieldtype": "Link",
+   "options": "Leave Application",
+   "reqd": 1
+  },
+  {
+   "fieldname": "employee",
+   "label": "Employee",
+   "fieldtype": "Link",
+   "options": "Employee",
+   "reqd": 1
+  },
+  {
+   "fieldname": "leave_date",
+   "label": "Leave Date",
+   "fieldtype": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "days",
+   "label": "Days",
+   "fieldtype": "Float",
+   "reqd": 1
+  }
+ ],
+ "permissions": []
+}

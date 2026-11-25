@@ -239,7 +239,11 @@ test('Weighted stages, dated progress snapshots and history work through the UI'
     await expect(page.getByRole('dialog', { name: 'Edit work item' }).getByLabel('Title', { exact: true })).toHaveValue('Meal service preparation');
     await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
     await page.getByRole('button', { name: 'Chat', exact: true }).click();
-    await expect(page.locator('.snapshot')).toContainText('Plan agreed');
+    // Creation is now a progress card too; retain its original state alongside
+    // the newer update rather than expecting one snapshot for the whole chat.
+    await expect(page.locator('.snapshot')).toHaveCount(2);
+    await expect(page.locator('.snapshot').first()).toContainText('Not started');
+    await expect(page.locator('.snapshot').last()).toContainText('Plan agreed');
     await page.screenshot({ path: 'test-results/collaboration-desktop.png', fullPage: true });
 });
 

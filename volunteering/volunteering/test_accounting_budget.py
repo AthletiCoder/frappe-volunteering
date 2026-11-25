@@ -23,6 +23,7 @@ from volunteering.volunteering.accounting_test_utils import (
 	mute_accounting_test_emails,
 	set_employee_grade,
 	set_project_budget,
+	save_test_project,
 )
 from volunteering.volunteering.approval_routing import get_approver_action_flags
 from volunteering.volunteering.budget_service import (
@@ -117,6 +118,10 @@ class IntegrationTestAccountingBudget(IntegrationTestCase):
 		super().setUp()
 		frappe.set_user("Administrator")
 		set_project_budget(self.project, 10000, project_control="Strict")
+		project = frappe.get_doc("Project", self.project)
+		if project.get("project_setup_version") and self.employee_email not in [row.user for row in project.project_participants]:
+			project.append("project_participants", {"user": self.employee_email, "access_level": "Basic"})
+			save_test_project(project)
 
 	@classmethod
 	def tearDownClass(cls):

@@ -1,0 +1,176 @@
+{
+ "doctype": "DocType",
+ "name": "Staff Time Request",
+ "module": "Volunteering",
+ "autoname": "hash",
+ "engine": "InnoDB",
+ "istable": 0,
+ "track_changes": 1,
+ "field_order": [
+  "employee",
+  "employee_name",
+  "company",
+  "request_type",
+  "from_date",
+  "to_date",
+  "reason",
+  "status",
+  "requested_status",
+  "credit_days",
+  "expired_days",
+  "valid_until",
+  "approver",
+  "decision_by",
+  "decision_on",
+  "decision_reason",
+  "policy_revision",
+  "hr_exception_reason",
+  "hr_exception_by",
+  "hr_exception_on",
+  "request_key",
+  "request_fingerprint",
+  "leave_adjustment",
+  "requires_hr"
+ ],
+ "fields": [
+  {
+   "fieldname": "employee",
+   "label": "Employee",
+   "fieldtype": "Link",
+   "options": "Employee",
+   "reqd": 1
+  },
+  {
+   "fieldname": "employee_name",
+   "label": "Employee Name",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "company",
+   "label": "Company",
+   "fieldtype": "Link",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "request_type",
+   "label": "Request Type",
+   "fieldtype": "Select",
+   "options": "Weekly Off Swap\nCompensatory Credit\nWFH\nAttendance Correction",
+   "reqd": 1
+  },
+  {
+   "fieldname": "from_date",
+   "label": "From Date",
+   "fieldtype": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "to_date",
+   "label": "To Date",
+   "fieldtype": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "reason",
+   "label": "Reason",
+   "fieldtype": "Small Text",
+   "reqd": 1
+  },
+  {
+   "fieldname": "status",
+   "label": "Status",
+   "fieldtype": "Select",
+   "options": "Open\nApproved\nRejected\nCancelled",
+   "default": "Open"
+  },
+  {
+   "fieldname": "requested_status",
+   "label": "Requested Status",
+   "fieldtype": "Select",
+   "options": "Present\nHalf Day\nAbsent\nHoliday\nWork From Home"
+  },
+  {
+   "fieldname": "credit_days",
+   "label": "Credit Days",
+   "fieldtype": "Float"
+  },
+  {
+   "fieldname": "expired_days",
+   "label": "Expired Days",
+   "fieldtype": "Float"
+  },
+  {
+   "fieldname": "valid_until",
+   "label": "Valid Until",
+   "fieldtype": "Date"
+  },
+  {
+   "fieldname": "approver",
+   "label": "Approver",
+   "fieldtype": "Link",
+   "options": "User"
+  },
+  {
+   "fieldname": "decision_by",
+   "label": "Decision By",
+   "fieldtype": "Link",
+   "options": "User"
+  },
+  {
+   "fieldname": "decision_on",
+   "label": "Decision On",
+   "fieldtype": "Datetime"
+  },
+  {
+   "fieldname": "decision_reason",
+   "label": "Decision Reason",
+   "fieldtype": "Small Text"
+  },
+  {
+   "fieldname": "policy_revision",
+   "label": "Policy Revision",
+   "fieldtype": "Link",
+   "options": "HR Policy Revision"
+  },
+  {
+   "fieldname": "hr_exception_reason",
+   "label": "Hr Exception Reason",
+   "fieldtype": "Small Text"
+  },
+  {
+   "fieldname": "hr_exception_by",
+   "label": "Hr Exception By",
+   "fieldtype": "Link",
+   "options": "User"
+  },
+  {
+   "fieldname": "hr_exception_on",
+   "label": "Hr Exception On",
+   "fieldtype": "Datetime"
+  },
+  {
+   "fieldname": "request_key",
+   "label": "Request Key",
+   "fieldtype": "Data",
+   "unique": 1
+  },
+  {
+   "fieldname": "request_fingerprint",
+   "label": "Request Fingerprint",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "leave_adjustment",
+   "label": "Leave Adjustment",
+   "fieldtype": "Link",
+   "options": "Leave Adjustment"
+  },
+  {
+   "fieldname": "requires_hr",
+   "fieldtype": "Check",
+   "label": "HR decision required"
+  }
+ ],
+ "permissions": []
+}

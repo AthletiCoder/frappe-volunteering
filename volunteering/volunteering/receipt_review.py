@@ -175,7 +175,7 @@ def review_receipts(name: str, decision: str, notes: str = "", checklist=None):
 	"""
 	user = frappe.session.user
 	_assert_reviewer(user)
-	doc = frappe.get_doc("Expense Claim", name)
+	doc = frappe.get_doc("Expense Claim", name, for_update=True)
 	doc.check_permission("read")
 	_assert_not_own_claim(doc, user)
 	legacy_approved = (
@@ -291,7 +291,10 @@ def validate_receipt_file_change(file_doc, method=None):
 		file_doc.attached_to_name,
 		["docstatus", "workflow_state"],
 		as_dict=True,
+		for_update=True,
 	)
+	if claim and claim.workflow_state == "Withdrawn":
+		frappe.throw(_("Receipts on a withdrawn claim are retained as history and cannot be changed."))
 	if claim and claim.docstatus == 1:
 		frappe.throw(
 			_(
@@ -312,7 +315,7 @@ def reset_review_after_file_change(file_doc, method=None):
 		["docstatus", "workflow_state", "receipt_review_status"],
 		as_dict=True,
 	)
-	if not claim or claim.docstatus != 0:
+	if not claim or claim.docstatus != 0 or claim.workflow_state == "Withdrawn":
 		return
 	if claim.receipt_review_status != REVIEW_STATUS_VERIFIED:
 		return

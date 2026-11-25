@@ -7,7 +7,9 @@ from frappe.utils import add_days, nowdate
 
 from volunteering.volunteering.test_utils import get_or_create_test_employee, get_or_create_test_project
 
-IGNORE_TEST_RECORD_DEPENDENCIES = ["Employee", "Company", "Project"]
+# The tests create their own employees/projects and use the site's dated policy.
+# User-linked audit fields must not bootstrap ERPNext's unrelated global books.
+IGNORE_TEST_RECORD_DEPENDENCIES = ["Employee", "Company", "Project", "User", "HR Policy Revision"]
 
 
 class IntegrationTestDailyWorkLog(IntegrationTestCase):

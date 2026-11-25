@@ -1,10 +1,10 @@
 {
   "package_name": "org.sevamrita.mobile",
-  "version_code": 31,
-  "version_name": "0.6.7",
+  "version_code": 33,
+  "version_name": "0.6.9",
   "min_sdk": 26,
-  "size_bytes": 2286998,
-  "sha256": "463d916abc07fe9f90589931930d7274210897b31877d384c230e21ef060854d",
-  "apk_url": "https://sevamrita.m.frappe.cloud/assets/volunteering/android_updates/SF-Tasks-0.6.7.apk",
-  "release_notes": "Check for updates compares your installed version with Sevamrita ERP. It offers the browser download only when a newer release is available."
+  "size_bytes": 2497138,
+  "sha256": "b36b2ca40b2999619b7d19ec58276c9e3a5bc317b8e33f9b6ab21122dfa9f6e4",
+  "apk_url": "https://sevamrita.m.frappe.cloud/assets/volunteering/android_updates/SF-Tasks-0.6.9.apk",
+  "release_notes": "# SF Tasks 0.6.9\n\n- Work logs: monthly calendars, compact hour/minute entry, and reporting-manager team review.\n- Time and leave: employee requests, remaining paid and compensatory leave, HR policy controls, holidays and payroll guidance.\n- People centre Guide: policy headings and bullet points, with organisation and work-location sections removed.\n- Trackers: add and edit stages between existing stages without losing the current workflow position.\n\nThe work-log and time/leave services require the matching ERP backend changes. Building or installing this APK does not deploy the backend."
 }

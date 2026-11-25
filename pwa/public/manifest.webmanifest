@@ -1,0 +1,19 @@
+{
+  "id": "/sf-tasks/",
+  "name": "SF Tasks PWA",
+  "short_name": "SF Tasks PWA",
+  "description": "Sevamrita conversations, tasks and progress. Works alongside SF Tasks for Android.",
+  "start_url": "/sf-tasks/",
+  "scope": "/sf-tasks/",
+  "display": "standalone",
+  "background_color": "#f4f7f6",
+  "theme_color": "#087b65",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    { "name": "My trackers", "url": "/sf-tasks/?view=trackers" },
+    { "name": "My mentions", "url": "/sf-tasks/?view=mentions" }
+  ]
+}

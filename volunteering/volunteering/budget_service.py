@@ -20,7 +20,7 @@ from volunteering.volunteering.doctype.volunteering_accounting_settings.voluntee
 # float; the budget is committed by the eventual Expense Claim.
 BUDGET_TRACKED_DOCTYPES = ("Expense Claim", "Purchase Order")
 CLOSED_PROJECT_CHECK_DOCTYPES = (*BUDGET_TRACKED_DOCTYPES, "Purchase Invoice")
-EXCLUDED_WORKFLOW_STATES = ("Draft", "Rejected", "")
+EXCLUDED_WORKFLOW_STATES = ("Draft", "Rejected", "Withdrawn", "")
 CONTROL_MODES = ("No Control", "Warn Only", "Strict")
 UNASSIGNED_ACCOUNT = "__unassigned__"
 

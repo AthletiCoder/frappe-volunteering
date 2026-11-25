@@ -10,16 +10,32 @@ CUSTOM_FIELDS = {
 		}
 	],
 	"Leave Application": [
+		{"fieldname": "sf_medical_certificate", "label": "Private supporting certificate", "fieldtype": "Attach", "read_only": 1},
+		{"fieldname": "sf_manager_notified_on", "label": "Manager informed on", "fieldtype": "Date"},
+		{"fieldname": "sf_childbirth_date", "label": "Expected or actual childbirth date", "fieldtype": "Date"},
+		{"fieldname": "sf_parental_case", "label": "Parental leave case", "fieldtype": "Select", "options": "\nBirth\nTwo or more surviving children\nAdoption or commissioning"},
+		{"fieldname": "sf_eligibility_verified_by", "label": "Eligibility verified by HR", "fieldtype": "Link", "options": "User", "read_only": 1},
+		{"fieldname": "sf_eligibility_reason", "label": "Eligibility verification notes", "fieldtype": "Small Text", "read_only": 1},
+		{"fieldname": "sf_policy_revision", "label": "HR policy", "fieldtype": "Link", "options": "HR Policy Revision", "read_only": 1, "no_copy": 1},
+		{"fieldname": "sf_request_key", "label": "Portal request reference", "fieldtype": "Data", "hidden": 1, "no_copy": 1},
+		{"fieldname": "sf_request_fingerprint", "label": "Request fingerprint", "fieldtype": "Data", "hidden": 1, "no_copy": 1},
+		{"fieldname": "hr_exception_reason", "label": "HR exception reason", "fieldtype": "Small Text", "insert_after": "description"},
+		{"fieldname": "hr_exception_by", "label": "HR exception authorised by", "fieldtype": "Link", "options": "User", "read_only": 1},
+		{"fieldname": "hr_exception_on", "label": "HR exception authorised on", "fieldtype": "Datetime", "read_only": 1},
 		{
 			"fieldname": "leave_category",
 			"label": "Leave Category",
 			"fieldtype": "Select",
-			"options": "Normal\nEmergency",
+			"options": "Normal\nEmergency\nMedical",
 			"insert_after": "leave_type",
 			"reqd": 1,
 			"default": "Normal",
 			"in_list_view": 1,
 		}
+	],
+	"Salary Slip": [
+		{"fieldname":"sf_employer_pf", "label":"Employer PF contribution", "fieldtype":"Currency", "read_only":1},
+		{"fieldname":"sf_payroll_policy", "label":"Payroll policy revision", "fieldtype":"Link", "options":"HR Policy Revision", "read_only":1},
 	],
 	"Attendance": [
 		{
@@ -30,6 +46,18 @@ CUSTOM_FIELDS = {
 			"read_only": 1,
 			"description": "Set when attendance was adjusted via Attendance Regularization Request",
 		}
+	],
+	"Leave Allocation": [
+		{"fieldname": "sf_managed_policy", "label": "Managed HR accrual", "fieldtype": "Check", "read_only": 1},
+		{"fieldname": "sf_policy_revision", "label": "HR policy", "fieldtype": "Link", "options": "HR Policy Revision", "read_only": 1},
+	],
+	"Leave Adjustment": [
+		{"fieldname": "sf_policy_posting", "label": "HR policy posting", "fieldtype": "Link", "options": "HR Leave Posting", "read_only": 1},
+	],
+	"Daily Work Log": [
+		{"fieldname": "hr_exception_reason", "label": "HR exception reason", "fieldtype": "Small Text"},
+		{"fieldname": "hr_exception_by", "label": "HR exception authorised by", "fieldtype": "Link", "options": "User", "read_only": 1},
+		{"fieldname": "hr_exception_on", "label": "HR exception authorised on", "fieldtype": "Datetime", "read_only": 1},
 	],
 }
 
@@ -147,6 +175,9 @@ ACCOUNTING_CUSTOM_FIELDS = {
 		}
 	],
 	"Expense Claim": [
+        {"fieldname": "withdrawn_by", "label": "Withdrawn by", "fieldtype": "Link", "options": "User", "read_only": 1, "no_copy": 1, "insert_after": "remark"},
+        {"fieldname": "withdrawn_on", "label": "Withdrawn on", "fieldtype": "Datetime", "read_only": 1, "no_copy": 1, "insert_after": "withdrawn_by"},
+        {"fieldname": "withdrawal_reason", "label": "Withdrawal reason", "fieldtype": "Small Text", "read_only": 1, "no_copy": 1, "insert_after": "withdrawn_on"},
 		*_approval_routing_fields("expense_approver", emergency_label="Emergency Expense"),
 		{
 			"fieldname": "expense_submission_id",

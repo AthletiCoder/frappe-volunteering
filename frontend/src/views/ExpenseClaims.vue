@@ -16,6 +16,8 @@
 					class="btn-primary"
 					>Correct and resubmit</RouterLink
 				>
+                <button v-if="selected?.can_withdraw" type="button" class="btn-secondary" :disabled="closing" @click="closeAction = 'withdraw'">Withdraw claim</button>
+                <button v-if="selected?.can_delete" type="button" class="btn-secondary" :disabled="closing" @click="closeAction = 'delete'">Delete draft</button>
 				<button v-if="selected" type="button" class="btn-secondary" @click="closeDetail">
 					Back to claims
 				</button>
@@ -104,6 +106,13 @@
 		</template>
 
 		<template v-if="!loading && selected">
+            <section v-if="closeAction" class="form-card mb-5" role="region" aria-label="Close claim">
+                <h2 class="form-title">{{ closeAction === 'delete' ? 'Delete this unsubmitted draft?' : 'Withdraw this claim?' }}</h2>
+                <p class="text-sm text-muted mb-3">{{ closeAction === 'delete' ? 'This removes the draft and its attachments.' : 'This closes the claim and removes it from review. Its receipts and withdrawal reason stay in the history. It cannot be reopened.' }}</p>
+                <label v-if="closeAction === 'withdraw'" class="field-label">Withdrawal reason<textarea v-model.trim="withdrawalReason" maxlength="1000" rows="2" class="field-input" :disabled="closing"></textarea></label>
+                <div class="flex gap-3 mt-3"><button type="button" class="btn-secondary" :disabled="closing" @click="closeAction = ''">Keep claim</button><button type="button" class="btn-primary" :disabled="closing || (closeAction === 'withdraw' && !withdrawalReason)" @click="closeClaim">{{ closing ? 'Saving…' : closeAction === 'delete' ? 'Delete draft permanently' : 'Confirm withdrawal' }}</button></div>
+            </section>
+            <p v-if="selected.withdrawal_reason" class="form-card mb-5 text-sm">Withdrawn: {{ selected.withdrawal_reason }}</p>
 			<section class="form-card mb-5">
 				<div class="flex flex-wrap items-start justify-between gap-3">
 					<div>
@@ -152,7 +161,7 @@
 					/>
 					<AmountBox
 						label="Approved"
-						:value="money(selected.sanctioned_amount, selected.currency)"
+						:value="selected.is_approved ? money(selected.approved_amount, selected.currency) : selected.stage === 'Withdrawn' || selected.stage === 'Rejected' ? 'Not approved' : 'Awaiting approval'"
 					/>
 					<AmountBox
 						label="Paid / settled"
@@ -160,7 +169,7 @@
 					/>
 					<AmountBox
 						label="Outstanding"
-						:value="money(selected.outstanding_amount, selected.currency)"
+						:value="selected.outstanding_amount == null ? 'Awaiting approval' : money(selected.outstanding_amount, selected.currency)"
 						accent
 					/>
 				</div>
@@ -257,6 +266,7 @@ const error = ref("");
 const claims = ref([]);
 const counts = ref({});
 const selected = ref(null);
+const closeAction = ref(""), withdrawalReason = ref(""), closing = ref(false);
 const stage = ref("All");
 const search = ref("");
 const stages = [
@@ -269,6 +279,8 @@ const stages = [
 	"Paid",
 	"Rejected",
 	"Cancelled",
+	"Withdrawn",
+	"Accounts classification",
 ];
 
 const filtered = computed(() => {
@@ -327,7 +339,23 @@ async function load() {
 	}
 }
 
+async function closeClaim() {
+    if (closing.value) return;
+    closing.value = true; error.value = "";
+    try {
+        const name = selected.value.name, expected_modified = selected.value.modified;
+        if (closeAction.value === "delete") {
+            await call("volunteering.volunteering.expense_claim_withdrawal.delete_expense_claim_draft", { name, expected_modified });
+            closeAction.value = ""; await closeDetail();
+        } else {
+            selected.value = await call("volunteering.volunteering.expense_claim_withdrawal.withdraw_expense_claim", { name, expected_modified, reason: withdrawalReason.value });
+            closeAction.value = "";
+        }
+    } catch (e) { error.value = e.message; }
+    finally { closing.value = false; }
+}
 async function loadDetail(name) {
+    closeAction.value = ""; withdrawalReason.value = "";
 	selected.value = await call(`${API}get_my_expense_claim`, { name });
 }
 

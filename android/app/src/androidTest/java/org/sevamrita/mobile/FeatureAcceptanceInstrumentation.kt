@@ -10,7 +10,8 @@ import java.util.UUID
 
 /** Framework-only device checks: no emulator, UI automation library or test credentials. */
 class FeatureAcceptanceInstrumentation:Instrumentation(){
-    override fun onCreate(arguments:Bundle?){super.onCreate(arguments);start()}
+    private var checkWorkLogs=false
+    override fun onCreate(arguments:Bundle?){checkWorkLogs=arguments?.getString("work_logs")=="true";super.onCreate(arguments);start()}
     override fun onStart(){
         val report=Bundle();var room="";var api:PortalApi?=null;var resultCode=Activity.RESULT_OK
         try{
@@ -55,11 +56,47 @@ class FeatureAcceptanceInstrumentation:Instrumentation(){
                 prefs.set("room:$room","Muted");check(!prefs.chat(room,true,true))
             }finally{prefs.set("quiet",oldQuiet);prefs.set("room:$room","Default")}
             report.putString("notifications","Per-conversation mentions/assignment/mute policy on Android: passed")
+            if(checkWorkLogs)checkPeopleWorkflows(api,report)
             report.putString("stream","All framework device acceptance checks passed.\n")
         }catch(error:Throwable){report.putString("stream",error.stackTraceToString());resultCode=Activity.RESULT_CANCELED}
         finally{
             try{if(room.isNotBlank()&&api!=null){val data=api.call("volunteering.volunteering.collaboration_mobile.get_space",JSONObject().put("name",room));api.call("volunteering.volunteering.collaboration_mobile.save_space",JSONObject().put("name",room).put("expected_modified",data.getJSONObject("space").getString("modified")).put("payload",JSONObject().put("archived",1)))}}catch(_:Exception){}
         }
         finish(resultCode,report)
+    }
+
+    private fun checkPeopleWorkflows(api:PortalApi,report:Bundle){
+        val root="volunteering.volunteering."
+        val calendar=api.call(root+"work_log_portal.get_work_log_calendar")
+        val today=calendar.getString("today")
+        check(calendar.items("days").filter{it.text("date")>today}.none{it.optBoolean("can_open")}){"A future work date is editable."}
+        val day=calendar.items("days").lastOrNull{it.optBoolean("can_open")&&it.text("name").isBlank()}
+            ?:error("The disposable phone employee needs a free work-log date.")
+        val details=JSONObject().put("date",day.text("date")).put("notes","Physical-device acceptance only")
+            .put("items",JSONArray().put(JSONObject().put("task_title","Prepare community kitchen report")
+                .put("description","Checked attendance and prepared the volunteer activity report on the test phone.")
+                .put("time_spent_hours",6.5)))
+        val draft=api.call(root+"work_log_portal.save_work_log",JSONObject().put("details",details)).getJSONObject("log")
+        check(draft.text("status")=="Draft"&&draft.optDouble("total_hours")==6.5)
+        val restored=api.call(root+"work_log_portal.get_work_log",JSONObject().put("name",draft.text("name"))).getJSONObject("log")
+        check(restored.items("items").single().text("task_title")=="Prepare community kitchen report")
+        details.put("name",draft.text("name")).put("modified",restored.text("modified"))
+        val submitted=api.call(root+"work_log_portal.save_work_log",JSONObject().put("details",details).put("submit",1)).getJSONObject("log")
+        check(submitted.text("status")=="Submitted"&&!submitted.optBoolean("can_edit"))
+        val refreshed=api.call(root+"work_log_portal.get_work_log_calendar")
+        check(refreshed.items("days").single{it.text("date")==day.text("date")}.text("status")=="Submitted")
+        report.putString("work_logs","Future-date guard, 6.5-hour draft, disk/network reload, submission and calendar status: passed")
+        val people=api.call(root+"hr_resources.get_people_centre")
+        check(people.has("guide_policy")&&people.getJSONObject("settings").items("contacts").isNotEmpty())
+        check(!people.optBoolean("can_manage")&&!people.optBoolean("can_payroll")){"Ordinary employee received HR editing access."}
+        val future=java.time.LocalDate.parse(today).plusDays(35).toString()
+        val payload=JSONObject().put("type","WFH").put("from_date",future).put("to_date",future)
+            .put("reason","Physical-device acceptance: prepare community activity reports remotely.")
+        val key=UUID.randomUUID().toString()
+        val args=JSONObject().put("details",payload).put("request_key",key)
+        val request=api.call(root+"time_leave_portal.submit_time_request",args)
+        check(request.text("status")=="Open")
+        check(api.call(root+"time_leave_portal.submit_time_request",args).text("name")==request.text("name")){"Retry created another time request."}
+        report.putString("people","Employee-only Guide, restricted HR controls and idempotent WFH request: passed")
     }
 }

@@ -78,4 +78,67 @@ class ChatNavigationTest {
         assertEquals(mine, task.back())
         assertThrows(IllegalArgumentException::class.java) { ChatRoute(ChatView.TASK, "private") }
     }
+    @Test fun workLogReturnsToItsListAndThenToThePreviousChat() {
+        val chat = ChatNavigation().navigate(ChatRoute(ChatView.CHAT, "kitchen"))
+        val logs = chat.navigate(ChatRoute(ChatView.WORK_LOGS))
+        val detail = logs.navigate(ChatRoute(ChatView.WORK_LOG, item = "work-log-1"))
+        assertEquals(logs, detail.back())
+        assertEquals(chat, detail.back().back())
+    }
+
+    @Test fun newWorkLogNeedsNoChatAndCannotContainAChatRoom() {
+        val root = ChatNavigation(current = ChatRoute(ChatView.WORK_LOGS))
+        assertFalse(root.canGoBack)
+        val detail = root.navigate(ChatRoute(ChatView.WORK_LOG))
+        assertEquals(root, detail.back())
+        assertThrows(IllegalArgumentException::class.java) { ChatRoute(ChatView.WORK_LOG, room = "private") }
+    }
+
+    @Test fun startupRestoresTheLastSectionWhenBothAreAvailable() {
+        assertEquals(ChatView.WORK_LOGS, tasksStartRoute("WORK_LOGS", chatAccess = true, workLogAccess = true).view)
+        assertEquals(ChatView.CONVERSATIONS, tasksStartRoute("CHATS", chatAccess = true, workLogAccess = true).view)
+    }
+
+    @Test fun missingOrUnknownPreferenceStartsInChats() {
+        for (saved in listOf(null, "", "removed-section")) {
+            assertEquals(ChatRoute(), tasksStartRoute(saved, chatAccess = true, workLogAccess = true))
+        }
+    }
+
+    @Test fun preferenceCannotRestoreASectionAfterItsAccessIsRemoved() {
+        assertEquals(ChatView.CONVERSATIONS, tasksStartRoute("WORK_LOGS", chatAccess = true, workLogAccess = false).view)
+        assertEquals(ChatView.WORK_LOGS, tasksStartRoute("CHATS", chatAccess = false, workLogAccess = true).view)
+        assertEquals(ChatView.WORK_LOGS, tasksStartRoute(null, chatAccess = false, workLogAccess = true).view)
+    }
+
+    @Test fun closingAChatTaskOrTrackerKeepsTheChatsSectionSelected() {
+        for (route in listOf(ChatRoute(), ChatRoute(ChatView.CHAT, "kitchen"),
+            ChatRoute(ChatView.TASK, "kitchen", "task"), ChatRoute(ChatView.TRACKER, "kitchen", "tracker"),
+            ChatRoute(ChatView.MY_TASKS), ChatRoute(ChatView.MY_TRACKERS), ChatRoute(ChatView.SETTINGS))) {
+            assertEquals(TasksSection.CHATS, route.section())
+        }
+        assertEquals(TasksSection.WORK_LOGS, ChatRoute(ChatView.WORK_LOGS).section())
+        assertEquals(TasksSection.WORK_LOGS, ChatRoute(ChatView.WORK_LOG, item = "log").section())
+    }
+
+    @Test fun switchingSectionsStartsAtTheSectionRootWithoutBuildingAnExitLoop() {
+        val task = ChatNavigation().navigate(ChatRoute(ChatView.CHAT, "kitchen"))
+            .navigate(ChatRoute(ChatView.TASK, "kitchen", "task"))
+        val logs = task.switchSection(TasksSection.WORK_LOGS)
+        assertEquals(ChatRoute(ChatView.WORK_LOGS), logs.current)
+        assertFalse(logs.canGoBack)
+        val chats = logs.switchSection(TasksSection.CHATS)
+        assertEquals(ChatNavigation(), chats)
+        assertEquals(chats, chats.switchSection(TasksSection.CHATS))
+    }
+
+    @org.junit.Test
+    fun timeAndLeaveIsIndependentAndRespectsAccess() {
+        assertEquals(ChatView.TIME_LEAVE, tasksStartRoute("TIME_LEAVE", chatAccess = false, workLogAccess = true).view)
+        assertEquals(ChatView.CONVERSATIONS, tasksStartRoute("TIME_LEAVE", chatAccess = true, workLogAccess = false).view)
+        assertEquals(TasksSection.TIME_LEAVE, ChatRoute(ChatView.TIME_LEAVE).section())
+        val navigation = ChatNavigation().navigate(ChatRoute(ChatView.MY_TASKS)).switchSection(TasksSection.TIME_LEAVE)
+        assertEquals(ChatView.TIME_LEAVE, navigation.current.view)
+        assertFalse(navigation.canGoBack)
+    }
 }

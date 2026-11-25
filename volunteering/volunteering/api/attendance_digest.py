@@ -28,12 +28,10 @@ from volunteering.volunteering.authority import (
 from volunteering.volunteering.doctype.daily_work_log.daily_work_log import (
 	get_daily_work_log_settings,
 )
-from volunteering.volunteering.leave_setup import WEEKLY_OFF_DAY
 
 # Leadership is an Employee Grade; the roles are only a dual-path fallback.
 DIGEST_GRADES = (EXECUTIVE_BOARD, BOARD_OF_DIRECTORS)
 BOARD_ROLES = tuple(sorted(LEGACY_BOARD_ROLES))
-PRESENT_THRESHOLD = 6.0
 
 
 # ---------------------------------------------------------------------------
@@ -142,8 +140,9 @@ def preview_work_log_digest():
 # Frequency helpers
 # ---------------------------------------------------------------------------
 def _is_weekly_off_day(reference_date) -> bool:
-	"""Org weekly off is Wednesday (see leave_setup.WEEKLY_OFF_DAY)."""
-	return getdate(reference_date).weekday() == WEEKLY_OFF_DAY
+	"""Use the organisation policy effective on the requested date."""
+	from volunteering.volunteering.hr_policy import policy_on
+	return getdate(reference_date).weekday() == policy_on(reference_date)["weekly_off_day"]
 
 
 def _is_due(frequency, reference_date):
@@ -309,7 +308,8 @@ def _row_for_employee(emp, attendance_date):
 	hours = flt(work_log.total_hours) if work_log else flt(attendance.working_hours if attendance else 0)
 	status = attendance.status if attendance else ("—" if not work_log else "Pending")
 	missing_log = not work_log and status not in ("On Leave", "Holiday")
-	low_hours = bool(work_log) and hours < PRESENT_THRESHOLD and status not in ("On Leave", "Holiday")
+	from volunteering.volunteering.attendance_service import get_present_hours_threshold
+	low_hours = bool(work_log) and hours < get_present_hours_threshold(attendance_date) and status not in ("On Leave", "Holiday")
 
 	return {
 		"employee_name": emp.employee_name or emp.name,
@@ -469,7 +469,7 @@ def _render_html(attendance_date, rows):
 		parts.append(_td(esc(row["leave_status"]) or "—"))
 		parts.append("</tr>")
 	parts.append("</tbody></table>")
-	parts.append(_legend("Amber = below 6h · Red = missing log or pending leave approval."))
+	parts.append(_legend("Amber = below the policy's full-day hours · Red = missing log or pending leave approval."))
 	parts.append(_WRAP_CLOSE)
 	return "\n".join(parts)
 

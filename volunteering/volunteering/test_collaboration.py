@@ -204,6 +204,22 @@ class IntegrationTestCollaboration(IntegrationTestCase):
 		self.assertEqual(room["receipt_through"], dict.fromkeys(("delivered_through", "seen_through"),
 			room["entries"][-1]["creation"]))
 
+	def test_creation_entries_keep_task_details_and_initial_tracker_progress(self):
+		deadline = add_days(nowdate(), 2)
+		task = self.task(assignee=self.member, deadline=deadline)
+		tracker = self.tracker(value=15)
+		c.update_task(task["name"], "start", task["modified"])
+		c.record_progress(tracker["name"], tracker["modified"], "Work started", value=50)
+		frappe.set_user(self.member)
+		entries = {entry["item"]: entry["snapshot"] for entry in c.get_space(self.room)["entries"]
+			if entry["snapshot"].get("created_kind")}
+		self.assertEqual(entries[task["name"]]["title"], "Buy utensils")
+		self.assertEqual(entries[task["name"]]["status"], "Open")
+		self.assertEqual(entries[task["name"]]["deadline"], str(deadline))
+		self.assertEqual(entries[task["name"]]["notify_users"], [self.member])
+		self.assertEqual(entries[tracker["name"]]["item_data"]["value"], 15)
+		self.assertEqual(entries[tracker["name"]]["pending_with"]["user"], self.owner)
+
 	def test_current_progress_is_latest_effective_snapshot_with_tie_break(self):
 		tracker = self.tracker()
 		current = now_datetime() - timedelta(hours=1)
@@ -603,6 +619,10 @@ class IntegrationTestCollaboration(IntegrationTestCase):
 		self.assertEqual(row["note"], "Delivery proof")
 		self.assertEqual(row["uploaded_by"], self.owner)
 		self.assertEqual(row["entry_kind"], "Note")
+		entry = next(entry for entry in c.get_space(self.room)["entries"] if entry["name"] == row["entry"])
+		self.assertEqual(entry["body"], "Delivery proof")
+		self.assertEqual(entry["snapshot"]["attachment_tracker"], {"name": item["name"], "title": item["title"]})
+		self.assertNotIn("item_data", entry["snapshot"])  # Uploading a file is not a progress update.
 		self.assertEqual(frappe.db.get_value("File", row["name"], "is_private"), 1)
 		frappe.set_user(self.viewer)
 		self.assertFalse(c.get_tracker_files(item["name"])["can_add"])
@@ -610,6 +630,35 @@ class IntegrationTestCollaboration(IntegrationTestCase):
 		with self.assertRaises(frappe.PermissionError): self.tracker_file(updated, "viewer")
 		frappe.set_user(self.outsider)
 		with self.assertRaises(frappe.PermissionError): c.get_tracker_files(item["name"])
+
+	def test_legacy_tracker_file_notes_resolve_context_without_rewriting_history(self):
+		item = self.tracker()
+		self.tracker_file(item)
+		row = c.get_tracker_files(item["name"])["files"][0]
+		frappe.db.set_value(c.PREFIX + "Entry", row["entry"], "snapshot", "{}", update_modified=False)
+		entry = next(entry for entry in c.get_space(self.room)["entries"] if entry["name"] == row["entry"])
+		self.assertEqual(entry["body"], "Delivery proof")
+		self.assertEqual(entry["snapshot"]["attachment_tracker"], {"name": item["name"], "title": item["title"]})
+		self.assertEqual(len(entry["attachments"]), 1)
+		self.assertEqual(frappe.db.get_value(c.PREFIX + "Entry", row["entry"], "snapshot"), "{}")
+
+	def test_tracker_file_context_does_not_reveal_another_chat_or_a_removed_note(self):
+		item = self.tracker()
+		self.tracker_file(item)
+		row = c.get_tracker_files(item["name"])["files"][0]
+		other_room = c.save_space({"title": "Separate conversation", "space_kind": "Group"})["name"]
+		other = c.save_item(other_room, {"item_kind": "Tracker", "title": "Separate tracker", "item_data": {"scale": "Percentage"}})
+		frappe.db.set_value(c.PREFIX + "Entry", row["entry"], {"item": other["name"], "snapshot": "{}"}, update_modified=False)
+		entry = next(entry for entry in c.get_space(self.room)["entries"] if entry["name"] == row["entry"])
+		self.assertNotIn("attachment_tracker", entry["snapshot"])
+		frappe.db.set_value(c.PREFIX + "Entry", row["entry"], {"item": item["name"],
+			"snapshot": frappe.as_json({"attachment_tracker": {"name": item["name"], "title": item["title"]}})}, update_modified=False)
+		doc = frappe.get_doc(c.PREFIX + "Entry", row["entry"])
+		c.edit_entry(doc.name, remove=True, expected_modified=str(doc.modified))
+		entry = next(entry for entry in c.get_space(self.room)["entries"] if entry["name"] == row["entry"])
+		self.assertEqual(entry["body"], "Message removed")
+		self.assertEqual(entry["attachments"], [])
+		self.assertEqual(entry["snapshot"], {})
 
 	def test_tracker_files_and_progress_retries_are_idempotent(self):
 		item = self.tracker()
@@ -847,3 +896,61 @@ class IntegrationTestCollaboration(IntegrationTestCase):
 		next_task=frappe.get_doc(c.PREFIX+'Item',{'series_key':frappe.db.get_value(c.PREFIX+'Item',item['name'],'series_key'),'from_date':'2026-11-15'})
 		child=c._json(next_task.item_data,{})['subtasks'][0]
 		self.assertEqual(child['status'],'Open');self.assertEqual(child['deadline'],'2026-11-16')
+
+	def test_middle_stage_insert_and_edit_preserve_current_step_and_progress_history(self):
+		import copy
+		item = self.tracker(scale="Status", assignment_mode="Stages", stages=[
+			{"key": "draft", "label": "Draft", "assignee": self.owner},
+			{"key": "review", "label": "Review", "assignee": self.member},
+			{"key": "issue", "label": "Issue", "assignee": self.owner}])
+		item = c.record_progress(item["name"], item["modified"], "Ready for review", stage="review")
+		history = copy.deepcopy(c.get_item_history(item["name"])["history"])
+		config = copy.deepcopy(item["item_data"])
+		config["stages"].insert(1, {"key": "check", "label": "Check evidence", "assignee": self.manager})
+		updated = c.save_item(self.room, {"item_data": config}, item["name"], item["modified"])
+		self.assertEqual([row["key"] for row in updated["item_data"]["stages"]], ["draft", "check", "review", "issue"])
+		self.assertEqual(updated["item_data"]["stage"], "review")
+		self.assertEqual(updated["item_data"]["stages"][2]["assignee"], self.member)
+		self.assertEqual(updated["item_data"]["stages"][1]["assignee"], self.manager)
+		self.assertEqual(c.get_item_history(item["name"])["history"], history)
+		config = copy.deepcopy(updated["item_data"])
+		config["stages"][1].update(label="Verify supporting records", assignee=self.member)
+		config["stages"][2].update(label="Final review", assignee=self.manager)
+		edited = c.save_item(self.room, {"item_data": config}, item["name"], updated["modified"])
+		self.assertEqual(edited["item_data"]["stages"][1]["key"], "check")
+		self.assertEqual(edited["item_data"]["stages"][1]["label"], "Verify supporting records")
+		self.assertEqual(edited["item_data"]["stage"], "review")
+		self.assertEqual(edited["item_data"]["stages"][2]["label"], "Final review")
+		self.assertEqual(edited["item_data"]["stages"][2]["assignee"], self.manager)
+		self.assertEqual(c.get_item_history(item["name"])["history"], history)
+
+	def test_percentage_stage_insertion_accepts_midpoint_and_preserves_current_stage(self):
+		import copy
+		item = self.tracker(scale="Stages", stage="review", stages=[
+			{"key": "draft", "label": "Draft", "position": 20},
+			{"key": "review", "label": "Review", "position": 60},
+			{"key": "issue", "label": "Issue", "position": 100}])
+		config = copy.deepcopy(item["item_data"])
+		config["stages"].insert(1, {"key": "check", "label": "Check", "position": 40})
+		updated = c.save_item(self.room, {"item_data": config}, item["name"], item["modified"])
+		self.assertEqual([row["position"] for row in updated["item_data"]["stages"]], [20, 40, 60, 100])
+		self.assertEqual(updated["item_data"]["stage"], "review")
+
+	def test_stage_changes_enforce_configuration_access_current_version_and_count_limit(self):
+		import copy
+		item = self.tracker(scale="Status", stages=[{"key": "draft", "label": "Draft"}, {"key": "review", "label": "Review"}])
+		config = copy.deepcopy(item["item_data"])
+		config["stages"].insert(1, {"key": "check", "label": "Check"})
+		for user in (self.member, self.viewer, self.outsider):
+			frappe.set_user(user)
+			with self.assertRaises(frappe.PermissionError):
+				c.save_item(self.room, {"item_data": config}, item["name"], item["modified"])
+		frappe.set_user(self.manager)
+		updated = c.save_item(self.room, {"item_data": config}, item["name"], item["modified"])
+		frappe.set_user(self.owner)
+		with self.assertRaisesRegex(frappe.ValidationError, "record changed"):
+			c.save_item(self.room, {"item_data": item["item_data"]}, item["name"], item["modified"])
+		config = copy.deepcopy(updated["item_data"])
+		config["stages"] = [{"key": str(index), "label": str(index)} for index in range(31)]
+		with self.assertRaises(frappe.ValidationError):
+			c.save_item(self.room, {"item_data": config}, item["name"], updated["modified"])

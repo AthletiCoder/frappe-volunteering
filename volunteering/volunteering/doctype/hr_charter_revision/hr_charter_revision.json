@@ -1,0 +1,47 @@
+{
+ "doctype": "DocType",
+ "name": "HR Charter Revision",
+ "module": "Volunteering",
+ "autoname": "hash",
+ "engine": "InnoDB",
+ "track_changes": 1,
+ "field_order": [
+  "settings",
+  "reason",
+  "published_by",
+  "published_on",
+  "charter_key"
+ ],
+ "fields": [
+  {
+   "fieldname": "settings",
+   "label": "Settings",
+   "fieldtype": "JSON",
+   "reqd": 1
+  },
+  {
+   "fieldname": "reason",
+   "label": "Reason",
+   "fieldtype": "Small Text",
+   "reqd": 1
+  },
+  {
+   "fieldname": "published_by",
+   "label": "Published By",
+   "fieldtype": "Link",
+   "options": "User"
+  },
+  {
+   "fieldname": "published_on",
+   "label": "Published On",
+   "fieldtype": "Datetime"
+  },
+  {
+   "fieldname": "charter_key",
+   "label": "Charter Key",
+   "fieldtype": "Data",
+   "unique": 1
+  }
+ ],
+ "permissions": []
+}

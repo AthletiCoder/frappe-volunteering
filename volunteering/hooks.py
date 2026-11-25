@@ -43,6 +43,8 @@ app_include_js = [
 
 # Website route for Frappe UI SPA (falls back to Desk pages if not built)
 website_route_rules = [
+	{"from_route": "/sf-tasks", "to_route": "sf_tasks"},
+	{"from_route": "/sf-tasks/<path:app_path>", "to_route": "sf_tasks"},
 	{"from_route": "/volunteering/<path:app_path>", "to_route": "volunteering"},
 	{"from_route": "/volunteering", "to_route": "volunteering"},
 ]
@@ -85,6 +87,9 @@ doctype_js = {
 # Keep the standard HRMS Expense Claim controller while replacing its automatic
 # Expense Claim Type → Account mapping with a Project-scoped account selector.
 override_doctype_class = {
+	"Salary Slip": "volunteering.volunteering.overrides.salary_slip.SevamritaSalarySlip",
+	"Leave Application": "volunteering.volunteering.overrides.leave_application.SevamritaLeaveApplication",
+	"Leave Adjustment": "volunteering.volunteering.overrides.leave_adjustment.SevamritaLeaveAdjustment",
 	"Project": "volunteering.volunteering.overrides.project.VolunteeringProject",
 	"File": "volunteering.volunteering.project_documents.ProjectAwareFile",
 	"Expense Claim": "volunteering.volunteering.overrides.expense_claim.VolunteeringExpenseClaim",
@@ -222,7 +227,7 @@ has_permission = {
 # Hook on document methods and events
 
 doc_events = {
-	"Collaboration Entry": {"after_insert": "volunteering.volunteering.collaboration_push.queue_entry"},
+	"Collaboration Entry": {"after_insert": ["volunteering.volunteering.collaboration_push.queue_entry", "volunteering.volunteering.tasks_web_push.queue_entry"]},
 	"Address": {
 		"before_insert": "volunteering.volunteering.office_addresses.validate_office_address_mutation",
 		"before_save": "volunteering.volunteering.office_addresses.validate_office_address_mutation",
@@ -250,6 +255,7 @@ doc_events = {
 	"Expense Claim": {
 		"before_validate": [
 			"volunteering.volunteering.accounting_controls.ensure_expense_claim_accounts",
+			"volunteering.volunteering.expense_claim_withdrawal.validate_closed_claim",
 			"volunteering.volunteering.expense_claim_portal.validate_expense_submission_integrity",
 		],
 		"before_save": [
@@ -270,6 +276,7 @@ doc_events = {
 		],
 		# Approve sets docstatus=1 and calls submit() (skips before_save) — re-check budget here.
 		"before_submit": [
+			"volunteering.volunteering.expense_claim_withdrawal.validate_closed_claim",
 			"volunteering.volunteering.expense_claim_portal.validate_expense_submission_integrity",
 			"volunteering.volunteering.project_workspace.validate_project_claim_access",
 			"volunteering.volunteering.accounting_controls.validate_project_required",
@@ -339,14 +346,20 @@ doc_events = {
 		"on_submit": "volunteering.volunteering.disbursement_notifications.on_payment_entry_submit",
 	},
 	"Leave Application": {
+		"before_validate": "volunteering.volunteering.overrides.leave_application.prepare_leave_policy",
 		"validate": "volunteering.volunteering.leave_policy.validate_leave_application",
+		"on_update": ["volunteering.volunteering.time_leave_portal.sync_comp_uses", "volunteering.volunteering.hr_policy.audit_exception"],
+		"on_submit": "volunteering.volunteering.hr_leave_balances.reconcile_leave_carry",
+		"on_cancel": ["volunteering.volunteering.time_leave_portal.sync_comp_uses", "volunteering.volunteering.hr_leave_balances.reconcile_leave_carry"],
 	},
+	"Salary Slip": {"before_validate": "volunteering.volunteering.employee_calendars.prepare_salary_calendar", "before_submit": "volunteering.volunteering.employee_calendars.validate_salary_policy"},
 	"Attendance Request": {
 		"validate": "volunteering.volunteering.attendance_request_permissions.validate_attendance_request",
 		"before_cancel": "volunteering.volunteering.attendance_request_permissions.before_cancel_attendance_request",
 	},
 	"Daily Work Log": {
 		"validate": "volunteering.volunteering.daily_work_log_permissions.validate_daily_work_log",
+		"on_update": "volunteering.volunteering.hr_policy.audit_exception",
 	},
 	"Employee": {
 		"after_insert": "volunteering.volunteering.leave_setup.assign_default_leave_policy",
@@ -384,13 +397,14 @@ boot_session = "volunteering.volunteering.workspace_setup.boot_session"
 
 scheduler_events = {
 	"daily": [
+		"volunteering.volunteering.hr_leave_balances.daily_leave_jobs",
 		"volunteering.volunteering.api.digest.send_daily_donation_digest",
 	],
 	"weekly": [
 		"volunteering.volunteering.accounting_dashboard.setup.send_weekly_pending_approval_reminder",
 	],
 	"cron": {
-		"* * * * *": ["volunteering.volunteering.collaboration_push.flush_pending"],
+		"* * * * *": ["volunteering.volunteering.collaboration_push.flush_pending", "volunteering.volunteering.tasks_web_push.flush_pending"],
 		"0 12 * * *": [
 			"volunteering.volunteering.api.attendance_digest.run_noon_attendance_jobs",
 		],

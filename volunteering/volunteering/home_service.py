@@ -69,6 +69,8 @@ def get_home_payload():
 		and employee
 		and frappe.db.exists("Employee", {"reports_to": employee, "status": "Active"})
 	)
+	from volunteering.volunteering.hr_policy import is_policy_manager
+	flags["show_approver_inbox"] = flags["show_approver_inbox"] or flags["has_team"] or is_policy_manager(user)
 	full_name = frappe.db.get_value("User", user, "full_name") or user
 
 	if not flags["allowed"]:
@@ -155,7 +157,7 @@ def get_home_payload():
 		"actions": {
 			"time": _time_actions(pending) if flags["show_time"] else [],
 			"money": _money_actions(pending) if flags["show_money"] else [],
-			"team": _team_actions() if flags["has_team"] else [],
+			"team": _team_actions(include_team=flags["has_team"]) if flags["has_team"] or flags["show_hr_management"] or flags["show_system_management"] else [],
 			"projects": _project_actions(flags),
 			"accounts": _accounts_actions(user),
 			"organisation": _organisation_actions(),
@@ -257,7 +259,7 @@ def _member_project_cards(user, employee):
 
 
 def _hr_management_actions():
-	return [
+	actions = [
 		{
 			"id": "manage_employees",
 			"label": _("Employees"),
@@ -265,10 +267,14 @@ def _hr_management_actions():
 			"route": "/volunteering/hr-management",
 		}
 	]
+	from volunteering.volunteering.hr_policy import is_policy_manager
+	if is_policy_manager(): actions.append({"id": "hr_policy", "label": _("HR policy and leave balances"), "hint": _("Publish dated rules and authorise reasoned adjustments."), "route": "/volunteering/time-leave?view=policy"})
+	return actions
 
 
 def _system_management_actions():
 	return [
+		{"id": "hr_policy", "label": _("HR policy and leave balances"), "hint": _("Publish dated rules and authorise reasoned adjustments."), "route": "/volunteering/time-leave?view=policy"},
 		{
 			"id": "manage_users",
 			"label": _("Users and roles"),
@@ -295,15 +301,29 @@ def _organisation_actions():
 	]
 
 
-def _team_actions():
-	return [
-		{
+def _team_actions(include_team=True):
+	actions = []
+	if include_team:
+		actions.append({
 			"id": "my_team",
 			"label": _("My team"),
 			"hint": _("Direct reports, attendance context and advance status."),
 			"route": TEAM_URL,
-		}
-	]
+		})
+	from volunteering.volunteering.hr_policy import is_policy_manager
+	if include_team or is_policy_manager():
+		actions.append({
+			"id": "time_leave_review", "label": _("Time and leave requests"),
+			"hint": _("Review leave, weekly-off swaps, compensatory credit and attendance requests."),
+			"route": "/volunteering/time-leave?view=team",
+		})
+	actions.append({
+		"id": "work_log_review",
+		"label": _("Review work logs"),
+		"hint": _("Review daily work from your team."),
+		"route": "/volunteering/work-logs?view=team",
+	})
+	return actions
 
 
 def _purchasing_actions(user, employee):
@@ -489,6 +509,7 @@ def _employee_draft_todos(employee):
 			doctype,
 			filters={
 				"employee": employee, "docstatus": 0,
+				**({"workflow_state": ["!=", "Withdrawn"]} if doctype == "Expense Claim" else {}),
 				**home_project_filter("intended_project" if doctype == "Employee Advance" else "project"),
 			},
 			fields=fields,
@@ -496,6 +517,8 @@ def _employee_draft_todos(employee):
 			limit=8,
 		)
 		for row in rows:
+			if doctype == "Expense Claim" and row.get("workflow_state") == "Withdrawn":
+				continue
 			if not (
 				is_home_advance(row)
 				if doctype == "Employee Advance"
@@ -552,7 +575,7 @@ def _own_pending(employee):
 		)
 		pending["claim"] = _safe_count(
 			"Expense Claim",
-			{"employee": employee, "docstatus": 0},
+			{"employee": employee, "docstatus": 0, "workflow_state": ["!=", "Withdrawn"]},
 		)
 		pending["advance"] = _safe_count(
 			"Employee Advance",
@@ -580,9 +603,9 @@ def _time_actions(pending=None):
 				"id": "log_work",
 				"label": _("Track work"),
 				"hint": _("Log today"),
-				"route": "/desk/daily-work-log/new",
+				"route": "/volunteering/work-logs?new=1",
 			},
-			"/desk/daily-work-log",
+			"/volunteering/work-logs",
 			_("Previous work logs"),
 			"log_work",
 			pending,
@@ -592,10 +615,10 @@ def _time_actions(pending=None):
 				"id": "wfh",
 				"label": _("Request WFH"),
 				"hint": _("Before you stay home"),
-				"route": "/desk/attendance-request/new",
+				"route": "/volunteering/time-leave?type=WFH",
 			},
-			"/desk/attendance-request",
-			_("Previous WFH"),
+			"/volunteering/time-leave",
+			_("Time and leave"),
 			"wfh",
 			pending,
 		),
@@ -604,10 +627,10 @@ def _time_actions(pending=None):
 				"id": "leave",
 				"label": _("Apply for leave"),
 				"hint": _("Normal or emergency"),
-				"route": "/desk/leave-application/new",
+				"route": "/volunteering/time-leave?type=Privilege%20Leave",
 			},
-			"/desk/leave-application",
-			_("Previous leave"),
+			"/volunteering/time-leave",
+			_("Time and leave"),
 			"leave",
 			pending,
 		),
@@ -616,10 +639,10 @@ def _time_actions(pending=None):
 				"id": "fix_attendance",
 				"label": _("Fix attendance"),
 				"hint": _("Wrong Present / Absent day"),
-				"route": "/desk/attendance-regularization-request/new",
+				"route": "/volunteering/time-leave?type=Attendance%20Correction",
 			},
-			"/desk/attendance-regularization-request",
-			_("Previous attendance fixes"),
+			"/volunteering/time-leave",
+			_("Time and leave"),
 			"fix_attendance",
 			pending,
 		),
@@ -705,6 +728,14 @@ def _approver_inbox(user, employee):
 	if "Expense Receipt Reviewer" in frappe.get_roles(user):
 		items.extend(_receipt_review_inbox(employee))
 	items.extend(_leave_inbox(user, employee))
+	if frappe.db.exists("DocType", "Staff Time Request"):
+		from volunteering.volunteering.hr_policy import is_policy_manager
+		filters = {"status": "Open"}
+		if not is_policy_manager(user): filters["approver"] = user
+		if employee: filters["employee"] = ["!=", employee]
+		for row in frappe.get_all("Staff Time Request", filters=filters, fields=["name", "employee_name", "request_type", "from_date", "modified"], limit=INBOX_CAP):
+			items.append({"id": f"Staff Time Request::{row.name}", "kind": _("Time and leave"), "title": row.employee_name,
+				"subtitle": f"{row.request_type} · {formatdate(row.from_date)}", "route": "/volunteering/time-leave?view=team", "modified": str(row.modified)})
 	items.extend(_wfh_inbox(employee))
 	items.extend(_pending_approver_inbox("Expense Claim", _("Claim"), user))
 	items.extend(_pending_approver_inbox("Employee Advance", _("Advance"), user))
@@ -754,6 +785,8 @@ def _leave_inbox(user, employee):
 		"status": "Open",
 		"docstatus": 0,
 	}
+	from volunteering.volunteering.hr_policy import is_policy_manager
+	if is_policy_manager(user): filters.pop("leave_approver")
 	if employee:
 		filters["employee"] = ["!=", employee]
 	rows = frappe.get_all(
@@ -771,7 +804,7 @@ def _leave_inbox(user, employee):
 				"kind": "Leave",
 				"title": row.employee_name or row.name,
 				"subtitle": f"{row.leave_type or ''} · {formatdate(row.from_date)} - {formatdate(row.to_date)}",
-				"route": f"/desk/leave-application/{row.name}",
+				"route": "/volunteering/time-leave?view=team",
 				"modified": str(row.modified or ""),
 			}
 		)
@@ -782,8 +815,12 @@ def _wfh_inbox(employee):
 	if not frappe.db.exists("DocType", "Attendance Request"):
 		return []
 	filters = {"docstatus": 0}
-	if employee:
-		filters["employee"] = ["!=", employee]
+	from volunteering.volunteering.hr_policy import is_policy_manager
+	if is_policy_manager():
+		if employee: filters["employee"] = ["!=", employee]
+	else:
+		reports = frappe.get_all("Employee", filters={"reports_to": employee or "__none__"}, pluck="name")
+		filters["employee"] = ["in", reports or ["__none__"]]
 	rows = frappe.get_all(
 		"Attendance Request",
 		filters=filters,

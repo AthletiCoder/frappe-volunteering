@@ -85,6 +85,13 @@
     "update_field": "approval_status",
     "update_value": "Rejected",
     "workflow_builder_id": null
+   },
+   {
+    "state": "Withdrawn",
+    "doc_status": "0",
+    "allow_edit": "System Manager",
+    "is_optional_state": 1,
+    "send_email": 0
    }
   ],
   "transitions": [

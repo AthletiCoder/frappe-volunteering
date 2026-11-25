@@ -77,3 +77,16 @@ internal fun chatInboxRows(rooms: List<ChatSummary>, expanded: Set<String>, quer
     rooms.filter { it.parent.isBlank() || it.parent !in byId }.sortedWith(order).forEach { visit(it, 0) }
     return output
 }
+
+internal fun chatPreviewWasSeen(latest: String, seenThrough: String): Boolean =
+    latest.isNotBlank() && latest <= seenThrough
+
+internal fun createdChatItemKind(entryKind: String, recordedKind: String, body: String): String? {
+    if (entryKind != "System") return null
+    return when {
+        recordedKind in listOf("Task", "Tracker") -> recordedKind
+        body.startsWith("Created task: ") -> "Task"
+        body.startsWith("Created tracker: ") -> "Tracker"
+        else -> null
+    }
+}

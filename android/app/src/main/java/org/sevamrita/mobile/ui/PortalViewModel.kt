@@ -8,9 +8,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import org.sevamrita.mobile.BuildConfig
+import org.sevamrita.mobile.data.ExpenseRequests
 import org.sevamrita.mobile.data.DurableChat
 import org.sevamrita.mobile.data.PortalApi
 import org.sevamrita.mobile.data.ChatSnapshotCache
+import org.sevamrita.mobile.data.TasksSectionPreferences
 import org.sevamrita.mobile.data.PortalSessionRequiredException
 import org.sevamrita.mobile.reminders.WorkReminders
 import org.sevamrita.mobile.data.PortalApiException
@@ -21,7 +24,7 @@ import org.sevamrita.mobile.data.display
 import org.sevamrita.mobile.data.text
 import org.sevamrita.mobile.data.items
 
-enum class Page { HOME, WORK, PROJECTS, PROJECT, PROPOSALS, PROPOSAL, PROPOSAL_FORM, ADVANCES, ADVANCE, NEW_ADVANCE, CLAIMS, CLAIM, CORRECT_CLAIM, NEW_CLAIM, COMBINED_START, COMBINED_INVOICE, MULTI_CLAIM, MULTI_RESULT, ADVANCE_QUEUE, ADVANCE_REVIEW, CLAIM_QUEUE, CLAIM_REVIEW, RECEIPT, PROFILE, INVOICE, INVOICE_RESULT, BUDGET_HEALTH, CHART, LEDGER, ACCOUNT_FORM, OPENING_BALANCES, DONATIONS, BANK_ACCOUNT, OFFICE_ADDRESSES, OFFICE_ADDRESS_FORM, TEAM, PROJECT_MAPPING, PROJECT_MAPPING_DETAIL, CLAIM_LIMITS, FISCAL_YEARS, HR_MANAGEMENT, EMPLOYEE_FORM, SYSTEM_MANAGEMENT, USER_FORM, COLLABORATION, UNAVAILABLE }
+enum class Page { HOME, WORK, PROJECTS, PROJECT, PROPOSALS, PROPOSAL, PROPOSAL_FORM, ADVANCES, ADVANCE, NEW_ADVANCE, CLAIMS, CLAIM, CORRECT_CLAIM, NEW_CLAIM, COMBINED_START, COMBINED_INVOICE, MULTI_CLAIM, MULTI_RESULT, ADVANCE_QUEUE, ADVANCE_REVIEW, CLAIM_QUEUE, CLAIM_REVIEW, RECEIPT, PROFILE, INVOICE, INVOICE_RESULT, BUDGET_HEALTH, CHART, LEDGER, ACCOUNT_FORM, OPENING_BALANCES, DONATIONS, BANK_ACCOUNT, OFFICE_ADDRESSES, OFFICE_ADDRESS_FORM, TEAM, PROJECT_MAPPING, PROJECT_MAPPING_DETAIL, CLAIM_LIMITS, FISCAL_YEARS, WORK_LOGS, WORK_LOG, HR_MANAGEMENT, EMPLOYEE_FORM, SYSTEM_MANAGEMENT, USER_FORM, COLLABORATION, PURCHASES, PURCHASE, MORE, TIME_LEAVE, UNAVAILABLE }
 
 data class PortalState(
     val signedIn: Boolean = false,
@@ -38,13 +41,33 @@ data class PortalState(
     val form: JSONObject = JSONObject(),
     val detailId: String = "",
     val unavailableLabel: String = "",
+    val expenseStatus: String = "",
+    val expensePending: Boolean = false,
     val receiptBytes: ByteArray? = null,
     val receiptName: String = "",
     val receiptReturn: Page = Page.CLAIM_REVIEW,
-    val donationList: JSONObject = JSONObject(),
     val proposalFilter: String = "mine",
     val ledgerFrom: String = "",
     val ledgerTo: String = "",
+    val workLogList: JSONObject = JSONObject(),
+    val workLogData: JSONObject = JSONObject(),
+    val workLogDraft: WorkLogDraft? = null,
+    val workLogOriginal: WorkLogDraft? = null,
+    val workLogLoading: Boolean = false,
+    val workLogView: String = "mine",
+    val workLogMonth: String = "",
+    val workLogEmployee: String = "",
+    val workLogPeopleQuery: String = "",
+    val donationList: JSONObject = JSONObject(),
+    val timeWorkspace: JSONObject = JSONObject(),
+    val timePolicy: JSONObject = JSONObject(),
+    val timeResources: JSONObject = JSONObject(),
+    val timePayroll: JSONObject = JSONObject(),
+    val timePayrollPreview: JSONObject = JSONObject(),
+    val timeBalancePreview: JSONObject = JSONObject(),
+    val timeView: String = "mine",
+    val purchaseView: String = "requests",
+    val purchaseWorkspace: JSONObject = JSONObject(),
     val chatHome: JSONObject = JSONObject(),
     val chatRoom: JSONObject = JSONObject(),
     val chatWork: JSONObject = JSONObject(),
@@ -61,13 +84,17 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
     private var navigationRevision = 0
     @Volatile private var sessionGeneration = 0
     private val snapshotRevision = java.util.concurrent.atomic.AtomicLong()
-    private var chatChangeVersion = 0
+    @Volatile private var chatChangeVersion = 0
+    private var chatReadVersion = 0
     private var chatRefreshing = false
     private var foregroundTasks = 0
     private val durable = DurableChat(application)
+    private val expenseRequests = ExpenseRequests(durable)
     private val draftVersions = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private val snapshots = ChatSnapshotCache(application)
+    private val sectionPreferences = TasksSectionPreferences(application)
     private val chatScreens = linkedMapOf<String, JSONObject>()
+    private val erpHistory = ArrayDeque<PortalState>()
     var state = androidx.compose.runtime.mutableStateOf(PortalState(server = api.server(), localAddress = api.localAddress()))
         private set
 
@@ -78,22 +105,22 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
             state.value = state.value.copy(booting = false,
                 error = if (state.value.signedIn) "" else "Unable to connect. Check the laptop Wi-Fi address and try again.")
         }) {
+            if (BuildConfig.ERP_APP) {
+                api.bootstrap()
+                loadErpHome(generation)
+                return@runTask
+            }
             val saved = snapshots.read(api.endpoint(), api.rememberedUser())
             if (generation != sessionGeneration) return@runTask
             if (saved != null) {
                 synchronized(chatScreens) { saved.optJSONObject("screens")?.let { rooms -> rooms.keys().forEach { key -> chatScreens[key] = rooms.getJSONObject(key) } } }
+                val home = saved.optJSONObject("home") ?: JSONObject()
                 state.value = state.value.copy(signedIn = true, booting = false, user = api.rememberedUser(),
-                    chatHome = saved.optJSONObject("home") ?: JSONObject(), chatWork = saved.optJSONObject("work") ?: JSONObject())
+                    chatHome = home, chatWork = saved.optJSONObject("work") ?: JSONObject(),
+                    chatNavigation = ChatNavigation(current = tasksStartRoute(home, api.rememberedUser())))
             }
             api.bootstrap()
-            val chat = api.call(CHAT + "get_collaboration_home")
-            val work = api.call(CHAT + "get_my_work")
-            if (generation != sessionGeneration) return@runTask
-            state.value = state.value.copy(signedIn = true, booting = false, page = Page.COLLABORATION,
-                chatHome = chat, chatWork = work, user = api.currentUser)
-            persistChatScreens()
-            startBackgroundReminders()
-            prefetchChatScreens()
+            loadTasksHome(generation)
         }
     }
 
@@ -125,14 +152,61 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
         sessionGeneration++
         runTask(onFailure = { if (!state.value.signedIn) api.logoutLocal() }) {
             api.login(username.trim(), password)
-            val chat = api.call(CHAT + "get_collaboration_home")
-            val work = api.call(CHAT + "get_my_work")
+            if (BuildConfig.ERP_APP) {
+                loadErpHome(sessionGeneration)
+                return@runTask
+            }
+            loadTasksHome(sessionGeneration)
+        }
+    }
+
+    private suspend fun loadTasksHome(generation: Int) {
+        val access = api.call("volunteering.volunteering.work_log_portal.get_tasks_app_access")
+        val chatAllowed = access.optBoolean("chat_access")
+        val chat = if (chatAllowed) api.call(CHAT + "get_collaboration_home") else access
+        val work = if (chatAllowed) api.call(CHAT + "get_my_work") else JSONObject()
+        if (generation != sessionGeneration) return
+        withContext(Dispatchers.Main) {
+            if (generation != sessionGeneration) return@withContext
+            val current = state.value
+            val startRoute = tasksStartRoute(chat, api.currentUser)
+            val workLogging = access.optJSONObject("work_logging")
+            val canKeepRoute = if (current.chatNavigation.current.section() == TasksSection.CHATS) chatAllowed
+                else workLogging?.optBoolean("can_create") == true || workLogging?.optBoolean("can_review_team") == true
+            // An opened notification or an interaction during cached startup takes priority.
+            val keepNavigation = current.signedIn && current.user == api.currentUser && navigationRevision > 0 && canKeepRoute
+            val navigation = if (keepNavigation) current.chatNavigation else ChatNavigation(current = startRoute)
             state.value = state.value.copy(signedIn = true, booting = false, home = JSONObject(),
-                chatHome = chat, chatRoom = JSONObject(), chatWork = work, chatNavigation = ChatNavigation(),
+                chatHome = chat, chatRoom = if (keepNavigation) current.chatRoom else JSONObject(), chatWork = work,
+                chatNavigation = navigation,
                 user = api.currentUser, page = Page.COLLABORATION)
+            if (navigation.current.view == ChatView.WORK_LOGS) {
+                openWorkLogs(if (keepNavigation) current.workLogView else if (workLogging?.optBoolean("can_create") == true) "mine" else "team")
+            }
+            if (navigation.current.view == ChatView.TIME_LEAVE) openTimeLeave()
+        }
+        if (chatAllowed) {
             persistChatScreens()
             startBackgroundReminders()
             prefetchChatScreens()
+        }
+    }
+
+    private fun tasksStartRoute(home: JSONObject, user: String): ChatRoute {
+        val workLogging = home.optJSONObject("work_logging")
+        val workLogAccess = workLogging?.optBoolean("can_create") == true || workLogging?.optBoolean("can_review_team") == true
+        return tasksStartRoute(sectionPreferences.read(api.endpoint(), user), home.optBoolean("chat_access", true), workLogAccess)
+    }
+
+    private suspend fun loadErpHome(generation: Int) {
+        val home = api.call(HOME, get = true)
+        if (!home.optBoolean("allowed")) throw IllegalArgumentException("This account does not have access to Sevamrita ERP Home.")
+        withContext(Dispatchers.Main) {
+            if (generation == sessionGeneration) {
+                erpHistory.clear()
+                state.value = state.value.copy(signedIn = true, booting = false, home = home,
+                    user = api.currentUser, page = Page.HOME)
+            }
         }
     }
 
@@ -160,6 +234,7 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun logout() {
+        erpHistory.clear()
         sessionGeneration++
         snapshotRevision.incrementAndGet()
         navigationRevision++
@@ -167,9 +242,109 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
         snapshots.clear()
         WorkReminders.clear(getApplication())
         runTask {
-            org.sevamrita.mobile.push.ChatPush.unregister(getApplication(), api)
+            if (!BuildConfig.ERP_APP && state.value.chatHome.optBoolean("chat_access", true)) org.sevamrita.mobile.push.ChatPush.unregister(getApplication(), api)
             api.logout()
             state.value = PortalState(booting = false, server = api.server(), localAddress = api.localAddress())
+        }
+    }
+
+    fun openWorkLogs(view: String = state.value.workLogView, month: String = state.value.workLogMonth,
+        employee: String = state.value.workLogEmployee, page: Int = 1, query: String = state.value.workLogPeopleQuery) {
+        val current = state.value
+        val access = current.chatHome.optJSONObject("work_logging")
+        val actualView = if (view == "mine" && access?.optBoolean("can_create") == false && access.optBoolean("can_review_team")) "team" else view
+        val target = if (actualView == "team") employee else ""
+        if (BuildConfig.ERP_APP) {
+            navigateErpState(Page.WORK_LOGS)
+            state.value = state.value.copy(page = Page.WORK_LOGS, detailId = "")
+        } else if (current.chatNavigation.current.view != ChatView.WORK_LOGS) {
+            moveChat(current.chatNavigation.navigate(ChatRoute(ChatView.WORK_LOGS)), loadWorkLogs = false)
+        }
+        val revision = ++navigationRevision
+        val generation = sessionGeneration
+        val sameCalendar = current.workLogView == actualView && current.workLogEmployee == target
+        val accessOnly = JSONObject().apply {
+            for (key in listOf("can_create", "can_review_team", "employee")) {
+                if (current.workLogList.has(key)) put(key, current.workLogList.opt(key))
+                else if (access?.has(key) == true) put(key, access.opt(key))
+            }
+        }
+        state.value = state.value.copy(workLogLoading = true, workLogView = actualView,
+            workLogMonth = month, workLogEmployee = target, workLogPeopleQuery = query,
+            workLogList = if (sameCalendar) current.workLogList else accessOnly, error = "", notice = "")
+        runTask(onFailure = { state.value = state.value.copy(workLogLoading = false) }) {
+            val teamList = actualView == "team" && target.isBlank()
+            val args = JSONObject().put("month", month)
+            if (teamList) args.put("page", page).put("query", query) else args.put("employee", target)
+            val data = api.call("volunteering.volunteering.work_log_portal." + if (teamList) "get_work_log_team" else "get_work_log_calendar", args)
+            if (revision == navigationRevision && generation == sessionGeneration) {
+                state.value = state.value.copy(workLogList = data, workLogMonth = data.text("month"), workLogLoading = false)
+            }
+        }
+    }
+
+    fun openWorkLog(name: String = "", date: String = "", employee: String = "") {
+        if (BuildConfig.ERP_APP) {
+            navigateErpState(Page.WORK_LOG, name)
+            state.value = state.value.copy(page = Page.WORK_LOG, detailId = name)
+        } else if (state.value.chatNavigation.current != ChatRoute(ChatView.WORK_LOG, item = name)) {
+            moveChat(state.value.chatNavigation.navigate(ChatRoute(ChatView.WORK_LOG, item = name)), loadWorkLogs = false)
+        }
+        val revision = ++navigationRevision
+        val generation = sessionGeneration
+        state.value = state.value.copy(workLogLoading = true, workLogDraft = null, error = "", notice = "")
+        runTask(onFailure = { state.value = state.value.copy(workLogLoading = false) }) {
+            val data = api.call("volunteering.volunteering.work_log_portal.get_work_log", JSONObject().put("name", name).put("date", date).put("employee", employee))
+            if (revision == navigationRevision && generation == sessionGeneration) setWorkLog(data)
+        }
+    }
+
+    private fun setWorkLog(data: JSONObject) {
+        val draft = WorkLogDraft.from(data.getJSONObject("log"))
+        state.value = state.value.copy(workLogData = data, workLogDraft = draft, workLogOriginal = draft, workLogLoading = false)
+    }
+
+    fun editWorkLog(change: (WorkLogDraft) -> WorkLogDraft) {
+        if (state.value.busy || !(state.value.workLogData.optJSONObject("log")?.optBoolean("can_edit") == true)) return
+        state.value.workLogDraft?.let { state.value = state.value.copy(workLogDraft = change(it)) }
+    }
+
+    fun discardWorkLogChanges() {
+        state.value = state.value.copy(workLogDraft = state.value.workLogOriginal)
+    }
+
+    fun editWorkLogItem(key: String, change: (WorkLogItemDraft) -> WorkLogItemDraft) = editWorkLog { draft ->
+        draft.copy(items = draft.items.map { if (it.key == key) change(it) else it })
+    }
+
+    fun saveWorkLog(submit: Boolean) {
+        if (state.value.busy) return
+        val draft = state.value.workLogDraft ?: return
+        val log = state.value.workLogData.optJSONObject("log") ?: return
+        val revision = navigationRevision
+        val generation = sessionGeneration
+        runTask {
+            val data = api.call("volunteering.volunteering.work_log_portal.save_work_log",
+                JSONObject().put("details", draft.payload(log).toString()).put("submit", if (submit) 1 else 0))
+            if (revision == navigationRevision && generation == sessionGeneration) {
+                setWorkLog(data)
+                state.value = state.value.copy(notice = if (submit) "Work log submitted." else "Draft saved.")
+            }
+        }
+    }
+
+    fun reviewWorkLog(remarks: String) {
+        if (state.value.busy) return
+        val log = state.value.workLogData.optJSONObject("log") ?: return
+        val revision = navigationRevision
+        val generation = sessionGeneration
+        runTask {
+            val data = api.call("volunteering.volunteering.work_log_portal.review_work_log",
+                JSONObject().put("name", log.text("name")).put("expected_modified", log.text("modified")).put("remarks", remarks))
+            if (revision == navigationRevision && generation == sessionGeneration) {
+                setWorkLog(data)
+                state.value = state.value.copy(notice = "Work log reviewed.")
+            }
         }
     }
 
@@ -179,6 +354,10 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun open(page: Page, id: String = "") {
+        if (page == Page.TIME_LEAVE) { openTimeLeave(id.takeIf { it in listOf("mine","team","policy") } ?: state.value.timeView); return }
+        if (page == Page.WORK_LOGS) { openWorkLogs(if (id == "team") "team" else "mine"); return }
+        if (page == Page.WORK_LOG) { openWorkLog(id); return }
+        navigateErpState(page, id)
         val revision = ++navigationRevision
         state.value = state.value.copy(page = page, detailId = id, error = "", notice = "", data = JSONObject(), form = JSONObject(),
             donationList = if (page == Page.DONATIONS) JSONObject() else state.value.donationList)
@@ -235,6 +414,14 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
                 else -> JSONObject()
             }
             val data = api.call(method, args)
+            if (page in listOf(Page.NEW_CLAIM, Page.MULTI_CLAIM, Page.COMBINED_START)) {
+                val saved = expenseRequests.pending(api)
+                state.value = state.value.copy(expensePending = saved.has("key"), expenseStatus = when {
+                    saved.has("result") -> "Your previous claim was saved. Open the saved submission to see its details."
+                    saved.has("args") -> "A previous submission needs confirmation. Its details and receipts are saved."
+                    else -> ""
+                })
+            }
             if (revision != navigationRevision) return@runTask
             state.value = if (page == Page.NEW_ADVANCE || page == Page.NEW_CLAIM || page == Page.MULTI_CLAIM || page == Page.COMBINED_START || page == Page.PROPOSAL_FORM) state.value.copy(form = data)
                 else state.value.copy(data = data)
@@ -246,7 +433,196 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    private fun navigateErpState(page: Page, id: String = "") {
+        if (!BuildConfig.ERP_APP) return
+        val current = state.value
+        if (current.signedIn && (current.page != page || current.detailId != id)) {
+            if (erpHistory.size >= 20) erpHistory.removeFirst()
+            erpHistory.addLast(current)
+        }
+    }
+
+    fun openErpTab(page: Page) {
+        if (state.value.page != page) {
+            open(page)
+            erpHistory.clear()
+        }
+        if (page == Page.HOME || page == Page.WORK || page == Page.MORE) refreshHome()
+    }
+
+    fun backInErp(fallback: Page): Boolean {
+        val current = state.value
+        if (current.busy) return true
+        if (current.page == Page.RECEIPT) { closeReceipt(); return true }
+        if (current.page == Page.WORK_LOGS && current.workLogView == "team" && current.workLogEmployee.isNotBlank()) {
+            openWorkLogs(view = "team", employee = "")
+            return true
+        }
+        while (erpHistory.lastOrNull()?.let { it.page == current.page && it.detailId == current.detailId } == true) {
+            erpHistory.removeLast()
+        }
+        val previous = erpHistory.removeLastOrNull()
+        if (previous != null) {
+            if (previous.page == Page.WORK_LOGS) {
+                state.value = state.value.copy(page = Page.WORK_LOGS, detailId = "")
+                openWorkLogs(previous.workLogView, month = previous.workLogMonth, employee = previous.workLogEmployee)
+                return true
+            }
+            if (previous.page == Page.PURCHASES) {
+                openPurchases(previous.purchaseView, recordHistory = false)
+                return true
+            }
+            navigationRevision++
+            state.value = previous.copy(home = current.home, busy = false, error = "", notice = "")
+            return true
+        }
+        if (current.page == Page.HOME) return false
+        openErpTab(fallback)
+        return true
+    }
+
+    fun openTimeLeave(view: String = "mine") {
+        val generation = sessionGeneration
+        if (BuildConfig.ERP_APP) { navigateErpState(Page.TIME_LEAVE); state.value = state.value.copy(page = Page.TIME_LEAVE) }
+        else if (state.value.chatNavigation.current.view != ChatView.TIME_LEAVE) {
+            state.value = state.value.copy(chatNavigation = state.value.chatNavigation.navigate(ChatRoute(ChatView.TIME_LEAVE)))
+        }
+        state.value = state.value.copy(timeView = view)
+        runTask {
+            val data = api.call("volunteering.volunteering.time_leave_portal.get_time_workspace", JSONObject().put("view", if(view == "team") "team" else "mine"))
+            val policy = if(view == "policy") api.call("volunteering.volunteering.hr_policy.get_hr_policy_workspace") else JSONObject()
+            withContext(Dispatchers.Main) {
+                if (generation != sessionGeneration || state.value.timeView != view) return@withContext
+                state.value = state.value.copy(timeWorkspace = data, timePolicy = policy)
+                if(view == "resources") loadPeopleCentre()
+            }
+        }
+    }
+    fun timeAction(method: String, args: JSONObject, success: () -> Unit = {}) {
+      val generation = sessionGeneration
+      runTask {
+        api.call("volunteering.volunteering." + method, args)
+        if (generation != sessionGeneration) return@runTask
+        val before = state.value
+        val data = api.call("volunteering.volunteering.time_leave_portal.get_time_workspace", JSONObject().put("view", if(before.timeView == "team") "team" else "mine"))
+        val policy = if(before.timeView == "policy") api.call("volunteering.volunteering.hr_policy.get_hr_policy_workspace") else before.timePolicy
+        withContext(Dispatchers.Main) {
+            if (generation != sessionGeneration) return@withContext
+            state.value = state.value.copy(timeWorkspace = data, timePolicy = policy, notice = "Time and leave updated."); success()
+        }
+      }
+    }
+    fun previewTimeBalance(employee: String) {
+      val generation = sessionGeneration
+      runTask {
+        val result = api.call("volunteering.volunteering.hr_leave_balances.preview_leave_adoption", JSONObject().put("employee",employee))
+        withContext(Dispatchers.Main) {
+            if (generation == sessionGeneration) state.value = state.value.copy(timeBalancePreview = result)
+        }
+      }
+    }
+
+    fun loadPeopleCentre(year: Int = java.time.LocalDate.now().year) {
+        val generation = sessionGeneration
+        runTask {
+            val result = api.call("volunteering.volunteering.hr_resources.get_people_centre", JSONObject().put("year",year))
+            withContext(Dispatchers.Main) {
+                if (generation == sessionGeneration) state.value = state.value.copy(timeResources = result)
+            }
+        }
+    }
+    fun resourceAction(method: String, args: JSONObject, success: (JSONObject) -> Unit = {}) {
+        val generation = sessionGeneration
+        runTask {
+            val result = api.call("volunteering.volunteering." + method,args)
+            withContext(Dispatchers.Main) {
+                if (generation != sessionGeneration) return@withContext
+                success(result); state.value = state.value.copy(notice = "People centre updated.")
+            }
+        }
+    }
+    fun loadPayrollProfile(employee: String) {
+        val generation = sessionGeneration
+        runTask {
+            val result = api.call("volunteering.volunteering.hr_resources.get_payroll_profile",JSONObject().put("employee",employee))
+            withContext(Dispatchers.Main) {
+                if (generation == sessionGeneration) state.value = state.value.copy(timePayroll = result, timePayrollPreview = JSONObject())
+            }
+        }
+    }
+    fun previewPayroll(employee: String, month: String, unpaid: String) {
+        val generation = sessionGeneration
+        runTask {
+            val result = api.call("volunteering.volunteering.hr_resources.preview_payroll",JSONObject().put("employee",employee).put("month",month).put("unpaid_days",unpaid))
+            withContext(Dispatchers.Main) {
+                if (generation == sessionGeneration && state.value.timePayroll.optJSONObject("profile")?.text("employee") == employee) {
+                    state.value = state.value.copy(timePayrollPreview = result)
+                }
+            }
+        }
+    }
+    fun uploadTimeCertificate(file: JSONObject, name: String = "", modified: String = "", success: (JSONObject) -> Unit) {
+      val generation = sessionGeneration
+      runTask {
+        val uploaded=api.call("volunteering.volunteering.hr_special_leave.upload_certificate",JSONObject().put("filename",file.text("filename")).put("content",file.text("content")))
+        if (generation != sessionGeneration) return@runTask
+        val result=if(name.isBlank())uploaded else api.call("volunteering.volunteering.hr_special_leave.attach_certificate",JSONObject().put("name",name).put("file_url",uploaded.text("file_url")).put("expected_modified",modified))
+        withContext(Dispatchers.Main) { if (generation == sessionGeneration) success(result) }
+      }
+    }
+
+    fun openPurchases(view: String, name: String = "", project: String = "", recordHistory: Boolean = true) {
+        val page = if (name.isBlank()) Page.PURCHASES else Page.PURCHASE
+        if (recordHistory) navigateErpState(page, name)
+        val revision = ++navigationRevision
+        state.value = state.value.copy(page = page, detailId = name, purchaseView = view,
+            purchaseWorkspace = if (view == state.value.purchaseView) state.value.purchaseWorkspace else JSONObject(),
+            data = JSONObject(), form = JSONObject().put("project", project), error = "", notice = "")
+        runTask {
+            val workspace = api.call(PURCHASE + "get_purchase_workspace", JSONObject().put("view", view))
+            val order = if (name.isBlank()) JSONObject() else api.call(PURCHASE + "get_purchase",
+                JSONObject().put("view", view).put("name", name))
+            if (revision == navigationRevision) state.value = state.value.copy(purchaseWorkspace = workspace, data = order)
+        }
+    }
+
+    fun purchaseAction(method: String, args: JSONObject, onSuccess: () -> Unit) = runTask {
+        val before = state.value
+        val revision = navigationRevision
+        val response = api.call(PURCHASE + method, args)
+        withContext(Dispatchers.Main) {
+            if (revision != navigationRevision) return@withContext
+            onSuccess()
+            val target = when (method) {
+                "review_purchase", "create_purchase_master", "configure_vendor_advances" -> ""
+                else -> response.text("name").ifBlank { before.detailId }
+            }
+            if (before.page == Page.PURCHASE && target.isBlank() && erpHistory.lastOrNull()?.page == Page.PURCHASES) {
+                erpHistory.removeLast()
+            }
+            if (before.page == Page.PURCHASES && target.isNotBlank()) {
+                state.value = state.value.copy(form = JSONObject())
+            }
+            openPurchases(before.purchaseView, name = target, recordHistory = before.page != Page.PURCHASE)
+            state.value = state.value.copy(notice = "Purchase updated.")
+        }
+    }
+
     fun openAction(label: String, route: String) {
+        if (BuildConfig.ERP_APP) {
+            val uri = android.net.Uri.parse(route)
+            val view = when (uri.path) {
+                "/volunteering/vendor-purchases" -> "requests"
+                "/volunteering/purchase-approvals" -> "approvals"
+                "/volunteering/purchase-accounts" -> "accounts"
+                else -> null
+            }
+            if (view != null) {
+                openPurchases(view, uri.getQueryParameter("order").orEmpty(), uri.getQueryParameter("project").orEmpty())
+                return
+            }
+        }
+        if (route.substringBefore('?') == "/volunteering/time-leave") { openTimeLeave(if (route.contains("view=team")) "team" else if (route.contains("view=policy")) "policy" else "mine"); return }
         val target = routeTarget(route)
         if (target == null) state.value = state.value.copy(page = Page.UNAVAILABLE, unavailableLabel = label, error = "", notice = "")
         else if (target.first == Page.PROPOSALS) openProposals(target.second)
@@ -259,6 +635,7 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun openLedger(account: String) {
+        navigateErpState(Page.LEDGER, account)
         val workspace = state.value.data
         val from = workspace.text("default_from_date")
         val to = workspace.text("default_to_date")
@@ -276,6 +653,7 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun openAccountForm(account: JSONObject = JSONObject(), parent: String = "") {
+        navigateErpState(Page.ACCOUNT_FORM)
         val selected = JSONObject(account.toString())
         if (selected.length() == 0 && parent.isNotBlank()) selected.put("parent_account", parent)
         state.value = state.value.copy(page = Page.ACCOUNT_FORM, form = selected, error = "", notice = "")
@@ -314,6 +692,7 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun openOfficeAddress(row: JSONObject = JSONObject()) {
+        navigateErpState(Page.OFFICE_ADDRESS_FORM)
         state.value = state.value.copy(page = Page.OFFICE_ADDRESS_FORM, form = JSONObject(row.toString()), error = "")
     }
 
@@ -448,6 +827,7 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun openManagedEmployee(name: String = "") {
+        navigateErpState(Page.EMPLOYEE_FORM)
         if (name.isBlank()) { state.value = state.value.copy(page = Page.EMPLOYEE_FORM, form = JSONObject()); return }
         runTask {
             val detail = api.call("volunteering.volunteering.people_management.get_managed_employee",
@@ -467,6 +847,7 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun openManagedUser(name: String = "") {
+        navigateErpState(Page.USER_FORM)
         if (name.isBlank()) { state.value = state.value.copy(page = Page.USER_FORM, form = JSONObject()); return }
         runTask {
             val detail = api.call("volunteering.volunteering.people_management.get_managed_user",
@@ -506,16 +887,57 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
             notice = "Invoice ${result.text("invoice_number")} generated as ${format.uppercase()}.")
     }
 
+    private fun expenseSubmissionStatus(message: String) {
+        viewModelScope.launch { state.value = state.value.copy(expenseStatus = message) }
+    }
+    private fun submitExpenseRequest(method: String, args: JSONObject): JSONObject {
+        try { return expenseRequests.submit(api, method, args, ::expenseSubmissionStatus) }
+        finally { state.value = state.value.copy(expensePending = expenseRequests.pending(api).has("key")) }
+    }
+    private fun acknowledgeExpenseResult() {
+        // Clear only after the result screen/detail loaded. A failed detail fetch
+        // must survive restart as a saved result, never a fresh submission.
+        expenseRequests.clear(api)
+        state.value = state.value.copy(expensePending = false, expenseStatus = "")
+    }
+    fun retryExpenseSubmission() = runTask {
+        val result = expenseRequests.retry(api, ::expenseSubmissionStatus)
+        if (result.has("claims")) state.value = state.value.copy(page = Page.MULTI_RESULT, data = result, expensePending = false, expenseStatus = "", notice = "Invoices submitted for review.")
+        else {
+            val name = result.text("name")
+            val detail = api.call("volunteering.volunteering.expense_claim_portal.get_my_expense_claim", JSONObject().put("name", name))
+            state.value = state.value.copy(page = Page.CLAIM, detailId = name, data = detail, expensePending = false, expenseStatus = "", notice = "Claim $name was saved successfully.")
+        }
+        acknowledgeExpenseResult()
+    }
+    fun closeExpenseClaim(delete: Boolean, reason: String) = runTask {
+        val name = state.value.detailId
+        val args = JSONObject().put("name", name).put("expected_modified", state.value.data.text("modified")).put("reason", reason)
+        if (delete) {
+            args.remove("reason")
+            api.call("volunteering.volunteering.expense_claim_withdrawal.delete_expense_claim_draft", args)
+            val list = api.call("volunteering.volunteering.expense_claim_portal.get_my_expense_claims")
+            state.value = state.value.copy(page = Page.CLAIMS, detailId = "", data = list, notice = "Draft deleted.")
+        } else {
+            val detail = api.call("volunteering.volunteering.expense_claim_withdrawal.withdraw_expense_claim", args)
+            state.value = state.value.copy(data = detail, notice = "Claim withdrawn. Receipts and history are retained.")
+        }
+    }
+
     fun submitMultiClaim(details: JSONObject) = runTask {
-        val result = api.call("volunteering.volunteering.expense_claim_portal.submit_multi_invoice_expense_claim",
+        val result = submitExpenseRequest("volunteering.volunteering.expense_claim_portal.submit_multi_invoice_expense_claim",
             JSONObject().put("payload", details.toString()))
         state.value = state.value.copy(page = Page.MULTI_RESULT, data = result,
             notice = "${result.optJSONArray("claims")?.length() ?: 0} invoices submitted for review.")
+        acknowledgeExpenseResult()
     }
 
     fun openCombinedInvoice(claim: JSONObject) = runTask {
         val defaults = api.call("volunteering.volunteering.invoice_generator.get_invoice_generator_defaults")
-        state.value = state.value.copy(page = Page.COMBINED_INVOICE, data = defaults, form = claim)
+        withContext(Dispatchers.Main) {
+            navigateErpState(Page.COMBINED_INVOICE)
+            state.value = state.value.copy(page = Page.COMBINED_INVOICE, data = defaults, form = claim)
+        }
     }
 
     fun submitGeneratedInvoice(details: JSONObject) = runTask {
@@ -538,17 +960,21 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
                 JSONObject().put("payload", payload.toString()).put("kind", kind))
             payload.put("${kind}_signature_proof", proof.text("proof"))
         }
-        val result = api.call("volunteering.volunteering.expense_claim_portal.submit_generated_invoice_expense_claim",
+        val result = submitExpenseRequest("volunteering.volunteering.expense_claim_portal.submit_generated_invoice_expense_claim",
             JSONObject().put("claim_payload", claim.toString()).put("invoice_payload", payload.toString()))
         val name = result.text("name")
         val detail = api.call("volunteering.volunteering.expense_claim_portal.get_my_expense_claim",
             JSONObject().put("name", name))
         state.value = state.value.copy(page = Page.CLAIM, detailId = name, data = detail,
             notice = "Signed invoice ${result.text("generated_invoice_number")} attached and claim submitted for review.")
+        acknowledgeExpenseResult()
     }
 
     fun startCorrection() {
-        if (state.value.data.optBoolean("can_correct")) state.value = state.value.copy(page = Page.CORRECT_CLAIM)
+        if (state.value.data.optBoolean("can_correct")) {
+            navigateErpState(Page.CORRECT_CLAIM, state.value.detailId)
+            state.value = state.value.copy(page = Page.CORRECT_CLAIM)
+        }
     }
 
     fun resubmitCorrection(details: JSONObject) = runTask {
@@ -590,6 +1016,7 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
         val project = state.value.data
         val projectId = project.text("name")
         if (projectId.isBlank()) return
+        navigateErpState(Page.PROPOSAL_FORM)
         val baseline = JSONObject(project.toString())
         runTask {
             val options = api.call("volunteering.volunteering.project_workspace.get_setup_options",
@@ -651,7 +1078,7 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun submitClaim(payload: JSONObject) = runTask {
-        val result = api.call(
+        val result = submitExpenseRequest(
             "volunteering.volunteering.expense_claim_portal.submit_expense_claim",
             JSONObject().put("payload", payload.toString())
         )
@@ -660,6 +1087,7 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
         val detail = api.call("volunteering.volunteering.expense_claim_portal.get_my_expense_claim", JSONObject().put("name", id))
         state.value = state.value.copy(page = Page.CLAIM, detailId = id, data = detail,
             notice = "Expense claim $id submitted for review.")
+        acknowledgeExpenseResult()
     }
 
     fun decideAdvance(action: String, reason: String) = runTask {
@@ -786,7 +1214,12 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
             val name = room.text("name")
             val data = api.call(CHAT + "get_space", JSONObject().put("name", name))
             if (generation != sessionGeneration || version != chatChangeVersion) return
-            synchronized(chatScreens) { chatScreens["room:$name"] = data }
+            synchronized(chatScreens) {
+                val key = "room:$name"
+                val seen = chatScreens[key]?.text("seen_through").orEmpty()
+                if (seen > data.text("seen_through")) data.put("seen_through", seen)
+                chatScreens[key] = data
+            }
             acknowledgeDelivery(name, data)
         }
     }
@@ -800,19 +1233,24 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun refreshChat() {
+        if (!state.value.chatHome.optBoolean("chat_access", true)) return
         refreshOutbox()
         if (state.value.signedIn) DurableChat.schedule(getApplication())
         if (chatRefreshing || !state.value.signedIn) return
         chatRefreshing = true
         val generation = sessionGeneration
         val version = chatChangeVersion
-        runTask(showBusy = false, silent = true, onFailure = { chatRefreshing = false }) {
+        val readVersion = chatReadVersion
+        runTask(showBusy = false, silent = true) {
             try {
                 val home = api.call(CHAT + "get_collaboration_home")
                 val work = api.call(CHAT + "get_my_work")
-                if (generation != sessionGeneration || version != chatChangeVersion) return@runTask
-                val workChanged = work.toString() != state.value.chatWork.toString()
-                if (state.value.page == Page.COLLABORATION) state.value = state.value.copy(chatHome = home, chatWork = work)
+                val workChanged = withContext(Dispatchers.Main) {
+                    if (generation != sessionGeneration || version != chatChangeVersion || readVersion != chatReadVersion) return@withContext null
+                    val current = state.value
+                    if (current.page == Page.COLLABORATION) state.value = current.copy(chatHome = home, chatWork = work)
+                    work.toString() != current.chatWork.toString()
+                } ?: return@runTask
                 if (workChanged) WorkReminders.requestSync(getApplication())
                 // Drop snapshots whose chat membership or individual share is no longer present.
                 val allowedRooms = home.items("spaces").map { it.text("name") }.toSet()
@@ -827,47 +1265,82 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
                 }.take(8), generation)
                 persistChatScreens()
             } finally {
-                chatRefreshing = false
-                if (generation == sessionGeneration && version != chatChangeVersion) withContext(Dispatchers.Main) { refreshChat() }
+                withContext(Dispatchers.Main) {
+                    chatRefreshing = false
+                    if (generation == sessionGeneration && (version != chatChangeVersion || readVersion != chatReadVersion)) refreshChat()
+                }
             }
         }
     }
 
-    private fun reloadChatRoom(name: String) {
+    private suspend fun reloadChatRoom(name: String) {
         val route = state.value.chatNavigation.current
         val generation = sessionGeneration
         val version = chatChangeVersion
         val args = JSONObject().put("name", name).put("entry",state.value.targetEntry.ifBlank{null})
         val detail = route.view in listOf(ChatView.TRACKER, ChatView.TASK) && route.room == name
         val room = if (detail) api.call(CHAT + "get_work_item", JSONObject().put("name", route.item)) else api.call(CHAT + "get_space", args)
-        if (generation != sessionGeneration || version != chatChangeVersion || state.value.page != Page.COLLABORATION || state.value.chatNavigation.current != route || state.value.chatRoom.optJSONObject("space")?.text("name") != name) return
-        val current = state.value.chatRoom
-        if (!detail && current.items("entries").isNotEmpty()) {
-            val incoming = room.items("entries")
-            val cached = current.items("entries")
-            val entries = (cached + incoming).associateBy { it.text("name") }.values
-                .sortedWith(compareBy({ it.text("creation") }, { it.text("name") }))
-            room.put("entries", JSONArray(entries))
-            if (entries.firstOrNull()?.text("name") != incoming.firstOrNull()?.text("name"))
-                room.put("older_cursor", current.opt("older_cursor"))
+        val accepted = withContext(Dispatchers.Main) {
+            val current = state.value
+            if (generation != sessionGeneration || version != chatChangeVersion || current.page != Page.COLLABORATION ||
+                current.chatNavigation.current != route || current.chatRoom.optJSONObject("space")?.text("name") != name) {
+                return@withContext false
+            }
+            if (!detail && current.chatRoom.items("entries").isNotEmpty()) {
+                val incoming = room.items("entries")
+                val entries = (current.chatRoom.items("entries") + incoming).associateBy { it.text("name") }.values
+                    .sortedWith(compareBy({ it.text("creation") }, { it.text("name") }))
+                room.put("entries", JSONArray(entries))
+                if (entries.firstOrNull()?.text("name") != incoming.firstOrNull()?.text("name")) {
+                    room.put("older_cursor", current.chatRoom.opt("older_cursor"))
+                }
+            }
+            if (!detail && current.chatRoom.text("seen_through") > room.text("seen_through")) {
+                room.put("seen_through", current.chatRoom.text("seen_through"))
+            }
+            synchronized(chatScreens) { chatScreens[screenKey(route)] = room }
+            state.value = current.copy(chatRoom = room, chatLoading = false, targetEntry = "")
+            persistChatScreens()
+            true
         }
-        synchronized(chatScreens) { chatScreens[screenKey(route)] = room }
-        state.value = state.value.copy(chatRoom = room, chatLoading = false, targetEntry = "")
-        persistChatScreens()
-        if (!detail) acknowledgeDelivery(name, room)
+        if (accepted && !detail) acknowledgeDelivery(name, room)
     }
 
-    fun markChatSeen(name: String, entry: JSONObject) = runTask(showBusy = false, silent = true) {
+    fun markChatSeen(name: String, entry: JSONObject) {
         val route = ChatRoute(ChatView.CHAT, name)
         val generation = sessionGeneration
         val stamp = entry.text("creation")
-        if (state.value.chatNavigation.current != route || stamp <= state.value.chatRoom.text("seen_through")) return@runTask
-        api.call(CHAT + "mark_seen", JSONObject().put("space", name).put("entry", entry.text("name")))
-        withContext(Dispatchers.Main) {
-            val current = state.value
-            if (sessionGeneration == generation && current.chatNavigation.current == route && stamp > current.chatRoom.text("seen_through")) {
-                val room = JSONObject(current.chatRoom.toString()).put("seen_through", stamp)
-                state.value = current.copy(chatRoom = room)
+        val current = state.value
+        if (current.chatNavigation.current != route || stamp <= current.chatRoom.text("seen_through")) return
+        runTask(showBusy = false, silent = true) {
+            api.call(CHAT + "mark_seen", JSONObject().put("space", name).put("entry", entry.text("name")))
+            withContext(Dispatchers.Main) {
+                if (sessionGeneration != generation) return@withContext
+                // Discard any in-flight inbox response from before this read was saved.
+                chatReadVersion++
+                val currentState = state.value
+                val roomKey = screenKey(route)
+                val cachedRoom = synchronized(chatScreens) { chatScreens[roomKey] }
+                val showingRoom = currentState.page == Page.COLLABORATION && currentState.chatNavigation.current == route
+                val room = if (showingRoom) currentState.chatRoom else cachedRoom
+                val readRoom = if (room != null && stamp > room.text("seen_through")) {
+                    JSONObject(room.toString()).put("seen_through", stamp)
+                } else room
+                if (readRoom != null) synchronized(chatScreens) { chatScreens[roomKey] = readRoom }
+
+                val home = currentState.chatHome
+                val spaces = home.items("spaces")
+                val summary = spaces.firstOrNull { it.text("name") == name }
+                val latest = summary?.optJSONObject("last_entry")?.text("creation").orEmpty()
+                val inboxCaughtUp = chatPreviewWasSeen(latest, readRoom?.text("seen_through") ?: stamp)
+                val readHome = if (inboxCaughtUp && summary != null && summary.optInt("unread") > 0) {
+                    JSONObject(home.toString()).put("spaces", JSONArray(spaces.map {
+                        if (it === summary) JSONObject(it.toString()).put("unread", 0) else it
+                    }))
+                } else home
+                state.value = currentState.copy(chatHome = readHome, chatRoom = if (showingRoom && readRoom != null) readRoom else currentState.chatRoom)
+                persistChatScreens()
+                if (!inboxCaughtUp) refreshChat()
             }
         }
     }
@@ -882,6 +1355,19 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
     fun showChatConversations() = moveChat(state.value.chatNavigation.navigate(ChatRoute()))
     fun showPersonalTasks() = moveChat(state.value.chatNavigation.navigate(ChatRoute(ChatView.MY_TASKS)))
     fun showPersonalTrackers() = moveChat(state.value.chatNavigation.navigate(ChatRoute(ChatView.MY_TRACKERS)))
+
+    fun switchTasksSection(section: TasksSection) {
+        val current = state.value
+        if (current.busy) return
+        val workLogging = current.chatHome.optJSONObject("work_logging")
+        if (section == TasksSection.CHATS && !current.chatHome.optBoolean("chat_access", true)) return
+        if (section != TasksSection.CHATS && workLogging?.optBoolean("can_create") != true && workLogging?.optBoolean("can_review_team") != true) return
+        moveChat(current.chatNavigation.switchSection(section), loadWorkLogs = false)
+        if (section == TasksSection.WORK_LOGS) {
+            openWorkLogs(current.workLogView, employee = current.workLogEmployee)
+        }
+        if (section == TasksSection.TIME_LEAVE) openTimeLeave()
+    }
     fun showRoomTrackers() {
         val room = state.value.chatNavigation.current.room
         if (room.isNotBlank()) openTrackers(room)
@@ -910,24 +1396,39 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
     fun backInChat(): Boolean {
         if (state.value.page == Page.RECEIPT) { closeReceipt(); return true }
         val navigation = state.value.chatNavigation
+        if (navigation.current.view == ChatView.WORK_LOGS && state.value.workLogView == "team" && state.value.workLogEmployee.isNotBlank()) {
+            openWorkLogs(view = "team", employee = "")
+            return true
+        }
         if (!navigation.canGoBack) return false
         moveChat(navigation.back())
         return true
     }
 
-    private fun moveChat(navigation: ChatNavigation) {
+    private fun moveChat(navigation: ChatNavigation, loadWorkLogs: Boolean = true) {
         val previousRoute = state.value.chatNavigation.current
         val room = navigation.current.room
         navigationRevision++
         val seeded = if (room.isBlank()) JSONObject() else seedChatScreen(navigation.current)
         state.value = state.value.copy(page = Page.COLLABORATION, chatNavigation = navigation,
             error = "", notice = "", chatRoom = seeded, chatLoading = room.isNotBlank() && seeded.optJSONObject("space")?.has("access_level") != true)
+        if (!BuildConfig.ERP_APP && state.value.chatHome.optBoolean("chat_access", true)) {
+            sectionPreferences.remember(api.endpoint(), state.value.user, navigation.current.section().name)
+        }
         if (room.isNotBlank() && previousRoute != navigation.current) runTask(showBusy = false) {
             try { reloadChatRoom(room) }
             catch (failure: Exception) {
                 if (!canReadCachedChat(seeded.optJSONObject("space")?.has("access_level") == true, failure)) throw failure
             }
         }
+        if (navigation.current.view == ChatView.CONVERSATIONS && previousRoute != navigation.current) refreshChat()
+        if (loadWorkLogs && navigation.current.view == ChatView.WORK_LOGS && previousRoute != navigation.current) {
+            openWorkLogs(state.value.workLogView)
+        }
+        if (loadWorkLogs && navigation.current.view == ChatView.WORK_LOG && previousRoute != navigation.current) {
+            openWorkLog(navigation.current.item)
+        }
+        if (loadWorkLogs && navigation.current.view == ChatView.TIME_LEAVE && previousRoute != navigation.current) openTimeLeave()
     }
 
     fun olderChatMessages() = runTask {
@@ -1036,7 +1537,8 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
                     state.value = PortalState(booting = false, server = api.server(), localAddress = api.localAddress(), error = exception.message.orEmpty())
                     return@launch
                 }
-                if (exception is PortalApiException && exception.status == 403 && state.value.page == Page.COLLABORATION) {
+                if (exception is PortalApiException && exception.status == 403 && state.value.page == Page.COLLABORATION &&
+                    state.value.chatNavigation.current.section() == TasksSection.CHATS) {
                     snapshotRevision.incrementAndGet()
                     synchronized(chatScreens) { chatScreens.clear() }; snapshots.clear()
                     state.value = state.value.copy(chatHome = JSONObject(), chatRoom = JSONObject(), chatWork = JSONObject())
@@ -1051,6 +1553,7 @@ class PortalViewModel(application: Application) : AndroidViewModel(application) 
     companion object {
         private const val HOME = "volunteering.volunteering.home_service.get_home_payload"
         private const val CHAT = "volunteering.volunteering.collaboration_mobile."
+        private const val PURCHASE = "volunteering.volunteering.vendor_purchases."
     }
 }
 
@@ -1087,6 +1590,10 @@ fun routeTarget(route: String): Pair<Page, String>? {
         path == "/volunteering/chart-of-accounts" -> Page.CHART to ""
         path == "/volunteering/opening-balances" -> Page.OPENING_BALANCES to ""
         path == "/volunteering/donations" -> Page.DONATIONS to ""
+        path == "/volunteering/time-leave" -> Page.TIME_LEAVE to query("view")
+        path == "/volunteering/work-logs" && query("log").isNotBlank() -> Page.WORK_LOG to query("log")
+        path == "/volunteering/work-logs" && query("new") == "1" -> Page.WORK_LOG to ""
+        path == "/volunteering/work-logs" -> Page.WORK_LOGS to query("view")
         path == "/volunteering/invoice-generator" -> Page.INVOICE to ""
         path == "/volunteering/budget-health" -> Page.BUDGET_HEALTH to ""
         path == "/volunteering/project-account-mapping" -> Page.PROJECT_MAPPING to ""

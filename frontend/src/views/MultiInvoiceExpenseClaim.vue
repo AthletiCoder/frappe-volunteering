@@ -11,6 +11,7 @@
 			</template>
 		</PageHeader>
 		<p v-if="error" class="message-error mb-5" role="alert">{{ error }}</p>
+		<div v-if="submissionStatus && !result" class="form-card mb-4" role="status"><p>{{ submissionStatus }}</p><button v-if="!submitting && submission?.pending?.args" type="button" class="btn-secondary mt-3" @click="retrySavedSubmission">Retry saved submission</button></div>
 		<p v-if="loading" class="text-muted">Loading your options…</p>
 		<section v-else-if="result" class="form-card space-y-4">
 			<h2 class="text-xl font-semibold">Sent for receipt review</h2>
@@ -25,7 +26,7 @@
 					<span>{{ claim.name }}</span><span>{{ money(claim.total) }} →</span>
 				</RouterLink>
 			</div>
-			<RouterLink to="/home" class="btn-secondary inline-flex">Return Home</RouterLink>
+			<div class="flex gap-3"><button type="button" class="btn-primary" @click="startAnother">Submit another set of invoices</button><RouterLink to="/home" class="btn-secondary inline-flex">Return Home</RouterLink></div>
 		</section>
 		<form v-else class="space-y-5" @submit.prevent="submit">
 			<section class="form-card">
@@ -87,7 +88,7 @@
 					<label class="field-label">Invoice number<input v-model.trim="invoice.invoice_number" maxlength="100" class="field-input" /></label>
 					<label class="field-label sm:col-span-2">Supplier / payee<input v-model.trim="invoice.supplier_name" maxlength="160" class="field-input" /></label>
 					<label class="field-label sm:col-span-2">Invoice or bill (PDF, PNG or JPEG; max 5 MB) *
-						<input type="file" accept=".pdf,.png,.jpg,.jpeg" required class="field-input" :disabled="readingFiles || submitting" @change="chooseReceipt($event, invoice)" />
+						<input type="file" accept=".pdf,.png,.jpg,.jpeg" :required="!invoice.receipt_content" class="field-input" :disabled="readingFiles || submitting" @change="chooseReceipt($event, invoice)" />
 					</label>
 				</div>
 				<p v-if="invoice.receipt_filename" class="text-xs text-muted mt-2">Ready to upload privately: {{ invoice.receipt_filename }}</p>
@@ -118,6 +119,7 @@ import { RouterLink, useRoute } from "vue-router";
 import PageHeader from "../components/PageHeader.vue";
 import SearchSelect from "../components/SearchSelect.vue";
 import { call } from "../lib/frappe";
+import { ExpenseSubmission } from "../lib/expenseSubmission";
 
 const API = "volunteering.volunteering.expense_claim_portal.";
 const route = useRoute();
@@ -132,7 +134,19 @@ const loadingAccounts = ref(false);
 const readingFiles = ref(0);
 const submitting = ref(false);
 const error = ref("");
-const result = ref(null);
+const result = ref(null), submissionStatus = ref("");
+let submission;
+async function startAnother() {
+    await submission?.reset(); result.value = null; error.value = "";
+    form.invoices = [blankInvoice(), blankInvoice()];
+    if (accountOptions.value.length === 1) form.invoices.forEach(invoice => invoice.items[0].account = accountOptions.value[0].value);
+}
+async function retrySavedSubmission() {
+    if (submitting.value || !submission?.pending) return;
+    submitting.value = true; error.value = "";
+    try { result.value = await submission.retry(); } catch (e) { error.value = e.message; }
+    finally { submitting.value = false; }
+}
 let accountRequest = 0;
 const sources = computed(() => [
 	{ value: "PERSONAL", label: "Paid personally", hint: "Reimburse me after approval", disabled: false },
@@ -152,6 +166,14 @@ onMounted(async () => {
 		if (defaults.value.projects.some((project) => project.value === requested)) form.project = requested;
 		else if (defaults.value.projects.length === 1) form.project = defaults.value.projects[0].value;
 		if (form.project) await projectChanged();
+        submission = new ExpenseSubmission({ slot: defaults.value.employee + ":multiple", call, status: value => submissionStatus.value = value });
+        result.value = await submission.restore();
+        if (!result.value && submission.pending?.draft) {
+            Object.assign(form, submission.pending.draft);
+            key = Math.max(key, ...form.invoices.flatMap(invoice => [invoice.key, ...invoice.items.map(item => item.key)])) + 1;
+            accountOptions.value = await call(`${API}get_project_accounts`, { project: form.project });
+            submissionStatus.value ||= "Your previous submission is saved on this device. Retry it safely below.";
+        }
 	} catch (e) { error.value = e.message || String(e); }
 	finally { loading.value = false; }
 });
@@ -212,7 +234,7 @@ async function submit() {
 			receipt_content: invoice.receipt_content,
 			items: invoice.items.map((item) => ({ account: item.account, description: item.description, amount: item.amount })),
 		}));
-		result.value = await call(`${API}submit_multi_invoice_expense_claim`, { payload: { ...form, invoices } });
+		result.value = await submission.submit(`${API}submit_multi_invoice_expense_claim`, { payload: { ...form, invoices } }, JSON.parse(JSON.stringify(form)));
 		window.scrollTo({ top: 0, behavior: "smooth" });
 	} catch (e) { error.value = e.message || String(e); window.scrollTo({ top: 0, behavior: "smooth" }); }
 	finally { submitting.value = false; }

@@ -251,7 +251,7 @@ test("expense claim and invoice preparation forms", async ({
   });
 });
 
-test("multi-invoice claims and both donation types", async ({ page }, testInfo) => {
+test("multi-invoice claims and donation list, entry and receipt setup", async ({ page }, testInfo) => {
   await test.step("multi-invoice-claim", async () => {
     await openRoute(
       page,
@@ -266,15 +266,21 @@ test("multi-invoice claims and both donation types", async ({ page }, testInfo) 
       page,
       PERSONAS.accounts,
       "/volunteering/donations",
-      "Register a donation",
+      "Donations",
     );
-    await page.getByRole("button", { name: /General donation/ }).click();
+    await auditMobileLayout(page, testInfo, "donation-list");
+    await page.getByRole("button", { name: "Record a donation", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Donor details", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /CSR donation/ })).toHaveCount(0);
+    await expect(page.getByLabel("Phone number", { exact: true })).not.toHaveAttribute("required", "");
     await auditMobileLayout(page, testInfo, "general-donation");
   });
-  await test.step("csr-donation", async () => {
-    await page.getByRole("button", { name: /CSR donation/ }).click();
-    await expect(page.getByRole("heading", { name: "CSR organisation" })).toBeVisible();
-    await auditMobileLayout(page, testInfo, "csr-donation");
+  await test.step("receipt-setup", async () => {
+    await page.getByRole("button", { name: "Receipt setup", exact: true }).click();
+    await expect(page.getByText("Receipt identity and registration", { exact: true })).toBeVisible();
+    await page.getByText("Receipt identity and registration", { exact: true }).click();
+    await page.getByText("Register an authorised signature", { exact: true }).click();
+    await auditMobileLayout(page, testInfo, "receipt-setup");
   });
 });
 

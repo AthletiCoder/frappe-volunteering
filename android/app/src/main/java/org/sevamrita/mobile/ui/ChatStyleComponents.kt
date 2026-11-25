@@ -38,7 +38,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import org.sevamrita.mobile.data.items
@@ -139,7 +138,7 @@ internal data class ChatThreadActions(
     val refresh: () -> Unit, val signOut: () -> Unit, val older: () -> Unit,
     val reply: (JSONObject) -> Unit, val task: (JSONObject) -> Unit, val tracker: (JSONObject) -> Unit, val edit: (JSONObject) -> Unit,
     val remove: (JSONObject) -> Unit, val info: (JSONObject) -> Unit, val seen: (JSONObject) -> Unit,
-    val openTracker: (String) -> Unit, val openFile: (String) -> Unit,
+    val openTracker: (String) -> Unit, val openTask: (String) -> Unit, val openFile: (String) -> Unit,
     val body: (String) -> Unit, val kind: (String) -> Unit, val attach: () -> Unit,
     val removeFile: (JSONObject) -> Unit, val cancelReply: () -> Unit, val cancelEdit: () -> Unit, val send: () -> Unit
 )
@@ -193,11 +192,11 @@ internal fun ChatThread(
             keyboard?.show()
         }
     }
-    LaunchedEffect(data, visibleIncoming, lifecycle, canMarkSeen, options) {
+    val seenThrough = data.text("seen_through")
+    LaunchedEffect(visibleIncoming, seenThrough, lifecycle, canMarkSeen, options) {
         val entry = visibleIncoming ?: return@LaunchedEffect
         if (canMarkSeen && options == null && lifecycle == Lifecycle.State.RESUMED &&
-            data.has("seen_through") && entry.text("creation") > data.text("seen_through")) {
-            delay(300)
+            data.has("seen_through") && entry.text("creation") > seenThrough) {
             actions.seen(entry)
         }
     }
@@ -245,17 +244,31 @@ internal fun ChatThread(
                     if (older == null || older.text("creation").take(10) != entry.text("creation").take(10)) Box(Modifier.fillMaxWidth().padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
                         Surface(color = appColor(0xFFFAF8F3), shape = RoundedCornerShape(9.dp), shadowElevation = 0.5.dp) { Text(chatDay(entry.text("creation")), Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 11.sp, color = greyInk) }
                     }
-                    if (entry.text("entry_kind") == "System") Box(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
+                    val snapshot = entry.optJSONObject("snapshot")
+                    val itemId = entry.text("item")
+                    val createdKind = createdChatItemKind(entry.text("entry_kind"), snapshot?.text("created_kind").orEmpty(), entry.text("body"))
+                    if (createdKind != null && itemId.isNotBlank()) {
+                        CreatedWorkMessage(
+                            entry, createdKind, snapshot, items[itemId], members, user,
+                            currentProgress?.text(itemId).orEmpty().isNotBlank(),
+                            onOpen = { if (createdKind == "Tracker") actions.openTracker(itemId) else actions.openTask(itemId) }
+                        )
+                    } else if (entry.text("entry_kind") == "System") Box(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
                         Surface(onClick = if (items[entry.text("item")]?.text("item_kind") == "Tracker") actions.trackers else actions.tasks,
                             color = appColor(0xFFFAF8F3), shape = RoundedCornerShape(8.dp)) { Text(entry.text("body"), Modifier.padding(horizontal = 10.dp, vertical = 6.dp), fontSize = 11.sp, color = greyInk) }
                     } else BoxWithConstraints(Modifier.fillMaxWidth()) {
                         val mine = entry.text("owner") == user
                         val progress = entry.text("entry_kind") == "Progress"
-                        val snapshot = entry.optJSONObject("snapshot")
                         val hasTrackerSnapshot = progress && snapshot?.optJSONObject("item_data") != null
                         val latestProgress = currentProgress?.text(entry.text("item")).orEmpty()
                         val earlier = progress && latestProgress.isNotBlank() && latestProgress != entry.text("name")
                         val deleted = entry.optBoolean("is_deleted")
+                        val attachmentTracker = snapshot?.optJSONObject("attachment_tracker")
+                        val trackerFilesTitle = if (!deleted && entry.text("entry_kind") == "Note" && entry.items("attachments").isNotEmpty()) {
+                            attachmentTracker?.takeIf { it.text("name") == itemId }?.text("title")
+                                ?.takeIf { it.isNotBlank() }
+                                ?: items[itemId]?.takeIf { it.text("item_kind") == "Tracker" }?.text("title").orEmpty()
+                        } else ""
                         val quoted = messageMap[entry.text("source_entry")]
                         val linked = work.filter { it.text("item_kind") in listOf("Task", "Tracker") && it.text("source_entry") == entry.text("name") }
                         val plain = entry.text("entry_kind") == "Message" && entry.text("source_entry").isBlank() &&
@@ -272,7 +285,19 @@ internal fun ChatThread(
                                     val target = messages.indexOfFirst { it.text("name") == entry.text("source_entry") }
                                     if (target >= 0) scope.launch { listState.animateScrollToItem(target) }
                                 }
-                                if (entry.text("entry_kind") !in listOf("Message", "System", "Progress")) Text(entry.text("entry_kind"), color = emerald, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                if (trackerFilesTitle.isNotBlank()) {
+                                    Row(Modifier.fillMaxWidth().padding(bottom = 7.dp)
+                                        .background(appColor(0x18107050), RoundedCornerShape(9.dp))
+                                        .clickable { actions.openTracker(itemId) }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Timeline, null, Modifier.size(21.dp), tint = emerald)
+                                        Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
+                                            Text("Files for tracker", color = emerald, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                            Text(trackerFilesTitle, color = messageInk, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                                                maxLines = 3, overflow = TextOverflow.Ellipsis)
+                                        }
+                                        Icon(Icons.Default.ChevronRight, "Open tracker", Modifier.size(18.dp), tint = emerald)
+                                    }
+                                } else if (entry.text("entry_kind") !in listOf("Message", "System", "Progress")) Text(entry.text("entry_kind"), color = emerald, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                                 val metadata: @Composable () -> Unit = { ChatMessageMeta(entry, receiptThrough.takeIf { mine && !deleted }) }
                                 if (plain) FlowRow(Modifier.align(Alignment.End),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
@@ -363,6 +388,55 @@ internal fun ChatThread(
             Spacer(Modifier.height(18.dp))
         }
     } }
+}
+
+@Composable
+private fun CreatedWorkMessage(
+    entry: JSONObject, kind: String, snapshot: JSONObject?, item: JSONObject?,
+    members: List<JSONObject>, user: String, hasProgress: Boolean, onOpen: () -> Unit
+) {
+    val recorded = snapshot?.takeIf { it.text("created_kind") == kind }
+    val details = recorded ?: item ?: JSONObject().put("title", entry.text("body").substringAfter(": "))
+    val mine = entry.text("owner") == user
+    val tracker = kind == "Tracker"
+    val earlier = tracker && recorded != null && hasProgress
+
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        Surface(
+            modifier = Modifier.align(if (mine) Alignment.CenterEnd else Alignment.CenterStart)
+                .widthIn(max = minOf(maxWidth * .86f, 560.dp))
+                .clickable(onClickLabel = "Open ${kind.lowercase()}", onClick = onOpen),
+            color = when {
+                earlier -> appColor(0xFFEAE9E5)
+                mine -> appColor(0xFFE0F4DB)
+                else -> MaterialTheme.colorScheme.surface
+            },
+            shape = RoundedCornerShape(13.dp),
+            shadowElevation = .5.dp
+        ) {
+            Column(Modifier.padding(horizontal = 10.dp, vertical = 7.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                val label = if (tracker && recorded == null && item != null) "Tracker created · current progress" else "$kind created"
+                Text(label, color = if (earlier) greyInk else emerald, style = MaterialTheme.typography.labelMedium)
+                if (tracker && details.optJSONObject("item_data") != null) {
+                    TrackerSnapshot(details, earlier, entry.text("creation"), item, members, user)
+                } else {
+                    Text(details.text("title"), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium)
+                    val assignee = details.text("assignee_name").ifBlank { details.text("assignee") }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (details.text("status").isNotBlank()) WorkStatus(details.text("status"))
+                        if (assignee.isNotBlank()) Text(assignee, color = greyInk, style = MaterialTheme.typography.bodySmall)
+                    }
+                    val deadline = chatDay(details.text("deadline"))
+                    val start = chatDay(details.text("from_date"))
+                    val end = chatDay(details.text("until_date"))
+                    val window = listOf(start, end).filter { it.isNotBlank() }.distinct().joinToString(" – ")
+                    val dates = listOf(window, if (deadline.isBlank()) "" else "Due $deadline").filter { it.isNotBlank() }
+                    if (dates.isNotEmpty()) Text(dates.joinToString(" · "), color = greyInk, style = MaterialTheme.typography.bodySmall)
+                }
+                Box(Modifier.align(Alignment.End)) { ChatMessageMeta(entry, null) }
+            }
+        }
+    }
 }
 
 @Composable

@@ -27,6 +27,8 @@ import ExpenseApprovalLimits from "./views/ExpenseApprovalLimits.vue";
 import Donations from "./views/Donations.vue";
 import OpeningBalances from "./views/OpeningBalances.vue";
 import FiscalYears from "./views/FiscalYears.vue";
+import WorkLogs from "./views/WorkLogs.vue";
+import TimeLeave from "./views/TimeLeave.vue";
 import VendorPurchases from "./views/VendorPurchases.vue";
 import Collaboration from "./views/Collaboration.vue";
 
@@ -44,6 +46,8 @@ const router = createRouter({
 		{ path: "/donations", component: Donations, name: "Donations" },
 		{ path: "/opening-balances", component: OpeningBalances, name: "OpeningBalances" },
 		{ path: "/fiscal-years", component: FiscalYears, name: "FiscalYears" },
+		{ path: "/work-logs", component: WorkLogs, name: "WorkLogs" },
+		{ path: "/time-leave", component: TimeLeave, name: "TimeLeave" },
 		{ path: "/profile", component: Profile, name: "Profile" },
 		{ path: "/todos", component: Todos, name: "Todos" },
 		{ path: "/budget-health", component: BudgetHealth, name: "BudgetHealth" },
@@ -97,6 +101,16 @@ const router = createRouter({
 	],
 });
 
+const root = document.querySelector("#app");
+
+// Stop the browser from stepping a focused number input during wheel scrolling.
+root.addEventListener("wheel", (event) => {
+	if (!event.ctrlKey && event.target instanceof HTMLInputElement
+		&& event.target.type === "number" && event.target.matches(":focus")) {
+		event.preventDefault();
+	}
+}, { capture: true, passive: false });
+
 const app = createApp(App);
 app.use(router);
-app.mount("#app");
+app.mount(root);

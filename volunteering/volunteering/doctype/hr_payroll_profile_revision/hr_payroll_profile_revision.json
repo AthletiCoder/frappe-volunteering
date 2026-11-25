@@ -1,0 +1,55 @@
+{
+ "doctype": "DocType",
+ "name": "HR Payroll Profile Revision",
+ "module": "Volunteering",
+ "autoname": "hash",
+ "engine": "InnoDB",
+ "track_changes": 1,
+ "field_order": [
+  "employee",
+  "effective_from",
+  "settings",
+  "reason",
+  "author",
+  "published_on"
+ ],
+ "fields": [
+  {
+   "fieldname": "employee",
+   "label": "Employee",
+   "fieldtype": "Link",
+   "options": "Employee",
+   "reqd": 1
+  },
+  {
+   "fieldname": "effective_from",
+   "label": "Effective From",
+   "fieldtype": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "settings",
+   "label": "Settings",
+   "fieldtype": "JSON",
+   "reqd": 1
+  },
+  {
+   "fieldname": "reason",
+   "label": "Reason",
+   "fieldtype": "Small Text",
+   "reqd": 1
+  },
+  {
+   "fieldname": "author",
+   "label": "Author",
+   "fieldtype": "Link",
+   "options": "User"
+  },
+  {
+   "fieldname": "published_on",
+   "label": "Published On",
+   "fieldtype": "Datetime"
+  }
+ ],
+ "permissions": []
+}

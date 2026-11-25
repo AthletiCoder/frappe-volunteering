@@ -1,0 +1,17 @@
+{
+ "doctype": "DocType",
+ "name": "Expense Claim Request",
+ "module": "Volunteering",
+ "autoname": "hash",
+ "engine": "InnoDB",
+ "field_order": ["employee", "operation", "fingerprint", "result"],
+ "fields": [
+  {"fieldname": "employee", "fieldtype": "Link", "options": "Employee", "label": "Employee", "reqd": 1},
+  {"fieldname": "operation", "fieldtype": "Data", "label": "Operation", "reqd": 1},
+  {"fieldname": "fingerprint", "fieldtype": "Data", "label": "Request fingerprint", "reqd": 1},
+  {"fieldname": "result", "fieldtype": "JSON", "label": "Submission result"}
+ ],
+ "permissions": [],
+ "istable": 0,
+ "track_changes": 0
+}

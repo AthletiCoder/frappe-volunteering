@@ -1,14 +1,14 @@
 <template>
-	<div class="min-h-screen bg-bg pb-20 text-ink lg:pl-60 lg:pb-0">
+	<div class="min-h-screen bg-bg text-ink lg:pl-60 lg:pb-0" :class="route.path === '/work-logs' ? 'pb-0' : 'pb-20'">
 		<PortalSidebar :items="sidebarItems" :full-name="fullName" :initials="initials" :role-label="roleLabel" :open="drawerOpen" @close="drawerOpen = false" />
 		<header class="app-header sticky top-0 z-20 w-full border-b border-line">
-			<div class="mx-auto flex h-16 max-w-[1480px] items-center gap-3 px-4 md:px-6 lg:px-8">
+			<div class="mx-auto flex h-16 max-w-[1480px] items-center gap-2 px-3 sm:gap-3 sm:px-4 md:px-6 lg:px-8">
 				<button type="button" class="btn-ghost lg:hidden" aria-label="Open menu" @click="drawerOpen = true"><Icon name="menu" /></button>
 				<RouterLink to="/home" class="text-sm font-bold lg:hidden">Sevamrita</RouterLink>
 				<button type="button" class="portal-search-trigger mx-auto hidden w-full max-w-md items-center gap-3 rounded-xl border border-line bg-bg px-3 py-2 text-sm text-muted hover:border-accent hover:text-ink sm:flex" @click="openSearch">
 					<Icon name="search" size="sm" /><span class="flex-1 text-left">Search pages and actions</span><kbd class="rounded-md border border-line bg-surface px-1.5 py-0.5 text-[10px]">⌘ K</kbd>
 				</button>
-				<div class="ml-auto flex items-center gap-1 sm:ml-0">
+				<div class="ml-auto flex items-center gap-0 sm:ml-0 sm:gap-1">
 					<button type="button" class="btn-ghost sm:hidden" aria-label="Search" @click="openSearch"><Icon name="search" /></button>
 					<NotifyMenu />
 					<a href="/help" class="btn-ghost" aria-label="Help"><Icon name="help" /></a>
@@ -16,15 +16,15 @@
 						<span class="flex h-8 w-8 items-center justify-center rounded-full bg-accent-soft text-xs font-bold text-accent">{{ initials }}</span>
 						<span class="portal-profile-details hidden text-left xl:block"><span class="block text-xs font-semibold leading-tight">{{ fullName }}</span><span class="block text-[11px] text-muted">{{ roleLabel }}</span></span>
 					</div>
-					<button type="button" class="ml-1 rounded-xl border border-line bg-surface px-3 py-2 text-xs font-semibold text-ink hover:bg-soft disabled:opacity-60" :disabled="loggingOut" @click="logout">{{ loggingOut ? "Logging out…" : "Logout" }}</button>
+					<button type="button" class="rounded-xl border border-line bg-surface px-2 py-2 text-xs font-semibold text-ink hover:bg-soft disabled:opacity-60 sm:ml-1 sm:px-3" :disabled="loggingOut" @click="logout">{{ loggingOut ? "Logging out…" : "Logout" }}</button>
 				</div>
 			</div>
 		</header>
 		<main class="mx-auto w-full max-w-[1480px] p-4 md:p-6 lg:p-8"><p v-if="logoutError" class="mb-4 text-sm text-bad" role="alert">{{ logoutError }}</p><RouterView /></main>
-		<div class="app-header fixed inset-x-0 bottom-0 z-20 w-full border-t border-line pb-[env(safe-area-inset-bottom)] lg:hidden">
+		<div v-if="route.path !== '/work-logs'" class="app-header fixed inset-x-0 bottom-0 z-20 w-full border-t border-line pb-[env(safe-area-inset-bottom)] lg:hidden">
 			<div class="mx-auto flex max-w-lg items-center px-2">
-				<AppNav layout="bottom" :items="mobileItems" aria-label="Mobile" />
-				<button type="button" class="flex min-w-[3.5rem] flex-col items-center gap-1 rounded-xl px-2 py-2 text-[11px] text-muted" aria-label="More sections" @click="drawerOpen = true"><Icon name="menu" /><span>More</span></button>
+				<AppNav class="min-w-0 flex-1" layout="bottom" :items="mobileItems" aria-label="Mobile" />
+				<button type="button" class="flex min-w-[3.5rem] shrink-0 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[11px] text-muted" aria-label="More sections" @click="drawerOpen = true"><Icon name="menu" /><span>More</span></button>
 			</div>
 		</div>
 		<div v-if="searchOpen" class="fixed inset-0 z-50 flex items-start justify-center bg-ink/40 px-4 pt-[10vh]" @click.self="searchOpen = false">

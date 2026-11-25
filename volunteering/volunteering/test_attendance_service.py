@@ -243,6 +243,7 @@ class IntegrationTestAttendanceService(IntegrationTestCase):
 				"status": "Approved",
 			}
 		)
+		leave.flags.hr_exception_reason = "Verified historical leave fixture for attendance regression"
 		leave.insert(ignore_permissions=True)
 		leave.submit()
 
@@ -284,6 +285,7 @@ class IntegrationTestAttendanceService(IntegrationTestCase):
 				"status": "Approved",
 			}
 		)
+		leave.flags.hr_exception_reason = "Verified historical leave fixture for attendance regression"
 		leave.insert(ignore_permissions=True)
 		leave.submit()
 
@@ -305,19 +307,18 @@ class IntegrationTestAttendanceService(IntegrationTestCase):
 		"""Wednesday stays Holiday even if get_holiday_info finds nothing."""
 		from unittest.mock import patch
 
-		from volunteering.volunteering.leave_setup import WEEKLY_OFF_DAY
+		from volunteering.volunteering.hr_policy import policy_on
 
-		day = getdate(nowdate())
-		wednesday = add_days(day, (WEEKLY_OFF_DAY - day.weekday()) % 7)
-		if wednesday > day:
-			wednesday = add_days(wednesday, -7)
+		wednesday = getdate(nowdate())
+		while wednesday.weekday() != policy_on(wednesday)["weekly_off_day"]:
+			wednesday = add_days(wednesday, -1)
 
 		frappe.db.delete("Attendance", {"employee": self.employee, "attendance_date": wednesday})
 		frappe.db.delete("Daily Work Log", {"employee": self.employee, "date": wednesday})
 
 		with patch(
-			"volunteering.volunteering.attendance_service.get_holiday_info",
-			return_value=None,
+			"volunteering.volunteering.employee_calendars._base_holidays",
+			return_value={},
 		):
 			process_employee_attendance(self.employee, wednesday)
 

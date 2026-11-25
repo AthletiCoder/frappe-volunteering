@@ -237,14 +237,22 @@ def share_item(name, shares, expected_modified):
 
 def _entry_payload(doc, level):
 	editable = not doc.is_deleted and doc.entry_kind not in {"System", "Progress"} and level != "Viewer"
+	attachments = [] if doc.is_deleted else frappe.get_all("File", filters={"attached_to_doctype": doc.doctype,
+		"attached_to_name": doc.name, "is_private": 1}, fields=["name", "file_name", "file_url", "file_size"])
+	snapshot = {} if doc.is_deleted else _json(doc.snapshot, {})
+	if doc.entry_kind == "Note" and doc.item and attachments and not snapshot.get("attachment_tracker"):
+		# Older file notes have no recorded title. Resolve it independently of the chat's paged item list.
+		tracker = frappe.db.get_value(PREFIX + "Item", {"name": doc.item, "space": doc.space, "item_kind": "Tracker"},
+			["name", "title"], as_dict=True)
+		if tracker:
+			snapshot["attachment_tracker"] = dict(tracker)
 	return {"name": doc.name, "space": doc.space, "body": "Message removed" if doc.is_deleted else features.display_body(doc.body),
 		"entry_kind": doc.entry_kind, "owner": doc.owner, "author_name": _name(doc.owner), "creation": str(doc.creation),
 		"edited_at": doc.edited_at, "modified": str(doc.modified), "is_deleted": bool(doc.is_deleted), "source_entry": doc.source_entry,
-		"item": doc.item, "snapshot": _json(doc.snapshot, {}), "mentions": _json(doc.get("mentions"), []), "raw_body": "" if doc.is_deleted else doc.body,
+		"item": doc.item, "snapshot": snapshot, "mentions": _json(doc.get("mentions"), []), "raw_body": "" if doc.is_deleted else doc.body,
 		"can_edit": editable and doc.owner == frappe.session.user,
 		"can_remove": editable and (doc.owner == frappe.session.user or level in {"Owner", "Manager"}),
-		"attachments": [] if doc.is_deleted else frappe.get_all("File", filters={"attached_to_doctype": doc.doctype,
-			"attached_to_name": doc.name, "is_private": 1}, fields=["name", "file_name", "file_url", "file_size"])}
+		"attachments": attachments}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -277,7 +285,9 @@ def get_collaboration_home():
 			filters["creation"] = [">", state.read_at]
 		payload["unread"] = frappe.db.count(PREFIX + "Entry", filters)
 		output.append(payload)
+	from volunteering.volunteering.work_log_portal import work_logging_access
 	return {"user": user, "spaces": output, "directory": get_directory(), "today": nowdate(),
+		"work_logging": work_logging_access(), "chat_access": True,
 		"isolated_test_site": frappe.local.site == "sevamrita-regression-20261027.local",
 		"projects": frappe.get_list("Project", fields=["name", "project_name"], limit_page_length=100)
 			if frappe.has_permission("Project", "read") else []}
@@ -766,7 +776,16 @@ def save_item(space, payload, name=None, expected_modified=None):
 	if not name:
 		assigned = [doc.assignee] if doc.assignee else []
 		assigned.extend(x.get("assignee") for x in _json(doc.item_data, {}).get("subtasks", []) if x.get("assignee"))
-		_entry(space, f"Created {doc.item_kind.lower()}: {doc.title}", item=doc.name, source=doc.source_entry, snapshot={"notify_users": list(set(assigned))})
+		snapshot = {"notify_users": list(set(assigned))}
+		if doc.item_kind in {"Task", "Tracker"}:
+			snapshot.update(created_kind=doc.item_kind, title=doc.title, status=doc.status)
+			if doc.item_kind == "Tracker":
+				config = _json(doc.item_data, {})
+				snapshot.update(item_data=config, pending_with=_progress_pending_with(doc, config, doc.status))
+			else:
+				snapshot.update(assignee_name=_name(doc.assignee) if doc.assignee else "",
+					**{field: str(doc.get(field) or "") for field in ("from_date", "until_date", "deadline")})
+		_entry(space, f"Created {doc.item_kind.lower()}: {doc.title}", item=doc.name, source=doc.source_entry, snapshot=snapshot)
 	elif doc.item_kind in {"Task", "Tracker"} and doc.assignee and previous_assignee != doc.assignee:
 		_entry(space, f"Assigned {doc.item_kind.lower()}: {doc.title}", item=doc.name, snapshot={"notify_users": [doc.assignee]})
 	_publish(space, root)
@@ -916,7 +935,8 @@ def add_tracker_files(name, expected_modified, attachments, request_key, note=""
 	_version(doc, expected_modified)
 	_save(doc)  # Refresh Files/Updates without changing the tracker's progress or effective date.
 	entry = _entry(doc.space, note or _("Added files to {0}").format(doc.title), kind="Note", item=doc.name,
-		request_key=key, snapshot={"request_fingerprint": fingerprint})
+		request_key=key, snapshot={"request_fingerprint": fingerprint,
+			"attachment_tracker": {"name": doc.name, "title": doc.title}})
 	for filename, content in uploads:
 		_store_attachment(entry, filename, content)
 	_publish(doc.space, root)

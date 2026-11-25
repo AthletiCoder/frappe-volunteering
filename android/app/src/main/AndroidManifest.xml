@@ -10,7 +10,7 @@
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:usesCleartextTraffic="${cleartextAllowed}"
-        android:icon="@drawable/ic_launcher"
+        android:icon="${appIcon}"
         android:label="${appLabel}"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <meta-data android:name="firebase_messaging_auto_init_enabled" android:value="false" />

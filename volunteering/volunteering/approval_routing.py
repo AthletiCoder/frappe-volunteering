@@ -662,7 +662,7 @@ def notify_pending_approvers(doc):
 		message=message,
 		reference_doctype=doc.doctype,
 		reference_name=doc.name,
-		now=True,
+		now=False,
 	)
 
 

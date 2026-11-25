@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+from copy import deepcopy
 import json
 import math
 from pathlib import PurePath
@@ -45,6 +46,8 @@ def _claim_stage(row) -> str:
 	"""Return a stable, employee-facing status bucket."""
 	workflow_state = cstr(row.get("workflow_state") or "Draft")
 	status = cstr(row.get("status"))
+	if workflow_state == "Withdrawn":
+		return "Withdrawn"
 	if cint(row.get("docstatus")) == 2 or status == "Cancelled":
 		return "Cancelled"
 	if cint(row.get("is_paid")) or status == "Paid":
@@ -76,6 +79,7 @@ def _next_claim_action(row) -> str:
 		"Rejected": _("Review the decision before resubmitting"),
 		"Paid": _("Complete"),
 		"Cancelled": _("Closed"),
+		"Withdrawn": _("Withdrawn by you; no further processing"),
 	}.get(stage, stage)
 
 
@@ -108,6 +112,7 @@ def _claim_summary(row, project_names=None) -> dict:
 	sanctioned = flt(row.get("total_sanctioned_amount"), 2)
 	reimbursed = flt(row.get("total_amount_reimbursed"), 2)
 	stage = _claim_stage(row)
+	approved = stage in ("Accounts classification", "Approved / unpaid", "Paid")
 	return {
 		"name": row.name,
 		"expense_submission_id": row.get("expense_submission_id") or "",
@@ -121,8 +126,10 @@ def _claim_summary(row, project_names=None) -> dict:
 		"currency": row.get("currency") or "INR",
 		"claimed_amount": claimed,
 		"sanctioned_amount": sanctioned,
+		"approved_amount": sanctioned if approved else None,
+		"is_approved": approved,
 		"reimbursed_amount": reimbursed,
-		"outstanding_amount": max((sanctioned or claimed) - reimbursed, 0),
+		"outstanding_amount": max(sanctioned - reimbursed, 0) if approved else (0 if stage in ("Withdrawn", "Rejected", "Cancelled") else None),
 		"workflow_state": row.get("workflow_state") or "Draft",
 		"receipt_review_status": row.get("receipt_review_status") or "Not Submitted",
 		"approval_status": row.get("approval_status") or "Draft",
@@ -235,6 +242,8 @@ def _workflow_timeline(doc) -> list[dict]:
 				"detail": doc.get("receipt_review_notes") or "",
 			}
 		)
+	if doc.get("withdrawn_on"):
+		events.append({"label": _("Claim withdrawn"), "when": doc.withdrawn_on, "by": doc.withdrawn_by, "detail": doc.withdrawal_reason})
 	if doc.get("clearance_date"):
 		events.append(
 			{
@@ -257,6 +266,8 @@ def get_my_expense_claim(name: str):
 	require_home_project(doc.project)
 	projects = _project_names([doc.project])
 	labels = _expense_labels(doc.project)
+	from volunteering.volunteering.expense_claim_withdrawal import can_withdraw
+
 	summary = _claim_summary(doc, projects)
 	can_correct = doc.docstatus == 0 and doc.workflow_state in (
 		"Receipt Correction Required",
@@ -278,6 +289,11 @@ def get_my_expense_claim(name: str):
 			"is_emergency": cint(doc.get("is_emergency")),
 			"emergency_reason": doc.get("emergency_reason") or "",
 			"can_correct": can_correct,
+			"can_withdraw": can_withdraw(doc),
+			"can_delete": doc.docstatus == 0 and doc.workflow_state == "Draft",
+			"withdrawn_by": doc.get("withdrawn_by"),
+			"withdrawn_on": doc.get("withdrawn_on"),
+			"withdrawal_reason": doc.get("withdrawal_reason"),
 			"account_options": _account_options(frappe.get_doc("Project", doc.project))
 			if can_correct
 			else [],
@@ -362,10 +378,12 @@ def get_project_accounts(project: str):
 
 
 @frappe.whitelist(methods=["POST"])
-def submit_expense_claim(payload):
+def submit_expense_claim(payload, request_key=None):
 	"""Create a draft, attach private item evidence, then enter receipt review."""
 	data = frappe.parse_json(payload)
-	return _submit_expense_claim_data(data)
+	from volunteering.volunteering.expense_claim_requests import submit_once
+
+	return submit_once("single", request_key, data, lambda: _submit_expense_claim_data(data))
 
 
 def _invoice_posting_date(expenses, company):
@@ -491,8 +509,11 @@ def _submit_expense_claim_data(
 				row.receipt_attachment = file_doc.file_url
 		else:
 			doc.expenses[index].receipt_attachment = file_doc.file_url
-	# Persist the per-item evidence association after File names/URLs exist.
-	doc.save()
+	# Persist only the trusted receipt pointers. Submit reloads the document and
+	# validates it fully, so another whole-document save here repeated budget,
+	# approval-routing and advance validation for every upload unnecessarily.
+	for row in doc.expenses:
+		row.db_set("receipt_attachment", row.receipt_attachment, update_modified=False)
 	apply_workflow(doc, "Submit")
 	doc.reload()
 	warnings = list(
@@ -512,7 +533,14 @@ def _submit_expense_claim_data(
 
 
 @frappe.whitelist(methods=["POST"])
-def submit_multi_invoice_expense_claim(payload):
+def submit_multi_invoice_expense_claim(payload, request_key=None):
+	from volunteering.volunteering.expense_claim_requests import submit_once
+
+	data = frappe.parse_json(payload)
+	return submit_once("multiple", request_key, data, lambda: _submit_multi_invoice_expense_claim(data))
+
+
+def _submit_multi_invoice_expense_claim(payload):
 	"""One employee submission, one dated accounting claim and receipt per invoice.
 
 	The database savepoint makes partial bundles impossible even when this method is
@@ -613,6 +641,8 @@ def submit_multi_invoice_expense_claim(payload):
 					advance = frappe.get_doc("Employee Advance", data.get("employee_advance"))
 					advance_remaining = flt(advance_residual_amount(advance), 2)
 				advance_remaining = max(flt(advance_remaining - allocated, 2), 0)
+	except frappe.QueryDeadlockError:
+		raise
 	except Exception:
 		frappe.db.rollback(save_point=savepoint)
 		raise
@@ -642,7 +672,15 @@ def _generated_invoice_claim_context(claim):
 
 
 @frappe.whitelist(methods=["POST"])
-def submit_generated_invoice_expense_claim(claim_payload, invoice_payload):
+def submit_generated_invoice_expense_claim(claim_payload, invoice_payload, request_key=None):
+	from volunteering.volunteering.expense_claim_requests import submit_once
+
+	claim, invoice = frappe.parse_json(claim_payload), frappe.parse_json(invoice_payload)
+	return submit_once("generated", request_key, {"claim": claim, "invoice": invoice},
+		lambda: _submit_generated_invoice_expense_claim(claim, invoice))
+
+
+def _submit_generated_invoice_expense_claim(claim_payload, invoice_payload):
 	"""Generate one signed invoice and submit it as a one-item Expense Claim.
 
 	The generated PDF never leaves the server in this combined workflow. It is
@@ -651,8 +689,10 @@ def submit_generated_invoice_expense_claim(claim_payload, invoice_payload):
 	creation share the request transaction, so a failed claim does not consume a
 	number or remember a vendor.
 	"""
-	claim = frappe.parse_json(claim_payload)
-	invoice = frappe.parse_json(invoice_payload)
+	# Generating the attachment adds trusted fields. Keep the original request
+	# immutable so a transaction retry retains the same signature/fingerprint.
+	claim = deepcopy(frappe.parse_json(claim_payload))
+	invoice = deepcopy(frappe.parse_json(invoice_payload))
 	if not isinstance(claim, dict) or not isinstance(invoice, dict):
 		frappe.throw(_("Claim and invoice details must be valid objects."))
 	expenses = claim.get("expenses")

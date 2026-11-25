@@ -1,0 +1,87 @@
+{
+ "doctype": "DocType",
+ "name": "HR Payroll Profile",
+ "module": "Volunteering",
+ "autoname": "hash",
+ "engine": "InnoDB",
+ "track_changes": 1,
+ "field_order": [
+  "employee",
+  "effective_from",
+  "monthly_basic",
+  "monthly_gross",
+  "basic_component",
+  "pf_enrolled",
+  "pt_applicable",
+  "pt_exempt",
+  "pt_exemption_reason",
+  "payroll_state",
+  "change_reason"
+ ],
+ "fields": [
+  {
+   "fieldname": "employee",
+   "label": "Employee",
+   "fieldtype": "Link",
+   "options": "Employee",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "effective_from",
+   "label": "Effective From",
+   "fieldtype": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "monthly_basic",
+   "label": "Monthly Basic",
+   "fieldtype": "Currency"
+  },
+  {
+   "fieldname": "monthly_gross",
+   "label": "Monthly Gross",
+   "fieldtype": "Currency"
+  },
+  {
+   "fieldname": "basic_component",
+   "label": "Basic Component",
+   "fieldtype": "Link",
+   "options": "Salary Component"
+  },
+  {
+   "fieldname": "pf_enrolled",
+   "label": "Pf Enrolled",
+   "fieldtype": "Check"
+  },
+  {
+   "fieldname": "pt_applicable",
+   "label": "Pt Applicable",
+   "fieldtype": "Check"
+  },
+  {
+   "fieldname": "pt_exempt",
+   "label": "Pt Exempt",
+   "fieldtype": "Check"
+  },
+  {
+   "fieldname": "pt_exemption_reason",
+   "label": "Pt Exemption Reason",
+   "fieldtype": "Small Text"
+  },
+  {
+   "fieldname": "payroll_state",
+   "label": "Payroll State",
+   "fieldtype": "Select",
+   "options": "Maharashtra\nOther",
+   "default": "Maharashtra"
+  },
+  {
+   "fieldname": "change_reason",
+   "label": "Change Reason",
+   "fieldtype": "Small Text",
+   "reqd": 1
+  }
+ ],
+ "permissions": []
+}

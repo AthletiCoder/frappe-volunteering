@@ -493,6 +493,7 @@ def ensure_workflow_states():
 		("Pending Accounts Classification", "Warning", "briefcase"),
 		("Approved", "Success", "ok-sign"),
 		("Rejected", "Danger", "remove"),
+		("Withdrawn", "Inverse", "remove"),
 	)
 	for state_name, style, icon in defaults:
 		if frappe.db.exists("Workflow State", state_name):

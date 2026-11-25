@@ -1,0 +1,15 @@
+{
+  "name": "sf-tasks-pwa",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node ../frontend/node_modules/vite/bin/vite.js build --config vite.config.js",
+    "test": "node --test test/*.test.js"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "6.2.8"
+  },
+  "dependencies": {
+    "pdfjs-dist": "6.5.438"
+  }
+}

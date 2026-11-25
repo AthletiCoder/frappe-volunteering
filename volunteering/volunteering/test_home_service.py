@@ -340,9 +340,9 @@ class UnitTestHomePayload(UnitTestCase):
 
 	def test_new_request_actions_link_to_previous_lists(self):
 		leave = next(row for row in _time_actions({"leave": 2}) if row["id"] == "leave")
-		self.assertEqual(leave["route"], "/desk/leave-application/new")
-		self.assertEqual(leave["list_route"], "/desk/leave-application")
-		self.assertEqual(leave["list_label"], "Previous leave")
+		self.assertEqual(leave["route"], "/volunteering/time-leave?type=Privilege%20Leave")
+		self.assertEqual(leave["list_route"], "/volunteering/time-leave")
+		self.assertEqual(leave["list_label"], "Time and leave")
 		self.assertEqual(leave["pending"], 2)
 
 	def test_money_actions_include_employee_invoice_generator(self):

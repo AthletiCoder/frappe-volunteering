@@ -202,6 +202,10 @@
 								<p v-if="entry.source_entry" class="reply-label">
 									↳ Linked to an earlier message
 								</p>
+								<button v-if="!entry.is_deleted && entry.snapshot?.attachment_tracker" type="button"
+									class="tracker-file-context" @click="viewWorkItem(entry.snapshot.attachment_tracker)">
+									<span>Files for tracker</span><strong>{{ entry.snapshot.attachment_tracker.title }}</strong>
+								</button>
 								<p class="message-text">{{ entry.body }}</p>
 								<div v-if="entry.snapshot?.item_data" class="snapshot">
 									<span
@@ -2096,6 +2100,22 @@ const CalendarView = defineComponent({
 	font-size: 12px;
 	margin-top: 10px;
 }
+.tracker-file-context {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	width: 100%;
+	margin: 4px 0 10px;
+	padding: 10px 12px;
+	border-radius: 9px;
+	background: #e4f1ed;
+	color: #176a57;
+	text-align: left;
+	overflow-wrap: anywhere;
+}
+.tracker-file-context span { font-size: 11px; }
+.tracker-file-context strong { font-size: 14px; }
+.tracker-file-context:focus-visible { outline: 2px solid #176a57; outline-offset: 2px; }
 .composer {
 	padding: 16px 24px;
 	border-top: 1px solid #e3eaed;

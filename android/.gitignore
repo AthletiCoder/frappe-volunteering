@@ -6,3 +6,4 @@ local.properties
 *.jks
 *.keystore
 release-keystore.properties
+erp-release-keystore.properties

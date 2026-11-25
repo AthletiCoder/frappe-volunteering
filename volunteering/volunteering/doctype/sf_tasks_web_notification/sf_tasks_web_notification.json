@@ -1,0 +1,51 @@
+{
+ "doctype": "DocType",
+ "name": "SF Tasks Web Notification",
+ "module": "Volunteering",
+ "autoname": "hash",
+ "engine": "InnoDB",
+ "field_order": [
+  "device",
+  "binding",
+  "data",
+  "status",
+  "attempts",
+  "next_attempt"
+ ],
+ "fields": [
+  {
+   "fieldname": "device",
+   "fieldtype": "Link",
+   "label": "Device",
+   "options": "SF Tasks Web Subscription"
+  },
+  {
+   "fieldname": "binding",
+   "fieldtype": "Data",
+   "label": "Binding"
+  },
+  {
+   "fieldname": "data",
+   "fieldtype": "JSON",
+   "label": "Data"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Pending\nSent\nSkipped\nFailed"
+  },
+  {
+   "fieldname": "attempts",
+   "fieldtype": "Int",
+   "label": "Attempts"
+  },
+  {
+   "fieldname": "next_attempt",
+   "fieldtype": "Datetime",
+   "label": "Next Attempt"
+  }
+ ],
+ "permissions": [],
+ "track_changes": 0
+}

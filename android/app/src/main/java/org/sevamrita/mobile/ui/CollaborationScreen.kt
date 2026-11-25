@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.PersonRemove
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.*
@@ -49,7 +50,7 @@ private val chatMuted: Color @Composable get() = appColor(0xFF637378)
 private val importance = listOf("Very low", "Low", "Medium", "High", "Very high")
 private val formSaver = Saver<JSONObject, String>(save = { it.toString() }, restore = { JSONObject(it) })
 private val editorSaver = Saver<String, String>(
-    save = { it.takeIf { kind -> kind in setOf("item", "space", "progress", "trackerFiles") }.orEmpty() },
+    save = { it.takeIf { kind -> kind in setOf("item", "space", "progress", "trackerFiles", "trackerStage") }.orEmpty() },
     restore = { it }
 )
 private fun JSONObject.copyJson() = JSONObject(toString())
@@ -62,6 +63,9 @@ private fun trackerValue(item: JSONObject): String = trackerDisplay(item.optJSON
 /** Compose-only collaboration. All actions use the same guarded APIs as Home on the web. */
 @Composable
 fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
+    if (state.chatNavigation.current.view == ChatView.WORK_LOGS) { WorkLogsScreen(state, model); return }
+    if (state.chatNavigation.current.view == ChatView.TIME_LEAVE) { TimeLeaveScreen(state, model); return }
+    if (state.chatNavigation.current.view == ChatView.WORK_LOG) { WorkLogScreen(state, model); return }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val context = LocalContext.current
@@ -95,7 +99,7 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
     LaunchedEffect(draft,sendKey,dialog,form.toString(),selected.toString(),uploads.toString(),trackerUploads.toString(),reply?.toString()) {
         delay(350)
         if(roomId.isNotBlank())model.saveDraft("workspace:$roomId",JSONObject().put("draft",draft).put("sendKey",sendKey)
-            .put("dialog",dialog.takeIf{it in listOf("item","progress","trackerFiles","space")}.orEmpty()).put("form",form)
+            .put("dialog",dialog.takeIf{it in listOf("item","progress","trackerFiles","space","trackerStage")}.orEmpty()).put("form",form)
             .put("reply",reply).put("selected",selected).put("originalForm",originalForm).put("uploads",JSONArray(uploads)).put("trackerUploads",JSONArray(trackerUploads)))
     }
     fun openEditor(kind: String, initial: JSONObject) {
@@ -155,6 +159,10 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
         selected = item
         trackerUploads = emptyList(); trackerUploadError = ""
         openEditor("trackerFiles", JSONObject().put("note", "").put("request_key", UUID.randomUUID().toString()))
+    }
+    fun stageFor(item: JSONObject, key: String, edit: Boolean) {
+        selected = item.copyJson()
+        openEditor("trackerStage", trackerStageForm(item, key, edit))
     }
     val trackerPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) {
@@ -273,7 +281,8 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
             else {
                 val canConfigure = canPost && tracker.optBoolean("can_edit") && (space.text("access_level") in listOf("Owner", "Manager") || tracker.text("owner") == state.user)
                 TrackerDetailScreen(tracker, space.text("title"), state.user, tracker.optBoolean("can_update", canPost) && !state.busy, canConfigure && !state.busy,
-                    onUpdate = { progressFor(tracker) }, onConfigure = { openEditor("item", tracker.copyJson()) }, onHistory = { historyFor(tracker) }, onShare = if (tracker.optBoolean("can_share")) { { shareFor(tracker) } } else null,
+                    onUpdate = { progressFor(tracker) }, onConfigure = { openEditor("item", tracker.copyJson()) },
+                    onInsertStage = { stageFor(tracker, it, false) }, onEditStage = { stageFor(tracker, it, true) }, onHistory = { historyFor(tracker) }, onShare = if (tracker.optBoolean("can_share")) { { shareFor(tracker) } } else null,
                     loadHistory = { ready -> model.loadTrackerHistory(tracker.text("name"), ready) }, onFile = { model.openReceipt(it, Page.COLLABORATION) },
                     loadFiles = { before, ready -> model.loadTrackerFiles(tracker.text("name"), before, ready) },
                     onAddFiles = if (tracker.optBoolean("can_add_files") && !state.busy) { { filesFor(tracker) } } else null,
@@ -298,6 +307,7 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
                 } },
                 seen = { model.markChatSeen(roomId, it) },
                 openTracker = { model.openTracker(roomId, it) },
+                openTask = { model.openTask(roomId, it) },
                 openFile = { model.openReceipt(it, Page.COLLABORATION) },
                 body = { if (editTarget == null) draft = it else editBody = it }, kind = { entryKind = it },
                 attach = { picker.launch(arrayOf("application/pdf", "image/*", "text/*", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) },
@@ -348,6 +358,13 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
                     if (creatingTracker && !it.optBoolean("queued")) model.openTracker(roomId, it.text("name"))
                 }
             }
+            "trackerStage" -> {
+                val config = runCatching { trackerStageConfig(selected, form, space.items("members")) }
+                    .getOrElse { model.error(it.message ?: "Check the stage details."); return }
+                model.chatCall("save_item", JSONObject().put("_operation_key", form.text("_operation_key"))
+                    .put("space", selected.text("space")).put("name", selected.text("name"))
+                    .put("expected_modified", selected.text("modified")).put("payload", JSONObject().put("item_data", config))) { dialog = "" }
+            }
             "share" -> model.chatCall("share_item", JSONObject().put("name", selected.text("name")).put("expected_modified", selected.text("modified")).put("shares", form.optJSONArray("shares") ?: JSONArray())) { dialog = "" }
             "progress" -> {
                 val plan = JSONObject(); listOf("next_action", "attention_date", "attention_until").forEach { plan.put(it, form.opt(it)) }
@@ -377,32 +394,37 @@ fun CollaborationScreen(state: PortalState, model: PortalViewModel) {
     val kind = form.text("item_kind").lowercase()
     val roomTitle = space.text("title")
     when (dialog) {
-        "item", "progress", "space", "trackerFiles" -> {
+        "item", "progress", "space", "trackerFiles", "trackerStage" -> {
             val title = when (dialog) {
                 "item" -> if (existing) "Edit $kind" else "New $kind"
                 "progress" -> "Update progress"
                 "trackerFiles" -> "Add tracker files"
+                "trackerStage" -> (if (form.optBoolean("editing")) "Edit " else "Add ") + (if (selected.optJSONObject("item_data")?.text("scale") == "Status") "status" else "stage")
                 else -> if (existing) "Conversation settings" else if (form.text("parent_space").isNotBlank()) "New subarea" else "New conversation"
             }
             val action = when {
                 dialog == "progress" -> "Post update"
                 dialog == "trackerFiles" -> "Upload files"
+                dialog == "trackerStage" -> if (form.optBoolean("editing")) "Save changes" else "Add ${if (selected.optJSONObject("item_data")?.text("scale") == "Status") "status" else "stage"}"
                 existing -> "Save changes"
                 dialog == "item" -> "Create $kind"
                 form.text("space_kind") == "Direct" -> "Open chat"
                 else -> "Create conversation"
             }
             val ready = when {
+                dialog == "trackerStage" -> form.text("label").trim().length in 1..100 &&
+                    (selected.optJSONObject("item_data")?.text("assignment_mode") != "Stages" || form.text("assignee").isNotBlank())
                 dialog == "progress" -> form.text("note").isNotBlank() && !readingTrackerFiles
                 dialog == "trackerFiles" -> trackerUploads.isNotEmpty() && !readingTrackerFiles
                 dialog == "space" && form.text("space_kind") == "Direct" -> form.text("person").isNotBlank()
                 else -> form.text("title").isNotBlank()
             }
             key(dialog) {
-                CollaborationEditor(title, if (dialog in listOf("progress", "trackerFiles")) selected.text("title") else roomTitle,
+                CollaborationEditor(title, if (dialog in listOf("progress", "trackerFiles", "trackerStage")) selected.text("title") else roomTitle,
                     action, state.busy || readingTrackerFiles, form.toString() != originalForm || trackerUploads.isNotEmpty(), state.error, ready, ::closeForm, ::saveForm) {
                     when (dialog) {
-                        "item" -> ChatItemForm(form, members) { form = it }
+                        "item" -> ChatItemForm(form, members, onError = model::error) { form = it }
+                        "trackerStage" -> TrackerStageForm(selected, form, members) { form = it }
                         "space" -> ChatSpaceForm(form, state.chatHome, space, state.user) { form = it }
                         "progress" -> {
                             ChatProgressForm(form, selected) { form = it }
@@ -521,7 +543,7 @@ private fun ChatSpaceForm(form: JSONObject, home: JSONObject, currentSpace: JSON
 }
 
 @Composable
-private fun ChatItemForm(form: JSONObject, members: List<JSONObject>, set: (JSONObject) -> Unit) {
+private fun ChatItemForm(form: JSONObject, members: List<JSONObject>, onError: (String) -> Unit, set: (JSONObject) -> Unit) {
     val kind = form.text("item_kind")
     val config = form.optJSONObject("item_data") ?: JSONObject()
     val people = members.filter { it.text("access_level") != "Viewer" }.map { it.text("user") to it.text("full_name") }
@@ -605,8 +627,20 @@ private fun ChatItemForm(form: JSONObject, members: List<JSONObject>, set: (JSON
                 }
                 if (config.text("scale") in listOf("Stages", "Status")) {
                     val stages = config.items("stages")
+                    fun addAfter(key: String?) {
+                        runCatching {
+                            val rows = insertTrackerStage(trackerDisplay(config).stages, key,
+                                TrackerStage(UUID.randomUUID().toString(), ""), config.text("scale"))
+                            configChange("stages", trackerStagesJson(rows))
+                        }.onFailure { onError(it.message ?: "Check the stage positions before adding another stage.") }
+                    }
                     stages.forEachIndexed { index, stage ->
-                        Text("Stage ${index + 1}", fontWeight = FontWeight.Bold, color = chatGreen)
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text("${if (config.text("scale") == "Status") "Status" else "Stage"} ${index + 1}", fontWeight = FontWeight.Bold, color = chatGreen, modifier = Modifier.weight(1f))
+                            IconButton(onClick = { addAfter(stage.text("key")) }, enabled = stages.size < 30) {
+                                Icon(Icons.Default.Add, "Add after ${stage.text("label").ifBlank { "stage ${index + 1}" }}", Modifier.size(20.dp))
+                            }
+                        }
                         EditorText("Stage name *", stage.text("label")) { label -> configChange("stages", JSONArray(stages.mapIndexed { i, s -> if (i == index) s.changed("label", label) else s })) }
                         if (config.text("assignment_mode") == "Stages") EditorSelect("Responsible person *", stage.text("assignee"),
                             people) { person ->
@@ -619,14 +653,7 @@ private fun ChatItemForm(form: JSONObject, members: List<JSONObject>, set: (JSON
                             set(form.changed("item_data", updated))
                         }) { Text("Remove stage") }
                     }
-                    OutlinedButton(onClick = {
-                        val existing = stages.mapIndexed { index, stage ->
-                            if (config.text("scale") == "Stages" && index == stages.lastIndex && stage.optDouble("position", 100.0) >= 100)
-                                stage.changed("position", ((stages.getOrNull(index - 1)?.optDouble("position") ?: 0.0) + 100) / 2)
-                            else stage
-                        }
-                        configChange("stages", JSONArray(existing + JSONObject().put("key", UUID.randomUUID().toString()).put("label", "").put("position", 100)))
-                    }) { Text("Add stage / status") }
+                    OutlinedButton(onClick = { addAfter(stages.lastOrNull()?.text("key")) }, enabled = stages.size < 30) { Text("Add stage / status") }
                 }
             }
             EditorSection("Follow-up") {

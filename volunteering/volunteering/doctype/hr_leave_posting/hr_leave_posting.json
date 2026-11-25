@@ -1,0 +1,83 @@
+{
+ "doctype": "DocType",
+ "name": "HR Leave Posting",
+ "module": "Volunteering",
+ "autoname": "hash",
+ "engine": "InnoDB",
+ "track_changes": 1,
+ "field_order": [
+  "employee",
+  "leave_type",
+  "posting_date",
+  "days",
+  "reason",
+  "source",
+  "source_name",
+  "adjustment",
+  "policy_revision",
+  "unique_key"
+ ],
+ "fields": [
+  {
+   "fieldname": "employee",
+   "label": "Employee",
+   "fieldtype": "Link",
+   "options": "Employee",
+   "reqd": 1
+  },
+  {
+   "fieldname": "leave_type",
+   "label": "Leave Type",
+   "fieldtype": "Link",
+   "options": "Leave Type",
+   "reqd": 1
+  },
+  {
+   "fieldname": "posting_date",
+   "label": "Posting Date",
+   "fieldtype": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "days",
+   "label": "Days",
+   "fieldtype": "Float",
+   "reqd": 1
+  },
+  {
+   "fieldname": "reason",
+   "label": "Reason",
+   "fieldtype": "Small Text",
+   "reqd": 1
+  },
+  {
+   "fieldname": "source",
+   "label": "Source",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "source_name",
+   "label": "Source Name",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "adjustment",
+   "label": "Adjustment",
+   "fieldtype": "Link",
+   "options": "Leave Adjustment"
+  },
+  {
+   "fieldname": "policy_revision",
+   "label": "Policy Revision",
+   "fieldtype": "Link",
+   "options": "HR Policy Revision"
+  },
+  {
+   "fieldname": "unique_key",
+   "label": "Unique Key",
+   "fieldtype": "Data",
+   "unique": 1
+  }
+ ],
+ "permissions": []
+}

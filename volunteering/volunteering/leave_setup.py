@@ -9,18 +9,23 @@ LEAVE_TYPE_NAME = "Privilege Leave"
 LWP_TYPE_NAME = "Leave Without Pay"
 LEAVE_POLICY_TITLE = "Sevamrita Standard Leave Policy"
 ANNUAL_LEAVE_ALLOCATION = 30
-WEEKLY_OFF_DAY = 2  # Wednesday (Python weekday: Mon=0)
+WEEKLY_OFF_DAY = 6  # Default only; runtime rules use the dated HR policy.
 
 
 def after_migrate():
 	setup_custom_fields()
+	from volunteering.volunteering.hr_policy import ensure_policy_defaults, policy_on
+	ensure_policy_defaults()
+	from volunteering.volunteering.hr_special_leave import ensure_types
+	ensure_types()
 	ensure_holiday_status_option()
 	try:
 		from volunteering.volunteering.employment_type import ensure_employment_type
 
 		ensure_employment_type()
 		setup_hr_masters()
-		ensure_wednesday_weekly_off()
+		if not policy_on().get("_revision"):
+			ensure_wednesday_weekly_off()
 		assign_missing_leave_policies()
 		_setup_attendance_request_permissions()
 		from volunteering.volunteering.leave_pending import backfill_leave_approvers_from_reports_to
@@ -44,6 +49,11 @@ def setup_custom_fields():
 
 def setup_hr_masters():
 	configure_hr_settings()
+	from volunteering.volunteering.hr_policy import policy_on
+	if policy_on().get("_revision"):
+		from volunteering.volunteering.hr_leave_balances import sync_leave_masters
+		sync_leave_masters()
+		return
 	ensure_leave_type()
 	ensure_lwp_leave_type()
 	companies = frappe.get_all("Company", pluck="name")
@@ -286,6 +296,11 @@ def assign_leave_policy_to_employee(employee):
 
 	if is_unpaid_employee(employee):
 		return
+	from volunteering.volunteering.hr_policy import policy_on
+	if policy_on().get("_revision"):
+		from volunteering.volunteering.hr_leave_balances import ensure_current_balance
+		ensure_current_balance(employee)
+		return
 
 	settings = get_setup_settings()
 	leave_policy = settings.get("default_leave_policy")
@@ -335,6 +350,9 @@ def has_leave_policy_assignment(employee, leave_period):
 
 def ensure_wednesday_weekly_off():
 	"""Ensure each company's holiday list marks Wednesday as weekly off for the FY."""
+	from volunteering.volunteering.hr_policy import policy_on
+	if policy_on().get("_revision"):
+		return  # HR-managed employee calendars replace the old forced weekly off.
 	year_start, year_end = get_fy_dates()
 	companies = frappe.get_all("Company", fields=["name", "default_holiday_list"])
 

@@ -43,6 +43,7 @@ import androidx.compose.material3.AlertDialog
 import org.sevamrita.mobile.ui.ChatView
 import org.sevamrita.mobile.ui.TrackerFilter
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -58,6 +59,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -71,8 +73,11 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.Wallet
 import androidx.compose.material3.Button
@@ -86,6 +91,11 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
@@ -99,11 +109,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
@@ -111,6 +123,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.json.JSONObject
+import kotlinx.coroutines.launch
 import org.sevamrita.mobile.data.Server
 import org.sevamrita.mobile.data.DemoLogins
 import org.sevamrita.mobile.data.display
@@ -186,6 +199,12 @@ class MainActivity : ComponentActivity() {
             SFTheme {
                 val model: PortalViewModel = viewModel()
                 val updates: AppUpdateViewModel = viewModel()
+                if (BuildConfig.ERP_APP) {
+                    CompositionLocalProvider(LocalAppUpdates provides updates) {
+                        ErpPortal(model, onExit = { finish() })
+                    }
+                    return@SFTheme
+                }
                 val lifecycleOwner = LocalLifecycleOwner.current
                 DisposableEffect(lifecycleOwner, updates) {
                     val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_START) updates.check() }
@@ -212,7 +231,7 @@ private fun PortalApp(model: PortalViewModel, onExit: () -> Unit, workLink: Work
         WorkReminders.reschedule(context); WorkReminders.requestSync(context)
     }
     LaunchedEffect(state.signedIn, state.user) {
-        if (state.signedIn && Build.VERSION.SDK_INT >= 33 && !WorkReminders.notificationsAllowed(context)) {
+        if (state.signedIn && state.chatHome.optBoolean("chat_access", true) && Build.VERSION.SDK_INT >= 33 && !WorkReminders.notificationsAllowed(context)) {
             val prefs = context.getSharedPreferences("reminder_permission", android.content.Context.MODE_PRIVATE)
             if (!prefs.getBoolean("asked", false)) { prefs.edit().putBoolean("asked", true).apply(); notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }
         }
@@ -236,7 +255,17 @@ private fun PortalApp(model: PortalViewModel, onExit: () -> Unit, workLink: Work
         return
     }
     if (!state.signedIn) { LoginScreen(state, model); return }
-    BackHandler { if (!model.backInChat()) confirmExit = true }
+    var discardWorkLog by remember { mutableStateOf(false) }
+    val sectionDrawer = rememberDrawerState(DrawerValue.Closed)
+    val sectionScope = rememberCoroutineScope()
+    val workLogDetail = state.chatNavigation.current.view == ChatView.WORK_LOG
+    val workLogDirty = workLogDetail && state.workLogDraft != state.workLogOriginal
+    val back = {
+        if (sectionDrawer.isOpen) { sectionScope.launch { sectionDrawer.close() }; Unit }
+        else if (workLogDirty) discardWorkLog = true
+        else if (!model.backInChat()) confirmExit = true
+    }
+    BackHandler(onBack = back)
     val screenStates = rememberSaveableStateHolder()
     val route = state.chatNavigation.current
     val depth = state.chatNavigation.history.size
@@ -250,10 +279,20 @@ private fun PortalApp(model: PortalViewModel, onExit: () -> Unit, workLink: Work
         previousDepth = depth
         motion.animateTo(1f, tween(durationMillis = 170, easing = FastOutSlowInEasing))
     }
+    val workLogPage = route.view in listOf(ChatView.WORK_LOGS, ChatView.WORK_LOG, ChatView.TIME_LEAVE)
+    val workLogging = state.chatHome.optJSONObject("work_logging")
+    val canLogWork = workLogging?.optBoolean("can_create") == true || workLogging?.optBoolean("can_review_team") == true
+    val rootViews = listOf(ChatView.CONVERSATIONS, ChatView.MY_TASKS, ChatView.MY_TRACKERS, ChatView.WORK_LOGS, ChatView.TIME_LEAVE)
+    val canSwitchSections = canLogWork
+    val showSectionMenu = canSwitchSections && route.view in rootViews && state.page != Page.RECEIPT
+    LaunchedEffect(canSwitchSections) { if (!canSwitchSections) sectionDrawer.close() }
     val roomChat = state.page != Page.RECEIPT && route.view == ChatView.CHAT
     var menuExpanded by remember { mutableStateOf(false) }
     val canGoBack = state.page == Page.RECEIPT || state.chatNavigation.canGoBack
     val title = if (state.page == Page.RECEIPT) state.receiptName else when (route.view) {
+        ChatView.TIME_LEAVE -> "Time and leave"
+        ChatView.WORK_LOGS -> workLogTitle(state.workLogView == "team")
+        ChatView.WORK_LOG -> workLogTitle(!(state.workLogData.optJSONObject("log")?.optBoolean("is_own", true) ?: true))
         ChatView.SEARCH -> "Search"
         ChatView.MENTIONS -> "My mentions"
         ChatView.SETTINGS -> "Settings"
@@ -267,68 +306,115 @@ private fun PortalApp(model: PortalViewModel, onExit: () -> Unit, workLink: Work
         ChatView.TASK -> "Task"
         ChatView.CHAT -> state.chatRoom.optJSONObject("space")?.text("title").orEmpty().ifBlank { "Chat" }
     }
-    Scaffold(
-        containerColor = canvas,
-        contentWindowInsets = WindowInsets.safeDrawing,
-        topBar = {
-            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).windowInsetsPadding(
-                WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))) {
-                if (!roomChat) Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    if (canGoBack) IconButton(onClick = { model.backInChat() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+    ModalNavigationDrawer(
+        drawerState = sectionDrawer,
+        gesturesEnabled = showSectionMenu,
+        drawerContent = {
+            if (canSwitchSections) ModalDrawerSheet(Modifier.widthIn(max = 320.dp)) {
+                Column(Modifier.padding(horizontal = 24.dp, vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(BuildConfig.APP_NAME, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text(state.user, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                for ((section, label, icon) in listOf(
+                    Triple(TasksSection.CHATS, "Chats", Icons.AutoMirrored.Filled.Chat),
+                    Triple(TasksSection.WORK_LOGS, "Work logs", Icons.Default.Schedule),
+                    Triple(TasksSection.TIME_LEAVE, "Time and leave", Icons.Default.Schedule)
+                ).filter { it.first != TasksSection.CHATS || state.chatHome.optBoolean("chat_access",true) }) NavigationDrawerItem(
+                    label = { Text(label) },
+                    selected = route.section() == section,
+                    icon = { Icon(icon, contentDescription = null) },
+                    onClick = {
+                        if (!state.busy) sectionScope.launch {
+                            sectionDrawer.close()
+                            model.switchTasksSection(section)
+                        }
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                )
+            }
+        }
+    ) {
+        Scaffold(
+            containerColor = canvas,
+            contentWindowInsets = WindowInsets.safeDrawing,
+            topBar = {
+                Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).windowInsetsPadding(
+                    WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))) {
+                    if (!roomChat) Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        if (showSectionMenu) IconButton(onClick = { sectionScope.launch { sectionDrawer.open() } }) {
+                            Icon(Icons.Default.Menu, contentDescription = "Open navigation menu")
+                        } else if (canGoBack) IconButton(onClick = back) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text(if (route.view == ChatView.CONVERSATIONS && state.page != Page.RECEIPT) BuildConfig.APP_NAME else title,
+                                color = if (route.view == ChatView.CONVERSATIONS) green else ink,
+                                fontWeight = FontWeight.Bold, fontSize = 25.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        val trackerList = route.view in listOf(ChatView.TRACKERS, ChatView.MY_TRACKERS)
+                        if (state.page != Page.RECEIPT && trackerList) TrackerFilter(state.trackerFilter, model::setTrackerFilter)
+                        if (!workLogPage && state.page != Page.RECEIPT && !trackerList && route.view != ChatView.MY_TASKS) IconButton(onClick = model::showPersonalTasks) {
+                            Icon(Icons.Default.Checklist, "My tasks", tint = green)
+                        }
+                        if (!workLogPage && state.page != Page.RECEIPT && !trackerList && route.view != ChatView.MY_TRACKERS) IconButton(onClick = model::showPersonalTrackers) {
+                            Icon(Icons.Default.Timeline, "My trackers", tint = green)
+                        }
+                        if (route.view == ChatView.WORK_LOGS) IconButton(
+                            onClick = { model.openWorkLogs(state.workLogView) },
+                            enabled = !state.busy
+                        ) { Icon(Icons.Default.Refresh, "Refresh work logs", tint = green) }
+                        if (route.view in listOf(ChatView.WORK_LOGS, ChatView.TIME_LEAVE)) Box {
+                            IconButton(onClick = { menuExpanded = true }) { Icon(Icons.Default.MoreVert, "More options", tint = muted) }
+                            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                                DropdownMenuItem(text = { Text("Check for updates") }, onClick = { menuExpanded = false; updates.check(manual = true) })
+                                DropdownMenuItem(text = { Text("Switch user") }, onClick = { menuExpanded = false; model.logout() }, enabled = !state.busy)
+                            }
+                        }
+                        if (!workLogPage) Box {
+                            IconButton(onClick = { menuExpanded = true }) { Icon(Icons.Default.MoreVert, "More options", tint = muted) }
+                            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                                DropdownMenuItem(text = { Text("Search messages & work") }, onClick = { menuExpanded=false;model.showChatPage(ChatView.SEARCH) })
+                                DropdownMenuItem(text = { Text("My mentions") }, onClick = { menuExpanded=false;model.showChatPage(ChatView.MENTIONS) })
+                                DropdownMenuItem(text = { Text("Outbox (${state.outbox.size})") }, onClick = { menuExpanded=false;model.showChatPage(ChatView.OUTBOX) })
+                                DropdownMenuItem(text = { Text("Appearance & notifications") }, onClick = { menuExpanded=false;model.showChatPage(ChatView.SETTINGS) })
+                                DropdownMenuItem(text = { Text("Chats") }, onClick = { menuExpanded = false; model.showChatConversations() })
+                                DropdownMenuItem(text = { Text("My tasks") }, onClick = { menuExpanded = false; model.showPersonalTasks() })
+                                DropdownMenuItem(text = { Text("My trackers") }, onClick = { menuExpanded = false; model.showPersonalTrackers() })
+                                DropdownMenuItem(text = { Text("Reminders") }, onClick = { menuExpanded = false; reminderSettings = true })
+                                DropdownMenuItem(text = { Text("Check for updates") }, onClick = { menuExpanded = false; updates.check(manual = true) })
+                                DropdownMenuItem(text = { Text("Refresh") }, onClick = { menuExpanded = false; model.refreshChat() })
+                                DropdownMenuItem(text = { Text("Switch user") }, onClick = { menuExpanded = false; model.logout() }, enabled = !state.busy)
+                            }
+                        }
                     }
-                    Column(Modifier.weight(1f)) {
-                        Text(if (route.view == ChatView.CONVERSATIONS && state.page != Page.RECEIPT) BuildConfig.APP_NAME else title,
-                            color = if (route.view == ChatView.CONVERSATIONS) green else ink,
-                            fontWeight = FontWeight.Bold, fontSize = 25.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    val trackerList = route.view in listOf(ChatView.TRACKERS, ChatView.MY_TRACKERS)
-                    if (state.page != Page.RECEIPT && trackerList) TrackerFilter(state.trackerFilter, model::setTrackerFilter)
-                    if (state.page != Page.RECEIPT && !trackerList && route.view != ChatView.MY_TASKS) IconButton(onClick = model::showPersonalTasks) {
-                        Icon(Icons.Default.Checklist, "My tasks", tint = green)
-                    }
-                    if (state.page != Page.RECEIPT && !trackerList && route.view != ChatView.MY_TRACKERS) IconButton(onClick = model::showPersonalTrackers) {
-                        Icon(Icons.Default.Timeline, "My trackers", tint = green)
-                    }
-                    Box {
-                        IconButton(onClick = { menuExpanded = true }) { Icon(Icons.Default.MoreVert, "More options", tint = muted) }
-                        DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                            DropdownMenuItem(text = { Text("Search messages & work") }, onClick = { menuExpanded=false;model.showChatPage(ChatView.SEARCH) })
-                            DropdownMenuItem(text = { Text("My mentions") }, onClick = { menuExpanded=false;model.showChatPage(ChatView.MENTIONS) })
-                            DropdownMenuItem(text = { Text("Outbox (${state.outbox.size})") }, onClick = { menuExpanded=false;model.showChatPage(ChatView.OUTBOX) })
-                            DropdownMenuItem(text = { Text("Appearance & notifications") }, onClick = { menuExpanded=false;model.showChatPage(ChatView.SETTINGS) })
-                            DropdownMenuItem(text = { Text("Chats") }, onClick = { menuExpanded = false; model.showChatConversations() })
-                            DropdownMenuItem(text = { Text("My tasks") }, onClick = { menuExpanded = false; model.showPersonalTasks() })
-                            DropdownMenuItem(text = { Text("My trackers") }, onClick = { menuExpanded = false; model.showPersonalTrackers() })
-                            DropdownMenuItem(text = { Text("Reminders") }, onClick = { menuExpanded = false; reminderSettings = true })
-                            DropdownMenuItem(text = { Text("Check for updates") }, onClick = { menuExpanded = false; updates.check(manual = true) })
-                            DropdownMenuItem(text = { Text("Refresh") }, onClick = { menuExpanded = false; model.refreshChat() })
-                            DropdownMenuItem(text = { Text("Switch user") }, onClick = { menuExpanded = false; model.logout() }, enabled = !state.busy)
+                }
+            },
+            bottomBar = { if (route.view == ChatView.WORK_LOGS && state.page != Page.RECEIPT) WorkLogNavigation(state, model) }
+        ) { padding ->
+            Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
+                AppUpdateBanner()
+                if (state.error.isNotBlank()) MessageBar(state.error, isError = true, onDismiss = model::dismissMessage)
+                if (state.notice.isNotBlank()) MessageBar(state.notice, isError = false, onDismiss = model::dismissMessage)
+                if (state.page == Page.RECEIPT) ReceiptScreen(state) else Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
+                    Box(Modifier.fillMaxSize().graphicsLayer {
+                        val remaining = 1f - motion.value
+                        val side = if (layoutDirection == LayoutDirection.Ltr) direction else -direction
+                        translationX = 16.dp.toPx() * side * remaining
+                        alpha = 1f - 0.17f * remaining
+                    }) {
+                        screenStates.SaveableStateProvider("${state.user}:${route.view}:${route.room}:${route.item}") {
+                            CollaborationScreen(state, model)
                         }
                     }
                 }
             }
         }
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
-            AppUpdateBanner()
-            if (state.error.isNotBlank()) MessageBar(state.error, isError = true, onDismiss = model::dismissMessage)
-            if (state.notice.isNotBlank()) MessageBar(state.notice, isError = false, onDismiss = model::dismissMessage)
-            if (state.page == Page.RECEIPT) ReceiptScreen(state) else Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
-                Box(Modifier.fillMaxSize().graphicsLayer {
-                    val remaining = 1f - motion.value
-                    val side = if (layoutDirection == LayoutDirection.Ltr) direction else -direction
-                    translationX = 16.dp.toPx() * side * remaining
-                    alpha = 1f - 0.17f * remaining
-                }) {
-                    screenStates.SaveableStateProvider("${state.user}:${route.view}:${route.room}:${route.item}") {
-                        CollaborationScreen(state, model)
-                    }
-                }
-            }
-        }
     }
+    if (discardWorkLog) WorkLogDiscardDialog(
+        onDismiss = { discardWorkLog = false },
+        onDiscard = { discardWorkLog = false; model.discardWorkLogChanges(); model.backInChat() }
+    )
     if (reminderSettings) AlertDialog(onDismissRequest = { reminderSettings = false },
         title = { Text("Work reminders") },
         text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -352,13 +438,158 @@ private fun PortalApp(model: PortalViewModel, onExit: () -> Unit, workLink: Work
     )
 }
 
+@Composable
+private fun ErpPortal(model: PortalViewModel, onExit: () -> Unit) {
+    val state = model.state.value
+    if (state.booting) {
+        Box(Modifier.fillMaxSize().background(canvas).safeDrawingPadding(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+    if (!state.signedIn) { LoginScreen(state, model); return }
+    val nav = state.home.optJSONObject("nav") ?: JSONObject()
+    val flags = state.home.optJSONObject("flags") ?: JSONObject()
+    val tabs = buildList {
+        add(Triple(Page.HOME, "Home", Icons.Default.Home))
+        add(Triple(Page.WORK, "My work", Icons.AutoMirrored.Filled.Assignment))
+        if (nav.optBoolean("projects")) add(Triple(Page.PROJECTS, "Projects", Icons.Default.Folder))
+        if (flags.optBoolean("show_money")) add(Triple(Page.CLAIMS, "Expenses", Icons.AutoMirrored.Filled.ReceiptLong))
+        add(Triple(Page.MORE, "More", Icons.Default.MoreVert))
+    }
+    var confirmExit by remember { mutableStateOf(false) }
+    var discardWorkLog by remember { mutableStateOf(false) }
+    val back = {
+        if (state.page == Page.WORK_LOG && state.workLogDraft != state.workLogOriginal) discardWorkLog = true
+        else if (!model.backInErp(parentOf(state.page))) confirmExit = true
+    }
+    BackHandler(onBack = back)
+    val screenStates = rememberSaveableStateHolder()
+    Scaffold(
+        containerColor = canvas,
+        contentWindowInsets = WindowInsets.safeDrawing,
+        topBar = {
+            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))) {
+                Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    if (state.page != Page.HOME) IconButton(onClick = back) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                    }
+                    Column(Modifier.weight(1f).padding(start = 4.dp)) {
+                        Text(if (BuildConfig.DEBUG) "SEVAMRITA ERP" else BuildConfig.APP_NAME.uppercase(), color = green, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 1.8.sp)
+                        Text(pageTitle(state), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = ink,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    if (state.page == Page.HOME || state.page == Page.WORK || state.page == Page.MORE) {
+                        IconButton(onClick = { model.refreshHome() }, enabled = !state.busy) {
+                            Icon(Icons.Default.Refresh, "Refresh", tint = green)
+                        }
+                        IconButton(onClick = { model.open(Page.PROFILE) }, enabled = !state.busy) {
+                            Icon(Icons.Default.AccountCircle, "Profile", tint = green)
+                        }
+                    }
+                }
+                if (state.busy) androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
+            }
+        },
+        bottomBar = {
+            if (state.page == Page.WORK_LOGS) WorkLogNavigation(state, model)
+            else if (tabs.any { it.first == state.page }) NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                for ((page, label, icon) in tabs) NavigationBarItem(
+                    selected = state.page == page,
+                    onClick = { if (!state.busy) model.openErpTab(page) },
+                    icon = { Icon(icon, contentDescription = null) },
+                    label = { Text(label, maxLines = 1, fontSize = 11.sp) }
+                )
+            }
+        }
+    ) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
+            if (state.error.isNotBlank()) MessageBar(state.error, isError = true, onDismiss = model::dismissMessage)
+            if (state.notice.isNotBlank()) MessageBar(state.notice, isError = false, onDismiss = model::dismissMessage)
+            if (state.page in listOf(Page.NEW_CLAIM, Page.MULTI_CLAIM, Page.COMBINED_START, Page.COMBINED_INVOICE) && (state.expensePending || state.expenseStatus.isNotBlank())) Surface(color = MaterialTheme.colorScheme.secondaryContainer) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(state.expenseStatus.ifBlank { "A previous submission needs confirmation. Its details and receipts are saved." }, style = MaterialTheme.typography.bodySmall)
+                    if (state.expensePending && !state.busy) TextButton(onClick = model::retryExpenseSubmission) { Text("Retry saved submission") }
+                }
+            }
+            screenStates.SaveableStateProvider("erp:${state.user}:${state.page}:${state.detailId}:${state.purchaseView}") {
+                when (state.page) {
+                    Page.HOME -> HomeScreen(state, model)
+                    Page.WORK -> WorkScreen(state, model)
+                    Page.PROJECTS -> ProjectsScreen(state, model)
+                    Page.PROJECT -> ProjectScreen(state, model)
+                    Page.PROPOSALS -> ProposalsScreen(state, model)
+                    Page.PROPOSAL -> ProposalScreen(state, model)
+                    Page.PROPOSAL_FORM -> ProposalFormScreen(state, model)
+                    Page.ADVANCES -> AdvancesScreen(state, model)
+                    Page.ADVANCE -> AdvanceScreen(state)
+                    Page.NEW_ADVANCE -> AdvanceRequestScreen(state.form, state.detailId, state.busy, model::submitAdvance)
+                    Page.CLAIMS -> ClaimsScreen(state, model)
+                    Page.CLAIM -> ClaimScreen(state, model)
+                    Page.CORRECT_CLAIM -> CorrectClaimScreen(state, model)
+                    Page.NEW_CLAIM -> ExpenseRequestScreen(state.form, state.data, state.detailId, state.busy, model::projectAccounts, model::submitClaim)
+                    Page.COMBINED_START -> CombinedClaimScreen(state, model)
+                    Page.COMBINED_INVOICE -> InvoiceScreen(state, model, integrated = true)
+                    Page.MULTI_CLAIM -> MultiClaimScreen(state, model)
+                    Page.MULTI_RESULT -> MultiResultScreen(state, model)
+                    Page.ADVANCE_QUEUE -> AdvanceQueueScreen(state, model)
+                    Page.ADVANCE_REVIEW -> AdvanceReviewScreen(state, model)
+                    Page.CLAIM_QUEUE -> ClaimQueueScreen(state, model)
+                    Page.CLAIM_REVIEW -> ClaimReviewScreen(state, model)
+                    Page.RECEIPT -> ReceiptScreen(state)
+                    Page.PROFILE -> ProfileScreen(state, model)
+                    Page.CHART -> ChartScreen(state, model)
+                    Page.LEDGER -> LedgerScreen(state, model)
+                    Page.ACCOUNT_FORM -> AccountFormScreen(state, model)
+                    Page.BANK_ACCOUNT -> BankAccountScreen(state, model)
+                    Page.OFFICE_ADDRESSES -> OfficeAddressesScreen(state, model)
+                    Page.OFFICE_ADDRESS_FORM -> OfficeAddressFormScreen(state, model)
+                    Page.TEAM -> TeamScreen(state, model)
+                    Page.OPENING_BALANCES -> OpeningBalancesScreen(state, model)
+                    Page.PROJECT_MAPPING -> ProjectMappingScreen(state, model)
+                    Page.PROJECT_MAPPING_DETAIL -> ProjectMappingDetailScreen(state, model)
+                    Page.CLAIM_LIMITS -> ClaimLimitsScreen(state, model)
+                    Page.FISCAL_YEARS -> FiscalYearsScreen(state, model)
+                    Page.DONATIONS -> DonationScreen(state, model)
+                    Page.TIME_LEAVE -> org.sevamrita.mobile.ui.TimeLeaveScreen(state, model)
+                    Page.WORK_LOGS -> WorkLogsScreen(state, model)
+                    Page.WORK_LOG -> WorkLogScreen(state, model)
+                    Page.HR_MANAGEMENT -> HRManagementScreen(state, model)
+                    Page.EMPLOYEE_FORM -> ManagedEmployeeFormScreen(state, model)
+                    Page.SYSTEM_MANAGEMENT -> SystemManagementScreen(state, model)
+                    Page.USER_FORM -> ManagedUserFormScreen(state, model)
+                    Page.INVOICE -> InvoiceScreen(state, model)
+                    Page.INVOICE_RESULT -> InvoiceResultScreen(state, model)
+                    Page.BUDGET_HEALTH -> BudgetHealthScreen(state, model)
+                    Page.MORE -> ErpSectionsScreen(state, model)
+                    Page.PURCHASES, Page.PURCHASE -> PurchaseScreen(state, model)
+                    Page.COLLABORATION -> HomeScreen(state, model)
+                    Page.UNAVAILABLE -> UnavailableScreen(state)
+                }
+            }
+        }
+    }
+    if (discardWorkLog) WorkLogDiscardDialog(
+        onDismiss = { discardWorkLog = false },
+        onDiscard = { discardWorkLog = false; model.discardWorkLogChanges(); model.backInErp(parentOf(state.page)) }
+    )
+    if (confirmExit) AlertDialog(
+        onDismissRequest = { confirmExit = false }, title = { Text(if (BuildConfig.DEBUG) "Close Sevamrita ERP?" else "Close ${BuildConfig.APP_NAME}?") },
+        confirmButton = { TextButton(onClick = onExit) { Text("Close app") } },
+        dismissButton = { TextButton(onClick = { confirmExit = false }) { Text("Stay") } }
+    )
+}
+
 private fun pageTitle(state: PortalState) = when (state.page) {
     Page.HOME -> "Home"; Page.WORK -> "My work"; Page.PROJECTS -> "Projects"
     Page.COLLABORATION -> "Chat & workspaces"
+    Page.PURCHASES -> purchaseTitle(state.purchaseView); Page.PURCHASE -> state.detailId; Page.MORE -> "More"
     Page.PROJECT -> state.detailId; Page.ADVANCES -> "Advances"; Page.ADVANCE -> state.detailId
     Page.PROPOSALS -> "Project proposals"; Page.PROPOSAL -> state.detailId; Page.PROPOSAL_FORM -> "Project proposal"
     Page.NEW_ADVANCE -> "Request an advance"; Page.CLAIMS -> "Expense claims"; Page.CLAIM -> state.detailId
-    Page.NEW_CLAIM -> "Submit an expense"; Page.PROFILE -> "My profile"; Page.UNAVAILABLE -> state.unavailableLabel
+    Page.TIME_LEAVE -> "Time and leave"; Page.NEW_CLAIM -> "Submit an expense"; Page.PROFILE -> "My profile"; Page.UNAVAILABLE -> state.unavailableLabel
     Page.ADVANCE_QUEUE -> "Advance approvals"; Page.ADVANCE_REVIEW -> state.detailId
     Page.CLAIM_QUEUE -> "Expense review"; Page.CLAIM_REVIEW -> state.detailId
     Page.RECEIPT -> state.receiptName
@@ -369,6 +600,7 @@ private fun pageTitle(state: PortalState) = when (state.page) {
     Page.PROJECT_MAPPING -> "Project account mapping"; Page.PROJECT_MAPPING_DETAIL -> "Project account mapping"
     Page.CLAIM_LIMITS -> "Expense approval limits"; Page.FISCAL_YEARS -> "Fiscal Years"
     Page.DONATIONS -> "Donations"
+    Page.WORK_LOGS -> workLogTitle(state.workLogView == "team"); Page.WORK_LOG -> workLogTitle(!(state.workLogData.optJSONObject("log")?.optBoolean("is_own", true) ?: true))
     Page.HR_MANAGEMENT -> "Employees"; Page.EMPLOYEE_FORM -> "Employee"
     Page.SYSTEM_MANAGEMENT -> "Users"; Page.USER_FORM -> "User"
     Page.INVOICE -> "Prepare an invoice"; Page.INVOICE_RESULT -> "Generated invoice"
@@ -378,6 +610,9 @@ private fun pageTitle(state: PortalState) = when (state.page) {
     Page.BUDGET_HEALTH -> "Budget health"
 }
 private fun parentOf(page: Page) = when (page) {
+    Page.WORK_LOG -> Page.WORK_LOGS
+    Page.PURCHASE -> Page.MORE
+    Page.ADVANCE_REVIEW -> Page.ADVANCE_QUEUE; Page.CLAIM_REVIEW -> Page.CLAIM_QUEUE
     Page.PROJECT -> Page.PROJECTS; Page.ADVANCE, Page.NEW_ADVANCE -> Page.ADVANCES
     Page.PROPOSAL, Page.PROPOSAL_FORM -> Page.PROPOSALS
     Page.CLAIM, Page.NEW_CLAIM -> Page.CLAIMS
@@ -399,7 +634,7 @@ private fun LoginScreen(state: PortalState, model: PortalViewModel) {
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var expanded by remember { mutableStateOf(false) }
-    val demoAccounts = DemoLogins.accounts(state.server)
+    val demoAccounts = if (BuildConfig.ERP_APP) emptyList() else DemoLogins.accounts(state.server)
     var demoEmail by remember { mutableStateOf(demoAccounts.firstOrNull()?.email.orEmpty()) }
     var demoExpanded by remember { mutableStateOf(false) }
     var manualLogin by remember { mutableStateOf(false) }
@@ -409,14 +644,26 @@ private fun LoginScreen(state: PortalState, model: PortalViewModel) {
         verticalArrangement = Arrangement.Center
     ) {
         item {
-            Surface(color = green, shape = RoundedCornerShape(18.dp), modifier = Modifier.size(58.dp)) {
-                Box(contentAlignment = Alignment.Center) { Text("S", fontSize = 30.sp, color = MaterialTheme.colorScheme.surface, fontWeight = FontWeight.Bold) }
+            if (BuildConfig.ERP_APP && !BuildConfig.DEBUG) {
+                Surface(color = Color.White, shape = RoundedCornerShape(18.dp), modifier = Modifier.size(58.dp)) {
+                    Image(
+                        painter = painterResource(R.drawable.sf_erp_emblem),
+                        contentDescription = null,
+                        modifier = Modifier.padding(7.dp)
+                    )
+                }
+            } else {
+                Surface(color = green, shape = RoundedCornerShape(18.dp), modifier = Modifier.size(58.dp)) {
+                    Box(contentAlignment = Alignment.Center) { Text("S", fontSize = 30.sp, color = MaterialTheme.colorScheme.surface, fontWeight = FontWeight.Bold) }
+                }
             }
             Spacer(Modifier.height(22.dp))
             Text(BuildConfig.APP_NAME, fontSize = 34.sp, fontWeight = FontWeight.Bold, color = ink)
-            Text("Conversations and tasks for your team.", color = muted, fontSize = 16.sp)
-            AppUpdateBanner()
-            TextButton(onClick = { updates.check(manual = true) }) { Text("${BuildConfig.VERSION_NAME} · Check for updates") }
+            Text(if (BuildConfig.ERP_APP) "Projects, expenses, advances and operations." else "Conversations, tasks and daily work.", color = muted, fontSize = 16.sp)
+            if (!BuildConfig.ERP_APP) {
+                AppUpdateBanner()
+                TextButton(onClick = { updates.check(manual = true) }) { Text("${BuildConfig.VERSION_NAME} · Check for updates") }
+            }
             Spacer(Modifier.height(30.dp))
             SectionCard {
                 Text("Sign in", fontWeight = FontWeight.SemiBold, fontSize = 21.sp)
@@ -486,71 +733,109 @@ private fun LoginScreen(state: PortalState, model: PortalViewModel) {
                 Text(state.notice, color = green)
             }
             Spacer(Modifier.height(16.dp))
-            Text("Use your Sevamrita ERP account. App chat access must be enabled for your user.", color = muted, fontSize = 13.sp)
+            Text(if (BuildConfig.ERP_APP) "Use the email and password you use for Sevamrita ERP."
+                else "Use your Sevamrita ERP account to log work. Chat requires App chat access.", color = muted, fontSize = 13.sp)
         }
     }
 }
+
+private val erpSections = listOf(
+    "projects" to "Projects", "money" to "Expenses and advances", "purchasing" to "Purchasing",
+    "accounts" to "Accounts", "team" to "My team", "hr_management" to "HR management",
+    "system_management" to "System management", "organisation" to "Organisation"
+)
+
+private fun nativeErpRoute(route: String) = route.startsWith("/volunteering/") &&
+    (routeTarget(route)?.first?.let { it != Page.COLLABORATION } ?: (route.substringBefore('?') in listOf(
+        "/volunteering/vendor-purchases", "/volunteering/purchase-approvals", "/volunteering/purchase-accounts"
+    )))
 
 @Composable
 private fun HomeScreen(state: PortalState, model: PortalViewModel) {
     val home = state.home
     val projects = home.items("member_projects")
-    val actions = home.optJSONObject("actions") ?: JSONObject()
+    val waiting = home.items("waiting").filter { nativeErpRoute(it.text("route")) }
+    val drafts = home.items("resume").filter { nativeErpRoute(it.text("route")) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        if (projects.isNotEmpty()) {
-            item { Heading("Your active projects", "Choose the project before starting work") }
-            items(projects) { project ->
-                SectionCard {
-                    Text(project.display("project_name"), fontWeight = FontWeight.Bold, fontSize = 19.sp)
-                    Text(project.display("name"), color = muted, fontSize = 12.sp)
-                    if (project.text("purpose").isNotBlank()) Text(project.text("purpose"), color = muted)
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SmallAction("Expense", Modifier.weight(1f), enabled = project.optBoolean("can_submit_expense")) { model.open(Page.NEW_CLAIM, project.text("name")) }
-                        SmallAction("Advance", Modifier.weight(1f)) { model.open(Page.NEW_ADVANCE, project.text("name")) }
+        item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Your active projects", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = ink, modifier = Modifier.weight(1f))
+                if (home.optJSONObject("nav")?.optBoolean("projects") == true) TextButton(onClick = { model.openErpTab(Page.PROJECTS) }) { Text("All projects") }
+            }
+        }
+        if (projects.isEmpty()) item { SectionCard { Text("No active projects assigned to you.", color = muted) } }
+        items(projects, key = { it.text("name") }) { project ->
+            val id = project.text("name")
+            SectionCard {
+                Row(Modifier.fillMaxWidth().clickable { model.open(Page.PROJECT, id) }.padding(vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(id, color = muted, fontSize = 12.sp)
+                        Text(project.display("project_name"), color = ink, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                     }
-                    OutlinedButton(onClick = { model.open(Page.INVOICE) }, modifier = Modifier.fillMaxWidth()) { Text("Prepare an invoice") }
-                    TextButton(onClick = { model.open(Page.PROJECT, project.text("name")) }) { Text("View project →") }
+                    Icon(Icons.Default.ChevronRight, "Open project", tint = green)
+                }
+                if (project.text("purpose").isNotBlank()) Text(project.text("purpose"), color = muted, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                val dates = listOf(project.text("starts_on"), project.text("ends_on")).filter { it.isNotBlank() }
+                if (dates.isNotEmpty()) Text(dates.joinToString(" – "), color = muted, fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (project.optBoolean("can_submit_expense")) SmallAction("Submit expense", Modifier.weight(1f)) { model.open(Page.NEW_CLAIM, id) }
+                    if (project.optBoolean("can_request_advance")) SmallAction("Request advance", Modifier.weight(1f)) { model.open(Page.NEW_ADVANCE, id) }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SmallAction("Prepare invoice", Modifier.weight(1f)) { model.open(Page.INVOICE) }
+                    if (project.optBoolean("can_place_purchase_order")) SmallAction("Purchase order", Modifier.weight(1f)) { model.openPurchases("requests", project = id) }
                 }
             }
-        } else item {
-            Heading("Welcome, ${home.display("full_name", "there")}", "Your Sevamrita workspace")
         }
-        if (home.items("waiting").isNotEmpty()) {
+        if (waiting.isNotEmpty()) {
             item { Heading("Waiting on you") }
-            items(home.items("waiting").take(5)) { row -> ActionRow(row.display("title"), row.text("subtitle")) {
-                model.openAction(row.display("title"), row.text("route"))
-            } }
+            items(waiting.take(4)) { row -> ActionRow(row.display("title"), row.text("subtitle")) { model.openAction(row.display("title"), row.text("route")) } }
         }
-        if (home.items("resume").isNotEmpty()) {
-            item { Heading("Pick up where you left off") }
-            items(home.items("resume").take(4)) { row -> ActionRow(row.display("title"), row.text("subtitle")) {
-                model.openAction(row.display("title"), row.text("route"))
-            } }
+        if (drafts.isNotEmpty()) {
+            item { Heading("Resume drafts") }
+            items(drafts.take(3)) { row -> ActionRow(row.display("title"), row.text("subtitle")) { model.openAction(row.display("title"), row.text("route")) } }
         }
-        item { Heading("Explore", "Only the actions available to your account are shown") }
-        val sections = listOf("collaboration" to "Collaboration", "projects" to "Projects", "money" to "Money", "accounts" to "Accounts", "team" to "Team", "time" to "Time & leave", "hr_management" to "HR", "system_management" to "System", "organisation" to "Organisation")
-        sections.forEach { (key, label) ->
-            val rows = actions.items(key).filterNot { it.text("route").startsWith("/desk/") }
+    }
+}
+
+@Composable
+private fun ErpSectionsScreen(state: PortalState, model: PortalViewModel) {
+    val actions = state.home.optJSONObject("actions") ?: JSONObject()
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { ActionRow("Profile", state.home.text("full_name")) { model.open(Page.PROFILE) } }
+        for ((key, label) in erpSections) {
+            val rows = actions.items(key).filter { nativeErpRoute(it.text("route")) }
             if (rows.isNotEmpty()) {
-                item { Text(label.uppercase(), color = green, fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 1.sp) }
-                items(rows) { row -> ActionRow(row.display("label"), row.text("hint")) { model.openAction(row.display("label"), row.text("route")) } }
+                item { Heading(label) }
+                items(rows) { row ->
+                    ActionRow(row.display("label"), row.text("hint")) { model.openAction(row.display("label"), row.text("route")) }
+                    if (nativeErpRoute(row.text("list_route"))) TextButton(onClick = { model.openAction(row.display("list_label"), row.text("list_route")) }) {
+                        Text(row.display("list_label"))
+                    }
+                }
             }
         }
-        item { Spacer(Modifier.height(8.dp)) }
+        if (state.home.optJSONObject("nav")?.optBoolean("budget_health") == true) {
+            item { ActionRow("Budget health", "Project budgets and commitments") { model.open(Page.BUDGET_HEALTH) } }
+        }
+        item { OutlinedButton(onClick = model::logout, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text("Log out") } }
     }
 }
 
 @Composable
 private fun WorkScreen(state: PortalState, model: PortalViewModel) {
+    val waiting = state.home.items("waiting").filter { nativeErpRoute(it.text("route")) }
+    val drafts = state.home.items("resume").filter { nativeErpRoute(it.text("route")) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Heading("Your work", "Approvals, follow-ups and drafts") }
         item { Text("WAITING ON YOU", color = green, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
-        if (state.home.items("waiting").isEmpty()) item { EmptyState("Nothing waiting right now") }
-        items(state.home.items("waiting")) { row -> ActionRow(row.display("title"), row.text("subtitle")) { model.openAction(row.display("title"), row.text("route")) } }
+        if (waiting.isEmpty()) item { EmptyState("Nothing waiting right now") }
+        items(waiting) { row -> ActionRow(row.display("title"), row.text("subtitle")) { model.openAction(row.display("title"), row.text("route")) } }
         item { Text("YOUR DRAFTS", color = green, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
-        if (state.home.items("resume").isEmpty()) item { EmptyState("No drafts to resume") }
-        items(state.home.items("resume")) { row -> ActionRow(row.display("title"), row.text("subtitle")) { model.openAction(row.display("title"), row.text("route")) } }
+        if (drafts.isEmpty()) item { EmptyState("No drafts to resume") }
+        items(drafts) { row -> ActionRow(row.display("title"), row.text("subtitle")) { model.openAction(row.display("title"), row.text("route")) } }
     }
 }
 
@@ -558,6 +843,10 @@ private fun WorkScreen(state: PortalState, model: PortalViewModel) {
 private fun ProjectsScreen(state: PortalState, model: PortalViewModel) {
     val projects = state.data.items("projects")
     val capabilities = state.data.optJSONObject("capabilities") ?: JSONObject()
+    var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    var filter by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    val visible = projects.filter { (filter.isBlank() || it.text("operational_status") == filter) &&
+        (it.text("project_name").contains(query.trim(), ignoreCase = true) || it.text("name").contains(query.trim(), ignoreCase = true)) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Heading("Approved projects", "Projects you are permitted to view") }
         if (capabilities.optBoolean("can_create")) item {
@@ -569,8 +858,13 @@ private fun ProjectsScreen(state: PortalState, model: PortalViewModel) {
         if (capabilities.optBoolean("can_manage")) item {
             OutlinedButton(onClick = { model.openProposals("review") }, modifier = Modifier.fillMaxWidth()) { Text("Review pending proposals") }
         }
-        if (projects.isEmpty() && !state.busy) item { EmptyState("No approved projects available") }
-        items(projects) { project -> ActionRow(project.display("project_name"), "${project.display("name")} · ${project.display("operational_status")}") {
+        if (projects.isNotEmpty()) item {
+            OutlinedTextField(query, { query = it }, singleLine = true, modifier = Modifier.fillMaxWidth(), label = { Text("Find a project") })
+            val filters = projects.map { it.text("operational_status") }.filter(String::isNotBlank).distinct().sorted()
+            SelectField("Status", filter, listOf("" to "All statuses") + filters.map { it to it }) { filter = it }
+        }
+        if (visible.isEmpty() && !state.busy) item { EmptyState(if (projects.isEmpty()) "No approved projects available" else "No matching projects") }
+        items(visible) { project -> ActionRow(project.display("project_name"), "${project.display("name")} · ${project.display("operational_status")}") {
             model.open(Page.PROJECT, project.text("name"))
         } }
     }
@@ -675,12 +969,23 @@ private fun ClaimsScreen(state: PortalState, model: PortalViewModel) {
 @Composable
 private fun ClaimScreen(state: PortalState, model: PortalViewModel) {
     val claim = state.data
+    var closeAction by remember(state.detailId) { mutableStateOf("") }
+    var withdrawalReason by remember(state.detailId) { mutableStateOf("") }
+    if (closeAction.isNotBlank()) AlertDialog(onDismissRequest = { if (!state.busy) closeAction = "" },
+        title = { Text(if (closeAction == "delete") "Delete draft?" else "Withdraw claim?") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(if (closeAction == "delete") "This permanently deletes the unsubmitted draft and its attachments." else "This closes the claim and removes it from review. Receipts and history are retained. It cannot be reopened.")
+            if (closeAction == "withdraw") OutlinedTextField(withdrawalReason, { withdrawalReason = it.take(1000) }, label = { Text("Withdrawal reason") }, minLines = 2)
+        } },
+        confirmButton = { TextButton(onClick = { model.closeExpenseClaim(closeAction == "delete", withdrawalReason); closeAction = "" }, enabled = !state.busy && (closeAction == "delete" || withdrawalReason.isNotBlank())) { Text(if (closeAction == "delete") "Delete draft" else "Confirm withdrawal") } },
+        dismissButton = { TextButton(onClick = { closeAction = "" }, enabled = !state.busy) { Text("Keep claim") } })
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { Heading(state.detailId, claim.display("project_name")) }
         item { SectionCard {
             LabelValue("Stage", claim.display("stage"))
             LabelValue("Claimed", money(claim.optDouble("claimed_amount")))
-            LabelValue("Sanctioned", money(claim.optDouble("sanctioned_amount")))
+            LabelValue("Approved", if (claim.optBoolean("is_approved")) money(claim.optDouble("approved_amount")) else if (claim.text("stage") in listOf("Withdrawn", "Rejected", "Cancelled")) "Not approved" else "Awaiting approval")
+            LabelValue("Outstanding", if (claim.isNull("outstanding_amount")) "Awaiting approval" else money(claim.optDouble("outstanding_amount")))
             LabelValue("Reimbursed", money(claim.optDouble("reimbursed_amount")))
             LabelValue("Payment", claim.display("payment_status"))
             LabelValue("Receipt review", claim.display("receipt_review_status"))
@@ -690,6 +995,9 @@ private fun ClaimScreen(state: PortalState, model: PortalViewModel) {
         if (claim.optBoolean("can_correct")) item {
             Button(onClick = model::startCorrection, modifier = Modifier.fillMaxWidth()) { Text("Correct and resubmit this claim") }
         }
+        if (claim.optBoolean("can_withdraw")) item { OutlinedButton(onClick = { closeAction = "withdraw" }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text("Withdraw claim") } }
+        if (claim.optBoolean("can_delete")) item { TextButton(onClick = { closeAction = "delete" }, enabled = !state.busy) { Text("Delete draft") } }
+        if (claim.text("withdrawal_reason").isNotBlank()) item { Text("Withdrawn: ${claim.text("withdrawal_reason")}") }
         item { Heading("Expense items") }
         items(claim.items("expenses")) { row -> SectionCard {
             Text(row.display("description"), fontWeight = FontWeight.SemiBold)

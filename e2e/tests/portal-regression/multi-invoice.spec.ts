@@ -47,7 +47,7 @@ test("two invoice dates create two separately dated claims with one submission I
   const project = defaults.projects[0].value;
   const accounts = await call(page, API + "get_project_accounts", { project });
   expect(accounts.length).toBeGreaterThan(0);
-  await page.getByLabel("Project *").selectOption(project);
+  await page.getByRole("combobox", { name: "Project *", exact: true }).selectOption(project);
   const today = defaults.expense_date;
   const prior = new Date(`${today}T12:00:00Z`);
   prior.setUTCDate(prior.getUTCDate() - 1);

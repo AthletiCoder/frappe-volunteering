@@ -1,0 +1,55 @@
+{
+ "doctype": "DocType",
+ "name": "HR Policy Revision",
+ "module": "Volunteering",
+ "autoname": "hash",
+ "engine": "InnoDB",
+ "istable": 0,
+ "track_changes": 1,
+ "field_order": [
+  "effective_from",
+  "settings",
+  "reason",
+  "published_by",
+  "published_on",
+  "policy_key"
+ ],
+ "fields": [
+  {
+   "fieldname": "effective_from",
+   "label": "Effective From",
+   "fieldtype": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "settings",
+   "label": "Settings",
+   "fieldtype": "JSON",
+   "reqd": 1
+  },
+  {
+   "fieldname": "reason",
+   "label": "Reason",
+   "fieldtype": "Small Text",
+   "reqd": 1
+  },
+  {
+   "fieldname": "published_by",
+   "label": "Published By",
+   "fieldtype": "Link",
+   "options": "User"
+  },
+  {
+   "fieldname": "published_on",
+   "label": "Published On",
+   "fieldtype": "Datetime"
+  },
+  {
+   "fieldname": "policy_key",
+   "label": "Policy key",
+   "fieldtype": "Data",
+   "unique": 1
+  }
+ ],
+ "permissions": []
+}

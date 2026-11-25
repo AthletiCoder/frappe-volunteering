@@ -149,7 +149,9 @@ class IntegrationTestLeavePolicy(IntegrationTestCase):
 			leave_approver=None,
 		)
 		with self.assertRaises(frappe.ValidationError):
-			validate_leave_application(doc)
+			validate_director_approval(doc, 10, {"director_approval_days": 7})
+		# The December charter removes automatic Director escalation.
+		validate_director_approval(doc, 10, {"director_approval_days": 0})
 
 	def test_long_leave_rejects_approver_without_board_grade(self):
 		approver = get_or_create_user("leave-manager@example.com", ["Employee"], "Leave Manager")
