@@ -88,6 +88,9 @@
 			</form>
 
 			<template v-else-if="order">
+				<section class="kit-panel p-5 sm:p-6" aria-label="Order progress">
+					<ProgressTracker :steps="purchaseSteps(order)" label="Order progress" />
+				</section>
 				<section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
 					<div class="summary"><span>Order total</span><strong>{{ money(order.grand_total) }}</strong><small>{{ order.workflow_state }}</small></div>
 					<div class="summary"><span>Total paid</span><strong>{{ money(totalPaid) }}</strong><small>{{ order.payments.length }} recorded payments</small></div>
@@ -175,6 +178,8 @@ import { uid } from "../lib/uid";
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import PageHeader from '../components/PageHeader.vue';
+import ProgressTracker from "../components/ProgressTracker.vue";
+import { purchaseSteps } from "../lib/requestProgress.js";
 import Icon from '../components/Icon.vue';
 import SearchSelect from '../components/SearchSelect.vue';
 import { call } from '../lib/frappe';

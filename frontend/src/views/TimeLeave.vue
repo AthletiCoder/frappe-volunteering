@@ -44,8 +44,9 @@
             <div class="flex items-center justify-end gap-3"><button type="button" class="btn-secondary" :disabled="busy" @click="editing = false">Cancel</button><button class="btn-primary" :disabled="busy">{{ busy ? 'Saving request…' : 'Submit request' }}</button></div>
           </form>
         </section>
-        <section v-if="selected" class="form-card space-y-4">
-          <div class="flex justify-between gap-3"><div><h2 class="form-title mb-1">{{ selected.type }}</h2><p class="text-sm text-muted">{{ selected.employee_name }} · {{ selected.name }}</p></div><button class="btn-secondary" :disabled="busy" @click="selected = null">Close</button></div>
+        <section v-if="selected" class="kit-panel request-detail space-y-4">
+          <div class="flex justify-between gap-3"><div class="flex min-w-0 gap-3"><span class="request-detail__icon" aria-hidden="true"><Icon :name="requestIcon(selected)" size="sm" /></span><div class="min-w-0"><h2 class="font-display text-lg font-semibold text-ink">{{ selected.type }}</h2><p class="text-sm text-muted">{{ selected.employee_name }} · {{ selected.name }}</p></div></div><button class="btn-secondary shrink-0" :disabled="busy" @click="selected = null">Close</button></div>
+          <ProgressTracker class="border-y border-line py-4" :steps="timeRequestSteps(selected.status)" label="Request progress" />
           <p class="font-medium">{{ requestDates(selected) }} · {{ selected.status }}</p><p class="whitespace-pre-wrap">{{ selected.reason }}</p>
           <p v-if="selected.hr_exception_reason" class="text-sm rounded-lg bg-amber-50 p-3">HR exception: {{ selected.hr_exception_reason }}</p>
           <p v-if="selected.decision_reason" class="text-sm text-muted">Decision: {{ selected.decision_reason }}</p>
@@ -115,6 +116,8 @@ import {timeLeaveHasCategory, timeLeaveCategory} from "../lib/timeLeaveForm.js";
 import PageHeader from '../components/PageHeader.vue';
 import Avatar from '../components/Avatar.vue';
 import Icon from '../components/Icon.vue';
+import ProgressTracker from '../components/ProgressTracker.vue';
+import { timeRequestSteps } from '../lib/requestProgress.js';
 import { call } from '../lib/frappe';
 const API = 'volunteering.volunteering.time_leave_portal.', POLICY = 'volunteering.volunteering.hr_policy.', BALANCE = 'volunteering.volunteering.hr_leave_balances.';
 const route = useRoute(), workspace = ref({}), policyWorkspace = ref({}), policyForm = reactive({}), tab = ref(route.query.view === 'team' ? 'team' : route.query.view === 'policy' ? 'policy' : 'mine');
@@ -169,6 +172,9 @@ async function adoptYear(){await operation(async()=>{balancePreview.value=await 
 </script>
 
 <style scoped>
+.request-detail { padding: 1.25rem; }
+@media (min-width: 640px) { .request-detail { padding: 1.5rem; } }
+.request-detail__icon { display: inline-flex; width: 2.5rem; height: 2.5rem; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 12px; background: var(--navy-50); color: var(--navy-900); }
 .leave-row { display: flex; width: 100%; align-items: center; gap: 0.875rem; padding: 0.875rem 1rem; text-align: left; transition: background-color var(--dur-fast) ease; }
 @media (min-width: 640px) { .leave-row { padding: 0.875rem 1.25rem; } }
 .leave-row + .leave-row { border-top: 1px solid var(--line); }
