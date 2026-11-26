@@ -142,6 +142,7 @@
 </template>
 
 <script setup>
+import { uid } from "../lib/uid";
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import PageHeader from '../components/PageHeader.vue';
@@ -160,7 +161,7 @@ const pageInfo = computed(() => ({
 }[props.workspaceView]));
 const workspace = ref(null), order = ref(null), loading = ref(true), saving = ref(false);
 const error = ref(''), message = ref(''), editing = ref(false), action = ref(''), filter = ref(''), search = ref(''), reviewNote = ref('');
-const key = () => crypto.randomUUID();
+const key = () => uid();
 const blankItem = () => ({ item_code: '', description: '', qty: 1, rate: '', warehouse: '', expense_account: '' });
 const blankOrder = () => ({ request_key: key(), supplier: '', project: '', transaction_date: workspace.value?.today || '', schedule_date: workspace.value?.today || '', terms: '', items: [blankItem()] });
 const form = reactive(blankOrder()), delivery = reactive({}), bill = reactive({}), payment = reactive({});

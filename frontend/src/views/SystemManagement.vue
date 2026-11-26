@@ -8,7 +8,7 @@
 			<template #actions>
 				<RouterLink to="/fiscal-years" class="btn-secondary">Fiscal years</RouterLink>
 				<button v-if="!editing" type="button" class="btn-primary" @click="beginNew">Add user</button>
-				<RouterLink to="/home" class="btn-secondary">Back to Home</RouterLink>
+				<RouterLink to="/home" class="btn-back">Back to Home</RouterLink>
 			</template>
 		</PageHeader>
 		<p v-if="loading" class="text-muted" role="status">Loading users…</p>
@@ -406,35 +406,11 @@ onMounted(load);
 </script>
 
 <style scoped>
-.form-card {
-	@apply rounded-2xl border border-line bg-surface p-4 sm:p-5 shadow-soft;
-}
-.form-title {
-	@apply text-lg font-semibold text-ink mb-3;
-}
-.form-hint {
-	@apply text-sm text-muted mb-4;
-}
 .form-grid {
 	@apply grid sm:grid-cols-2 gap-3;
 }
-.field-label {
-	@apply text-sm font-medium text-ink;
-}
-.field-input {
-	@apply mt-1 w-full rounded-xl border border-line bg-bg px-3 py-2 text-ink;
-}
-.field-help {
-	@apply block text-xs text-muted mt-1;
-}
 .directory-card {
 	@apply rounded-2xl border border-line bg-surface p-4 shadow-soft hover:shadow-lift transition-all;
-}
-.message-error {
-	@apply rounded-xl border border-bad bg-bad-soft p-3 text-sm text-bad;
-}
-.message-success {
-	@apply rounded-xl border border-ok bg-ok-soft p-3 text-sm text-ink;
 }
 .status-pill {
 	@apply rounded-full bg-ok-soft px-2.5 py-1 text-xs text-ok;
@@ -444,9 +420,6 @@ onMounted(load);
 }
 .choice-card {
 	@apply flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-bg p-3;
-}
-.choice-card-active {
-	@apply border-accent bg-accent-soft;
 }
 .choice-card span,
 .option-row span {

@@ -4,17 +4,17 @@
       <template #actions><button v-if="(workspace.eligible || workspace.can_override) && tab !== 'policy'" class="btn-primary" @click="newRequest">New request</button></template>
     </PageHeader>
     <p v-if="error" role="alert" class="message-error">{{ error }}</p><p v-if="notice" role="status" class="message-success">{{ notice }}</p>
-    <div class="flex gap-2 flex-wrap" role="tablist" aria-label="Time and leave views">
+    <div class="segmented" role="tablist" aria-label="Time and leave views">
       <button v-for="item in tabs" :key="item.id" role="tab" :aria-selected="tab === item.id" :class="tab === item.id ? 'btn-primary' : 'btn-secondary'" @click="changeTab(item.id)">{{ item.label }}</button>
     </div>
     <p v-if="loading" role="status" class="text-muted">Loading time and leave…</p>
     <template v-else>
       <PeopleCentre v-if="tab === 'resources'" @request-holiday="requestHoliday" />
       <template v-else-if="tab !== 'policy'">
-        <div v-if="tab === 'mine'" class="grid gap-4 sm:grid-cols-3">
-          <section class="form-card"><p class="text-sm text-muted">Paid leave remaining</p><p class="text-3xl font-semibold text-ink mt-2">{{ number(workspace.paid_balance) }} <span class="text-sm font-normal">days</span></p></section>
-          <section class="form-card"><p class="text-sm text-muted">Compensatory leave remaining</p><p class="text-3xl font-semibold text-accent mt-2">{{ number(workspace.comp_balance) }} <span class="text-sm font-normal">days</span></p></section>
-          <section class="form-card"><p class="text-sm text-muted">Leave year</p><p class="font-semibold text-ink mt-2">{{ date(workspace.leave_year?.[0]) }} – {{ date(workspace.leave_year?.[1]) }}</p><p class="text-xs text-muted mt-2">{{ workspace.policy?.monthly_leave }} days earned each month</p></section>
+        <div v-if="tab === 'mine'" class="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
+          <section class="form-card !p-4 sm:!p-5"><p class="text-[13px] text-muted">Paid leave remaining</p><p class="mt-1.5 font-display text-2xl font-semibold tabular-nums text-ink sm:text-3xl">{{ number(workspace.paid_balance) }} <span class="text-sm font-normal">days</span></p></section>
+          <section class="form-card !p-4 sm:!p-5"><p class="text-[13px] text-muted">Compensatory leave remaining</p><p class="mt-1.5 font-display text-2xl font-semibold tabular-nums text-navy-900 sm:text-3xl">{{ number(workspace.comp_balance) }} <span class="text-sm font-normal">days</span></p></section>
+          <section class="form-card col-span-2 !p-4 sm:col-span-1 sm:!p-5"><p class="text-[13px] text-muted">Leave year</p><p class="mt-1.5 font-semibold text-ink">{{ date(workspace.leave_year?.[0]) }} – {{ date(workspace.leave_year?.[1]) }}</p><p class="text-xs text-muted mt-2">{{ workspace.policy?.monthly_leave }} days earned each month</p></section>
         </div>
         <p v-if="tab === 'mine' && !workspace.eligible" class="form-card text-muted">Automatic attendance and leave apply to salaried employees. Work logging remains available to all active employees.</p>
         <p v-if="workspace.legacy_allocation && tab === 'mine'" class="form-card text-sm">Your existing allocation keeps its original year and accrual schedule. HR can verify its balance and adopt the calendar-year policy without granting it twice.</p>
@@ -153,8 +153,6 @@ button.form-card:hover { border-color: var(--accent); box-shadow: 0 3px 14px rgb
 .request-close:hover { background: var(--soft); color: var(--ink); }
 .field-label { background: transparent; border: 0; padding: 0; border-radius: 0; display: flex; flex-direction: column; min-width: 0; color: var(--ink); font-size: .875rem; font-weight: 600; line-height: 1.5; }
 .field-input { display: block; width: 100%; min-width: 0; min-height: 2.9rem; margin-top: .45rem; padding: .7rem .85rem; border: 1px solid var(--line); border-radius: .7rem; background: var(--surface); color: var(--ink); font-size: .925rem; font-weight: 400; line-height: 1.45; }
-textarea.field-input { resize: vertical; min-height: 5.5rem; }
-.field-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 fieldset { margin: 0; padding: 0 0 1.5rem; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
 fieldset > legend { float: none; width: auto; margin: 0 0 1rem; padding: 0; border: 0; font-size: 1rem; line-height: 1.4; }
 input[type=checkbox] { width: 1.05rem; height: 1.05rem; flex: none; accent-color: var(--accent); }

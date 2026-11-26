@@ -1,62 +1,68 @@
+@import "@fontsource-variable/inter/wght.css";
+@import "@fontsource/poppins/latin-500.css";
+@import "@fontsource/poppins/latin-600.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────────────────────────────────
+   Sevamrita design system: light theme.
+   Navy carries structure and primary actions; one marigold accent marks only
+   what needs a person's attention; neutrals are tinted toward the brand navy.
+   Token names are shared with every view, so changing a value here restyles
+   the whole portal.
+   ───────────────────────────────────────────────────────────────────────── */
 :root {
 	color-scheme: light;
-	--bg: #f5f7f9;
-	--surface: #ffffff;
-	--soft: #edf2f5;
-	--ink: #1d2935;
-	--muted: #647483;
-	--line: #dfe6eb;
-	--accent: #0c755f;
-	--accent-hover: #095d4d;
-	--accent-soft: #def1ea;
-	--on-accent: #ffffff;
-	--todo: #c2410c;
-	--todo-soft: #ffedd5;
-	--on-todo: #ffffff;
-	--ok: #15803d;
-	--ok-soft: #dcfce7;
-	--warn: #b45309;
-	--warn-soft: #fef3c7;
-	--bad: #b91c1c;
-	--bad-soft: #fee2e2;
-	--shadow-soft: 0 1px 2px rgb(29 41 53 / 0.04), 0 8px 24px rgb(29 41 53 / 0.04);
-	--shadow-lift: 0 10px 28px rgb(12 117 95 / 0.12);
-	--header-bg: rgb(255 255 255 / 0.96);
-}
 
-html.dark {
-	color-scheme: dark;
-	--bg: #121110;
-	--surface: #1c1a17;
-	--soft: #25221e;
-	--ink: #c9c2b8;
-	--muted: #8a8378;
-	/* Warm muted edge — avoid bright white hairlines on dark surfaces */
-	--line: #2f2c28;
-	--accent: #3a7a64;
-	--accent-hover: #2f6553;
-	--accent-soft: rgb(58 122 100 / 0.16);
+	/* Brand */
+	--navy-50: #eef2f9;
+	--navy-100: #dfe7f3;
+	--navy-200: #c3d1e8;
+	--navy-600: #1b3f78;
+	--navy-800: #0b2f66;
+	--navy-900: #05224d;
+	--marigold: #f2b544;
+	--marigold-soft: #fdf1d8;
+
+	/* Surfaces & text */
+	--bg: #f6f7f9;
+	--surface: #ffffff;
+	--soft: #f1f4f8;
+	--ink: #0e1b2e;
+	--ink-2: #2c3a4f;
+	--muted: #5b6779;
+	--line: #e5e9f0;
+	--line-strong: #c5cdd9;
+
+	/* Roles */
+	--accent: var(--navy-900);
+	--accent-hover: var(--navy-800);
+	--accent-soft: #ebf0f8;
 	--on-accent: #ffffff;
-	--todo: #c4a07a;
-	--todo-soft: rgb(196 160 122 / 0.14);
-	--on-todo: #121110;
-	--ok: #8aaa7a;
-	--ok-soft: rgb(138 170 122 / 0.14);
-	--warn: #c4b07a;
-	--warn-soft: rgb(196 176 122 / 0.14);
-	--bad: #c48a82;
-	--bad-soft: rgb(196 138 130 / 0.14);
-	--shadow-soft: 0 8px 20px rgb(0 0 0 / 0.35);
-	--shadow-lift: 0 12px 24px rgb(0 0 0 / 0.4);
-	--header-bg: rgb(18 17 16 / 0.92);
-	--border-color: #2f2c28;
-	--dark-border-color: #2f2c28;
-	--gray-200: #2f2c28;
-	--gray-300: #3a3630;
+	--todo: #8a5300;
+	--todo-soft: var(--marigold-soft);
+	--on-todo: #3a2500;
+	--ok: #1e7a4c;
+	--ok-soft: #e6f4ec;
+	--warn: #9a5b00;
+	--warn-soft: #fef4e2;
+	--bad: #b42330;
+	--bad-soft: #fcebec;
+
+	/* Depth & motion */
+	--shadow-soft: 0 1px 2px rgb(14 27 46 / 0.04), 0 1px 3px rgb(14 27 46 / 0.03);
+	--shadow-lift: 0 2px 4px rgb(14 27 46 / 0.04), 0 14px 32px -8px rgb(5 34 77 / 0.16);
+	--shadow-pop: 0 28px 64px -16px rgb(5 34 77 / 0.32), 0 2px 6px rgb(14 27 46 / 0.06);
+	--ring: 0 0 0 3px rgb(5 34 77 / 0.14);
+	--ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+	--dur-fast: 140ms;
+	--dur: 200ms;
+
+	--header-bg: rgb(255 255 255 / 0.86);
+	--radius-control: 10px;
+	--radius-card: 16px;
 }
 
 @layer base {
@@ -65,95 +71,562 @@ html.dark {
 	::after {
 		border-color: var(--line);
 	}
+
+	html {
+		-webkit-text-size-adjust: 100%;
+		text-rendering: optimizeLegibility;
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+	}
+
+	body {
+		font-family: theme("fontFamily.sans");
+		font-feature-settings: "cv11", "ss03";
+		background: var(--bg);
+		color: var(--ink);
+		font-size: 14px;
+		line-height: 1.55;
+	}
+
+	h1, h2, h3 {
+		font-family: theme("fontFamily.display");
+		color: var(--ink);
+		letter-spacing: -0.012em;
+		text-wrap: balance;
+	}
+	/* Poppins ships at 500/600 only; keep headings from synthesising a faux bold. */
+	:is(h1, h2, h3):is(.font-bold, .font-extrabold, .font-black, .font-semibold) {
+		font-weight: 600;
+	}
+	main h1.text-2xl,
+	main h1.text-3xl {
+		font-size: clamp(1.5rem, 1.15rem + 0.9vw, 1.875rem);
+		line-height: 1.2;
+	}
+
+	::selection {
+		background: var(--navy-100);
+		color: var(--ink);
+	}
+
+	a,
+	button,
+	summary,
+	[role="button"] {
+		-webkit-tap-highlight-color: transparent;
+	}
+	:where(:focus-visible) {
+		outline: 2px solid var(--navy-600);
+		outline-offset: 2px;
+	}
+
+	/* Every field gets the same calm frame and focus ring. Zero specificity
+	   (:where) so a view's own classes and utilities always win. */
+	:where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]), select, textarea) {
+		border-color: var(--line-strong);
+		border-radius: var(--radius-control);
+		transition: border-color var(--dur-fast) ease, box-shadow var(--dur-fast) ease, background-color var(--dur-fast) ease;
+	}
+	:where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]), select, textarea):where(:hover) {
+		border-color: var(--navy-200);
+	}
+	:where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]), select, textarea):where(:focus) {
+		outline: none;
+		border-color: var(--navy-600);
+		box-shadow: var(--ring);
+	}
+	:where(input, textarea)::placeholder {
+		color: #8a95a6;
+	}
+	:where(input[type="checkbox"], input[type="radio"]) {
+		accent-color: var(--navy-900);
+	}
+
+	/* ── Component kit: native controls, redrawn ───────────────────────────
+	   Every control stays a real <select>/<input>, so keyboard, autofill,
+	   screen readers and existing behaviour are untouched; only the drawing
+	   changes. */
+
+	/* Checkbox & radio */
+	:where(input[type="checkbox"], input[type="radio"]) {
+		appearance: none;
+		-webkit-appearance: none;
+		display: inline-grid;
+		place-content: center;
+		flex-shrink: 0;
+		width: 1.125rem;
+		height: 1.125rem;
+		margin: 0;
+		border: 1.5px solid var(--line-strong);
+		background: var(--surface);
+		cursor: pointer;
+		vertical-align: -0.2em;
+		transition: background-color var(--dur-fast) ease, border-color var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
+	}
+	:where(input[type="checkbox"]) { border-radius: 5px; }
+	:where(input[type="radio"]) { border-radius: 999px; }
+	:where(input[type="checkbox"])::before {
+		content: "";
+		width: 0.7rem;
+		height: 0.7rem;
+		background: var(--on-accent);
+		clip-path: polygon(14% 52%, 0 66%, 38% 100%, 100% 24%, 86% 10%, 38% 72%);
+		transform: scale(0);
+		transition: transform var(--dur-fast) var(--ease-out);
+	}
+	:where(input[type="radio"])::before {
+		content: "";
+		width: 0.5rem;
+		height: 0.5rem;
+		border-radius: 999px;
+		background: var(--on-accent);
+		transform: scale(0);
+		transition: transform var(--dur-fast) var(--ease-out);
+	}
+	:where(input[type="checkbox"], input[type="radio"]):where(:hover:not(:disabled)) {
+		border-color: var(--navy-600);
+	}
+	:where(input[type="checkbox"], input[type="radio"]):where(:checked, :indeterminate) {
+		background: var(--accent);
+		border-color: var(--accent);
+	}
+	:where(input[type="checkbox"], input[type="radio"]):where(:checked)::before {
+		transform: scale(1);
+	}
+	:where(input[type="checkbox"]):where(:indeterminate)::before {
+		clip-path: inset(40% 10% 40% 10%);
+		transform: scale(1);
+	}
+	:where(input[type="checkbox"], input[type="radio"]):where(:focus-visible) {
+		outline: none;
+		box-shadow: var(--ring);
+		border-color: var(--navy-600);
+	}
+	:where(input[type="checkbox"], input[type="radio"]):where(:disabled) {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	/* File input: a real drop target (browsers accept a dropped file on the
+	   input itself), drawn as a dashed zone with a proper button. */
+	:where(input[type="file"]) {
+		display: block;
+		width: 100%;
+		min-width: 0;
+		padding: 0.875rem;
+		border: 1.5px dashed var(--line-strong);
+		border-radius: 12px;
+		background: var(--soft);
+		color: var(--muted);
+		font-size: 0.8125rem;
+		cursor: pointer;
+		transition: border-color var(--dur-fast) ease, background-color var(--dur-fast) ease;
+	}
+	:where(input[type="file"]):where(:hover:not(:disabled), :focus-visible) {
+		border-color: var(--navy-600);
+		background: var(--navy-50);
+		outline: none;
+	}
+	:where(input[type="file"]):where(:disabled) {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+	:where(input[type="file"])::file-selector-button {
+		margin-right: 0.875rem;
+		padding: 0.5rem 0.875rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--radius-control);
+		background: var(--surface);
+		color: var(--ink);
+		font: inherit;
+		font-weight: 600;
+		cursor: pointer;
+		box-shadow: 0 1px 1px rgb(14 27 46 / 0.04);
+		transition: border-color var(--dur-fast) ease, background-color var(--dur-fast) ease;
+	}
+	:where(input[type="file"]):where(:hover:not(:disabled))::file-selector-button {
+		border-color: var(--navy-200);
+		background: var(--navy-50);
+	}
+
+	/* Date & time pickers: tint the native calendar glyph. */
+	:where(input[type="date"], input[type="datetime-local"], input[type="month"], input[type="time"])::-webkit-calendar-picker-indicator {
+		cursor: pointer;
+		opacity: 0.55;
+		transition: opacity var(--dur-fast) ease;
+	}
+	:where(input[type="date"], input[type="datetime-local"], input[type="month"], input[type="time"]):hover::-webkit-calendar-picker-indicator {
+		opacity: 0.9;
+	}
+
+	/* Single-value selects: own chevron and, where the browser supports a
+	   customisable picker, a Sevamrita-styled option list. */
+	:where(select:not([multiple]):not([size])) {
+		appearance: none;
+		-webkit-appearance: none;
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%235b6779' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 8 4 4 4-4'/%3E%3C/svg%3E");
+		background-repeat: no-repeat;
+		background-position: right 0.625rem center;
+		background-size: 1.125rem;
+		cursor: pointer;
+	}
+	:where(select:disabled) {
+		cursor: not-allowed;
+		background-color: var(--soft);
+		color: var(--muted);
+	}
+}
+
+/* Selects keep room for the chevron even when a view pads them with .field-input. */
+select:not([multiple]):not([size]) {
+	padding-right: 2.25rem;
+}
+
+@supports (appearance: base-select) {
+	select:not([multiple]):not([size]),
+	select:not([multiple]):not([size])::picker(select) {
+		appearance: base-select;
+	}
+	select:not([multiple]):not([size]) {
+		display: flex;
+		align-items: center;
+		background-image: none;
+		padding-right: 0.75rem;
+	}
+	select:not([multiple]):not([size])::picker-icon {
+		content: "";
+		width: 1.125rem;
+		height: 1.125rem;
+		margin-left: auto;
+		padding-left: 0.5rem;
+		box-sizing: content-box;
+		background: var(--muted);
+		mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 8 4 4 4-4'/%3E%3C/svg%3E") right center / 1.125rem no-repeat;
+		transition: rotate var(--dur) var(--ease-out);
+	}
+	select:not([multiple]):not([size]):open::picker-icon {
+		rotate: 180deg;
+	}
+	select:not([multiple]):not([size]):open {
+		border-color: var(--navy-600);
+		box-shadow: var(--ring);
+	}
+	select:not([multiple]):not([size])::picker(select) {
+		margin-block: 6px;
+		padding: 0.3125rem;
+		max-height: min(22rem, 60vh);
+		border: 1px solid var(--line);
+		border-radius: 12px;
+		background: var(--surface);
+		box-shadow: var(--shadow-pop);
+		opacity: 0;
+		translate: 0 -4px;
+		transition: opacity var(--dur-fast) ease, translate var(--dur) var(--ease-out), display var(--dur) allow-discrete, overlay var(--dur) allow-discrete;
+	}
+	select:not([multiple]):not([size]):open::picker(select) {
+		opacity: 1;
+		translate: 0 0;
+	}
+	@starting-style {
+		select:not([multiple]):not([size]):open::picker(select) {
+			opacity: 0;
+			translate: 0 -4px;
+		}
+	}
+	select:not([multiple]):not([size]) option {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		min-height: 2.25rem;
+		padding: 0.4375rem 0.625rem;
+		border-radius: 8px;
+		color: var(--ink);
+		font-size: 0.875rem;
+		cursor: pointer;
+		transition: background-color var(--dur-fast) ease;
+	}
+	select:not([multiple]):not([size]) option:is(:hover, :focus-visible) {
+		background: var(--navy-50);
+		outline: none;
+	}
+	select:not([multiple]):not([size]) option:checked {
+		background: var(--accent-soft);
+		color: var(--navy-900);
+		font-weight: 600;
+	}
+	select:not([multiple]):not([size]) option::checkmark {
+		order: 1;
+		margin-left: auto;
+		color: var(--navy-900);
+		font-weight: 600;
+	}
+	select:not([multiple]):not([size]) option:disabled {
+		color: var(--muted);
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		select:not([multiple]):not([size])::picker(select) {
+			transition: none;
+		}
+	}
+}
+
+@layer base {
+
+	:where(table) {
+		font-variant-numeric: tabular-nums;
+	}
+
+	/* Calm, thin scrollbars inside panels. */
+	* {
+		scrollbar-width: thin;
+		scrollbar-color: var(--line-strong) transparent;
+	}
 }
 
 @layer components {
+	/* Buttons: one family, three weights. */
+	.btn-primary,
+	.btn-secondary {
+		@apply inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold leading-5;
+		border-radius: var(--radius-control);
+		transition: background-color var(--dur-fast) ease, border-color var(--dur-fast) ease, color var(--dur-fast) ease,
+			box-shadow var(--dur-fast) ease, transform 100ms ease;
+	}
 	.btn-primary {
-		@apply inline-flex items-center justify-center px-3 py-1.5 rounded-xl font-medium text-white;
-		@apply active:scale-[0.98] transition-all duration-150;
+		color: var(--on-accent);
 		background-color: var(--accent);
+		box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 1px 2px rgb(5 34 77 / 0.18);
 	}
 	.btn-primary:hover {
 		background-color: var(--accent-hover);
+		color: var(--on-accent);
 	}
 	.btn-secondary {
-		@apply inline-flex items-center justify-center px-3 py-1.5 rounded-xl border font-medium;
-		@apply active:scale-[0.98] transition-all duration-150;
+		@apply border;
 		color: var(--ink);
 		background-color: var(--surface);
-		border-color: var(--line);
+		border-color: var(--line-strong);
+		box-shadow: 0 1px 1px rgb(14 27 46 / 0.03);
 	}
 	a.btn-secondary:hover,
 	a.btn-secondary:focus-visible,
 	.btn-secondary:hover,
 	.btn-secondary:focus-visible {
 		color: var(--ink);
-		background-color: var(--accent-soft);
-		border-color: var(--line);
+		background-color: var(--navy-50);
+		border-color: var(--navy-200);
+	}
+	.btn-primary:active:not(:disabled),
+	.btn-secondary:active:not(:disabled) {
+		transform: scale(0.98);
+	}
+	.btn-primary:disabled,
+	.btn-secondary:disabled {
+		opacity: 0.55;
+		cursor: not-allowed;
+		box-shadow: none;
 	}
 	.btn-ghost {
-		@apply inline-flex items-center justify-center p-2 rounded-xl text-muted;
-		@apply hover:text-ink hover:bg-soft transition-all duration-150;
+		@apply inline-flex items-center justify-center p-2 text-muted;
+		border-radius: var(--radius-control);
+		transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+	}
+	.btn-ghost:hover {
+		color: var(--ink);
+		background-color: var(--soft);
+	}
+
+	/* Quiet way back to Home; it sits beside a page's real actions without competing. */
+	.btn-back {
+		@apply inline-flex min-h-9 items-center gap-1.5 px-2.5 py-1.5 text-[13px] font-medium text-muted;
+		border-radius: var(--radius-control);
+		transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+	}
+	.btn-back::before {
+		content: "";
+		width: 1rem;
+		height: 1rem;
+		background: currentColor;
+		-webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M19 12H5M11 6l-6 6 6 6'/%3E%3C/svg%3E") center / contain no-repeat;
+		mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M19 12H5M11 6l-6 6 6 6'/%3E%3C/svg%3E") center / contain no-repeat;
+		transition: transform var(--dur-fast) ease;
+	}
+	.btn-back:hover {
+		color: var(--ink);
+		background: var(--soft);
+	}
+	.btn-back:hover::before {
+		transform: translateX(-2px);
+	}
+
+	/* View switchers: the same btn-primary / btn-secondary toggles, drawn as one
+	   segmented control. Wraps on narrow phones so no control leaves the screen. */
+	.segmented {
+		@apply inline-flex max-w-full flex-wrap gap-1 rounded-xl bg-soft p-1;
+	}
+	.segmented > :is(.btn-primary, .btn-secondary) {
+		@apply shrink-0 whitespace-nowrap border-0 px-3.5 py-1.5;
+		min-height: 2.25rem;
+		border-radius: 8px;
+		box-shadow: none;
+	}
+	.segmented > .btn-secondary {
+		background: transparent;
+		color: var(--muted);
+	}
+	.segmented > .btn-secondary:hover {
+		background: rgb(255 255 255 / 0.6);
+		color: var(--ink);
+	}
+	.segmented > .btn-primary,
+	.segmented > .btn-primary:hover {
+		background: var(--surface);
+		color: var(--navy-900);
+		box-shadow: 0 1px 2px rgb(14 27 46 / 0.08), 0 0 0 1px var(--line);
+	}
+
+	/* Shared building blocks (canonical versions of classes many views use). */
+	.form-card {
+		@apply border border-line bg-surface p-5 sm:p-6;
+		border-radius: var(--radius-card);
+		box-shadow: var(--shadow-soft);
+	}
+	.form-title {
+		@apply mb-3 text-lg font-semibold text-ink;
+		font-family: theme("fontFamily.display");
+	}
+	.form-hint {
+		@apply mb-4 text-sm leading-relaxed text-muted;
+	}
+	.form-grid {
+		@apply grid gap-4 sm:grid-cols-2;
+	}
+	.field-label {
+		@apply block text-sm font-medium text-ink;
+	}
+	.field-input {
+		@apply mt-1.5 block w-full border bg-surface px-3 py-2.5 text-sm text-ink;
+		min-width: 0;
+	}
+	textarea.field-input {
+		resize: vertical;
+		min-height: 5.5rem;
+	}
+	.field-help {
+		@apply mt-1 block text-xs leading-relaxed text-muted;
+	}
+	.message-error,
+	.error-box {
+		@apply rounded-xl border p-3.5 text-sm;
+		border-color: color-mix(in srgb, var(--bad) 28%, transparent);
+		background: var(--bad-soft);
+		color: var(--bad);
+	}
+	.message-success,
+	.success-box {
+		@apply rounded-xl border p-3.5 text-sm;
+		border-color: color-mix(in srgb, var(--ok) 28%, transparent);
+		background: var(--ok-soft);
+		color: var(--ink);
+	}
+	.warning-box {
+		@apply rounded-xl border p-3.5 text-sm text-ink;
+		border-color: color-mix(in srgb, var(--warn) 30%, transparent);
+		background: var(--warn-soft);
+	}
+	.info-box {
+		@apply rounded-xl border border-line bg-soft p-3.5 text-sm text-ink;
+	}
+	.choice-card-active {
+		border-color: var(--navy-900) !important;
+		background: var(--accent-soft) !important;
+		box-shadow: 0 0 0 1px var(--navy-900);
+	}
+
+	/* Small helpers for new UI. */
+	.eyebrow {
+		@apply text-[11px] font-semibold uppercase text-muted;
+		letter-spacing: 0.09em;
+	}
+	.chip {
+		@apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold leading-none;
+	}
+	.skeleton {
+		position: relative;
+		overflow: hidden;
+		background: var(--soft);
+		border-radius: 8px;
+	}
+	.skeleton::after {
+		content: "";
+		position: absolute;
+		inset: 0;
+		transform: translateX(-100%);
+		background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.65), transparent);
+		animation: skeleton-sweep 1.3s ease-in-out infinite;
 	}
 }
 
-body {
-	font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-	background: var(--bg);
-	color: var(--ink);
+/* ── Motion ─────────────────────────────────────────────────────────────── */
+@keyframes skeleton-sweep {
+	to { transform: translateX(100%); }
+}
+/* Motion only, never opacity: content is fully readable even if the
+   animation is paused (background tabs) or skipped. */
+@keyframes page-in {
+	from { transform: translateY(6px); }
+	to { transform: none; }
+}
+@keyframes fade-in {
+	from { opacity: 0; }
+	to { opacity: 1; }
+}
+@keyframes dialog-in {
+	from { opacity: 0; transform: translateY(8px) scale(0.98); }
+	to { opacity: 1; transform: none; }
+}
+@keyframes drawer-in {
+	from { transform: translateX(-100%); }
+	to { transform: none; }
+}
+@keyframes reveal {
+	from { opacity: 0; transform: translateY(-4px); }
+	to { opacity: 1; transform: none; }
+}
+.page-enter {
+	animation: page-in 260ms var(--ease-out) both;
+}
+.anim-fade {
+	animation: fade-in var(--dur) ease both;
+}
+.anim-dialog {
+	animation: dialog-in 220ms var(--ease-out) both;
+}
+.anim-drawer {
+	animation: drawer-in 240ms var(--ease-out) both;
+}
+details[open] > :not(summary) {
+	animation: reveal 180ms var(--ease-out) both;
+}
+@media (prefers-reduced-motion: reduce) {
+	*,
+	::before,
+	::after {
+		animation-duration: 1ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 1ms !important;
+		scroll-behavior: auto !important;
+	}
 }
 
-html.dark body,
-html.dark .page-content-wrapper,
-html.dark main,
-html.dark .web-footer,
-html.dark .navbar {
-	background-color: var(--bg);
-	color: var(--ink);
-	border-color: var(--line);
-}
-
-html.dark input,
-html.dark select,
-html.dark textarea,
-html.dark .border,
-html.dark .border-line,
-html.dark [class*="border-line"] {
-	border-color: var(--line) !important;
-}
-
-html.dark input,
-html.dark select,
-html.dark textarea {
-	background-color: var(--surface);
-	color: var(--ink);
-	outline: none;
-	box-shadow: none;
-}
-
-html.dark input:focus,
-html.dark select:focus,
-html.dark textarea:focus {
-	outline: none;
-	box-shadow: 0 0 0 2px rgb(58 122 100 / 0.35);
-}
-
-html.dark a:focus,
-html.dark button:focus {
-	outline: none;
-}
-
-html.dark a:focus-visible,
-html.dark button:focus-visible {
-	outline: 2px solid rgb(58 122 100 / 0.5);
-	outline-offset: 2px;
-}
-
+/* ── App chrome ─────────────────────────────────────────────────────────── */
 .app-header {
 	width: 100%;
 	background: var(--header-bg);
-	backdrop-filter: blur(14px);
-	-webkit-backdrop-filter: blur(14px);
+	backdrop-filter: saturate(1.4) blur(16px);
+	-webkit-backdrop-filter: saturate(1.4) blur(16px);
 }
 
 /* Frappe's website CSS also defines `.hidden` with higher priority than the
@@ -167,17 +640,16 @@ html.dark button:focus-visible {
 }
 @media (min-width: 1024px) {
 	.portal-sidebar { display: flex !important; }
+	.portal-header-logout { display: inline-flex !important; }
+	.portal-mobile-brand { display: none !important; }
 }
 @media (min-width: 1280px) {
 	.portal-profile-details { display: block !important; }
 }
 
 .app-scrim {
-	background: rgb(28 25 20 / 0.28);
-}
-
-html.dark .app-scrim {
-	background: rgb(0 0 0 / 0.55);
+	background: rgb(14 27 46 / 0.32);
+	backdrop-filter: blur(2px);
 }
 
 /* Belt-and-suspenders: SPA owns chrome on /volunteering/* */
@@ -213,4 +685,157 @@ body[data-path^="volunteering"] .page_content {
 		min-height: 44px;
 		align-items: center;
 	}
+}
+
+@layer components {
+	/* ── Component kit: avatars ─────────────────────────────────────────── */
+	.kit-avatar {
+		display: inline-flex;
+		flex-shrink: 0;
+		align-items: center;
+		justify-content: center;
+		border-radius: 999px;
+		font-weight: 600;
+		letter-spacing: 0.02em;
+		line-height: 1;
+		user-select: none;
+	}
+	.kit-avatar--sm { width: 1.75rem; height: 1.75rem; font-size: 0.625rem; }
+	.kit-avatar--md { width: 2.25rem; height: 2.25rem; font-size: 0.75rem; }
+	.kit-avatar--lg { width: 3rem; height: 3rem; font-size: 0.9375rem; }
+	.kit-avatar--navy { background: var(--navy-100); color: var(--navy-900); }
+	.kit-avatar--teal { background: #dcf1ee; color: #0f5e57; }
+	.kit-avatar--plum { background: #eee6f6; color: #57317a; }
+	.kit-avatar--amber { background: var(--marigold-soft); color: #7a4a00; }
+	.kit-avatar--rose { background: #fbe7ea; color: #8f2337; }
+	.kit-avatar--slate { background: #e8ecf1; color: #374357; }
+
+	/* ── Component kit: stat tiles ──────────────────────────────────────── */
+	.stat-tile {
+		position: relative;
+		display: flex;
+		min-width: 0;
+		flex-direction: column;
+		gap: 0.25rem;
+		padding: 0.875rem 1rem 0.9375rem;
+		border: 1px solid var(--line);
+		border-radius: 14px;
+		background: var(--surface);
+		box-shadow: var(--shadow-soft);
+		transition: border-color var(--dur-fast) ease, box-shadow var(--dur) var(--ease-out), transform var(--dur) var(--ease-out);
+	}
+	a.stat-tile:hover {
+		border-color: var(--navy-200);
+		box-shadow: var(--shadow-lift);
+		transform: translateY(-1px);
+	}
+	.stat-tile__label {
+		font-size: 0.8125rem;
+		font-weight: 500;
+		color: var(--muted);
+	}
+	.stat-tile__icon {
+		display: inline-flex;
+		width: 1.75rem;
+		height: 1.75rem;
+		align-items: center;
+		justify-content: center;
+		border-radius: 8px;
+		background: var(--navy-50);
+		color: var(--navy-900);
+	}
+	.stat-tile__value {
+		font-family: theme("fontFamily.display");
+		font-size: 1.75rem;
+		font-weight: 600;
+		line-height: 1.1;
+		letter-spacing: -0.02em;
+		color: var(--ink);
+		font-variant-numeric: tabular-nums;
+	}
+	.stat-tile__hint {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: 0.75rem;
+		color: var(--muted);
+	}
+	.stat-tile--attention {
+		border-color: color-mix(in srgb, var(--marigold) 55%, var(--line));
+		background: linear-gradient(180deg, var(--marigold-soft), var(--surface) 70%);
+	}
+	.stat-tile--attention .stat-tile__icon {
+		background: var(--marigold);
+		color: var(--on-todo);
+	}
+
+	/* ── Component kit: panel & link-arrow ──────────────────────────────── */
+	.kit-panel {
+		border: 1px solid var(--line);
+		border-radius: var(--radius-card);
+		background: var(--surface);
+		box-shadow: var(--shadow-soft);
+	}
+	.link-arrow {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		border-radius: 8px;
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: var(--navy-600);
+		transition: color var(--dur-fast) ease, gap var(--dur-fast) ease;
+	}
+	.link-arrow:hover {
+		color: var(--navy-900);
+		gap: 0.375rem;
+	}
+	.kind-tag {
+		display: inline-flex;
+		flex-shrink: 0;
+		align-items: center;
+		border-radius: 6px;
+		background: var(--soft);
+		padding: 0.125rem 0.4rem;
+		font-size: 0.6875rem;
+		font-weight: 600;
+		color: var(--ink-2);
+		text-transform: capitalize;
+	}
+}
+
+/* Frappe's website stylesheet ships `.hidden { display: none !important }`, which
+   would defeat Tailwind's `hidden lg:block` pattern. Restore the responsive reveal
+   inside the portal app only. */
+@media (min-width: 640px) {
+	#app .hidden.sm\:block { display: block !important; }
+	#app .hidden.sm\:inline { display: inline !important; }
+	#app .hidden.sm\:inline-block { display: inline-block !important; }
+	#app .hidden.sm\:flex { display: flex !important; }
+	#app .hidden.sm\:inline-flex { display: inline-flex !important; }
+	#app .hidden.sm\:grid { display: grid !important; }
+}
+@media (min-width: 768px) {
+	#app .hidden.md\:block { display: block !important; }
+	#app .hidden.md\:inline { display: inline !important; }
+	#app .hidden.md\:inline-block { display: inline-block !important; }
+	#app .hidden.md\:flex { display: flex !important; }
+	#app .hidden.md\:inline-flex { display: inline-flex !important; }
+	#app .hidden.md\:grid { display: grid !important; }
+}
+@media (min-width: 1024px) {
+	#app .hidden.lg\:block { display: block !important; }
+	#app .hidden.lg\:inline { display: inline !important; }
+	#app .hidden.lg\:inline-block { display: inline-block !important; }
+	#app .hidden.lg\:flex { display: flex !important; }
+	#app .hidden.lg\:inline-flex { display: inline-flex !important; }
+	#app .hidden.lg\:grid { display: grid !important; }
+}
+@media (min-width: 1280px) {
+	#app .hidden.xl\:block { display: block !important; }
+	#app .hidden.xl\:inline { display: inline !important; }
+	#app .hidden.xl\:inline-block { display: inline-block !important; }
+	#app .hidden.xl\:flex { display: flex !important; }
+	#app .hidden.xl\:inline-flex { display: inline-flex !important; }
+	#app .hidden.xl\:grid { display: grid !important; }
 }

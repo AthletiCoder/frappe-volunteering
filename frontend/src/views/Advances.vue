@@ -554,24 +554,8 @@ onMounted(loadAll);
 </script>
 
 <style scoped>
-.form-card {
-	@apply rounded-2xl border border-line bg-surface p-4 sm:p-5 shadow-soft;
-}
-.form-title {
-	@apply text-lg font-semibold text-ink;
-}
-.field-label {
-	@apply block text-sm font-medium text-ink;
-}
-.field-input {
-	@apply mt-1 block w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-ink;
-}
 .field-hint {
 	@apply mt-1 block text-xs text-muted;
-}
-.field-input:focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: 2px;
 }
 .choice-card {
 	@apply flex cursor-pointer gap-3 rounded-xl border border-line bg-surface p-4;
@@ -596,8 +580,5 @@ onMounted(loadAll);
 }
 .message-error {
 	@apply bg-bad-soft text-bad mb-5;
-}
-.message-success {
-	@apply bg-ok-soft text-ok;
 }
 </style>

@@ -14,7 +14,7 @@
 				>
 					Add account
 				</button>
-				<RouterLink to="/home" class="btn-secondary">Back to Home</RouterLink>
+				<RouterLink to="/home" class="btn-back">Back to Home</RouterLink>
 			</template>
 		</PageHeader>
 
@@ -763,41 +763,11 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.form-card {
-	@apply rounded-2xl border border-line bg-surface p-4 sm:p-5 shadow-soft;
-}
-.form-title {
-	@apply text-lg font-semibold text-ink mb-3;
-}
-.form-hint {
-	@apply text-sm text-muted mb-4;
-}
 .form-grid {
 	@apply grid gap-3 sm:grid-cols-2;
 }
-.field-label {
-	@apply block text-sm font-medium text-ink;
-}
-.field-input {
-	@apply mt-1 w-full rounded-xl border border-line bg-bg px-3 py-2 text-ink font-normal;
-}
-.field-input:focus-visible {
-	@apply outline-none ring-2 ring-accent border-accent;
-}
-.field-help {
-	@apply block text-xs text-muted mt-1;
-}
-.message-error {
-	@apply rounded-xl border border-bad bg-bad-soft p-3 text-sm text-bad;
-}
-.message-success {
-	@apply rounded-xl border border-ok bg-ok-soft p-3 text-sm text-ink;
-}
 .choice-card {
 	@apply flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-bg p-3;
-}
-.choice-card-active {
-	@apply border-accent bg-accent-soft;
 }
 .choice-card span,
 .choice-card strong,

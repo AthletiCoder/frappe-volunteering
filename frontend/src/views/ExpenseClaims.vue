@@ -25,7 +25,7 @@
 					>Submit an expense</RouterLink
 				>
 				<RouterLink v-if="!selected" to="/expense-claim/multiple" class="btn-secondary">Submit multiple invoices</RouterLink>
-				<RouterLink to="/home" class="btn-secondary">Home</RouterLink>
+				<RouterLink to="/home" class="btn-back">Home</RouterLink>
 			</template>
 		</PageHeader>
 
@@ -400,18 +400,6 @@ onMounted(load);
 </script>
 
 <style scoped>
-.form-card {
-	@apply rounded-2xl border border-line bg-surface p-4 sm:p-5 shadow-soft;
-}
-.form-title {
-	@apply text-lg font-semibold text-ink mb-3;
-}
-.field-label {
-	@apply block text-sm font-medium text-ink;
-}
-.field-input {
-	@apply mt-1 block w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-ink;
-}
 .claim-card {
 	@apply rounded-2xl border border-line bg-surface p-4 shadow-soft transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lift;
 }
@@ -439,11 +427,5 @@ onMounted(load);
 }
 .timeline-dot {
 	@apply relative z-10 mt-1 h-2.5 w-2.5 rounded-full bg-accent;
-}
-.message-error {
-	@apply rounded-xl border border-bad bg-bad-soft p-4 text-sm text-bad;
-}
-.warning-box {
-	@apply rounded-xl border border-warn bg-warn-soft p-3 text-sm text-ink;
 }
 </style>

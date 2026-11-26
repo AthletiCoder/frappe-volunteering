@@ -20,7 +20,7 @@
 			<template #actions>
 				<RouterLink v-if="!isCorrection" :to="{ path: '/expense-claim/multiple', query: { project: form.project || route.query.project } }" class="btn-secondary">Submit multiple invoices</RouterLink>
 				<RouterLink to="/expense-claims" class="btn-secondary">My claims</RouterLink>
-				<RouterLink to="/home" class="btn-secondary">Back to Home</RouterLink>
+				<RouterLink to="/home" class="btn-back">Back to Home</RouterLink>
 			</template>
 		</PageHeader>
 
@@ -810,42 +810,14 @@ function plainText(value) {
 </script>
 
 <style scoped>
-.form-card {
-	@apply rounded-2xl border border-line bg-surface p-4 sm:p-5 shadow-soft;
-}
-.form-title {
-	@apply text-lg font-semibold text-ink mb-3;
-}
-.form-hint {
-	@apply text-sm text-muted mb-3;
-}
 .expense-portal-grid {
 	@apply grid sm:grid-cols-2 gap-4;
-}
-.field-label {
-	@apply block text-sm font-medium text-ink;
-}
-.field-input {
-	@apply mt-1 block w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-ink;
-}
-.field-input:focus {
-	outline: 2px solid var(--accent);
-	outline-offset: 2px;
 }
 .choice-card {
 	@apply flex min-h-24 flex-col items-start gap-1 rounded-xl border border-line bg-bg p-4 text-left text-ink transition-colors;
 }
-.choice-card-active {
-	@apply border-accent bg-accent-soft;
-}
 .choice-card:disabled {
 	@apply cursor-not-allowed opacity-50;
-}
-.error-box {
-	@apply rounded-xl border border-bad bg-bad-soft p-4 text-sm text-bad;
-}
-.warning-box {
-	@apply rounded-xl border border-warn bg-warn-soft p-3 text-sm text-ink;
 }
 .success-mark {
 	@apply mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-ok-soft text-2xl font-bold text-ok;

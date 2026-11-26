@@ -242,12 +242,6 @@ async function submit() {
 </script>
 
 <style scoped>
-.form-card { @apply rounded-2xl border border-line bg-surface p-4 shadow-soft sm:p-5; }
-.field-label { @apply block text-sm font-medium text-ink; }
-.field-input { @apply mt-1 block w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-ink; }
-.field-input:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 .choice-card { @apply flex min-h-24 flex-col items-start gap-1 rounded-xl border border-line bg-bg p-4 text-left text-ink transition-colors; }
-.choice-card-active { @apply border-accent bg-accent-soft; }
 .choice-card:disabled { @apply cursor-not-allowed opacity-50; }
-.message-error { @apply rounded-xl border border-bad bg-bad-soft p-4 text-sm text-bad; }
 </style>

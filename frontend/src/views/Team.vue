@@ -271,11 +271,4 @@ onMounted(load);
 .mini-stat span {
 	@apply mt-0.5 text-[11px] text-muted;
 }
-.field-input {
-	@apply block w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-ink;
-}
-.field-input:focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: 2px;
-}
 </style>

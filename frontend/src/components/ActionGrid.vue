@@ -1,39 +1,39 @@
 <template>
-	<section v-if="actions.length" :class="variant === 'dashboard' ? 'rounded-2xl border border-line bg-surface p-4 shadow-soft sm:p-5' : ''">
-		<h2 class="text-sm font-semibold text-ink mb-2 flex items-center gap-2">
-			<Icon :name="icon" size="sm" class="text-accent" />
+	<section v-if="actions.length" :class="variant === 'dashboard' ? 'action-panel' : ''">
+		<h2 :class="variant === 'dashboard' ? 'flex items-center gap-2 px-4 pb-1 pt-4 text-[13px] font-semibold text-ink-2 sm:px-5' : 'mb-2 flex items-center gap-2 text-sm font-semibold text-ink'">
+			<Icon :name="icon" size="sm" class="text-muted" />
 			{{ title }}
 		</h2>
-		<div :class="variant === 'dashboard' ? 'divide-y divide-line' : 'grid grid-cols-1 sm:grid-cols-2 gap-3'">
+		<div :class="variant === 'dashboard' ? 'p-1.5 pt-0.5 sm:p-2 sm:pt-1' : 'grid grid-cols-1 gap-3 sm:grid-cols-2'">
 			<article
 				v-for="action in actions"
 				:key="action.id"
 				:data-action-id="action.id"
-				:class="variant === 'dashboard' ? 'py-2.5 first:pt-1 last:pb-0' : 'rounded-2xl border border-line bg-surface p-3 shadow-soft hover:shadow-lift hover:-translate-y-0.5 transition-all duration-200'"
+				:class="variant === 'dashboard' ? 'action-row' : 'rounded-2xl border border-line bg-surface p-3 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lift'"
 			>
-				<a :href="action.route" class="group flex items-start gap-3 rounded-lg p-1 hover:bg-bg">
+				<a :href="action.route" class="group flex items-start gap-3 rounded-xl p-2.5 transition-colors duration-150 hover:bg-soft">
 					<span
 						:data-icon-name="visualFor(action.id).icon"
 						:data-icon-tone="visualFor(action.id).tone"
 						:class="[
-							variant === 'dashboard' ? 'w-9 h-9 rounded-lg flex items-center justify-center shrink-0' : 'w-10 h-10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-200',
+							'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-transform duration-200 ease-out group-hover:scale-105',
 							`action-icon--${visualFor(action.id).tone}`,
 						]"
 					>
 						<Icon :name="visualFor(action.id).icon" />
 					</span>
-					<div class="min-w-0">
-						<div class="font-semibold text-ink" :class="variant === 'dashboard' ? 'text-sm' : ''">{{ action.label }}</div>
-						<div class="text-sm text-muted mt-0.5" :class="variant === 'dashboard' ? 'line-clamp-2' : ''">{{ action.hint }}</div>
+					<div class="min-w-0 flex-1 pt-0.5">
+						<div class="flex items-center gap-1 text-sm font-semibold text-ink">{{ action.label }}<Icon name="arrow-right" size="sm" class="ml-auto shrink-0 -translate-x-1 text-navy-600 opacity-0 transition-all duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100" /></div>
+						<div class="mt-0.5 text-[13px] leading-snug text-muted" :class="variant === 'dashboard' ? 'line-clamp-2' : ''">{{ action.hint }}</div>
 					</div>
 				</a>
 				<a
 					v-if="action.list_route"
 					:href="action.list_route"
-					:class="variant === 'dashboard' ? 'ml-12 mt-1 inline-flex items-center gap-2 rounded-full bg-soft px-2 py-0.5 text-xs text-muted hover:text-accent' : 'mt-2 self-start inline-flex items-center gap-2 rounded-full bg-soft px-2.5 py-1 text-xs text-muted hover:shadow-soft hover:-translate-y-px transition-all duration-150'"
+					class="mb-1.5 ml-[3.875rem] inline-flex items-center gap-2 rounded-full border border-line bg-surface px-2.5 py-0.5 text-xs text-muted transition-colors duration-150 hover:border-navy-200 hover:text-navy-900"
 				>
 					<span>{{ action.list_label }}</span>
-					<span class="tabular-nums font-semibold text-ink">{{
+					<span class="font-semibold tabular-nums text-ink">{{
 						action.pending || 0
 					}}</span>
 				</a>
@@ -87,63 +87,18 @@ function visualFor(id) {
 </script>
 
 <style scoped>
-.action-icon--blue {
-	background: #e7f0ff;
-	color: #2b63ad;
+.action-panel {
+	border: 1px solid var(--line);
+	border-radius: var(--radius-card);
+	background: var(--surface);
+	box-shadow: var(--shadow-soft);
 }
-
-.action-icon--green {
-	background: #e1f3e8;
-	color: #237653;
-}
-
-.action-icon--amber {
-	background: #fff0d3;
-	color: #956000;
-}
-
-.action-icon--violet {
-	background: #efe8ff;
-	color: #6b4ca5;
-}
-
-.action-icon--cyan {
-	background: #dff3f2;
-	color: #176f73;
-}
-
-.action-icon--slate {
-	background: #e9eef1;
-	color: #4d626e;
-}
-
-:global(html.dark) .action-icon--blue {
-	background: rgb(96 165 250 / 0.16);
-	color: #93c5fd;
-}
-
-:global(html.dark) .action-icon--green {
-	background: rgb(74 222 128 / 0.14);
-	color: #86d9a3;
-}
-
-:global(html.dark) .action-icon--amber {
-	background: rgb(245 158 11 / 0.15);
-	color: #e8ba69;
-}
-
-:global(html.dark) .action-icon--violet {
-	background: rgb(167 139 250 / 0.15);
-	color: #c4aff7;
-}
-
-:global(html.dark) .action-icon--cyan {
-	background: rgb(34 211 238 / 0.13);
-	color: #7ccbd0;
-}
-
-:global(html.dark) .action-icon--slate {
-	background: rgb(148 163 184 / 0.14);
-	color: #aab7c2;
-}
+.text-ink-2 { color: var(--ink-2); }
+/* Tones stay as names (tests and data use them) but share one quiet, navy-friendly palette. */
+.action-icon--blue { background: var(--navy-50); color: var(--navy-900); }
+.action-icon--green { background: #e8f3ee; color: #1e6b47; }
+.action-icon--amber { background: var(--marigold-soft); color: #8a5300; }
+.action-icon--violet { background: #f0edf7; color: #574585; }
+.action-icon--cyan { background: #e7f1f5; color: #1d5a72; }
+.action-icon--slate { background: var(--soft); color: #46546a; }
 </style>

@@ -1,13 +1,13 @@
 <template>
 	<div class="donations-page mx-auto max-w-5xl space-y-6 pb-10">
 		<PageHeader title="Donations" eyebrow="Accounts" subtitle="Record donations and issue signed receipts when ready.">
-			<template #actions><RouterLink to="/home" class="btn-secondary">Back to Home</RouterLink></template>
+			<template #actions><RouterLink to="/home" class="btn-back">Back to Home</RouterLink></template>
 		</PageHeader>
 		<p v-if="error" class="message-error" role="alert">{{ error }}</p>
 		<p v-if="message" class="message-success" role="status">{{ message }} <a v-if="issuedPdf" :href="issuedPdf" target="_blank" rel="noopener" class="text-accent underline">Open private PDF</a></p>
 		<p v-if="loading" class="text-muted">Loading donation workspace…</p>
 		<template v-else-if="workspace">
-			<div class="flex flex-wrap gap-2" role="group" aria-label="Donations views">
+			<div class="segmented" role="group" aria-label="Donations views">
 				<button v-for="[id, label] in views" :key="id" type="button" :class="view === id ? 'btn-primary' : 'btn-secondary'" :aria-pressed="view === id" :disabled="busy || listLoading" @click="openView(id)">{{ label }}</button>
 			</div>
 			<div v-if="view === 'record'" class="intro-note">
@@ -108,6 +108,7 @@
 </template>
 
 <script setup>
+import { uid } from "../lib/uid";
 import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import PageHeader from "../components/PageHeader.vue";
@@ -127,7 +128,7 @@ const newSignatory = reactive({ name: "", designation: "", signature: "" });
 const form = reactive({ donor: "", donor_name: "", donor_type: "Individual", address: "", pan: "", mobile_number: "", email: "", amount: "", received_on: "", payment_method: "Online", payment_reference: "", received_into_account: "", donation_account: "", donor_signature_data: "", donor_signature_proof: "", cheque_cleared: false });
 const donorChoice = ref("");
 const signatureOpen = ref(false), signatureTarget = ref(""), signatureError = ref(""), canvas = ref(null);
-let drawing = false, hasInk = false, requestKey = crypto.randomUUID();
+let drawing = false, hasInk = false, requestKey = uid();
 const receivedOptions = computed(() => workspace.value?.accounts?.received_into || []);
 const creditLedger = computed(() => workspace.value?.accounts?.donation_credit_by_type?.General || null);
 const availableDonors = computed(() => workspace.value?.donors || []);
@@ -191,7 +192,7 @@ async function register() {
 	try {
 		const recorded = await call(`${api}.register_donation`, { details: { ...form, request_key: requestKey } });
 		message.value = `Donation recorded · Journal Entry ${recorded.journal_entry}. Receipt pending.`;
-		requestKey = crypto.randomUUID();
+		requestKey = uid();
 		Object.assign(form, { donor: "", donor_name: "", donor_type: "Individual", address: "", pan: "", mobile_number: "", email: "", amount: "", received_on: workspace.value.today, payment_method: "Online", payment_reference: "", received_into_account: "", donor_signature_data: "", donor_signature_proof: "", cheque_cleared: false });
 		donorChoice.value = "";
 		filter.value = "pending";
@@ -225,9 +226,6 @@ onMounted(load);
 </script>
 
 <style scoped>
-.form-card {
-	@apply rounded-2xl border border-line bg-surface p-5 shadow-soft sm:p-7;
-}
 .form-title {
 	@apply m-0 text-xl font-semibold leading-tight text-ink;
 }
@@ -253,9 +251,6 @@ onMounted(load);
 textarea.field-input {
 	min-height: 6rem;
 	resize: vertical;
-}
-.field-input:focus {
-	@apply border-accent outline-none ring-2 ring-accent;
 }
 .field-help {
 	@apply block text-xs leading-relaxed text-muted;
@@ -331,12 +326,6 @@ textarea.field-input {
 }
 .setup-card[open] summary {
 	@apply border-b border-line pb-4;
-}
-.message-error {
-	@apply rounded-xl border border-bad bg-bad-soft p-4 text-sm text-bad;
-}
-.message-success {
-	@apply rounded-xl border border-ok bg-ok-soft p-4 text-sm text-ink;
 }
 @media (max-width: 640px) {
 	.form-grid {

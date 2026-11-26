@@ -14,7 +14,7 @@
 				>
 					Add office address
 				</button>
-				<RouterLink to="/home" class="btn-secondary">Back to Home</RouterLink>
+				<RouterLink to="/home" class="btn-back">Back to Home</RouterLink>
 			</template>
 		</PageHeader>
 
@@ -308,23 +308,8 @@ onMounted(load);
 </script>
 
 <style scoped>
-.form-card {
-	@apply rounded-2xl border border-line bg-surface p-4 sm:p-5 shadow-soft;
-}
-.form-title {
-	@apply text-lg font-semibold text-ink mb-3;
-}
 .form-grid {
 	@apply grid sm:grid-cols-2 gap-3;
-}
-.field-label {
-	@apply block text-sm font-medium text-ink;
-}
-.field-input {
-	@apply mt-1 w-full rounded-xl border border-line bg-bg px-3 py-2 text-ink font-normal;
-}
-.field-input:focus {
-	@apply outline-none ring-2 ring-accent border-accent;
 }
 .badge {
 	@apply inline-flex rounded-full bg-soft px-2.5 py-1 text-xs text-muted;

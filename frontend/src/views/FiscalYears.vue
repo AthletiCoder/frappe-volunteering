@@ -5,7 +5,7 @@
 			eyebrow="System management"
 			subtitle="Keep the accounting years Sevamrita still needs available for correctly dated entries."
 		>
-			<template #actions><RouterLink to="/home" class="btn-secondary">Back to Home</RouterLink></template>
+			<template #actions><RouterLink to="/home" class="btn-back">Back to Home</RouterLink></template>
 		</PageHeader>
 
 		<p v-if="error" class="message-error" role="alert">{{ error }}</p>
@@ -148,13 +148,8 @@ onMounted(load);
 </script>
 
 <style scoped>
-.form-card { @apply rounded-2xl border border-line bg-surface p-4 shadow-soft sm:p-6; }
 .year-row { @apply flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-bg p-4; }
 .status-pill { @apply rounded-full px-2.5 py-1 text-xs font-semibold; }
 .status-active { @apply bg-ok-soft text-ok; }
 .status-disabled { @apply bg-soft text-muted; }
-.field-label { @apply block text-sm font-medium text-ink; }
-.field-input { @apply mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-ink; }
-.message-error { @apply rounded-xl border border-bad bg-bad-soft p-4 text-sm text-bad; }
-.message-success { @apply rounded-xl border border-ok bg-ok-soft p-4 text-sm text-ink; }
 </style>

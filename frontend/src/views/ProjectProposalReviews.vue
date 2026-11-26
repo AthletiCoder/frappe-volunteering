@@ -9,7 +9,7 @@
 				<RouterLink to="/projects?view=approved" class="btn-secondary"
 					>Approved projects</RouterLink
 				>
-				<RouterLink to="/home" class="btn-secondary">Home</RouterLink>
+				<RouterLink to="/home" class="btn-back">Home</RouterLink>
 			</template>
 		</PageHeader>
 
@@ -99,22 +99,10 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.form-card {
-	@apply rounded-2xl border border-line bg-surface p-5 md:p-6 shadow-soft;
-}
-.form-title {
-	@apply text-lg font-semibold text-ink mb-3;
-}
-.form-hint {
-	@apply text-sm text-muted mb-4 leading-relaxed;
-}
 .project-tile {
 	@apply rounded-2xl border border-line bg-surface p-5 shadow-soft transition-all hover:shadow-lift hover:border-accent break-words;
 }
 .project-badge {
 	@apply text-xs px-2.5 py-1 rounded-full bg-accent-soft text-accent font-medium shrink-0;
-}
-.message-error {
-	@apply rounded-xl border border-bad bg-bad-soft p-4 text-sm text-bad;
 }
 </style>

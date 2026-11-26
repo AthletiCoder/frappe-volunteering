@@ -2,7 +2,7 @@
 	<div class="space-y-6 project-workspace">
 		<PageHeader :title="pageTitle" :subtitle="pageSubtitle" :eyebrow="pageEyebrow">
 			<template #actions>
-				<RouterLink to="/home" class="btn-secondary">Home</RouterLink>
+				<RouterLink to="/home" class="btn-back">Home</RouterLink>
 				<button v-if="caps.can_create && !editing" class="btn-primary" @click="create">
 					Propose a project
 				</button>
@@ -44,7 +44,7 @@
 		</div>
 
 		<template v-if="!loading && !editing">
-			<nav class="flex flex-wrap gap-2" aria-label="Project workspace views">
+			<nav class="segmented" aria-label="Project workspace views">
 				<RouterLink
 					:to="{ path: '/projects', query: { view: 'approved' } }"
 					:class="listView === 'approved' ? 'btn-primary' : 'btn-secondary'"
@@ -125,37 +125,27 @@
 			</section>
 
 			<template v-else>
-				<div class="flex flex-wrap items-end gap-3">
-					<label class="grow field-label"
-						>Find a project<input
-							v-model="search"
-							class="field-input"
-							placeholder="Search by name, project ID or status"
-					/></label>
-					<label class="field-label min-w-48"
-						>Project status<select v-model="projectStatusFilter" class="field-input">
-							<option value="">All statuses</option>
-							<option value="Active">Running</option>
-							<option value="Planned">Planned</option>
-							<option value="On Hold">On hold</option>
-							<option value="Completed">Completed</option>
-							<option value="Cancelled">Cancelled</option>
-						</select></label
-					>
-					<div class="text-sm text-muted pb-2">
-						{{ filteredProjects.length }} projects
+				<div class="proj-toolbar">
+					<label class="field-label min-w-0 flex-1">Find a project<span class="relative mt-1.5 block"><Icon name="search" size="sm" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" /><input v-model="search" class="field-input !mt-0 pl-9" placeholder="Search by name, project ID or status" /></span></label>
+					<label class="field-label w-full sm:w-56">Project status<select v-model="projectStatusFilter" class="field-input">
+							<option value="">All statuses ({{ projects.length }})</option>
+							<option v-for="option in statusOptions" :key="option.value" :value="option.value">{{ option.label }} ({{ option.count }})</option>
+						</select></label>
+					<div class="hidden items-center gap-3 sm:flex sm:pb-0.5">
+						<div class="view-toggle" role="group" aria-label="Layout">
+							<button type="button" :aria-pressed="projectLayout === 'cards'" title="Cards" @click="setLayout('cards')"><Icon name="grid" size="sm" /><span class="sr-only">Cards</span></button>
+							<button type="button" :aria-pressed="projectLayout === 'list'" title="List" @click="setLayout('list')"><Icon name="menu" size="sm" /><span class="sr-only">List</span></button>
+						</div>
 					</div>
 				</div>
-				<p class="text-sm text-muted">
-					These are approved projects. Open a card to view the effective details.
-				</p>
-				<label v-if="caps.can_manage" class="text-sm"
-					><input v-model="includeRemoved" type="checkbox" @change="load" /> Include
-					removed projects</label
-				>
-				<div v-if="!filteredProjects.length" class="form-card text-center py-10">
-					<h2 class="form-title">No projects here yet</h2>
-					<p class="text-sm text-muted">
+				<div class="flex flex-wrap items-center justify-between gap-2">
+					<p class="text-sm text-muted"><span class="font-semibold text-ink">{{ filteredProjects.length }} projects</span> · These are approved projects. Open a card to view the effective details.</p>
+					<label v-if="caps.can_manage" class="inline-flex items-center gap-2 text-sm"><input v-model="includeRemoved" type="checkbox" @change="load" /> Include removed projects</label>
+				</div>
+				<div v-if="!filteredProjects.length" class="kit-panel flex flex-col items-center px-6 py-12 text-center">
+					<span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-navy-50 text-navy-900"><Icon name="folder" /></span>
+					<h2 class="mt-3 text-base font-semibold text-ink">No projects here yet</h2>
+					<p class="mt-1 max-w-md text-sm text-muted">
 						{{
 							caps.can_create
 								? "Create a project to define its purpose, people, expense labels and budgets."
@@ -163,30 +153,39 @@
 						}}
 					</p>
 				</div>
-				<div class="grid sm:grid-cols-2 gap-4">
+				<div v-else :class="projectLayout === 'list' ? 'kit-panel divide-y divide-line overflow-hidden' : 'grid gap-4 sm:grid-cols-2 xl:grid-cols-3'">
 					<button
 						v-for="project in filteredProjects"
 						:key="project.name"
-						class="project-tile text-left"
+						type="button"
+						:class="projectLayout === 'list' ? 'proj-row group' : 'proj-card group'"
+						:style="{ '--tone': statusTone(project).color }"
 						@click="open(project.name)"
 					>
-						<div class="flex justify-between gap-3 items-start">
-							<span class="text-xs font-medium text-muted">{{ project.name }}</span>
-							<span class="project-badge">{{
-								project.operational_status || project.status
-							}}</span>
-						</div>
-						<h2 class="text-lg font-semibold mt-4 text-ink">
-							{{ project.project_name }}
-						</h2>
-						<p class="text-sm text-accent mt-2">Open project →</p>
-						<div
-							class="mt-5 pt-3 border-t border-line text-xs text-muted flex flex-wrap gap-2 justify-between"
-						>
-							<span>{{
-								project.project_owner || "Legacy setup · owner not assigned"
-							}}</span>
-						</div>
+						<template v-if="projectLayout === 'list'">
+							<span class="proj-row__icon"><Icon name="folder" size="sm" /></span>
+							<span class="min-w-0 flex-1">
+								<span class="block truncate text-sm font-semibold text-ink">{{ project.project_name }}</span>
+								<span class="block truncate text-xs text-muted">{{ project.name }} · {{ project.project_owner || "Legacy setup · owner not assigned" }}</span>
+							</span>
+							<span class="proj-status hidden sm:inline-flex"><span class="proj-status__dot"></span>{{ statusTone(project).label }}</span>
+							<span class="hidden w-24 text-right text-xs text-muted md:block">{{ updatedLabel(project.modified) }}</span>
+							<span class="text-sm font-semibold text-navy-600">Open project →</span>
+						</template>
+						<template v-else>
+							<span class="flex items-start justify-between gap-3">
+								<span class="proj-card__icon"><Icon name="folder" /></span>
+								<span class="proj-status"><span class="proj-status__dot"></span>{{ statusTone(project).label }}</span>
+							</span>
+							<span class="mt-4 block text-xs font-medium tabular-nums text-muted">{{ project.name }}</span>
+							<h2 class="mt-1 text-[1.0625rem] font-semibold leading-snug text-ink">{{ project.project_name }}</h2>
+							<span class="mt-auto flex items-center gap-2.5 border-t border-line pt-3.5 text-xs text-muted">
+								<Avatar :name="project.project_owner || '?'" size="sm" />
+								<span class="min-w-0 flex-1 truncate">{{ project.project_owner || "Legacy setup · owner not assigned" }}</span>
+								<span v-if="project.modified" class="shrink-0">{{ updatedLabel(project.modified) }}</span>
+							</span>
+							<span class="proj-card__open">Open project →</span>
+						</template>
 					</button>
 				</div>
 			</template>
@@ -971,6 +970,8 @@ Requested patch: {{ JSON.stringify(request.data, null, 2) }}</pre>
 import { computed, defineComponent, h, onMounted, reactive, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import PageHeader from "../components/PageHeader.vue";
+import Avatar from "../components/Avatar.vue";
+import Icon from "../components/Icon.vue";
 import { call } from "../lib/frappe";
 import { loadHomePayload } from "../lib/home";
 
@@ -982,6 +983,34 @@ const request = ref(null),
 	requestMode = ref(false),
 	includeRemoved = ref(false);
 const projectStatusFilter = ref("");
+const STATUS_TONES = {
+	Active: { label: "Running", color: "var(--ok)" },
+	Planned: { label: "Planned", color: "var(--navy-600)" },
+	"On Hold": { label: "On hold", color: "var(--warn)" },
+	Completed: { label: "Completed", color: "#5b6779" },
+	Cancelled: { label: "Cancelled", color: "var(--bad)" },
+};
+function statusTone(project) {
+	const status = project.operational_status || project.status;
+	return STATUS_TONES[status] || { label: status || "Unknown", color: "var(--muted)" };
+}
+function updatedLabel(value) {
+	if (!value) return "";
+	const time = new Date(String(value).replace(" ", "T")).getTime();
+	if (Number.isNaN(time)) return "";
+	const days = Math.floor((Date.now() - time) / 86400000);
+	if (days <= 0) return "Updated today";
+	if (days === 1) return "Updated yesterday";
+	if (days < 30) return `Updated ${days} days ago`;
+	const months = Math.round(days / 30);
+	return months < 12 ? `Updated ${months} mo ago` : `Updated ${Math.round(months / 12)} yr ago`;
+}
+const LAYOUT_KEY = "volunteering.projects.layout";
+const projectLayout = ref((() => { try { return localStorage.getItem(LAYOUT_KEY) === "list" ? "list" : "cards"; } catch { return "cards"; } })());
+function setLayout(value) {
+	projectLayout.value = value;
+	try { localStorage.setItem(LAYOUT_KEY, value); } catch { /* storage unavailable */ }
+}
 const reason = ref(""),
 	comments = ref(""),
 	documentVisibility = ref("Basic");
@@ -1139,6 +1168,13 @@ const changed = computed(
 		request.value &&
 		JSON.stringify(stableValue(patchData())) !==
 			JSON.stringify(stableValue(request.value.data)),
+);
+const statusOptions = computed(() =>
+	Object.entries(STATUS_TONES).map(([value, tone]) => ({
+		value,
+		label: tone.label,
+		count: projects.value.filter((project) => (project.operational_status || project.status) === value).length,
+	})),
 );
 const filteredProjects = computed(() =>
 	projects.value.filter((project) => {
@@ -1626,15 +1662,6 @@ onMounted(handleRoute);
 </script>
 
 <style scoped>
-.form-card {
-	@apply rounded-2xl border border-line bg-surface p-5 md:p-6 shadow-soft;
-}
-.form-title {
-	@apply text-lg font-semibold text-ink mb-3;
-}
-.form-hint {
-	@apply text-sm text-muted mb-4 leading-relaxed;
-}
 .form-grid {
 	@apply grid sm:grid-cols-2 gap-4;
 	min-width: 0;
@@ -1647,19 +1674,30 @@ onMounted(handleRoute);
 	@apply block text-sm font-medium text-ink;
 	min-width: 0;
 }
-.field-input {
-	@apply block w-full rounded-xl border border-line bg-surface px-3 py-2.5 mt-1 text-sm text-ink;
-}
-.field-input:focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: 2px;
-}
 .field-help {
 	@apply block text-xs font-normal text-muted mt-1 leading-relaxed;
 }
 .section-eyebrow {
 	@apply text-xs uppercase tracking-wider text-accent font-semibold mb-2;
 }
+.proj-toolbar { @apply flex flex-col gap-3 rounded-2xl border border-line bg-surface p-4 sm:flex-row sm:items-end; box-shadow: var(--shadow-soft); }
+.view-toggle { @apply inline-flex rounded-xl border border-line-strong bg-surface p-0.5; }
+.view-toggle button { @apply inline-flex h-[2.4375rem] w-10 items-center justify-center rounded-lg text-muted transition-colors; }
+.view-toggle button:hover { @apply text-ink; }
+.view-toggle button[aria-pressed="true"] { @apply bg-navy-900 text-white; }
+.proj-card { position: relative; display: flex; min-height: 12.5rem; flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); padding: 1.125rem 1.25rem 1.25rem; text-align: left; box-shadow: var(--shadow-soft); transition: border-color var(--dur) ease, box-shadow var(--dur) var(--ease-out), transform var(--dur) var(--ease-out); }
+.proj-card::before { content: ""; position: absolute; inset: 0 0 auto; height: 3px; background: var(--tone); opacity: 0.85; }
+.proj-card:hover { border-color: var(--navy-200); box-shadow: var(--shadow-lift); transform: translateY(-2px); }
+.proj-card h2 { margin-bottom: 1rem; overflow-wrap: anywhere; }
+.proj-card__icon { display: inline-flex; width: 2.5rem; height: 2.5rem; align-items: center; justify-content: center; border-radius: 12px; background: var(--navy-50); color: var(--navy-900); }
+.proj-card__open { margin-top: 0.875rem; font-size: 0.8125rem; font-weight: 600; color: var(--navy-600); transition: color var(--dur-fast) ease; }
+.proj-card:hover .proj-card__open { color: var(--navy-900); }
+.proj-status { display: inline-flex; flex-shrink: 0; align-items: center; gap: 0.375rem; border-radius: 999px; padding: 0.1875rem 0.625rem; background: color-mix(in srgb, var(--tone) 12%, transparent); color: var(--tone); font-size: 0.75rem; font-weight: 600; }
+.proj-status__dot { width: 0.375rem; height: 0.375rem; border-radius: 999px; background: currentColor; }
+.proj-row { display: flex; width: 100%; align-items: center; gap: 0.875rem; padding: 0.75rem 1rem; text-align: left; transition: background-color var(--dur-fast) ease; }
+@media (min-width: 640px) { .proj-row { padding: 0.75rem 1.25rem; } }
+.proj-row:hover { background: color-mix(in srgb, var(--navy-50) 70%, transparent); }
+.proj-row__icon { display: inline-flex; width: 2.25rem; height: 2.25rem; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 10px; background: color-mix(in srgb, var(--tone) 12%, transparent); color: var(--tone); }
 .project-tile {
 	@apply rounded-2xl border border-line bg-surface p-5 shadow-soft transition-all hover:shadow-lift hover:border-accent break-words;
 }

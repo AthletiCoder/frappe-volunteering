@@ -20,3 +20,4 @@ volunteering.patches.backfill_expense_claim_approval_limits
 volunteering.patches.seed_sevamrita_office_addresses
 volunteering.patches.reorganize_sevamrita_production_chart
 volunteering.patches.keep_sevamrita_fiscal_years_from_2024_active
+volunteering.patches.set_sevamrita_brand_assets

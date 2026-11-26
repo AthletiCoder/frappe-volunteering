@@ -199,6 +199,32 @@ class IntegrationTestProjectExpenseAccounts(IntegrationTestCase):
 				ensure_project_account=False,
 			)
 
+	def test_patch_seeds_empty_project_without_approval_workflow(self):
+		project = frappe.get_doc("Project", self.project)
+		project.account_budgets = []
+		save_test_project(project)
+		expense_type = "Legacy seed " + frappe.generate_hash(length=6)
+		frappe.get_doc(
+			{
+				"doctype": "Expense Claim Type",
+				"expense_type": expense_type,
+				"accounts": [{"company": self.company, "default_account": self.allowed_account}],
+			}
+		).insert(ignore_permissions=True)
+
+		backfill_project_expense_accounts(seed_empty_projects=True)
+
+		rows = frappe.get_all(
+			"Project Account Budget",
+			filters={"parent": self.project, "parenttype": "Project", "parentfield": "account_budgets"},
+			fields=["expense_account", "employee_label", "budget_key", "is_active"],
+		)
+		self.assertIn(self.allowed_account, [row.expense_account for row in rows])
+		for row in rows:
+			self.assertTrue(row.employee_label)
+			self.assertTrue(row.budget_key)
+			self.assertEqual(row.is_active, 1)
+
 	def test_normal_migrate_does_not_repopulate_intentionally_empty_project(self):
 		project = frappe.get_doc("Project", self.project)
 		project.account_budgets = []

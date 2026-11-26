@@ -13,7 +13,7 @@
 				<button v-if="selected" type="button" class="btn-secondary" @click="closeDetail">
 					Back to queue
 				</button>
-				<RouterLink to="/home" class="btn-secondary">Home</RouterLink>
+				<RouterLink to="/home" class="btn-back">Home</RouterLink>
 			</template>
 		</PageHeader>
 
@@ -666,21 +666,6 @@ onMounted(load);
 </script>
 
 <style scoped>
-.form-card {
-	@apply rounded-2xl border border-line bg-surface p-4 sm:p-5 shadow-soft;
-}
-.form-title {
-	@apply text-lg font-semibold text-ink mb-2;
-}
-.form-hint {
-	@apply text-sm text-muted mb-4;
-}
-.field-label {
-	@apply block text-sm font-medium text-ink;
-}
-.field-input {
-	@apply mt-1 block w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-ink;
-}
 .queue-tab {
 	@apply rounded-full border border-line bg-surface px-3 py-2 text-sm font-medium text-muted;
 }
@@ -698,18 +683,6 @@ onMounted(load);
 }
 .sanction-row small {
 	@apply block text-xs text-muted mt-1;
-}
-.error-box {
-	@apply rounded-xl border border-bad bg-bad-soft p-4 text-sm text-bad;
-}
-.success-box {
-	@apply rounded-xl border border-ok bg-ok-soft p-4 text-sm text-ok;
-}
-.warning-box {
-	@apply rounded-xl border border-warn bg-warn-soft p-3 text-sm text-ink;
-}
-.info-box {
-	@apply rounded-xl border border-line bg-soft p-3 text-sm text-ink;
 }
 .btn-danger {
 	@apply rounded-xl bg-bad px-4 py-2 text-sm font-semibold text-white disabled:opacity-50;
