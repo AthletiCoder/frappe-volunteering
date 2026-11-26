@@ -1,15 +1,15 @@
 <template>
-	<section v-if="actions.length" :class="variant === 'dashboard' ? 'action-panel' : ''">
-		<h2 :class="variant === 'dashboard' ? 'flex items-center gap-2 px-4 pb-1 pt-4 text-[13px] font-semibold text-ink-2 sm:px-5' : 'mb-2 flex items-center gap-2 text-sm font-semibold text-ink'">
+	<section v-if="actions.length" :class="panel ? 'action-panel' : ''">
+		<h2 :class="panel ? 'flex items-center gap-2 px-4 pb-1 pt-4 text-[13px] font-semibold text-ink-2 sm:px-5' : 'mb-2 flex items-center gap-2 text-sm font-semibold text-ink'">
 			<Icon :name="icon" size="sm" class="text-muted" />
 			{{ title }}
 		</h2>
-		<div :class="variant === 'dashboard' ? 'p-1.5 pt-0.5 sm:p-2 sm:pt-1' : 'grid grid-cols-1 gap-3 sm:grid-cols-2'">
+		<div :class="variant === 'tiles' ? 'grid gap-0.5 p-1.5 pt-0.5 sm:grid-cols-2 sm:p-2 sm:pt-1 xl:grid-cols-3' : variant === 'dashboard' ? 'p-1.5 pt-0.5 sm:p-2 sm:pt-1' : 'grid grid-cols-1 gap-3 sm:grid-cols-2'">
 			<article
 				v-for="action in actions"
 				:key="action.id"
 				:data-action-id="action.id"
-				:class="variant === 'dashboard' ? 'action-row' : 'rounded-2xl border border-line bg-surface p-3 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lift'"
+				:class="panel ? 'action-row min-w-0' : 'rounded-2xl border border-line bg-surface p-3 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lift'"
 			>
 				<a :href="action.route" class="group flex items-start gap-3 rounded-xl p-2.5 transition-colors duration-150 hover:bg-soft">
 					<span
@@ -24,7 +24,7 @@
 					</span>
 					<div class="min-w-0 flex-1 pt-0.5">
 						<div class="flex items-center gap-1 text-sm font-semibold text-ink">{{ action.label }}<Icon name="arrow-right" size="sm" class="ml-auto shrink-0 -translate-x-1 text-navy-600 opacity-0 transition-all duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100" /></div>
-						<div class="mt-0.5 text-[13px] leading-snug text-muted" :class="variant === 'dashboard' ? 'line-clamp-2' : ''">{{ action.hint }}</div>
+						<div class="mt-0.5 text-[13px] leading-snug text-muted" :class="variant === 'tiles' ? 'line-clamp-1' : variant === 'dashboard' ? 'line-clamp-2' : ''">{{ action.hint }}</div>
 					</div>
 				</a>
 				<a
@@ -43,9 +43,10 @@
 </template>
 
 <script setup>
+import { computed } from "vue";
 import Icon from "./Icon.vue";
 
-defineProps({
+const props = defineProps({
 	title: { type: String, required: true },
 	icon: { type: String, default: "spark" },
 	actions: { type: Array, default: () => [] },
@@ -80,6 +81,9 @@ const actionVisuals = {
 	chart_of_accounts: { icon: "chart", tone: "blue" },
 	project_account_mapping: { icon: "link", tone: "violet" },
 };
+
+// "dashboard" stacks rows in a panel; "tiles" lays the same rows out in a grid.
+const panel = computed(() => props.variant === "dashboard" || props.variant === "tiles");
 
 function visualFor(id) {
 	return actionVisuals[id] || { icon: "spark", tone: "slate" };

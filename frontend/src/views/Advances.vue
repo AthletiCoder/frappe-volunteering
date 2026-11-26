@@ -27,7 +27,7 @@
 			</p>
 		</section>
 
-		<section v-if="showForm" class="space-y-5 mb-8">
+		<section v-if="showForm" class="mx-auto mb-8 max-w-6xl space-y-5">
 			<div class="form-card">
 				<div class="flex flex-wrap items-start justify-between gap-3">
 					<div>
@@ -64,9 +64,10 @@
 				</p>
 			</div>
 
-			<form class="space-y-5" @submit.prevent="save(true)">
+			<form class="form-layout" @submit.prevent="save(true)">
+				<div class="min-w-0 space-y-5">
 				<section class="form-card">
-					<h3 class="form-title">Request details</h3>
+					<h3 class="step-title"><span class="step-num" :class="{ 'step-num--done': form.intended_project && form.amount > 0 && form.purpose }" aria-hidden="true">1</span>Request details</h3>
 					<div class="grid gap-4 sm:grid-cols-2 mt-4">
 						<SearchSelect
 							v-model="form.intended_project"
@@ -127,7 +128,7 @@
 				</section>
 
 				<section class="form-card">
-					<h3 class="form-title">Who will use the advance?</h3>
+					<h3 class="step-title"><span class="step-num step-num--done" aria-hidden="true">2</span>Who will use the advance?</h3>
 					<div class="grid gap-3 sm:grid-cols-2 mt-4">
 						<label
 							class="choice-card"
@@ -166,7 +167,7 @@
 				</section>
 
 				<section class="form-card">
-					<h3 class="form-title">Payment and support</h3>
+					<h3 class="step-title"><span class="step-num" :class="{ 'step-num--done': defaults.approved_bank }" aria-hidden="true">3</span>Payment and support</h3>
 					<div
 						v-if="defaults.approved_bank"
 						class="rounded-xl border border-line bg-soft p-3 text-sm mt-4"
@@ -200,38 +201,26 @@
 							></textarea>
 						</label>
 					</div>
-					<p v-if="form.support_filename" class="text-xs text-muted mt-2">
-						Ready to upload privately: {{ form.support_filename }}
+					<p v-if="form.support_filename" class="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-ok">
+						<Icon name="check" size="sm" />Ready to upload privately: {{ form.support_filename }}
 					</p>
 				</section>
 
-				<section class="form-card flex flex-wrap justify-between gap-3 items-center">
-					<div class="text-sm text-muted">
-						<p>
-							Reporting manager:
-							{{
-								defaults.approver?.name ||
-								defaults.approver?.user ||
-								"Not configured"
-							}}
-						</p>
-						<p>
-							Every request starts with your reporting manager. Each reviewer
-							escalates to the next person when the live total of this request and
-							your other outstanding advances exceeds their approval authority; no
-							linked approver is skipped.
-						</p>
-						<p v-if="defaults.open_advances.length">
-							You have
-							{{ defaults.open_advances.length }} advance(s) with an open balance.
-							You can submit another request; each balance remains tracked until
-							settled.
-						</p>
-					</div>
-					<div class="flex flex-wrap gap-2">
+				</div>
+				<aside class="form-rail space-y-4">
+					<section class="summary-card" aria-label="Advance summary">
+						<p class="eyebrow">Amount requested</p>
+						<p class="summary-total">{{ formatMoney(form.amount || 0) }}</p>
+						<dl class="summary-list">
+							<div><dt>Project</dt><dd>{{ selectedProjectLabel || "Not chosen" }}</dd></div>
+							<div><dt>Needed by</dt><dd>{{ shortDate(form.required_by_date) || "—" }}</dd></div>
+							<div><dt>Settle by</dt><dd>{{ shortDate(form.expected_settlement_date) || "—" }}</dd></div>
+							<div><dt>For</dt><dd>{{ form.advance_use }}</dd></div>
+						</dl>
+						<div class="mt-4 flex flex-col-reverse gap-2">
 						<button
 							type="button"
-							class="btn-secondary"
+							class="btn-secondary min-h-11 w-full"
 							:disabled="!canSave || saving || readingFile"
 							@click="save(false)"
 						>
@@ -239,13 +228,37 @@
 						</button>
 						<button
 							type="submit"
-							class="btn-primary"
+							class="btn-primary min-h-11 w-full"
 							:disabled="!canSave || saving || readingFile"
 						>
 							{{ saving ? "Saving…" : "Submit for approval" }}
 						</button>
 					</div>
-				</section>
+					</section>
+					<section class="summary-card text-sm text-muted">
+						<p class="font-semibold text-ink">Who approves</p>
+						<p class="mt-2">
+							Reporting manager:
+							{{
+								defaults.approver?.name ||
+								defaults.approver?.user ||
+								"Not configured"
+							}}
+						</p>
+						<p class="mt-2 text-xs leading-relaxed">
+							Every request starts with your reporting manager. Each reviewer
+							escalates to the next person when the live total of this request and
+							your other outstanding advances exceeds their approval authority; no
+							linked approver is skipped.
+						</p>
+						<p v-if="defaults.open_advances.length" class="mt-2 text-xs leading-relaxed">
+							You have
+							{{ defaults.open_advances.length }} advance(s) with an open balance.
+							You can submit another request; each balance remains tracked until
+							settled.
+						</p>
+					</section>
+				</aside>
 			</form>
 		</section>
 
@@ -363,6 +376,7 @@ import { RouterLink, useRoute, useRouter } from "vue-router";
 import { call } from "../lib/frappe";
 import { formatMoney } from "../lib/money";
 import PageHeader from "../components/PageHeader.vue";
+import Icon from "../components/Icon.vue";
 import SearchSelect from "../components/SearchSelect.vue";
 import ManagerFloatPanel from "../components/ManagerFloatPanel.vue";
 import TeamFloatRequests from "../components/TeamFloatRequests.vue";
@@ -400,6 +414,12 @@ const blankForm = () => ({
 	support_content: "",
 });
 const form = reactive(blankForm());
+const selectedProjectLabel = computed(() => (defaults.value?.projects || []).find((project) => project.value === form.intended_project)?.label || "");
+function shortDate(value) {
+	if (!value) return "";
+	const date = new Date(`${String(value).slice(0, 10)}T12:00:00`);
+	return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(date);
+}
 const canSave = computed(
 	() =>
 		!defaults.value.freeze?.frozen &&
@@ -560,9 +580,12 @@ onMounted(loadAll);
 .choice-card {
 	@apply flex cursor-pointer gap-3 rounded-xl border border-line bg-surface p-4;
 }
-.choice-card.selected {
+.choice-card { transition: border-color var(--dur-fast) ease, background-color var(--dur-fast) ease, box-shadow var(--dur-fast) ease; }
+.choice-card:hover:not(.disabled) { border-color: var(--navy-200); background: var(--navy-50); }
+.choice-card.selected, .choice-card.selected:hover {
 	background: var(--accent-soft);
-	border-color: var(--accent);
+	border-color: var(--navy-900);
+	box-shadow: inset 0 0 0 1px var(--navy-900);
 }
 .choice-card.disabled {
 	@apply cursor-not-allowed opacity-50;

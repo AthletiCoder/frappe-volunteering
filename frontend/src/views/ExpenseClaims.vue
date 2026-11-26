@@ -33,75 +33,43 @@
 		<p v-if="loading" class="text-muted" role="status">Loading your claims…</p>
 
 		<template v-if="!loading && !selected">
-			<section class="form-card mb-5">
-				<div class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,0.35fr)]">
-					<label class="field-label"
-						>Find a claim<input
-							v-model.trim="search"
-							class="field-input"
-							placeholder="Search by claim number, project or purpose"
-					/></label>
-					<label class="field-label"
-						>Status<select v-model="stage" class="field-input">
-							<option v-for="option in stages" :key="option" :value="option">
-								{{ option }} ({{ counts[option] || 0 }})
-							</option>
-						</select></label
-					>
-				</div>
-			</section>
-
-			<div v-if="!filtered.length" class="form-card text-center py-10">
-				<h2 class="text-lg font-semibold text-ink">No matching claims</h2>
-				<p class="text-sm text-muted mt-2">
-					{{
-						claims.length
-							? "Try another status or search."
-							: "You have not raised an expense claim yet."
-					}}
-				</p>
-				<RouterLink to="/expense-claim" class="btn-primary mt-4 inline-flex"
-					>Submit an expense</RouterLink
-				>
-			</div>
-
-			<div class="space-y-3">
-				<button
-					v-for="claim in filtered"
-					:key="claim.name"
-					type="button"
-					class="claim-card w-full text-left"
-					@click="openDetail(claim.name)"
-				>
-					<div class="flex flex-wrap items-start justify-between gap-3">
-						<div class="min-w-0">
-							<div class="flex flex-wrap items-center gap-2">
-								<strong class="text-ink">{{ claim.name }}</strong>
-								<span :class="['status-pill', statusClass(claim.stage)]">{{
-									claim.stage
-								}}</span>
-							</div>
-							<p class="text-sm text-muted mt-1 truncate">
-								{{ claim.project_name || claim.project || "No project" }}
-							</p>
-							<p class="text-sm text-ink mt-2">
-								{{ claim.purpose || "No purpose recorded" }}
-							</p>
-						</div>
-						<div class="sm:text-right shrink-0">
-							<p class="font-semibold text-ink">
-								{{ money(claim.claimed_amount, claim.currency) }}
-							</p>
-							<p class="text-xs text-muted mt-1">Invoice date: {{ date(claim.posting_date) }}</p>
-						</div>
+			<div class="list-board">
+				<aside class="min-w-0 space-y-4">
+					<div class="filter-rail kit-panel" role="group" aria-label="Filter claims by status">
+						<button v-for="option in stages" :key="option" type="button" class="filter-btn" :class="{ 'filter-btn--active': stage === option }" :aria-pressed="stage === option" @click="stage = option">
+							<span class="filter-btn__dot" :class="statusClass(option)"></span>
+							<span class="min-w-0 flex-1 truncate text-left">{{ option }}</span>
+							<span class="filter-btn__count">{{ counts[option] || 0 }}</span>
+						</button>
 					</div>
-					<div
-						class="mt-3 border-t border-line pt-3 flex flex-wrap justify-between gap-2 text-xs"
-					>
-						<span class="text-muted">{{ claim.next_action }}</span>
-						<span class="font-medium text-accent">View status and history →</span>
+					<div v-if="claims.length" class="kit-panel hidden p-4 lg:block">
+						<p class="eyebrow">Claimed in this view</p>
+						<p class="mt-1 font-display text-2xl font-semibold tabular-nums text-ink">{{ money(filteredTotal, claims[0]?.currency) }}</p>
+						<p class="mt-1 text-xs text-muted">{{ filtered.length }} {{ filtered.length === 1 ? "claim" : "claims" }}</p>
 					</div>
-				</button>
+				</aside>
+				<section class="min-w-0 space-y-3" aria-label="Claims">
+					<label class="field-label relative block"><span class="sr-only">Find a claim</span><Icon name="search" size="sm" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" /><input v-model.trim="search" class="field-input !mt-0 pl-9" aria-label="Find a claim" placeholder="Search by claim number, project or purpose" /></label>
+					<div v-if="!filtered.length" class="kit-panel flex flex-col items-center px-6 py-12 text-center">
+						<span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-navy-50 text-navy-900"><Icon name="receipt" /></span>
+						<h2 class="mt-3 text-base font-semibold text-ink">No matching claims</h2>
+						<p class="mt-1 text-sm text-muted">{{ claims.length ? "Try another status or search." : "You have not raised an expense claim yet." }}</p>
+						<RouterLink to="/expense-claim" class="btn-primary mt-4 inline-flex">Submit an expense</RouterLink>
+					</div>
+					<div v-else class="kit-panel overflow-hidden">
+						<div class="list-head" aria-hidden="true"><span>Claim</span><span>Status</span><span class="text-right">Amount</span><span></span></div>
+						<button v-for="claim in filtered" :key="claim.name" type="button" class="list-row group" @click="openDetail(claim.name)">
+							<span class="min-w-0">
+								<span class="flex flex-wrap items-center gap-x-2"><strong class="text-sm text-ink">{{ claim.name }}</strong><span class="text-xs text-muted">{{ date(claim.posting_date) }}</span></span>
+								<span class="mt-0.5 block truncate text-[13px] text-ink-2">{{ claim.purpose || "No purpose recorded" }}</span>
+								<span class="block truncate text-xs text-muted">{{ claim.project_name || claim.project || "No project" }}</span>
+							</span>
+							<span class="list-row__status"><span :class="['status-pill', statusClass(claim.stage)]">{{ claim.stage }}</span><span class="mt-1 block text-xs text-muted">{{ claim.next_action }}</span></span>
+							<span class="list-row__amount">{{ money(claim.claimed_amount, claim.currency) }}</span>
+							<Icon name="arrow-right" size="sm" class="list-row__arrow" />
+						</button>
+					</div>
+				</section>
 			</div>
 		</template>
 
@@ -256,6 +224,7 @@
 import { computed, defineComponent, h, onMounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import PageHeader from "../components/PageHeader.vue";
+import Icon from "../components/Icon.vue";
 import { call } from "../lib/frappe";
 
 const API = "volunteering.volunteering.expense_claim_portal.";
@@ -283,6 +252,7 @@ const stages = [
 	"Accounts classification",
 ];
 
+const filteredTotal = computed(() => filtered.value.reduce((sum, claim) => sum + Number(claim.claimed_amount || 0), 0));
 const filtered = computed(() => {
 	const needle = search.value.toLowerCase();
 	return claims.value.filter(
@@ -400,9 +370,7 @@ onMounted(load);
 </script>
 
 <style scoped>
-.claim-card {
-	@apply rounded-2xl border border-line bg-surface p-4 shadow-soft transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lift;
-}
+.text-ink-2 { color: var(--ink-2); }
 .status-pill {
 	@apply inline-flex rounded-full px-2.5 py-1 text-xs font-semibold;
 }

@@ -1,5 +1,5 @@
 <template>
-	<div :class="embedded ? '' : 'max-w-5xl mx-auto'">
+	<div :class="embedded ? '' : 'max-w-6xl mx-auto'">
 		<PageHeader
 			v-if="!embedded"
 			title="Prepare an invoice"
@@ -15,20 +15,19 @@
 		<component
 			:is="embedded ? 'div' : 'form'"
 			v-else
-			class="space-y-5"
+			:class="embedded ? '' : 'form-layout'"
 			@submit.prevent="generate"
 		>
+			<div class="min-w-0 space-y-5">
 			<section class="form-card">
-				<h2 class="form-title">Invoice type</h2>
+				<h2 class="step-title"><span class="step-num" aria-hidden="true">1</span>Invoice type</h2>
 				<div class="grid sm:grid-cols-2 gap-3">
 					<button
 						v-for="option in invoiceTypes"
 						:key="option.value"
 						type="button"
-						:class="[
-							'choice-card',
-							form.invoice_type === option.value ? 'choice-card-active' : '',
-						]"
+						:class="['option-card', form.invoice_type === option.value ? 'option-card--on' : '']"
+						:aria-pressed="form.invoice_type === option.value"
 						@click="form.invoice_type = option.value"
 					>
 						<span class="font-semibold">{{ option.label }}</span>
@@ -38,7 +37,7 @@
 			</section>
 
 			<section class="form-card">
-				<h2 class="form-title">Invoice details</h2>
+				<h2 class="step-title"><span class="step-num" aria-hidden="true">2</span>Invoice details</h2>
 				<div class="form-grid">
 					<label class="field-label"
 						>Invoice number<input
@@ -107,7 +106,7 @@
 			</details>
 
 			<section class="form-card">
-				<h2 class="form-title">Supplier</h2>
+				<h2 class="step-title"><span class="step-num" aria-hidden="true">3</span>Supplier</h2>
 				<p class="form-hint">
 					Enter the supplier’s legal details, not the employee’s details.
 				</p>
@@ -182,7 +181,7 @@
 			</section>
 
 			<section class="form-card">
-				<h2 class="form-title">Supplier bank details (optional)</h2>
+				<h2 class="step-title"><span class="step-num" aria-hidden="true">4</span>Supplier bank details (optional)</h2>
 				<p class="form-hint">
 					Use the supplier’s account—not the employee reimbursement account. Leave all
 					fields blank when remittance details are not needed; the invoice will omit this
@@ -236,7 +235,7 @@
 			</section>
 
 			<section class="form-card">
-				<h2 class="form-title">Sevamrita office</h2>
+				<h2 class="step-title"><span class="step-num" aria-hidden="true">5</span>Sevamrita office</h2>
 				<div v-if="officeAddresses.length" class="space-y-3">
 					<label class="field-label"
 						>Office address *<select
@@ -270,8 +269,8 @@
 			<section class="form-card">
 				<div class="flex items-center justify-between gap-3 mb-3">
 					<div>
-						<h2 class="form-title mb-0">Items</h2>
-						<p class="form-hint">Enter HSN/SAC if available.</p>
+						<h2 class="step-title !mb-0"><span class="step-num" aria-hidden="true">6</span>Items</h2>
+						<p class="mt-1 text-sm text-muted">Enter HSN/SAC if available.</p>
 					</div>
 					<button
 						type="button"
@@ -340,7 +339,7 @@
 			</section>
 
 			<section class="form-card">
-				<h2 class="form-title">Charges and tax</h2>
+				<h2 class="step-title"><span class="step-num" aria-hidden="true">7</span>Charges and tax</h2>
 				<div class="form-grid">
 					<label class="field-label"
 						>Transportation charges<input
@@ -384,7 +383,7 @@
 			</section>
 
 			<section class="form-card">
-				<h2 class="form-title">Volunteer declaration and signature</h2>
+				<h2 class="step-title"><span class="step-num" aria-hidden="true">8</span>Volunteer declaration and signature</h2>
 				<p v-if="signatureNotice" class="rounded-xl border border-warn bg-warn-soft p-3 text-sm text-ink mb-4" role="alert">
 					{{ signatureNotice }}
 				</p>
@@ -486,7 +485,37 @@
 			>
 				{{ error }}
 			</div>
-			<div v-if="result && !embedded" class="rounded-2xl border border-ok bg-ok-soft p-4">
+			</div>
+			<aside v-if="!embedded" class="form-rail space-y-4">
+				<section class="summary-card" aria-label="Invoice summary">
+					<p class="eyebrow">Grand total</p>
+					<p class="summary-total">{{ money(grandTotal) }}</p>
+					<dl class="summary-list">
+						<div><dt>Type</dt><dd>{{ invoiceTypes.find((option) => option.value === form.invoice_type)?.label || "—" }}</dd></div>
+						<div v-if="form.invoice_number"><dt>Number</dt><dd>{{ form.invoice_number }}</dd></div>
+						<div v-if="form.items?.length"><dt>Items</dt><dd>{{ form.items.length }}</dd></div>
+					</dl>
+			<div class="mt-4 flex flex-col gap-2">
+				<button
+					type="submit"
+					name="output_format"
+					value="pdf"
+					class="btn-primary min-h-11 w-full"
+					:disabled="generating || !officeAddresses.length"
+				>
+					{{ generating === "pdf" ? "Generating PDF…" : "Generate PDF" }}
+				</button>
+				<button
+					type="submit"
+					name="output_format"
+					value="docx"
+					class="btn-secondary min-h-11 w-full"
+					:disabled="generating || !officeAddresses.length"
+				>
+					{{ generating === "docx" ? "Generating Word…" : "Generate Word" }}
+				</button>
+			</div>
+			<div v-if="result" class="mt-4 rounded-2xl border border-ok bg-ok-soft p-4">
 				<p class="font-semibold text-ink">Document files are ready</p>
 				<p class="text-sm text-ink mt-1">
 					Invoice number: <strong>{{ result.invoice_number }}</strong>
@@ -512,26 +541,8 @@
 				</div>
 			</div>
 
-			<div v-if="!embedded" class="flex flex-wrap gap-3 justify-end pb-4">
-				<button
-					type="submit"
-					name="output_format"
-					value="pdf"
-					class="btn-primary px-5 py-2.5"
-					:disabled="generating || !officeAddresses.length"
-				>
-					{{ generating === "pdf" ? "Generating PDF…" : "Generate PDF" }}
-				</button>
-				<button
-					type="submit"
-					name="output_format"
-					value="docx"
-					class="btn-secondary px-5 py-2.5"
-					:disabled="generating || !officeAddresses.length"
-				>
-					{{ generating === "docx" ? "Generating Word…" : "Generate Word" }}
-				</button>
-			</div>
+				</section>
+			</aside>
 		</component>
 		<div
 			v-if="signatureOpen"

@@ -23,7 +23,7 @@
 			<div class="waiting-board">
 				<!-- Filters: a vertical rail on wide screens, a wrapping row on phones. -->
 				<aside class="min-w-0 space-y-4">
-					<div class="kit-panel p-1.5" role="group" aria-label="Filter waiting items">
+					<div class="filter-rail kit-panel" role="group" aria-label="Filter waiting items">
 						<button
 							v-for="chip in chips"
 							:key="chip.id"
@@ -215,62 +215,7 @@ onMounted(async () => {
 	}
 }
 
-/* Filters */
-[role="group"] {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 0.25rem;
-}
-@media (min-width: 1024px) {
-	[role="group"] { flex-direction: column; flex-wrap: nowrap; }
-}
-.filter-btn {
-	display: flex;
-	min-height: 2.5rem;
-	flex: 1 1 8rem;
-	align-items: center;
-	gap: 0.625rem;
-	padding: 0.375rem 0.625rem 0.375rem 0.375rem;
-	border-radius: 10px;
-	font-size: 0.875rem;
-	font-weight: 600;
-	color: var(--ink-2);
-	transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
-}
-@media (min-width: 1024px) {
-	.filter-btn { flex: none; width: 100%; }
-}
-.filter-btn:hover { background: var(--soft); color: var(--ink); }
-.filter-btn--active,
-.filter-btn--active:hover {
-	background: var(--navy-50);
-	color: var(--navy-900);
-	box-shadow: inset 0 0 0 1px var(--navy-100);
-}
-.filter-btn__icon {
-	display: inline-flex;
-	width: 1.75rem;
-	height: 1.75rem;
-	flex-shrink: 0;
-	align-items: center;
-	justify-content: center;
-	border-radius: 8px;
-}
-.filter-btn__count {
-	min-width: 1.5rem;
-	border-radius: 999px;
-	padding: 0.0625rem 0.4375rem;
-	background: var(--soft);
-	text-align: center;
-	font-size: 0.75rem;
-	font-variant-numeric: tabular-nums;
-	color: var(--muted);
-}
-.filter-btn--active .filter-btn__count {
-	background: var(--navy-900);
-	color: #fff;
-}
-
+/* Filter buttons use the shared .filter-rail / .filter-btn kit. */
 /* Queue: a table on wide screens, stacked rows on phones. */
 .waiting-head {
 	display: none;

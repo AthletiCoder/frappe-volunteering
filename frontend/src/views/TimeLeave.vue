@@ -61,8 +61,32 @@
             <div class="flex flex-wrap gap-3 justify-end"><button v-if="selected.can_cancel" class="btn-secondary" :disabled="busy || decision.reason.length < 10" @click="decide('cancel')">Cancel request</button><button v-if="selected.can_reverse" class="btn-secondary" :disabled="busy || decision.reason.length < 10" @click="decide('reverse')">Reverse approval</button><button v-if="selected.can_decide" class="btn-secondary" :disabled="busy || decision.reason.length < 10" @click="decide('reject')">Reject</button><button v-if="selected.can_decide" class="btn-primary" :disabled="busy" @click="decide('approve')">Approve</button></div>
           </template>
         </section>
-        <div class="flex flex-wrap gap-3"><label class="field-label min-w-40">Status<select v-model="status" class="field-input"><option value="">All requests</option><option>Open</option><option>Approved</option><option>Rejected</option><option>Cancelled</option></select></label><label v-if="tab === 'team'" class="field-label flex-1">Employee<select v-model="employeeFilter" class="field-input" @change="load"><option value="">All team members</option><option v-for="person in workspace.people" :key="person.name" :value="person.name">{{ person.employee_name }}</option></select></label></div>
-        <div class="space-y-3"><button v-for="request in filteredRequests" :key="request.doctype + request.name" type="button" class="form-card w-full text-left hover:border-accent transition-colors" @click="openRequest(request)"><div class="flex justify-between gap-3"><div><h3 class="font-semibold text-ink">{{ request.type }}</h3><p class="text-sm text-muted mt-1">{{ tab === 'team' ? request.employee_name + ' · ' : '' }}{{ requestDates(request) }}</p></div><span class="text-sm font-medium" :class="request.status === 'Open' ? 'text-amber-700' : 'text-accent'">{{ request.status }}</span></div><p class="text-sm mt-3 line-clamp-2">{{ request.reason }}</p><p v-if="request.requires_hr && request.status === 'Open'" class="text-xs text-amber-700 mt-2">HR decision required</p></button><p v-if="!filteredRequests.length" class="form-card text-muted text-center">No requests match this view.</p></div>
+        <div class="list-board">
+          <aside class="min-w-0 space-y-3">
+            <div class="filter-rail kit-panel" role="group" aria-label="Filter requests by status">
+              <button v-for="option in statusOptions" :key="option.value" type="button" class="filter-btn" :class="{ 'filter-btn--active': status === option.value }" :aria-pressed="status === option.value" @click="status = option.value">
+                <span class="filter-btn__dot" :class="option.tone"></span><span class="min-w-0 flex-1 truncate text-left">{{ option.label }}</span><span class="filter-btn__count">{{ option.count }}</span>
+              </button>
+            </div>
+            <label v-if="tab === 'team'" class="field-label kit-panel block p-3">Employee<select v-model="employeeFilter" class="field-input" @change="load"><option value="">All team members</option><option v-for="person in workspace.people" :key="person.name" :value="person.name">{{ person.employee_name }}</option></select></label>
+          </aside>
+          <section class="min-w-0" aria-label="Requests">
+            <div v-if="filteredRequests.length" class="kit-panel overflow-hidden">
+              <button v-for="request in filteredRequests" :key="request.doctype + request.name" type="button" class="leave-row group" :class="{ 'leave-row--open': request.status === 'Open' }" @click="openRequest(request)">
+                <Avatar v-if="tab === 'team'" :name="request.employee_name" />
+                <span v-else class="leave-row__icon"><Icon :name="requestIcon(request)" size="sm" /></span>
+                <span class="min-w-0 flex-1">
+                  <span class="flex flex-wrap items-center gap-x-2 gap-y-0.5"><span class="text-sm font-semibold text-ink">{{ tab === 'team' ? request.employee_name : request.type }}</span><span v-if="tab === 'team'" class="kind-tag">{{ request.type }}</span><span class="text-xs text-muted">{{ requestDates(request) }}</span></span>
+                  <span class="mt-0.5 block truncate text-[13px] text-ink-2">{{ request.reason }}</span>
+                  <span v-if="request.requires_hr && request.status === 'Open'" class="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-warn"><Icon name="user-shield" size="sm" />HR decision required</span>
+                </span>
+                <span class="leave-status" :class="statusTone(request.status)"><span class="h-1.5 w-1.5 rounded-full bg-current"></span>{{ request.status }}</span>
+                <Icon name="arrow-right" size="sm" class="hidden shrink-0 text-muted transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-navy-900 sm:block" />
+              </button>
+            </div>
+            <div v-else class="kit-panel flex flex-col items-center px-6 py-12 text-center"><span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-ok-soft text-ok"><Icon name="check" /></span><p class="mt-3 text-sm text-muted">No requests match this view.</p></div>
+          </section>
+        </div>
         <section v-if="tab === 'mine' && workspace.credits?.length" class="form-card"><h2 class="form-title">Compensatory credits</h2><div v-for="credit in workspace.credits" :key="credit.name" class="py-3 border-t border-line flex flex-wrap justify-between gap-2 text-sm"><span>Worked {{ date(credit.from_date) }} · {{ number(credit.credit_days) }} day(s)</span><span>{{ number(credit.available) }} available · valid through {{ date(credit.valid_until) }}</span></div></section>
       </template>
       <template v-else>
@@ -89,6 +113,8 @@ import { useRoute } from 'vue-router';
 import PeopleCentre from './PeopleCentre.vue';
 import {timeLeaveHasCategory, timeLeaveCategory} from "../lib/timeLeaveForm.js";
 import PageHeader from '../components/PageHeader.vue';
+import Avatar from '../components/Avatar.vue';
+import Icon from '../components/Icon.vue';
 import { call } from '../lib/frappe';
 const API = 'volunteering.volunteering.time_leave_portal.', POLICY = 'volunteering.volunteering.hr_policy.', BALANCE = 'volunteering.volunteering.hr_leave_balances.';
 const route = useRoute(), workspace = ref({}), policyWorkspace = ref({}), policyForm = reactive({}), tab = ref(route.query.view === 'team' ? 'team' : route.query.view === 'policy' ? 'policy' : 'mine');
@@ -112,6 +138,10 @@ const policyGroups = [
 const effectiveFrom = ref(''), policyReason = ref(''), balanceEmployee = ref(''), balancePreview = ref(null), balanceAdjustment = ref(0), openingBalance = ref(0), balanceReason = ref(''), confirmAdoption = ref(false);
 let balanceKey = newKey(), adoptionKey = newKey();
 const tabs = computed(() => [{id:'mine',label:'My requests'}, {id:'resources',label:'People centre'}, ...(workspace.value.can_review ? [{id:'team',label:'Team review'}] : []), ...(workspace.value.can_override ? [{id:'policy',label:'HR policy & balances'}] : [])]);
+const STATUS_TONES = { Open: 'text-warn', Approved: 'text-ok', Rejected: 'text-bad', Cancelled: 'text-muted' };
+const statusOptions = computed(() => { const rows = workspace.value.requests || []; return [{ value: '', label: 'All requests', tone: 'text-navy-600', count: rows.length }, ...['Open', 'Approved', 'Rejected', 'Cancelled'].map(value => ({ value, label: value, tone: STATUS_TONES[value], count: rows.filter(row => row.status === value).length }))]; });
+function statusTone(value) { return { Open: 'bg-warn-soft text-warn', Approved: 'bg-ok-soft text-ok', Rejected: 'bg-bad-soft text-bad' }[value] || 'bg-soft text-muted'; }
+function requestIcon(row) { const type = String(row.type || '').toLowerCase(); return type.includes('wfh') || type.includes('home') ? 'home' : type.includes('attendance') ? 'calendar-check' : type.includes('off') ? 'sun' : 'calendar-away'; }
 const filteredRequests = computed(() => (workspace.value.requests || []).filter(x => !status.value || x.status === status.value));
 const requestTypes = computed(()=>workspace.value.request_types || types);
 const isLeave = computed(() => ['Privilege Leave','Compensatory Leave','Leave Without Pay','Maternity Leave','Paternity Leave','Optional Holiday'].includes(form.type));
@@ -139,6 +169,15 @@ async function adoptYear(){await operation(async()=>{balancePreview.value=await 
 </script>
 
 <style scoped>
+.leave-row { display: flex; width: 100%; align-items: center; gap: 0.875rem; padding: 0.875rem 1rem; text-align: left; transition: background-color var(--dur-fast) ease; }
+@media (min-width: 640px) { .leave-row { padding: 0.875rem 1.25rem; } }
+.leave-row + .leave-row { border-top: 1px solid var(--line); }
+.leave-row:hover { background: color-mix(in srgb, var(--navy-50) 70%, transparent); }
+.leave-row--open { box-shadow: inset 3px 0 0 var(--marigold); }
+.leave-row__icon { display: inline-flex; width: 2.25rem; height: 2.25rem; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 10px; background: var(--navy-50); color: var(--navy-900); }
+.leave-status { display: inline-flex; flex-shrink: 0; align-items: center; gap: 0.375rem; border-radius: 999px; padding: 0.1875rem 0.625rem; font-size: 0.75rem; font-weight: 600; }
+.text-ink-2 { color: var(--ink-2); }
+
 .form-card { display: block; min-width: 0; padding: 1.5rem; border: 1px solid var(--line); border-radius: 1.15rem; background: var(--surface); box-shadow: var(--shadow-soft); }
 button.form-card { width: 100%; text-align: left; transition: border-color .15s, box-shadow .15s; }
 button.form-card:hover { border-color: var(--accent); box-shadow: 0 3px 14px rgb(0 0 0 / .05); }

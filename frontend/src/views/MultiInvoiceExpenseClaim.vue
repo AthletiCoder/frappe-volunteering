@@ -1,5 +1,5 @@
 <template>
-	<div class="max-w-5xl mx-auto">
+	<div class="mx-auto max-w-6xl">
 		<PageHeader
 			eyebrow="Expenses"
 			title="Submit multiple invoices"
@@ -28,12 +28,15 @@
 			</div>
 			<div class="flex gap-3"><button type="button" class="btn-primary" @click="startAnother">Submit another set of invoices</button><RouterLink to="/home" class="btn-secondary inline-flex">Return Home</RouterLink></div>
 		</section>
-		<form v-else class="space-y-5" @submit.prevent="submit">
+		<form v-else class="form-layout" @submit.prevent="submit">
+			<div class="min-w-0 space-y-5">
 			<section class="form-card">
-				<h2 class="text-lg font-semibold mb-4">Claim context</h2>
+				<h2 class="step-title"><span class="step-num" :class="{ 'step-num--done': form.project }" aria-hidden="true">1</span>Claim context</h2>
+				<div class="mb-4 flex flex-wrap gap-2">
+					<span class="person-chip"><Avatar :name="defaults.employee_name" size="sm" /><span class="min-w-0"><span class="block text-[11px] text-muted">Employee</span><span class="block truncate text-sm font-semibold text-ink">{{ defaults.employee_name || "—" }}</span></span></span>
+					<span class="person-chip"><Avatar :name="defaults.approver?.name || '?'" size="sm" tone="slate" /><span class="min-w-0"><span class="block text-[11px] text-muted">Reporting manager</span><span class="block truncate text-sm font-semibold text-ink">{{ defaults.approver?.name || "Not configured" }}</span></span></span>
+				</div>
 				<div class="grid gap-4 sm:grid-cols-2">
-					<label class="field-label">Employee<input :value="defaults.employee_name" readonly class="field-input" /></label>
-					<label class="field-label">Reporting manager<input :value="defaults.approver?.name || 'Not configured'" readonly class="field-input" /></label>
 					<label class="field-label sm:col-span-2">Project *
 						<select v-model="form.project" required class="field-input" @change="projectChanged">
 							<option value="" disabled>Select a project you belong to</option>
@@ -45,11 +48,11 @@
 			</section>
 
 			<section class="form-card">
-				<h2 class="text-lg font-semibold mb-3">How were these paid?</h2>
+				<h2 class="step-title !mb-2"><span class="step-num step-num--done" aria-hidden="true">2</span>How were these paid?</h2>
 				<p class="text-sm text-muted mb-4">All invoices in this submission must use the same payment source and project.</p>
 				<div class="grid gap-3 sm:grid-cols-3">
 					<button v-for="source in sources" :key="source.value" type="button" :disabled="source.disabled"
-						:class="['choice-card', form.reimbursement_source === source.value ? 'choice-card-active' : '']"
+						:class="['option-card', form.reimbursement_source === source.value ? 'option-card--on' : '']" :aria-pressed="form.reimbursement_source === source.value"
 						@click="form.reimbursement_source = source.value; form.employee_advance = ''">
 						<strong>{{ source.label }}</strong><span class="text-sm text-muted">{{ source.hint }}</span>
 					</button>
@@ -75,12 +78,12 @@
 			</section>
 
 			<div class="flex flex-wrap items-end justify-between gap-3">
-				<div><h2 class="text-xl font-semibold">Invoices</h2><p class="text-sm text-muted mt-1">One date and one private receipt per invoice; add the billed items below it.</p></div>
+				<div><h2 class="step-title !mb-0"><span class="step-num" :class="{ 'step-num--done': total > 0 }" aria-hidden="true">3</span>Invoices</h2><p class="text-sm text-muted mt-1">One date and one private receipt per invoice; add the billed items below it.</p></div>
 				<button type="button" class="btn-secondary" :disabled="form.invoices.length >= 10" @click="addInvoice">+ Add invoice</button>
 			</div>
 			<section v-for="(invoice, invoiceIndex) in form.invoices" :key="invoice.key" class="form-card">
 				<div class="flex items-center justify-between gap-3 mb-4">
-					<h3 class="text-lg font-semibold">Invoice {{ invoiceIndex + 1 }}</h3>
+					<h3 class="flex items-center gap-2.5 text-lg font-semibold"><span class="item-badge" aria-hidden="true">{{ invoiceIndex + 1 }}</span>Invoice {{ invoiceIndex + 1 }}</h3>
 					<button v-if="form.invoices.length > 2" type="button" class="text-sm font-medium text-bad" @click="form.invoices.splice(invoiceIndex, 1)">Remove invoice</button>
 				</div>
 				<div class="grid gap-4 sm:grid-cols-2">
@@ -91,10 +94,10 @@
 						<input type="file" accept=".pdf,.png,.jpg,.jpeg" :required="!invoice.receipt_content" class="field-input" :disabled="readingFiles || submitting" @change="chooseReceipt($event, invoice)" />
 					</label>
 				</div>
-				<p v-if="invoice.receipt_filename" class="text-xs text-muted mt-2">Ready to upload privately: {{ invoice.receipt_filename }}</p>
+				<p v-if="invoice.receipt_filename" class="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-ok"><Icon name="check" size="sm" />Ready to upload privately: {{ invoice.receipt_filename }}</p>
 				<div class="mt-5 space-y-3">
 					<div class="flex items-center justify-between gap-3"><h4 class="font-semibold">Items on this invoice</h4><button type="button" class="btn-secondary" :disabled="invoice.items.length >= 10" @click="invoice.items.push(blankItem())">+ Add item</button></div>
-					<div v-for="(item, itemIndex) in invoice.items" :key="item.key" class="rounded-xl border border-line p-4">
+					<div v-for="(item, itemIndex) in invoice.items" :key="item.key" class="rounded-xl border border-line bg-soft/50 p-4">
 						<div class="flex items-center justify-between mb-3"><strong>Item {{ itemIndex + 1 }}</strong><button v-if="invoice.items.length > 1" type="button" class="text-sm text-bad" @click="invoice.items.splice(itemIndex, 1)">Remove</button></div>
 						<div class="grid gap-4 sm:grid-cols-2">
 							<SearchSelect v-model="item.account" :options="accountOptions" :disabled="!form.project || loadingAccounts" label="Project expense category *" placeholder="Type to find a category" required />
@@ -105,10 +108,26 @@
 				</div>
 				<p class="mt-4 text-right font-semibold">Invoice total: {{ money(invoiceTotal(invoice)) }}</p>
 			</section>
-			<section class="form-card flex flex-wrap items-center justify-between gap-4">
-				<div><p class="text-sm text-muted">Combined submission</p><p class="text-2xl font-semibold">{{ money(total) }}</p><p class="text-sm text-muted">Approval authority is checked against this full amount.</p></div>
-				<button type="submit" class="btn-primary" :disabled="submitting || readingFiles || !form.project || !accountOptions.length || total <= 0">{{ submitting ? 'Submitting…' : 'Submit all invoices for review' }}</button>
-			</section>
+			</div>
+			<aside class="form-rail space-y-4">
+				<section class="summary-card" aria-label="Submission summary">
+					<p class="eyebrow">Combined submission</p>
+					<p class="summary-total">{{ money(total) }}</p>
+					<dl class="summary-list">
+						<div v-for="(invoice, index) in form.invoices" :key="invoice.key"><dt>Invoice {{ index + 1 }}<template v-if="invoice.receipt_filename || invoice.receipt_content"> ✓</template></dt><dd>{{ money(invoiceTotal(invoice)) }}</dd></div>
+					</dl>
+					<p class="mt-3 text-xs text-muted">Approval authority is checked against this full amount.</p>
+					<button type="submit" class="btn-primary mt-4 min-h-11 w-full" :disabled="submitting || readingFiles || !form.project || !accountOptions.length || total <= 0">{{ submitting ? 'Submitting…' : 'Submit all invoices for review' }}</button>
+				</section>
+				<section class="summary-card">
+					<p class="text-sm font-semibold text-ink">What happens next</p>
+					<ol class="next-steps mt-3">
+						<li><span class="next-steps__dot">1</span><span>Each invoice becomes its own claim</span></li>
+						<li><span class="next-steps__dot">2</span><span>Receipt review, then reporting-manager approval</span></li>
+						<li><span class="next-steps__dot">3</span><span>Posted in the financial year of each invoice date</span></li>
+					</ol>
+				</section>
+			</aside>
 		</form>
 	</div>
 </template>
@@ -117,6 +136,8 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import PageHeader from "../components/PageHeader.vue";
+import Avatar from "../components/Avatar.vue";
+import Icon from "../components/Icon.vue";
 import SearchSelect from "../components/SearchSelect.vue";
 import { call } from "../lib/frappe";
 import { ExpenseSubmission } from "../lib/expenseSubmission";
@@ -242,6 +263,8 @@ async function submit() {
 </script>
 
 <style scoped>
+.person-chip { @apply flex min-w-0 max-w-full items-center gap-2.5 rounded-xl border border-line bg-soft py-1.5 pl-1.5 pr-3.5; }
+.item-badge { @apply inline-flex h-6 w-6 items-center justify-center rounded-full bg-navy-900 text-[11px] font-bold text-white; }
 .choice-card { @apply flex min-h-24 flex-col items-start gap-1 rounded-xl border border-line bg-bg p-4 text-left text-ink transition-colors; }
 .choice-card:disabled { @apply cursor-not-allowed opacity-50; }
 </style>

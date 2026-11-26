@@ -123,14 +123,15 @@
 					</section>
 				</div>
 
-				<!-- Rail: shortcuts to everything else this person does often. -->
-				<section v-if="hasShortcuts" aria-label="Your shortcuts" class="home-board__shortcuts min-w-0 space-y-3">
-					<div class="flex items-end justify-between gap-2 px-1"><h2 class="text-base font-semibold">Your shortcuts</h2><p class="hidden text-xs text-muted sm:block">Everything else is in the menu.</p></div>
-					<ActionGrid v-if="focus.roleActions.length" title="Your responsibilities" icon="clipboard-check" :actions="focus.roleActions" variant="dashboard" />
-					<ActionGrid v-if="focus.projectActions.length" title="Project proposals" icon="folder" :actions="focus.projectActions" variant="dashboard" />
-					<ActionGrid v-if="focus.personalActions.length" title="Your day-to-day" icon="clock" :actions="focus.personalActions" variant="dashboard" />
-				</section>
 			</div>
+
+			<!-- Shortcuts: full width under the board, laid out as compact tiles. -->
+			<section v-if="hasShortcuts" aria-label="Your shortcuts" class="min-w-0 space-y-3">
+				<div class="flex items-end justify-between gap-2 px-1"><h2 class="text-base font-semibold">Your shortcuts</h2><p class="hidden text-xs text-muted sm:block">Everything else is in the menu.</p></div>
+				<ActionGrid v-if="focus.roleActions.length" title="Your responsibilities" icon="clipboard-check" :actions="focus.roleActions" variant="tiles" />
+				<ActionGrid v-if="focus.projectActions.length" title="Project proposals" icon="folder" :actions="focus.projectActions" variant="tiles" />
+				<ActionGrid v-if="focus.personalActions.length" title="Your day-to-day" icon="clock" :actions="focus.personalActions" variant="tiles" />
+			</section>
 		</template>
 	</div>
 </template>
@@ -327,8 +328,7 @@ onMounted(async () => {
 	}
 	.home-board__main { grid-column: 1; grid-row: 1 / 4; }
 	.home-board__projects { grid-column: 2; grid-row: 1; }
-	.home-board__shortcuts { grid-column: 2; grid-row: 1 / 4; }
-	.home-board--projects .home-board__shortcuts { grid-row: 2 / 4; }
+	.home-board:not(.home-board--projects) { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Project card: navy header, actions below. */
