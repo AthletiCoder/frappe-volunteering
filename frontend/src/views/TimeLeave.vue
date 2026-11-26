@@ -44,8 +44,9 @@
             <div class="flex items-center justify-end gap-3"><button type="button" class="btn-secondary" :disabled="busy" @click="editing = false">Cancel</button><button class="btn-primary" :disabled="busy">{{ busy ? 'Saving request…' : 'Submit request' }}</button></div>
           </form>
         </section>
-        <section v-if="selected" class="kit-panel request-detail space-y-4">
-          <div class="flex justify-between gap-3"><div class="flex min-w-0 gap-3"><span class="request-detail__icon" aria-hidden="true"><Icon :name="requestIcon(selected)" size="sm" /></span><div class="min-w-0"><h2 class="font-display text-lg font-semibold text-ink">{{ selected.type }}</h2><p class="text-sm text-muted">{{ selected.employee_name }} · {{ selected.name }}</p></div></div><button class="btn-secondary shrink-0" :disabled="busy" @click="selected = null">Close</button></div>
+        <div :class="{ 'leave-triage': selected }">
+        <section v-if="selected" class="kit-panel request-detail leave-triage__detail space-y-4">
+          <div class="flex items-start justify-between gap-3"><div class="flex min-w-0 gap-3"><span class="request-detail__icon" aria-hidden="true"><Icon :name="requestIcon(selected)" size="sm" /></span><div class="min-w-0"><h2 class="font-display text-lg font-semibold text-ink">{{ selected.type }}</h2><p class="text-sm text-muted">{{ selected.employee_name }} · {{ selected.name }}</p></div></div><button class="btn-secondary shrink-0" :disabled="busy" @click="selected = null">Close</button></div>
           <ProgressTracker class="border-y border-line py-4" :steps="timeRequestSteps(selected.status)" label="Request progress" />
           <p class="font-medium">{{ requestDates(selected) }} · {{ selected.status }}</p><p class="whitespace-pre-wrap">{{ selected.reason }}</p>
           <p v-if="selected.hr_exception_reason" class="text-sm rounded-lg bg-amber-50 p-3">HR exception: {{ selected.hr_exception_reason }}</p>
@@ -62,7 +63,7 @@
             <div class="flex flex-wrap gap-3 justify-end"><button v-if="selected.can_cancel" class="btn-secondary" :disabled="busy || decision.reason.length < 10" @click="decide('cancel')">Cancel request</button><button v-if="selected.can_reverse" class="btn-secondary" :disabled="busy || decision.reason.length < 10" @click="decide('reverse')">Reverse approval</button><button v-if="selected.can_decide" class="btn-secondary" :disabled="busy || decision.reason.length < 10" @click="decide('reject')">Reject</button><button v-if="selected.can_decide" class="btn-primary" :disabled="busy" @click="decide('approve')">Approve</button></div>
           </template>
         </section>
-        <div class="list-board">
+        <div class="list-board leave-triage__list">
           <aside class="min-w-0 space-y-3">
             <div class="filter-rail kit-panel" role="group" aria-label="Filter requests by status">
               <button v-for="option in statusOptions" :key="option.value" type="button" class="filter-btn" :class="{ 'filter-btn--active': status === option.value }" :aria-pressed="status === option.value" @click="status = option.value">
@@ -73,7 +74,7 @@
           </aside>
           <section class="min-w-0" aria-label="Requests">
             <div v-if="filteredRequests.length" class="kit-panel overflow-hidden">
-              <button v-for="request in filteredRequests" :key="request.doctype + request.name" type="button" class="leave-row group" :class="{ 'leave-row--open': request.status === 'Open' }" @click="openRequest(request)">
+              <button v-for="request in filteredRequests" :key="request.doctype + request.name" type="button" class="leave-row group" :class="{ 'leave-row--open': request.status === 'Open', 'leave-row--active': selected && selected.name === request.name && selected.doctype === request.doctype }" :aria-current="selected && selected.name === request.name && selected.doctype === request.doctype ? 'true' : undefined" @click="openRequest(request)">
                 <Avatar v-if="tab === 'team'" :name="request.employee_name" />
                 <span v-else class="leave-row__icon"><Icon :name="requestIcon(request)" size="sm" /></span>
                 <span class="min-w-0 flex-1">
@@ -87,6 +88,7 @@
             </div>
             <div v-else class="kit-panel flex flex-col items-center px-6 py-12 text-center"><span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-ok-soft text-ok"><Icon name="check" /></span><p class="mt-3 text-sm text-muted">No requests match this view.</p></div>
           </section>
+        </div>
         </div>
         <section v-if="tab === 'mine' && workspace.credits?.length" class="form-card"><h2 class="form-title">Compensatory credits</h2><div v-for="credit in workspace.credits" :key="credit.name" class="py-3 border-t border-line flex flex-wrap justify-between gap-2 text-sm"><span>Worked {{ date(credit.from_date) }} · {{ number(credit.credit_days) }} day(s)</span><span>{{ number(credit.available) }} available · valid through {{ date(credit.valid_until) }}</span></div></section>
       </template>
@@ -173,6 +175,17 @@ async function adoptYear(){await operation(async()=>{balancePreview.value=await 
 
 <style scoped>
 .request-detail { padding: 1.25rem; }
+.leave-triage { display: grid; gap: 1.25rem; }
+.leave-row--active, .leave-row--active:hover { background: var(--navy-50); box-shadow: inset 3px 0 0 var(--navy-900); }
+@media (min-width: 1280px) {
+  .leave-triage { grid-template-columns: minmax(0, 1fr) 26rem; grid-template-areas: "list detail"; align-items: start; gap: 1.5rem; }
+  .leave-triage__list { grid-area: list; }
+  .leave-triage__detail { grid-area: detail; position: sticky; top: 5.5rem; max-height: calc(100vh - 7rem); overflow-y: auto; }
+  .leave-triage .list-board { grid-template-columns: minmax(0, 1fr); }
+  .leave-triage .list-board > aside { position: static; }
+  .leave-triage .filter-rail { flex-direction: row; flex-wrap: wrap; }
+  .leave-triage .filter-btn { width: auto; flex: 1 1 auto; }
+}
 @media (min-width: 640px) { .request-detail { padding: 1.5rem; } }
 .request-detail__icon { display: inline-flex; width: 2.5rem; height: 2.5rem; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 12px; background: var(--navy-50); color: var(--navy-900); }
 .leave-row { display: flex; width: 100%; align-items: center; gap: 0.875rem; padding: 0.875rem 1rem; text-align: left; transition: background-color var(--dur-fast) ease; }

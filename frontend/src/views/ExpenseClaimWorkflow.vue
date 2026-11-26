@@ -68,6 +68,16 @@
 		</template>
 
 		<template v-if="!loading && selected">
+			<div class="triage">
+				<QueueRail
+					class="triage__rail hidden xl:flex"
+					:items="railItems"
+					:active-key="selected.name"
+					:label="railLabel"
+					@open="openDetail"
+					@close="closeDetail"
+				/>
+				<div class="min-w-0">
 			<section class="form-card mb-5">
 				<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 					<Summary label="Employee" :value="selected.employee_name" />
@@ -383,6 +393,8 @@
 					</button>
 				</div>
 			</section>
+				</div>
+			</div>
 		</template>
 	</div>
 </template>
@@ -392,6 +404,7 @@ import { computed, defineComponent, h, onMounted, reactive, ref, watch } from "v
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import PageHeader from "../components/PageHeader.vue";
 import Icon from "../components/Icon.vue";
+import QueueRail from "../components/QueueRail.vue";
 import Avatar from "../components/Avatar.vue";
 import SearchSelect from "../components/SearchSelect.vue";
 import { call } from "../lib/frappe";
@@ -436,6 +449,24 @@ const visibleTabs = computed(() =>
 	),
 );
 const currentQueue = computed(() => queuePayload.value.queues?.[tab.value] || []);
+// The open claim may sit in a different queue from the last tab chosen; show
+// the queue that actually contains it beside the detail.
+const railKey = computed(() => {
+	const queues = queuePayload.value.queues || {};
+	const name = selected.value?.name;
+	if ((queues[tab.value] || []).some((row) => row.name === name)) return tab.value;
+	return Object.keys(queues).find((key) => (queues[key] || []).some((row) => row.name === name)) || tab.value;
+});
+const railLabel = computed(() => visibleTabs.value.find((item) => item.key === railKey.value)?.label || "Queue");
+const railItems = computed(() =>
+	(queuePayload.value.queues?.[railKey.value] || []).map((claim) => ({
+		key: claim.name,
+		person: claim.employee_name,
+		subtitle: `${claim.name} · ${date(claim.posting_date)}`,
+		amount: money(claim.amount, claim.currency),
+		href: `/volunteering/expense-claim-workflow?claim=${encodeURIComponent(claim.name)}`,
+	})),
+);
 const sanctionedTotal = computed(() =>
 	Object.values(sanctioned).reduce((sum, amount) => sum + Number(amount || 0), 0),
 );
@@ -673,6 +704,11 @@ onMounted(load);
 </script>
 
 <style scoped>
+.triage { display: block; }
+@media (min-width: 1280px) {
+	.triage { display: grid; grid-template-columns: 18rem minmax(0, 1fr); gap: 1.5rem; align-items: start; }
+	.triage__rail { position: sticky; top: 5.5rem; }
+}
 .queue-row { display: flex; width: 100%; align-items: center; gap: 0.875rem; padding: 0.875rem 1rem; text-align: left; transition: background-color var(--dur-fast) ease; }
 @media (min-width: 640px) { .queue-row { padding: 0.875rem 1.25rem; } }
 .queue-row + .queue-row { border-top: 1px solid var(--line); }

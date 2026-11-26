@@ -70,6 +70,16 @@
 		</template>
 
 		<template v-if="!loading && selected">
+			<div class="triage">
+				<QueueRail
+					class="triage__rail hidden xl:flex"
+					:items="railItems"
+					:active-key="selected.name"
+					:label="railLabel"
+					@open="openDetail"
+					@close="closeDetail"
+				/>
+				<div class="min-w-0">
 			<section class="form-card mb-5">
 				<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 					<Summary label="Employee" :value="selected.employee_name" />
@@ -382,6 +392,8 @@
 					<strong>{{ money(claim.allocated_amount, selected.currency) }}</strong>
 				</a>
 			</section>
+				</div>
+			</div>
 		</template>
 	</div>
 </template>
@@ -391,6 +403,7 @@ import { computed, defineComponent, h, onMounted, reactive, ref, watch } from "v
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import PageHeader from "../components/PageHeader.vue";
 import Icon from "../components/Icon.vue";
+import QueueRail from "../components/QueueRail.vue";
 import Avatar from "../components/Avatar.vue";
 import { call } from "../lib/frappe";
 
@@ -431,6 +444,23 @@ const visibleTabs = computed(() =>
 	allTabs.filter((option) => option.key === "approval" || queuePayload.value.can_disburse),
 );
 const currentQueue = computed(() => queuePayload.value.queues?.[tab.value] || []);
+// Show the queue that contains the open advance beside its detail.
+const railKey = computed(() => {
+	const queues = queuePayload.value.queues || {};
+	const name = selected.value?.name;
+	if ((queues[tab.value] || []).some((row) => row.name === name)) return tab.value;
+	return Object.keys(queues).find((key) => (queues[key] || []).some((row) => row.name === name)) || tab.value;
+});
+const railLabel = computed(() => visibleTabs.value.find((item) => item.key === railKey.value)?.label || "Queue");
+const railItems = computed(() =>
+	(queuePayload.value.queues?.[railKey.value] || []).map((advance) => ({
+		key: advance.name,
+		person: advance.employee_name,
+		subtitle: `${advance.name} · ${advance.project || "No project"}`,
+		amount: money(advance.amount, advance.currency),
+		href: `/volunteering/advance-workflow?advance=${encodeURIComponent(advance.name)}`,
+	})),
+);
 const selectedPaymentAccount = computed(() =>
 	selected.value?.payment?.accounts?.find((account) => account.value === payment.paid_from),
 );
@@ -592,6 +622,11 @@ onMounted(load);
 </script>
 
 <style scoped>
+.triage { display: block; }
+@media (min-width: 1280px) {
+	.triage { display: grid; grid-template-columns: 18rem minmax(0, 1fr); gap: 1.5rem; align-items: start; }
+	.triage__rail { position: sticky; top: 5.5rem; }
+}
 .queue-row { display: flex; width: 100%; align-items: center; gap: 0.875rem; padding: 0.875rem 1rem; text-align: left; transition: background-color var(--dur-fast) ease; }
 @media (min-width: 640px) { .queue-row { padding: 0.875rem 1.25rem; } }
 .queue-row + .queue-row { border-top: 1px solid var(--line); }
