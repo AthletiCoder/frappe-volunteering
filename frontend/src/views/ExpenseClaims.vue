@@ -37,7 +37,7 @@
 				<aside class="min-w-0 space-y-4">
 					<div class="filter-rail kit-panel" role="group" aria-label="Filter claims by status">
 						<button v-for="option in stages" :key="option" type="button" class="filter-btn" :class="{ 'filter-btn--active': stage === option }" :aria-pressed="stage === option" @click="stage = option">
-							<span class="filter-btn__dot" :class="statusClass(option)"></span>
+							<span class="filter-btn__dot" :class="statusDot(option)"></span>
 							<span class="min-w-0 flex-1 truncate text-left">{{ option }}</span>
 							<span class="filter-btn__count">{{ counts[option] || 0 }}</span>
 						</button>
@@ -224,6 +224,7 @@
 import { computed, defineComponent, h, onMounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import PageHeader from "../components/PageHeader.vue";
+import { dotClass } from "../lib/tones.js";
 import Icon from "../components/Icon.vue";
 import { call } from "../lib/frappe";
 
@@ -355,6 +356,12 @@ function dateTime(value) {
 	return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(
 		new Date(value),
 	);
+}
+
+// Rail dots need a solid colour; the pill classes only carry pale backgrounds.
+function statusDot(value) {
+	const tone = { "status-ok": "ok", "status-bad": "bad", "status-warn": "warn" }[statusClass(value)];
+	return dotClass(value === "All" ? "info" : tone || "muted");
 }
 
 function statusClass(value) {

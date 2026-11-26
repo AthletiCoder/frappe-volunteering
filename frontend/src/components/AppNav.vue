@@ -12,7 +12,7 @@
 					<Icon name="chevron-down" size="sm" class="ml-auto text-muted/70 transition-transform duration-200 ease-out group-open:rotate-180" />
 				</summary>
 				<div class="relative mb-1 ml-[1.35rem] mt-0.5 space-y-0.5 border-l border-line pl-2.5">
-					<a v-for="child in item.children" :key="child.href" :href="child.href" :title="child.label" :aria-current="isActiveHref(child.href) ? 'page' : undefined" :class="cn('relative flex min-h-[2.125rem] items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-muted transition-colors duration-150 hover:bg-soft hover:text-ink', { 'nav-child-active bg-navy-50 font-semibold text-navy-900': isActiveHref(child.href) })" @click="emit('navigate')">
+					<a v-for="child in item.children" :key="child.href" :href="child.href" :title="child.label" :aria-current="isActiveHref(child.href) ? 'page' : undefined" :class="cn('relative flex min-h-[2.125rem] items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors duration-150', isActiveHref(child.href) ? 'nav-child-active bg-navy-50 font-semibold text-navy-900' : 'text-ink-2 hover:bg-soft hover:text-ink')" @click="emit('navigate')">
 						<span class="min-w-0 flex-1 leading-snug">{{ child.label }}</span>
 						<span v-if="child.badge" class="shrink-0 rounded-full bg-marigold-soft px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-todo">{{ child.badge > 9 ? '9+' : child.badge }}</span>
 					</a>
@@ -83,10 +83,10 @@ function linkClass(item, active) {
 	return cn(
 		"relative flex items-center font-medium transition-colors duration-150",
 		props.layout === "bottom"
-			? "min-w-0 flex-1 flex-col gap-0.5 rounded-xl px-0.5 pb-1.5 pt-1 text-[11px] text-muted"
+			? `min-w-0 flex-1 flex-col gap-0.5 rounded-xl px-0.5 pb-1.5 pt-1 text-[11px] ${active ? "" : "text-muted"}`
 			: props.layout === "sidebar"
 				? "min-h-[2.375rem] gap-3 rounded-xl px-2.5 py-2 text-sm text-ink-2 hover:bg-soft hover:text-ink"
-				: "gap-3 rounded-xl px-2 py-1.5 text-sm text-muted hover:bg-accent-soft hover:text-accent",
+				: `gap-3 rounded-xl px-2 py-1.5 text-sm hover:bg-accent-soft hover:text-accent ${active ? "" : "text-muted"}`,
 		{
 			"text-navy-900 font-semibold": active && props.layout === "bottom",
 			"bg-navy-50 font-semibold text-navy-900 hover:bg-navy-50 hover:text-navy-900": active && props.layout === "sidebar",
@@ -97,7 +97,7 @@ function linkClass(item, active) {
 function iconWrapClass(item, active) {
 	return cn(
 		"flex shrink-0 items-center justify-center transition-all duration-200 ease-out",
-		props.layout === "bottom" ? "h-8 w-12 rounded-full" : "h-5 w-5 text-muted",
+		props.layout === "bottom" ? "h-8 w-12 rounded-full" : `h-5 w-5 ${active ? "" : "text-muted"}`,
 		active && props.layout === "bottom" ? "bg-navy-50 text-navy-900" : "",
 		active && props.layout !== "bottom" ? "text-navy-900" : ""
 	);

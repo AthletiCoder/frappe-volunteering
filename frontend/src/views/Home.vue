@@ -189,7 +189,7 @@ const tiles = computed(() => {
 	if (!data?.allowed) return [];
 	const list = [{ id: "decide", label: "To decide", value: waitingCount.value, hint: waitingCount.value ? "Requests waiting on you" : "All caught up", icon: "clipboard-check", to: "/todos", attention: waitingCount.value > 0 }];
 	if (resumeItems.value.length || data.flags?.show_money) {
-		list.push({ id: "drafts", label: "Drafts to finish", value: resumeItems.value.length, hint: resumeItems.value[0]?.subtitle?.split(" · ").slice(1, 2).join("") || "Nothing half-done", icon: "document-history", to: "/todos?bucket=resume" });
+		list.push({ id: "drafts", label: "Drafts to finish", value: resumeItems.value.length, hint: resumeItems.value.length ? "Started but not sent yet" : "Nothing half-done", icon: "document-history", to: "/todos?bucket=resume" });
 	}
 	if (logWork.value) {
 		list.push({ id: "logs", label: "Work logs to fill", value: logWork.value.pending || 0, hint: logWork.value.pending ? "Days without a log" : "Up to date", icon: "clock", to: logWork.value.list_route || "" });

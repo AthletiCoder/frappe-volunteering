@@ -402,3 +402,25 @@ class UnitTestHomePayload(UnitTestCase):
 		]
 		todos = _employee_draft_todos("HR-EMP-00001")
 		self.assertEqual(todos[0]["route"], "/volunteering/advances/HR-EAD-2026-00001")
+
+	@patch("volunteering.volunteering.home_service.frappe.db.exists", return_value=True)
+	@patch("volunteering.volunteering.home_service.frappe.db.has_column", return_value=True)
+	@patch("volunteering.volunteering.home_service.frappe.get_all")
+	@patch("volunteering.volunteering.home_service.is_home_project", return_value=True)
+	@patch("volunteering.volunteering.home_service.home_project_filter", return_value={})
+	def test_only_claims_waiting_on_the_employee_resume(self, _filter, _home, get_all, _has_column, _exists):
+		def claim(name, state):
+			return frappe._dict({"name": name, "creation": "2026-09-18 09:00:00", "modified": "2026-09-18 09:10:00", "total_claimed_amount": 0, "project": "PROJ-1", "workflow_state": state})
+
+		get_all.side_effect = [
+			[],
+			[
+				claim("HR-EXP-1", "Draft"),
+				claim("HR-EXP-2", "Receipt Correction Required"),
+				claim("HR-EXP-3", "Pending Receipt Review"),
+				claim("HR-EXP-4", "Pending Approval"),
+			],
+		]
+		todos = _employee_draft_todos("HR-EMP-00001")
+		self.assertEqual([row["title"] for row in todos], ["HR-EXP-1", "HR-EXP-2"])
+		self.assertIn("or_filters", get_all.call_args.kwargs)
