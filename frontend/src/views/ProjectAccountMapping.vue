@@ -6,7 +6,7 @@
 			subtitle="Suggest one or more ledger accounts for each approved expense break-up. Final classification still happens on each claim."
 		>
 			<template #actions
-				><RouterLink to="/home" class="btn-secondary">Back to Home</RouterLink></template
+				><RouterLink to="/home" class="btn-back">Back to Home</RouterLink></template
 			>
 		</PageHeader>
 		<div

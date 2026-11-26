@@ -1,23 +1,33 @@
 <template>
 	<nav
-		:class="cn('flex', layout === 'bottom' ? 'w-full max-w-md mx-auto justify-between gap-1' : layout === 'sidebar' ? 'w-full flex-col gap-1' : 'gap-0.5')"
+		:class="cn('flex', layout === 'bottom' ? 'w-full justify-around gap-0.5' : layout === 'sidebar' ? 'w-full flex-col gap-0.5' : 'gap-0.5')"
 		:aria-label="ariaLabel"
 	>
 		<template v-for="item in items" :key="itemKey(item)">
-			<p v-if="item.section && layout === 'sidebar'" class="px-3 pt-5 pb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{{ item.section }}</p>
-			<details v-else-if="item.children && layout === 'sidebar'" :open="item.children.some((child) => isActiveHref(child.href))" class="group">
-				<summary :class="cn(linkClass(item, item.children.some((child) => isActiveHref(child.href))), 'record-summary cursor-pointer list-none')">
-					<span :class="iconWrapClass(item, false)"><Icon :name="item.icon" size="sm" /></span>
+			<p v-if="item.section && layout === 'sidebar'" class="eyebrow px-3 pb-1.5 pt-6 first:pt-2">{{ item.section }}</p>
+			<details v-else-if="item.children && layout === 'sidebar'" :open="item.children.some((child) => isActiveHref(child.href))" class="nav-group group">
+				<summary :class="cn(linkClass(item, item.children.some((child) => isActiveHref(child.href))), 'record-summary cursor-pointer list-none select-none')">
+					<span :class="iconWrapClass(item, item.children.some((child) => isActiveHref(child.href)))"><Icon :name="item.icon" size="sm" /></span>
 					<span class="min-w-0 flex-1">{{ item.label }}</span>
-					<Icon name="chevron-down" size="sm" class="ml-auto transition-transform group-open:rotate-180" />
+					<Icon name="chevron-down" size="sm" class="ml-auto text-muted/70 transition-transform duration-200 ease-out group-open:rotate-180" />
 				</summary>
-				<div class="ml-5 mt-1 space-y-1 border-l border-line pl-2">
-					<a v-for="child in item.children" :key="child.href" :href="child.href" :title="child.label" :aria-current="isActiveHref(child.href) ? 'page' : undefined" :class="cn('flex min-h-9 items-center gap-2 rounded-lg px-2 py-2 text-xs font-medium text-muted hover:bg-soft hover:text-ink', { 'bg-accent-soft text-accent font-semibold': isActiveHref(child.href) })" @click="emit('navigate')">
-						<span class="min-w-0 flex-1 truncate">{{ child.label }}</span>
-						<span v-if="child.badge" class="shrink-0 rounded-full bg-soft px-1.5 py-0.5 text-[11px] tabular-nums">{{ child.badge > 9 ? '9+' : child.badge }}</span>
+				<div class="relative mb-1 ml-[1.35rem] mt-0.5 space-y-0.5 border-l border-line pl-2.5">
+					<a v-for="child in item.children" :key="child.href" :href="child.href" :title="child.label" :aria-current="isActiveHref(child.href) ? 'page' : undefined" :class="cn('relative flex min-h-[2.125rem] items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors duration-150', isActiveHref(child.href) ? 'nav-child-active bg-navy-50 font-semibold text-navy-900' : 'text-ink-2 hover:bg-soft hover:text-ink')" @click="emit('navigate')">
+						<span class="min-w-0 flex-1 leading-snug">{{ child.label }}</span>
+						<span v-if="child.badge" class="shrink-0 rounded-full bg-marigold-soft px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-todo">{{ child.badge > 9 ? '9+' : child.badge }}</span>
 					</a>
 				</div>
 			</details>
+			<button
+				v-else-if="item.button"
+				type="button"
+				:aria-label="item.label"
+				:class="layout === 'bottom' ? 'nav-fab-slot' : linkClass(item, false)"
+				@click="emit('action', item.button)"
+			>
+				<span :class="layout === 'bottom' ? 'nav-fab' : iconWrapClass(item, false)"><Icon :name="item.icon" :size="layout === 'bottom' ? 'md' : 'sm'" /></span>
+				<span :class="layout === 'bottom' ? 'sr-only' : null">{{ item.label }}</span>
+			</button>
 			<a
 				v-else-if="item.href"
 				:href="item.href"
@@ -28,8 +38,8 @@
 				<span :class="iconWrapClass(item, false)">
 					<Icon :name="item.icon" :size="layout === 'bottom' ? 'md' : 'sm'" />
 				</span>
-				<span :class="layout === 'bottom' ? 'truncate max-w-full' : null">{{ item.label }}</span>
-				<span v-if="item.badge && layout === 'sidebar'" class="ml-auto rounded-full bg-todo-soft px-2 py-0.5 text-xs font-semibold text-todo">{{ item.badge > 9 ? '9+' : item.badge }}</span>
+				<span :class="layout === 'bottom' ? 'max-w-full truncate' : null">{{ item.label }}</span>
+				<span v-if="item.badge && layout === 'sidebar'" class="ml-auto rounded-full bg-marigold-soft px-2 py-0.5 text-xs font-semibold tabular-nums text-todo">{{ item.badge > 9 ? '9+' : item.badge }}</span>
 			</a>
 			<RouterLink
 				v-else
@@ -42,10 +52,10 @@
 				<span :class="iconWrapClass(item, isActive(item.to))">
 					<Icon :name="item.icon" :size="layout === 'bottom' ? 'md' : 'sm'" />
 				</span>
-				<span :class="layout === 'bottom' ? 'truncate max-w-full' : null">{{ item.label }}</span>
+				<span :class="layout === 'bottom' ? 'max-w-full truncate' : null">{{ item.label }}</span>
 				<span
 					v-if="item.badge"
-					:class="layout === 'sidebar' ? 'ml-auto rounded-full bg-todo-soft px-2 py-0.5 text-xs font-semibold text-todo' : 'absolute top-1 right-[18%] min-w-[1.1rem] h-4 px-1 rounded-full bg-todo text-on-todo text-[10px] font-bold inline-flex items-center justify-center'"
+					:class="layout === 'sidebar' ? 'ml-auto rounded-full bg-marigold-soft px-2 py-0.5 text-xs font-semibold tabular-nums text-todo' : 'absolute left-1/2 top-0.5 ml-1.5 inline-flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-marigold px-1 text-[10px] font-bold text-on-todo ring-2 ring-surface'"
 					>{{ item.badge > 9 ? "9+" : item.badge }}</span
 				>
 			</RouterLink>
@@ -63,7 +73,7 @@ const props = defineProps({
 	layout: { type: String, default: "top" },
 	ariaLabel: { type: String, default: "Primary" },
 });
-const emit = defineEmits(["navigate"]);
+const emit = defineEmits(["navigate", "action"]);
 
 const route = useRoute();
 
@@ -81,22 +91,25 @@ function isActiveHref(href) {
 
 function linkClass(item, active) {
 	return cn(
-		"relative flex items-center gap-2.5 text-sm font-medium transition-colors duration-150",
+		"relative flex items-center font-medium transition-colors duration-150",
 		props.layout === "bottom"
-			? "flex-1 flex-col rounded-xl py-2 px-1 min-w-0 text-[11px] text-muted"
+			? `min-w-0 flex-1 flex-col gap-0.5 rounded-xl px-0.5 pb-1.5 pt-1 text-[11px] ${active ? "" : "text-muted"}`
 			: props.layout === "sidebar"
-				? "min-h-10 rounded-xl px-3 py-2.5 text-muted hover:text-ink hover:bg-soft"
-				: "rounded-xl px-2 py-1.5 text-muted hover:text-accent hover:bg-accent-soft",
-		{ "text-accent": active && props.layout !== "sidebar", "bg-accent-soft text-accent font-semibold": active && props.layout === "sidebar" }
+				? "min-h-[2.375rem] gap-3 rounded-xl px-2.5 py-2 text-sm text-ink-2 hover:bg-soft hover:text-ink"
+				: `gap-3 rounded-xl px-2 py-1.5 text-sm hover:bg-accent-soft hover:text-accent ${active ? "" : "text-muted"}`,
+		{
+			"text-navy-900 font-semibold": active && props.layout === "bottom",
+			"bg-navy-50 font-semibold text-navy-900 hover:bg-navy-50 hover:text-navy-900": active && props.layout === "sidebar",
+		}
 	);
 }
 
 function iconWrapClass(item, active) {
 	return cn(
-		"flex items-center justify-center rounded-2xl transition-transform duration-150",
-		props.layout === "bottom" ? "w-9 h-8" : "",
-		active && props.layout === "bottom" ? "bg-accent-soft scale-105" : "",
-		active && props.layout !== "bottom" ? "text-accent" : ""
+		"flex shrink-0 items-center justify-center transition-all duration-200 ease-out",
+		props.layout === "bottom" ? "h-8 w-12 rounded-full" : `h-5 w-5 ${active ? "" : "text-muted"}`,
+		active && props.layout === "bottom" ? "bg-navy-50 text-navy-900" : "",
+		active && props.layout !== "bottom" ? "text-navy-900" : ""
 	);
 }
 
@@ -111,4 +124,33 @@ function isActive(to) {
 
 <style scoped>
 .record-summary::-webkit-details-marker { display: none; }
+.nav-fab-slot { display: flex; flex: 1 1 0; min-width: 0; align-items: center; justify-content: center; }
+.nav-fab {
+	display: inline-flex;
+	width: 3rem;
+	height: 3rem;
+	margin-top: -1.25rem;
+	align-items: center;
+	justify-content: center;
+	border-radius: 999px;
+	background: var(--navy-900);
+	color: #fff;
+	box-shadow: 0 0 0 4px var(--surface), 0 10px 22px -8px rgb(5 34 77 / 0.55);
+	transition: transform var(--dur) var(--ease-out), background-color var(--dur-fast) ease;
+}
+.nav-fab-slot:hover .nav-fab { background: var(--navy-800, #0b2f66); }
+.nav-fab-slot:active .nav-fab { transform: scale(0.94); }
+.nav-fab-slot:focus-visible { outline: none; }
+.nav-fab-slot:focus-visible .nav-fab { box-shadow: 0 0 0 4px var(--surface), 0 0 0 6px var(--navy-900); }
+.text-ink-2 { color: var(--ink-2); }
+.nav-child-active::before {
+	content: "";
+	position: absolute;
+	left: calc(-0.625rem - 1px);
+	top: 0.5rem;
+	bottom: 0.5rem;
+	width: 2px;
+	border-radius: 2px;
+	background: var(--navy-900);
+}
 </style>

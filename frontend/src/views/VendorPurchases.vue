@@ -26,24 +26,32 @@
 						<label class="field-label">Show<select v-model="filter" class="field-input"><option v-for="option in filterOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
 					</div>
 					<p v-if="!visibleOrders.length" class="empty">{{ pageInfo.empty }}</p>
-					<button v-for="row in visibleOrders" :key="row.name" class="purchase-row" @click="openOrder(row.name)">
-						<div class="min-w-0"><span class="text-xs text-muted">{{ row.name }} · {{ dateLabel(row.transaction_date) }}</span><h2 class="mt-1 font-semibold">{{ row.supplier_name }}</h2><p class="mt-1 text-sm text-muted">{{ row.project }} · {{ row.workflow_state }}</p></div>
-						<div class="text-right"><strong>{{ money(row.grand_total) }}</strong><p class="mt-2 text-xs text-muted">{{ Math.round(row.per_received || 0) }}% received · {{ Math.round(row.per_billed || 0) }}% billed</p><span class="mt-2 block text-sm font-medium text-accent">Open purchase →</span></div>
-					</button>
+					<div v-else class="-mx-4 overflow-hidden border-y border-line sm:-mx-6">
+						<button v-for="row in visibleOrders" :key="row.name" class="purchase-row group" @click="openOrder(row.name)">
+							<span class="purchase-row__icon"><Icon name="vendor" size="sm" /></span>
+							<div class="min-w-0 flex-1"><span class="text-xs tabular-nums text-muted">{{ row.name }} · {{ dateLabel(row.transaction_date) }}</span><h2 class="mt-0.5 truncate font-semibold text-ink">{{ row.supplier_name }}</h2><p class="mt-0.5 truncate text-sm text-muted">{{ row.project }} · <span class="font-medium text-ink-2">{{ row.workflow_state }}</span></p></div>
+							<div class="purchase-row__progress" aria-hidden="true">
+								<span class="flex justify-between text-[11px] text-muted"><span>Received</span><span>{{ Math.round(row.per_received || 0) }}%</span></span><span class="meter"><span :style="{ width: Math.min(100, row.per_received || 0) + '%' }"></span></span>
+								<span class="mt-1.5 flex justify-between text-[11px] text-muted"><span>Billed</span><span>{{ Math.round(row.per_billed || 0) }}%</span></span><span class="meter meter--alt"><span :style="{ width: Math.min(100, row.per_billed || 0) + '%' }"></span></span>
+							</div>
+							<div class="shrink-0 text-right"><strong class="tabular-nums text-ink">{{ money(row.grand_total) }}</strong><p class="mt-1 text-xs text-muted sm:hidden">{{ Math.round(row.per_received || 0) }}% received · {{ Math.round(row.per_billed || 0) }}% billed</p><span class="mt-1 block text-sm font-medium text-navy-600 group-hover:text-navy-900">Open purchase →</span></div>
+						</button>
+					</div>
 				</section>
 			</template>
 
-			<form v-if="editing" class="space-y-5" @submit.prevent="saveOrder(true)">
-				<section class="panel"><h2 class="section-title">Supplier and project</h2><div class="fields mt-5">
+			<form v-if="editing" class="form-layout" @submit.prevent="saveOrder(true)">
+				<div class="min-w-0 space-y-5">
+				<section class="panel"><h2 class="step-title !mb-0"><span class="step-num" :class="{ 'step-num--done': form.supplier && form.project }" aria-hidden="true">1</span>Supplier and project</h2><div class="fields mt-5">
 					<SearchSelect v-model="form.supplier" label="Supplier *" :options="supplierOptions" placeholder="Find a registered supplier" empty-text="No matching supplier. An Accounts Manager can register one below." selection-error="Choose a registered supplier." :required="true" />
 					<SearchSelect v-model="form.project" label="Project *" :options="workspace.projects" placeholder="Choose an active project" empty-text="No eligible active project is available." selection-error="Choose a project from the list." :required="true" />
 					<label class="field-label">Order date *<input v-model="form.transaction_date" class="field-input" type="date" :max="workspace.today" required /></label>
 					<label class="field-label">Expected delivery *<input v-model="form.schedule_date" class="field-input" type="date" required /></label>
 					<label class="field-label sm:col-span-2">Purpose and order instructions<textarea v-model="form.terms" class="field-input" rows="3" placeholder="What is being purchased, where it should be delivered, and any agreed terms." /></label>
 				</div></section>
-				<section class="panel space-y-5"><div class="flex items-center justify-between gap-3"><h2 class="section-title">Items to purchase</h2><button type="button" class="btn-secondary" @click="form.items.push(blankItem())">Add item</button></div>
+				<section class="panel space-y-5"><div class="flex items-center justify-between gap-3"><h2 class="step-title !mb-0"><span class="step-num" :class="{ 'step-num--done': itemsTotal > 0 }" aria-hidden="true">2</span>Items to purchase</h2><button type="button" class="btn-secondary" @click="form.items.push(blankItem())">+ Add item</button></div>
 					<article v-for="(item, index) in form.items" :key="index" class="item-card space-y-4">
-						<div class="flex items-center justify-between"><strong>Item {{ index + 1 }}</strong><button v-if="form.items.length > 1" type="button" class="text-sm text-bad" @click="form.items.splice(index, 1)">Remove item</button></div>
+						<div class="flex items-center justify-between"><strong class="flex items-center gap-2.5"><span class="item-badge" aria-hidden="true">{{ index + 1 }}</span>Item {{ index + 1 }}</strong><button v-if="form.items.length > 1" type="button" class="text-sm text-bad" @click="form.items.splice(index, 1)">Remove item</button></div>
 						<div class="fields"><SearchSelect v-model="item.item_code" label="Purchase item *" :options="itemOptions" placeholder="Search materials or services" empty-text="No matching item. An Accounts Manager can add one below." selection-error="Choose a purchase item from the list." :required="true" />
 							<label class="field-label">Description<input v-model="item.description" class="field-input" placeholder="Specification or description" /></label>
 							<label class="field-label">Quantity *<input v-model.number="item.qty" class="field-input" type="number" min="0.001" step="any" required /><small class="field-help">Unit: {{ itemMaster(item.item_code)?.stock_uom || 'Select an item' }}</small></label>
@@ -55,10 +63,34 @@
 					<p class="field-help">{{ legacyTaxes ? 'This older draft keeps its existing tax configuration. No tax template can be added or changed here.' : 'Enter the final quoted prices, including any supplier taxes. No additional tax is added. Accounts may optionally record the included tax breakup with the supplier bill.' }}</p>
 					<label class="field-label">Quotation or supporting document (optional)<input class="upload" type="file" accept=".pdf,.png,.jpg,.jpeg" @change="pickFile($event, 'order')" /><span v-if="proofs.order" class="field-help">{{ proofs.order.file_name }}</span></label>
 				</section>
-				<div class="action-bar"><button type="button" class="btn-secondary" :disabled="saving" @click="saveOrder(false)">Save draft</button><button type="submit" class="btn-primary" :disabled="saving">{{ saving ? 'Saving…' : 'Submit purchase for approval' }}</button></div>
+				</div>
+				<aside class="form-rail space-y-4">
+					<section class="summary-card" aria-label="Purchase summary">
+						<p class="eyebrow">{{ legacyTaxes ? 'Items total' : 'Order total' }}</p>
+						<p class="summary-total">{{ money(itemsTotal) }}</p>
+						<dl class="summary-list">
+							<div><dt>Supplier</dt><dd>{{ supplierOptions.find(row => row.value === form.supplier)?.label || 'Not chosen' }}</dd></div>
+							<div><dt>Project</dt><dd>{{ (workspace.projects || []).find(row => row.value === form.project)?.label || 'Not chosen' }}</dd></div>
+							<div><dt>Items</dt><dd>{{ form.items.length }}</dd></div>
+							<div><dt>Delivery</dt><dd>{{ form.schedule_date ? dateLabel(form.schedule_date) : '—' }}</dd></div>
+						</dl>
+						<div class="mt-4 flex flex-col-reverse gap-2"><button type="button" class="btn-secondary min-h-11 w-full" :disabled="saving" @click="saveOrder(false)">Save draft</button><button type="submit" class="btn-primary min-h-11 w-full" :disabled="saving">{{ saving ? 'Saving…' : 'Submit purchase for approval' }}</button></div>
+					</section>
+					<section class="summary-card">
+						<p class="text-sm font-semibold text-ink">What happens next</p>
+						<ol class="next-steps mt-3">
+							<li><span class="next-steps__dot">1</span><span>An approver within your authority reviews the order</span></li>
+							<li><span class="next-steps__dot">2</span><span>Goods are received against the order</span></li>
+							<li><span class="next-steps__dot">3</span><span>Accounts records the supplier bill and payment</span></li>
+						</ol>
+					</section>
+				</aside>
 			</form>
 
 			<template v-else-if="order">
+				<section class="kit-panel p-5 sm:p-6" aria-label="Order progress">
+					<ProgressTracker :steps="purchaseSteps(order)" label="Order progress" />
+				</section>
 				<section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
 					<div class="summary"><span>Order total</span><strong>{{ money(order.grand_total) }}</strong><small>{{ order.workflow_state }}</small></div>
 					<div class="summary"><span>Total paid</span><strong>{{ money(totalPaid) }}</strong><small>{{ order.payments.length }} recorded payments</small></div>
@@ -142,9 +174,13 @@
 </template>
 
 <script setup>
+import { uid } from "../lib/uid";
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import PageHeader from '../components/PageHeader.vue';
+import ProgressTracker from "../components/ProgressTracker.vue";
+import { purchaseSteps } from "../lib/requestProgress.js";
+import Icon from '../components/Icon.vue';
 import SearchSelect from '../components/SearchSelect.vue';
 import { call } from '../lib/frappe';
 import { loadHomePayload } from '../lib/home';
@@ -160,7 +196,7 @@ const pageInfo = computed(() => ({
 }[props.workspaceView]));
 const workspace = ref(null), order = ref(null), loading = ref(true), saving = ref(false);
 const error = ref(''), message = ref(''), editing = ref(false), action = ref(''), filter = ref(''), search = ref(''), reviewNote = ref('');
-const key = () => crypto.randomUUID();
+const key = () => uid();
 const blankItem = () => ({ item_code: '', description: '', qty: 1, rate: '', warehouse: '', expense_account: '' });
 const blankOrder = () => ({ request_key: key(), supplier: '', project: '', transaction_date: workspace.value?.today || '', schedule_date: workspace.value?.today || '', terms: '', items: [blankItem()] });
 const form = reactive(blankOrder()), delivery = reactive({}), bill = reactive({}), payment = reactive({});
@@ -277,15 +313,24 @@ onMounted(load);
 </script>
 
 <style scoped>
+.item-badge { @apply inline-flex h-6 w-6 items-center justify-center rounded-full bg-navy-900 text-[11px] font-bold text-white; }
 .panel { @apply rounded-2xl border border-line bg-surface p-4 shadow-soft sm:p-6; }
 .section-title { @apply text-lg font-semibold text-ink; }
 .fields { @apply grid gap-5 sm:grid-cols-2; }
 .field-label { @apply block min-w-0 text-sm font-medium text-ink; }
 .field-input { @apply mt-2 block min-h-11 w-full min-w-0 rounded-xl border border-line bg-surface px-3 py-2.5 text-base font-normal text-ink; }
 .field-help { @apply mt-2 block text-sm font-normal leading-relaxed text-muted; }
-.summary { @apply min-w-0 rounded-2xl border border-line bg-surface p-5; }
-.summary span { @apply block text-sm text-muted; }.summary strong { @apply mt-2 block text-xl font-bold text-ink; }.summary small { @apply mt-2 block text-xs text-muted; }
-.purchase-row { @apply flex w-full flex-wrap items-start justify-between gap-4 rounded-xl border border-line p-4 text-left transition-colors hover:border-accent hover:bg-accent-soft; }
+.summary { @apply min-w-0 rounded-2xl border border-line bg-surface p-5; box-shadow: var(--shadow-soft); }
+.summary span { @apply block text-sm text-muted; }.summary strong { @apply mt-1.5 block font-display text-2xl font-semibold tabular-nums text-ink; }.summary small { @apply mt-2 block text-xs text-muted; }
+.purchase-row { @apply flex w-full items-center gap-4 px-4 py-3.5 text-left transition-colors sm:px-6; }
+.purchase-row + .purchase-row { border-top: 1px solid var(--line); }
+.purchase-row:hover { background: color-mix(in srgb, var(--navy-50) 70%, transparent); }
+.purchase-row__icon { @apply hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-navy-50 text-navy-900 sm:inline-flex; }
+.purchase-row__progress { @apply hidden w-36 shrink-0 sm:block; }
+.meter { @apply mt-0.5 block h-1.5 overflow-hidden rounded-full bg-soft; }
+.meter > span { @apply block h-full rounded-full bg-ok; }
+.meter--alt > span { @apply bg-navy-600; }
+.text-ink-2 { color: var(--ink-2); }
 .item-card { @apply min-w-0 rounded-xl border border-line bg-bg p-4; }
 .total { @apply flex flex-wrap items-center justify-between gap-3 rounded-xl bg-accent-soft p-4 text-sm; }
 .action-bar { @apply flex flex-wrap justify-end gap-3; }.action-bar button { @apply w-full sm:w-auto; }

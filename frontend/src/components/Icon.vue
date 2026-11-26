@@ -5,7 +5,7 @@
 		viewBox="0 0 24 24"
 		fill="none"
 		stroke="currentColor"
-		stroke-width="1.8"
+		stroke-width="1.75"
 		stroke-linecap="round"
 		stroke-linejoin="round"
 		aria-hidden="true"
@@ -14,6 +14,7 @@
 			v-if="name === 'home'"
 			d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z"
 		/>
+		<path v-else-if="name === 'plus'" d="M12 5v14M5 12h14" />
 		<path v-else-if="name === 'chat'" d="M4 4h16v12H9l-5 4V4zM8 8h8M8 12h5" />
 		<path
 			v-else-if="name === 'check'"
@@ -151,7 +152,11 @@
 			v-else-if="name === 'refresh'"
 			d="M4 12a8 8 0 0 1 13.7-5.7L20 8M20 12a8 8 0 0 1-13.7 5.7L4 16M20 4v4h-4M4 20v-4h4"
 		/>
-		<circle v-else cx="12" cy="12" r="3" />
+		<path v-else-if="name === 'logout'" d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10" />
+		<path v-else-if="name === 'arrow-left'" d="M19 12H5M11 6l-6 6 6 6" />
+		<path v-else-if="name === 'grid'" d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" />
+		<path v-else-if="name === 'more'" d="M5 12h.01M12 12h.01M19 12h.01" />
+		<circle v-else-if="!FIRST_CHAIN.has(name)" cx="12" cy="12" r="3" />
 	</svg>
 </template>
 
@@ -159,6 +164,9 @@
 import { computed } from "vue";
 import { cn } from "../lib/cn";
 
+// Icons drawn before the help circle start a second v-if chain; without
+// this guard that chain's fallback dot was drawn over all of them.
+const FIRST_CHAIN = new Set(["home", "plus", "chat", "check", "wallet", "chart", "bell", "help"]);
 const props = defineProps({
 	name: { type: String, required: true },
 	size: { type: String, default: "md" },

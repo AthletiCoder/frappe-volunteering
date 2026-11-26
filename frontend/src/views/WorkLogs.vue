@@ -1,28 +1,39 @@
 <template>
 	<div class="work-log-page mx-auto max-w-5xl space-y-4 pb-4">
-        <PageHeader :title="pageTitle">
-            <template v-if="editing" #actions><RouterLink :to="{ path: '/work-logs', query: calendarQuery }" class="text-sm font-medium text-accent">← Calendar</RouterLink></template>
+        <PageHeader :title="pageTitle" eyebrow="Time & leave">
+            <template v-if="editing" #actions><RouterLink :to="{ path: '/work-logs', query: calendarQuery }" class="btn-back">Calendar</RouterLink></template>
         </PageHeader>
 		<p v-if="error" role="alert" class="message-error">{{ error }}</p>
 		<p v-if="message" role="status" class="message-success">{{ message }}</p>
 		<p v-if="loading" role="status" class="text-muted">Loading work logs…</p>
 		<template v-else-if="workspace">
+        <nav v-if="!editing && workspace.can_review_team" class="view-tabs" aria-label="Work log views">
+            <button v-if="workspace.can_create" :class="{ selected: listView === 'mine' }" :aria-current="listView === 'mine' ? 'page' : undefined" :disabled="busy" @click="changeView('mine')">My logs</button>
+            <button :class="{ selected: listView === 'team' }" :aria-current="listView === 'team' ? 'page' : undefined" :disabled="busy" @click="changeView('team')">Team review</button>
+        </nav>
 			<template v-if="!editing">
                 <template v-if="listView === 'team' && !route.query.employee">
-                    <section class="card space-y-4">
-                        <div><h2 class="text-xl font-semibold text-ink">Your team</h2><p class="mt-2 text-sm text-muted">Select a person to view their monthly calendar and review their work.</p><p v-if="workspace.month" class="mt-2 text-sm font-medium text-ink">{{ monthLabel(workspace.month) }}</p></div>
-                        <form class="flex gap-3" @submit.prevent="searchPeople"><input v-model="peopleQuery" type="search" class="input !mt-0" aria-label="Search team" placeholder="Search by name" /><button class="btn-secondary" :disabled="busy">Search</button></form>
+                    <section class="kit-panel overflow-hidden">
+                        <div class="flex flex-wrap items-end justify-between gap-3 border-b border-line px-4 py-4 sm:px-5">
+                            <div><h2 class="text-base font-semibold text-ink">Your team</h2><p class="mt-1 text-sm text-muted">Select a person to view their monthly calendar and review their work.<template v-if="workspace.month"> · <span class="font-medium text-ink">{{ monthLabel(workspace.month) }}</span></template></p></div>
+                            <form class="flex w-full gap-2 sm:w-auto" @submit.prevent="searchPeople"><input v-model="peopleQuery" type="search" class="field-input !mt-0 min-w-0 sm:w-64" aria-label="Search team" placeholder="Search by name" /><button class="btn-secondary" :disabled="busy">Search</button></form>
+                        </div>
+                        <p v-if="!workspace.people?.length" class="px-5 py-10 text-center text-sm text-muted">No employees match this view.</p>
+                        <button v-for="person in workspace.people" :key="person.name" class="person-card group" :disabled="busy" @click="openPerson(person)">
+                            <Avatar :name="person.employee_name" />
+                            <span class="min-w-0 flex-1 text-left"><strong class="block truncate text-sm text-ink">{{ person.employee_name }}</strong><span class="block truncate text-xs text-muted">{{ person.designation || person.name }}</span></span>
+                            <span class="hidden w-40 shrink-0 sm:block"><span class="flex justify-between text-[11px] text-muted"><span>{{ hoursLabel(person.total_hours) }} h recorded</span></span><span class="mt-1 block h-1.5 overflow-hidden rounded-full bg-soft"><span class="block h-full rounded-full bg-navy-600" :style="{ width: Math.min(100, (Number(person.total_hours || 0) / 176) * 100) + '%' }"></span></span></span>
+                            <span v-if="person.submitted" class="chip shrink-0 bg-marigold-soft text-[#7a4a00]">{{ person.submitted }} awaiting review</span>
+                            <span v-else class="chip shrink-0 bg-ok-soft text-ok">Up to date</span>
+                            <Icon name="arrow-right" size="sm" class="hidden shrink-0 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-navy-900 sm:block" />
+                        </button>
                     </section>
-                    <p v-if="!workspace.people?.length" class="card text-muted">No employees match this view.</p>
-                    <button v-for="person in workspace.people" :key="person.name" class="person-card" :disabled="busy" @click="openPerson(person)">
-                        <span class="person-avatar">{{ person.employee_name.slice(0, 1) }}</span>
-                        <span class="min-w-0 flex-1 text-left"><strong class="block text-ink">{{ person.employee_name }}</strong><span class="mt-1 block text-sm text-muted">{{ person.designation || person.name }}</span><span class="mt-2 block text-sm text-muted">{{ hoursLabel(person.total_hours) }} h recorded<span v-if="person.submitted"> · {{ person.submitted }} awaiting review</span></span></span><span class="text-accent" aria-hidden="true">→</span>
-                    </button>
                     <div v-if="workspace.page > 1 || workspace.has_more" class="flex items-center justify-between"><button class="btn-secondary" :disabled="busy || workspace.page === 1" @click="peoplePage(workspace.page - 1)">Previous</button><span>Page {{ workspace.page }}</span><button class="btn-secondary" :disabled="busy || !workspace.has_more" @click="peoplePage(workspace.page + 1)">Next</button></div>
                 </template>
                 <template v-else-if="workspace.days">
                     <div v-if="listView === 'team'" class="flex flex-wrap items-center justify-between gap-3"><h2 class="text-xl font-semibold text-ink">{{ workspace.calendar_employee.employee_name }}</h2><button class="btn-secondary" @click="changeView('team')">Back to team</button></div>
-                    <section class="calendar-panel space-y-3" aria-label="Work log calendar">
+                    <div class="calendar-layout">
+                    <section class="calendar-panel kit-panel space-y-4 p-4 sm:p-5" aria-label="Work log calendar">
                         <div class="flex items-center justify-between gap-2">
                             <button class="month-arrow" aria-label="Previous month" :disabled="busy" @click="changeMonth(offsetMonth(workspace.month, -1))">‹</button>
                             <div class="flex items-center gap-3"><label class="sr-only" for="log-month">Month</label><input id="log-month" type="month" :value="workspace.month" :max="workspace.today.slice(0, 7)" class="month-input" :disabled="busy" @change="changeMonth($event.target.value)" /><button class="text-xs text-accent" :disabled="busy" @click="changeMonth(workspace.today.slice(0, 7))">This month</button></div>
@@ -35,48 +46,93 @@
                                 <span v-else class="calendar-empty" aria-hidden="true"></span>
                             </template>
                         </div>
-                        <div class="flex flex-wrap gap-x-5 gap-y-3 text-xs"><span v-for="status in statuses" :key="status" class="inline-flex items-center gap-2"><span :class="['legend-dot', dayClass(status)]"></span>{{ status }}</span></div>
+                        <div class="flex flex-wrap gap-x-4 gap-y-2 border-t border-line pt-3 text-xs text-muted"><span v-for="status in statuses" :key="status" class="inline-flex items-center gap-2"><span :class="['legend-dot', dayClass(status)]"></span>{{ status }}</span></div>
                     </section>
-                    <section class="summary-row" aria-label="Monthly summary"><div><strong>{{ durationLabel(workspace.summary.total_hours) }}</strong><span>Total time</span></div><div><strong>{{ workspace.summary.submitted_total ?? workspace.summary.Submitted + workspace.summary.Reviewed }}</strong><span>Submitted</span></div><div><strong>{{ workspace.summary.awaiting_review ?? workspace.summary.Submitted }}</strong><span>Awaiting review</span></div><div><strong>{{ workspace.summary.Reviewed }}</strong><span>Reviewed</span></div></section>
+                    <aside class="space-y-4">
+                        <section class="summary-row" aria-label="Monthly summary">
+                            <div class="summary-row__total"><span>Total time</span><strong>{{ durationLabel(workspace.summary.total_hours) }}</strong></div>
+                            <div><span>Submitted</span><strong>{{ workspace.summary.submitted_total ?? workspace.summary.Submitted + workspace.summary.Reviewed }}</strong></div>
+                            <div><span>Awaiting review</span><strong>{{ workspace.summary.awaiting_review ?? workspace.summary.Submitted }}</strong></div>
+                            <div><span>Reviewed</span><strong>{{ workspace.summary.Reviewed }}</strong></div>
+                        </section>
+                        <div v-if="missingDays && listView !== 'team'" class="kit-panel flex items-start gap-3 p-4 text-sm"><span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-bad-soft text-bad"><Icon name="clock" size="sm" /></span><span><strong class="block text-ink">{{ missingDays }} {{ missingDays === 1 ? "day" : "days" }} you can still log</strong><span class="text-xs text-muted">Older unfilled days are past the logging window.</span></span></div>
+                    </aside>
+                    </div>
+
                 </template>
 			</template>
             <template v-else-if="log">
-                <div class="flex flex-wrap items-center gap-3">
-                    <h2 v-if="!log.is_own" class="w-full font-semibold text-ink">{{ log.employee_name }}</h2>
-                    <label class="date-button"><span aria-hidden="true">▦</span> {{ dateLabel(form.date) }}<input v-model="form.date" type="date" aria-label="Work date" :min="workspace.can_override ? undefined : workspace.earliest_date" :max="workspace.today" :disabled="!log.can_edit || !!log.name || busy" @change="switchDate" /></label>
-                    <span :class="['status', statusClass(log.status)]">{{ log.status }}</span>
-                    <span v-if="log.is_wfh" class="text-xs text-accent">Work from home</span>
+                <div class="log-editor">
+                    <div class="min-w-0 space-y-4">
+                        <div class="log-dayhead">
+                            <label class="log-date" :class="{ 'log-date--locked': !log.can_edit || !!log.name || busy }">
+                                <span class="log-date__tile" aria-hidden="true"><span class="log-date__month">{{ monthShort(form.date) }}</span><span class="log-date__day">{{ Number(String(form.date).slice(8, 10)) || "" }}</span></span>
+                                <span class="min-w-0"><span class="block text-xs font-medium text-muted">{{ weekdayLabel(form.date) }}</span><span class="block text-base font-semibold text-ink">{{ dateLabel(form.date) }}</span><span v-if="log.can_edit && !log.name" class="block text-xs text-navy-600">Change date</span></span>
+                                <input v-model="form.date" type="date" aria-label="Work date" :min="workspace.can_override ? undefined : workspace.earliest_date" :max="workspace.today" :disabled="!log.can_edit || !!log.name || busy" @change="switchDate" />
+                            </label>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span :class="['status', statusClass(log.status)]"><span class="h-1.5 w-1.5 rounded-full bg-current"></span>{{ log.status }}</span>
+                                <span v-if="log.is_wfh" class="chip bg-navy-50 text-navy-900"><Icon name="home" size="sm" />Work from home</span>
+                            </div>
+                            <h2 v-if="!log.is_own" class="w-full text-base font-semibold text-ink">{{ log.employee_name }}</h2>
+                        </div>
+                        <form ref="logForm" id="work-log-form" class="space-y-3" @submit.prevent="save(false)">
+                            <section v-for="(item, index) in form.items" :key="item.key" class="activity-card">
+                                <div class="flex items-center gap-3">
+                                    <span class="activity-num" aria-hidden="true">{{ index + 1 }}</span>
+                                    <h2 class="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink">{{ log.can_edit ? 'Activity ' + (index + 1) : item.task_title }}</h2>
+                                    <div v-if="log.can_edit" class="worklog-time-picker" :aria-label="'Time spent on activity ' + (index + 1)"><Icon name="clock" size="sm" class="ml-1.5 hidden text-muted sm:block" /><label><span class="sr-only">Hours</span><select aria-label="Hours" v-model.number="item.duration_hours" :disabled="busy" @change="changeDuration(item)"><option v-for="h in 25" :key="h - 1" :value="h - 1">{{ h - 1 }} h</option></select></label><label><span class="sr-only">Minutes</span><select aria-label="Minutes" v-model.number="item.duration_minutes" :disabled="busy || item.duration_hours === 24" @change="changeDuration(item)"><option v-for="m in 60" :key="m - 1" :value="m - 1">{{ m - 1 }} min</option></select></label></div>
+                                    <strong v-else class="chip whitespace-nowrap bg-navy-50 text-navy-900"><Icon name="clock" size="sm" />{{ durationLabel(item.time_spent_hours) }}</strong>
+                                    <button v-if="log.can_edit && form.items.length > 1" type="button" class="remove-activity" :disabled="busy" :aria-label="'Remove activity ' + (index + 1)" @click="form.items.splice(index, 1)"><Icon name="close" size="sm" /></button>
+                                </div>
+                                <div v-if="log.can_edit" class="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_14rem]">
+                                    <label class="field-label">Activity *<input v-model.trim="item.task_title" required maxlength="140" class="field-input" :disabled="busy" placeholder="What did you work on?" /></label>
+                                    <div class="min-w-0"><label class="field-label" :for="'project-' + item.key">Project</label><select :id="'project-' + item.key" v-model="item.project" class="field-input" :disabled="busy"><option value="">General work</option><option v-if="item.project && !workspace.projects.some(p => p.name === item.project)" :value="item.project">{{ item.project_name || item.project }}</option><option v-for="project in workspace.projects" :key="project.name" :value="project.name">{{ project.project_name }}</option></select></div>
+                                    <label class="field-label sm:col-span-2">Details *<textarea :value="workLogDetails(item.description, item.output_link)" @input="setDetails(item, $event.target.value)" required minlength="11" maxlength="4000" rows="3" class="field-input" :disabled="busy" placeholder="Describe the work and what was completed. Paste any links here." /></label>
+                                </div>
+                                <template v-else>
+                                    <p class="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-ink-2">{{ workLogDetails(item.description, item.output_link) }}</p>
+                                    <p class="mt-3"><span class="chip bg-soft text-ink-2"><Icon name="folder" size="sm" />{{ item.project_name || 'General work' }}</span></p>
+                                </template>
+                            </section>
+                            <div v-if="!form.items.length" class="activity-card text-sm text-muted">No activities were recorded for this day.</div>
+                            <label v-if="log.can_edit && workspace.can_override" class="field-label activity-card">HR exception reason <span class="font-normal text-muted">Required for late or on-behalf entries</span><textarea v-model="form.hr_exception_reason" minlength="10" maxlength="2000" rows="2" class="field-input"></textarea></label>
+                            <div v-if="log.can_edit" class="grid gap-3" :class="!showNotes && !form.notes ? 'sm:grid-cols-[minmax(0,1fr)_auto]' : ''">
+                                <button type="button" class="add-tile" :disabled="busy || form.items.length >= 100" @click="form.items.push(emptyItem())">+ Add activity</button>
+                                <button v-if="!showNotes && !form.notes" type="button" class="add-tile add-tile--quiet" @click="showNotes = true">+ Add notes</button>
+                            </div>
+                            <label v-if="log.can_edit && (showNotes || form.notes)" class="field-label activity-card">Notes (optional)<textarea v-model.trim="form.notes" rows="2" maxlength="4000" class="field-input" :disabled="busy" placeholder="Anything your manager should know about the day" /></label>
+                            <div v-else-if="form.notes" class="activity-card"><h2 class="text-sm font-semibold">Notes</h2><p class="mt-2 whitespace-pre-wrap text-sm text-ink-2">{{ form.notes }}</p></div>
+                        </form>
+                        <section v-if="log.can_review" class="activity-card space-y-3"><h2 class="font-semibold text-ink">Manager review</h2><label class="field-label">Private review notes<textarea v-model="remarks" maxlength="4000" rows="2" class="field-input" :disabled="busy" placeholder="Visible to managers and HR" /></label></section>
+                        <section v-else-if="log.manager_remarks" class="activity-card"><h2 class="font-semibold text-ink">Private review notes</h2><p class="mt-3 whitespace-pre-wrap text-sm text-muted">{{ log.manager_remarks }}</p></section>
+                    </div>
+                    <!-- Day summary: a side card on wide screens, a sticky action bar on phones. -->
+                    <footer class="form-footer">
+                        <div class="hidden lg:block">
+                            <p class="eyebrow">Day total</p>
+                            <p class="mt-1 font-display text-[2rem] font-semibold leading-none tabular-nums text-ink">{{ durationLabel(totalHours) }}</p>
+                            <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-soft" aria-hidden="true"><div class="h-full rounded-full bg-navy-900 transition-[width] duration-300" :style="{ width: Math.min(100, (totalHours / 8) * 100) + '%' }"></div></div>
+                            <p class="mt-1.5 text-xs text-muted">Against an 8-hour day</p>
+                        </div>
+                        <p class="text-sm font-medium text-ink lg:mt-4 lg:border-t lg:border-line lg:pt-4">{{ form.items.length }} {{ form.items.length === 1 ? 'activity' : 'activities' }} · {{ durationLabel(totalHours) }}</p>
+                        <div v-if="log.can_edit" class="mt-2 flex gap-3 lg:mt-3 lg:flex-col-reverse"><button type="submit" form="work-log-form" class="btn-secondary min-h-11 flex-1" :disabled="busy">Save draft</button><button type="button" class="btn-primary min-h-11 flex-1" :disabled="busy" @click="submitForm">{{ busy ? 'Saving…' : 'Submit log' }}</button></div>
+                        <button v-else-if="log.can_review" class="btn-primary mt-2 min-h-11 w-full" :disabled="busy" @click="review">Mark as reviewed</button>
+                        <p v-if="log.can_edit" class="mt-3 hidden text-xs leading-relaxed text-muted lg:block">Drafts stay private. Submitting sends the log to your manager and updates your attendance.</p>
+                    </footer>
                 </div>
-                <form ref="logForm" id="work-log-form" class="space-y-3" @submit.prevent="save(false)">
-                    <section v-for="(item, index) in form.items" :key="item.key" class="activity-card space-y-3">
-                        <div class="flex items-center justify-between gap-2"><h2 class="font-semibold text-ink">{{ log.can_edit ? 'Activity ' + (index + 1) : item.task_title }}</h2><div v-if="log.can_edit" class="worklog-time-picker" :aria-label="'Time spent on activity ' + (index + 1)"><label><span class="sr-only">Hours</span><select aria-label="Hours" v-model.number="item.duration_hours" :disabled="busy" @change="changeDuration(item)"><option v-for="h in 25" :key="h - 1" :value="h - 1">{{ h - 1 }} h</option></select></label><label><span class="sr-only">Minutes</span><select aria-label="Minutes" v-model.number="item.duration_minutes" :disabled="busy || item.duration_hours === 24" @change="changeDuration(item)"><option v-for="m in 60" :key="m - 1" :value="m - 1">{{ m - 1 }} min</option></select></label></div><strong v-else class="whitespace-nowrap text-sm text-accent">{{ durationLabel(item.time_spent_hours) }}</strong><button v-if="log.can_edit && form.items.length > 1" type="button" class="remove-activity" :disabled="busy" :aria-label="'Remove activity ' + (index + 1)" @click="form.items.splice(index, 1)">×</button></div>
-                        <template v-if="log.can_edit">
-                            <label class="label">Activity *<input v-model.trim="item.task_title" required maxlength="140" class="input" :disabled="busy" placeholder="What did you work on?" /></label>
-                            <label class="sr-only" :for="'project-' + item.key">Project</label><select :id="'project-' + item.key" v-model="item.project" class="project-input" :disabled="busy"><option value="">General work</option><option v-if="item.project && !workspace.projects.some(p => p.name === item.project)" :value="item.project">{{ item.project_name || item.project }}</option><option v-for="project in workspace.projects" :key="project.name" :value="project.name">{{ project.project_name }}</option></select>
-                            <label class="label">Details *<textarea :value="workLogDetails(item.description, item.output_link)" @input="setDetails(item, $event.target.value)" required minlength="11" maxlength="4000" rows="2" class="input" :disabled="busy" placeholder="Describe the work and what was completed." /></label>
-                        </template>
-                        <template v-else><p class="whitespace-pre-wrap text-sm leading-relaxed text-ink">{{ workLogDetails(item.description, item.output_link) }}</p><p class="text-xs text-muted">{{ item.project_name || 'General work' }}</p></template>
-                    </section>
-                    <label v-if="log.can_edit && workspace.can_override" class="field-label">HR exception reason <span class="font-normal text-muted">Required for late or on-behalf entries</span><textarea v-model="form.hr_exception_reason" minlength="10" maxlength="2000" rows="2" class="field-input"></textarea></label><div v-if="log.can_edit" class="flex gap-5"><button type="button" class="text-sm font-medium text-accent" :disabled="busy || form.items.length >= 100" @click="form.items.push(emptyItem())">+ Add activity</button><button v-if="!showNotes && !form.notes" type="button" class="text-sm font-medium text-accent" @click="showNotes = true">+ Add notes</button></div>
-                    <label v-if="log.can_edit && (showNotes || form.notes)" class="label">Notes (optional)<textarea v-model.trim="form.notes" rows="2" maxlength="4000" class="input" :disabled="busy" /></label>
-                    <div v-else-if="form.notes" class="activity-card"><h2 class="text-sm font-semibold">Notes</h2><p class="mt-2 whitespace-pre-wrap text-sm">{{ form.notes }}</p></div>
-                </form>
-                <section v-if="log.can_review" class="activity-card space-y-3"><h2 class="font-semibold text-ink">Manager review</h2><label class="label">Private review notes<textarea v-model="remarks" maxlength="4000" rows="2" class="input" :disabled="busy" placeholder="Visible to managers and HR" /></label></section>
-                <section v-else-if="log.manager_remarks" class="activity-card"><h2 class="font-semibold text-ink">Private review notes</h2><p class="mt-3 whitespace-pre-wrap text-sm text-muted">{{ log.manager_remarks }}</p></section>
-                <footer class="form-footer"><p class="text-sm font-medium text-ink">{{ form.items.length }} {{ form.items.length === 1 ? 'activity' : 'activities' }} · {{ durationLabel(totalHours) }}</p><div v-if="log.can_edit" class="mt-2 flex gap-3"><button type="submit" form="work-log-form" class="btn-secondary flex-1" :disabled="busy">Save draft</button><button type="button" class="btn-primary flex-1" :disabled="busy" @click="submitForm">{{ busy ? 'Saving…' : 'Submit log' }}</button></div><button v-else-if="log.can_review" class="btn-primary mt-2 w-full" :disabled="busy" @click="review">Mark as reviewed</button></footer>
             </template>
-        <nav v-if="!editing && workspace.can_review_team" class="view-tabs" aria-label="Work log views">
-            <button v-if="workspace.can_create" :class="{ selected: listView === 'mine' }" :aria-current="listView === 'mine' ? 'page' : undefined" :disabled="busy" @click="changeView('mine')">My logs</button>
-            <button :class="{ selected: listView === 'team' }" :aria-current="listView === 'team' ? 'page' : undefined" :disabled="busy" @click="changeView('team')">Team review</button>
-        </nav>
 		</template>
 	</div>
 </template>
 
 <script setup>
+import { uid } from "../lib/uid";
 import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { RouterLink, onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from "vue-router";
 import PageHeader from "../components/PageHeader.vue";
+import Avatar from "../components/Avatar.vue";
+import Icon from "../components/Icon.vue";
 import { call } from "../lib/frappe";
 import { monthDates, offsetMonth, hoursLabel, durationMinutes, durationHours, durationLabel, workLogDetails } from "../lib/workLogCalendar";
 
@@ -94,6 +150,7 @@ const listView = computed(() => route.query.view === "team" ? "team" : "mine");
 const calendarQuery = computed(() => ({ view: listView.value, month: route.query.month || workspace.value?.month || form.date.slice(0, 7) || undefined, employee: listView.value === "team" ? route.query.employee : undefined }));
 const dates = computed(() => monthDates(workspace.value?.month || ""));
 const dayMap = computed(() => Object.fromEntries((workspace.value?.days || []).map(day => [day.date, day])));
+const missingDays = computed(() => (workspace.value?.days || []).filter(day => day.status === "Not filled" && day.can_open && day.date < workspace.value.today).length);
 const statuses = ["Not filled", "Draft", "Submitted", "Reviewed", "Holiday", "On leave"];
 const dayClass = status => ({ "Not filled": "day-missing", Draft: "day-draft", Submitted: "day-submitted", Reviewed: "day-reviewed" })[status] || "day-unavailable";
 const dayLabel = day => day ? `${dateLabel(day.date)}, ${day.status}${day.total_hours != null ? ', ' + hoursLabel(day.total_hours) + ' hours' : ''}${day.day_note ? ', ' + day.day_note : ''}${day.cancelled ? ', cancelled log' : ''}` : "";
@@ -101,10 +158,12 @@ const totalHours = computed(() => Number(form.items.reduce((sum, item) => sum + 
 const snapshot = () => JSON.stringify(form);
 const dirty = computed(() => (log.value?.can_edit && original.value && snapshot() !== original.value)
     || (log.value?.can_review && remarks.value !== (log.value.manager_remarks || "")));
-const emptyItem = () => ({ key: crypto.randomUUID(), task_title: "", project: "", description: "", time_spent_hours: "", duration_hours: 0, duration_minutes: 0, output_link: "" });
+const emptyItem = () => ({ key: uid(), task_title: "", project: "", description: "", time_spent_hours: "", duration_hours: 0, duration_minutes: 0, output_link: "" });
 const dateLabel = value => new Date(String(value).slice(0, 10) + "T12:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+const monthShort = value => value ? new Date(String(value).slice(0, 10) + "T12:00:00").toLocaleDateString("en-IN", { month: "short" }) : "";
+const weekdayLabel = value => value ? new Date(String(value).slice(0, 10) + "T12:00:00").toLocaleDateString("en-IN", { weekday: "long" }) : "";
 const monthLabel = value => new Date(value + "-01T12:00:00").toLocaleDateString("en-IN", { month: "long", year: "numeric" });
-const statusClass = status => ({ Draft: "bg-soft text-muted", Submitted: "bg-accent-soft text-accent", Reviewed: "bg-ok-soft text-ok", Cancelled: "bg-bad-soft text-bad" })[status];
+const statusClass = status => ({ Draft: "bg-warn-soft text-warn", Submitted: "bg-navy-50 text-navy-900", Reviewed: "bg-ok-soft text-ok", Cancelled: "bg-bad-soft text-bad" })[status] || "bg-soft text-muted";
 function apply(data) {
     workspace.value = data;
     if (data.log) {
@@ -189,57 +248,83 @@ watch(() => route.fullPath, load, { immediate: true });
 <style scoped>
 .card { @apply rounded-2xl border border-line bg-surface p-5 shadow-soft sm:p-6; }
 .work-log-page { min-height: calc(100dvh - 10rem); display: flex; flex-direction: column; }
-.person-card { @apply flex w-full items-center gap-4 rounded-2xl border border-line bg-surface p-5 hover:border-accent; }
+.person-card { @apply flex w-full items-center gap-4 px-4 py-3.5 text-left transition-colors sm:px-5; }
+.person-card + .person-card, p + .person-card { border-top: 1px solid var(--line); }
+.person-card:hover:not(:disabled) { background: color-mix(in srgb, var(--navy-50) 70%, transparent); }
 .person-avatar { @apply flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-accent-soft text-lg font-semibold text-accent; }
 .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: clamp(4px, 1vw, 10px); }
 .weekday { @apply py-2 text-center text-xs font-medium text-muted; }
-.calendar-day { @apply flex min-w-0 flex-col items-center justify-center gap-2 rounded-xl border border-transparent py-3 transition-shadow focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent; min-height: 72px; }
-.calendar-day:not(:disabled):hover { @apply border-accent shadow-soft; }
-.calendar-day.today { @apply border-accent; box-shadow: 0 0 0 1px var(--color-accent, #08745e); }
-.day-number { @apply text-sm font-semibold; }
-.day-hours { @apply text-xs; }
-.day-missing { background: #ffedeb; color: #96372e; }
-.day-draft { background: #fff2d2; color: #765600; }
-.day-submitted { background: #e7efff; color: #224f94; }
-.day-reviewed { background: #dcf3e6; color: #165e3c; }
-.day-unavailable { @apply bg-soft text-muted; }
-.legend-dot { @apply inline-block h-3 w-3 rounded-full border border-current; }
-.month-arrow { @apply flex h-11 w-11 items-center justify-center rounded-xl border border-line text-2xl text-ink disabled:opacity-30; }
+.calendar-day { @apply relative flex min-w-0 flex-col items-start justify-between gap-1 rounded-xl border border-line p-2 text-left transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent sm:p-2.5; min-height: 72px; }
+.calendar-day::after { content: ""; position: absolute; top: 0.5rem; right: 0.5rem; width: 0.4375rem; height: 0.4375rem; border-radius: 999px; background: currentColor; opacity: 0.85; }
+.calendar-day.day-unavailable::after { display: none; }
+.calendar-day:not(:disabled):hover { border-color: var(--navy-200); box-shadow: var(--shadow-lift); transform: translateY(-1px); }
+.calendar-day.today { border-color: var(--navy-900); box-shadow: inset 0 0 0 1px var(--navy-900); }
+.day-number { @apply text-sm font-semibold text-ink; }
+.day-hours { @apply text-xs font-semibold; }
+.day-missing { background: var(--surface); color: var(--bad); border-style: dashed; border-color: color-mix(in srgb, var(--bad) 35%, var(--line)); }
+.day-draft { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.day-submitted { background: var(--navy-50); color: var(--navy-600); border-color: transparent; }
+.day-reviewed { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.day-unavailable { @apply bg-soft text-muted; border-color: transparent; }
+.day-unavailable .day-number { color: var(--muted); }
+.legend-dot { @apply inline-block h-2 w-2 rounded-full; background: currentColor; }
+.legend-dot.day-unavailable { background: var(--line-strong); }
+.legend-dot.day-missing { border: 0; }
+.month-arrow { @apply flex h-10 w-10 items-center justify-center rounded-xl border border-line-strong bg-surface text-xl text-ink transition-colors hover:bg-navy-50 disabled:opacity-30; }
 .month-input { @apply max-w-full border-none bg-transparent text-center text-base font-semibold text-ink; }
 .summary-card { @apply flex flex-col gap-2 rounded-2xl border border-line bg-surface p-4; }
 .summary-card strong { @apply text-lg text-ink; }
 .summary-card span { @apply text-xs text-muted; }
-.view-tabs { @apply sticky bottom-0 z-10 !mt-auto flex gap-2 rounded-2xl border border-line bg-surface p-2 shadow-soft; }
-.view-tabs button { @apply flex-1 rounded-xl px-4 py-3 text-sm font-medium text-muted; }
-.view-tabs button.selected { @apply bg-accent-soft text-accent; }
+.view-tabs { @apply inline-flex max-w-full gap-1 self-start rounded-xl bg-soft p-1; }
+.view-tabs button { @apply min-h-9 rounded-lg px-4 py-1.5 text-sm font-semibold text-muted transition-colors hover:text-ink; }
+.view-tabs button.selected { @apply bg-surface text-navy-900 shadow-soft; box-shadow: 0 0 0 1px var(--line), var(--shadow-soft); }
 @media (max-width: 420px) { .calendar-day { min-height: 62px; padding: 8px 0; } .card { padding: 16px; } }
 .label { @apply block text-sm font-medium text-ink; }
 .input { @apply mt-2 block w-full rounded-xl border border-line bg-surface px-3 py-3 text-ink outline-none focus:border-accent disabled:bg-soft; }
 .status { @apply rounded-full px-3 py-1 text-xs font-medium; }
-.message-error { @apply rounded-xl border border-bad bg-bad-soft p-4 text-sm text-bad; }
-.message-success { @apply rounded-xl border border-ok bg-ok-soft p-4 text-sm text-ink; }
 </style>
 
 <style scoped>
-.calendar-panel { margin-inline: -10px; }
-.summary-row { @apply grid grid-cols-4 gap-2 border-t border-line pt-3; }
-.summary-row div { @apply flex flex-col gap-1; }
-.summary-row strong { @apply text-sm font-semibold text-ink; }
-.summary-row span { @apply text-xs text-muted; }
-.activity-card { @apply rounded-2xl border border-line bg-surface p-4; }
-.activity-card .input { @apply mt-1 py-2.5; }
-.worklog-time-picker { @apply flex shrink-0 items-center gap-1 rounded-lg border border-line bg-soft px-1; }
-.worklog-time-picker select { @apply rounded-lg bg-transparent py-2 pl-1 text-xs font-medium text-ink; }
-.remove-activity { @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xl text-muted hover:bg-soft; }
-.project-input { @apply w-full rounded-lg border border-line bg-soft px-3 py-2 text-sm text-ink; }
-.date-button { @apply relative inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-ink; }
-.date-button input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
-.form-footer { @apply sticky bottom-0 z-10 !mt-auto border-t border-line bg-surface py-3; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+.calendar-layout { display: grid; gap: 1.25rem; align-items: start; }
+@media (min-width: 1024px) { .calendar-layout { grid-template-columns: minmax(0, 1fr) 17rem; gap: 1.5rem; } .calendar-layout > aside { position: sticky; top: 5.5rem; } }
+.summary-row { @apply grid grid-cols-3 gap-2.5 sm:grid-cols-4 lg:grid-cols-3; }
+.summary-row div { @apply flex min-w-0 flex-col gap-1 rounded-2xl border border-line bg-surface px-2.5 py-3; box-shadow: var(--shadow-soft); }
+.summary-row .summary-row__total { @apply col-span-3 sm:col-span-1 lg:col-span-3; background: linear-gradient(135deg, var(--navy-900), var(--navy-600)); border-color: transparent; }
+.summary-row .summary-row__total span { color: rgb(255 255 255 / 0.7); }
+.summary-row .summary-row__total strong { color: #fff; font-size: 1.5rem; }
+.summary-row strong { @apply font-display text-xl font-semibold tabular-nums text-ink; }
+.summary-row span { @apply text-[11px] font-medium leading-tight text-muted; }
+.activity-card { @apply rounded-2xl border border-line bg-surface p-4 sm:p-5; box-shadow: var(--shadow-soft); }
+.activity-num { @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy-900 text-xs font-semibold text-white; }
+.worklog-time-picker { @apply flex shrink-0 items-center gap-0.5 rounded-xl border border-line-strong bg-surface p-0.5; }
+.worklog-time-picker select { @apply rounded-lg border-0 bg-transparent py-1.5 pl-2 text-sm font-semibold text-ink shadow-none; min-width: 0; }
+.worklog-time-picker select:focus { box-shadow: var(--ring); }
+.worklog-time-picker label select { padding: 0.375rem 0.25rem 0.375rem 0.5rem; }
+.worklog-time-picker label select::picker-icon { width: 0.875rem; padding-left: 0.25rem; }
+.remove-activity { @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-bad-soft hover:text-bad; }
+.add-tile { @apply flex min-h-[3rem] w-full items-center justify-center rounded-2xl border-[1.5px] border-dashed border-line-strong px-5 text-sm font-semibold text-navy-600 transition-colors hover:border-navy-600 hover:bg-navy-50 hover:text-navy-900 disabled:opacity-50; }
+.add-tile--quiet { @apply text-muted; }
+.log-editor { display: grid; gap: 1rem; align-items: start; }
+@media (min-width: 1024px) { .log-editor { grid-template-columns: minmax(0, 1fr) 18rem; gap: 1.5rem; } }
+.log-dayhead { @apply flex flex-wrap items-center justify-between gap-3; }
+.log-date { @apply relative flex items-center gap-3 rounded-2xl border border-line bg-surface py-2 pl-2 pr-5 transition-colors; box-shadow: var(--shadow-soft); cursor: pointer; }
+.log-date:not(.log-date--locked):hover { @apply border-navy-200; }
+.log-date--locked { cursor: default; }
+.log-date input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: inherit; }
+.log-date__tile { @apply flex h-12 w-12 shrink-0 flex-col items-center justify-center overflow-hidden rounded-xl bg-navy-900 text-white; }
+.log-date__month { @apply text-[10px] font-semibold uppercase tracking-wider text-white/70; }
+.log-date__day { @apply font-display text-lg font-semibold leading-none; }
+.status { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold; }
+.form-footer { @apply sticky bottom-0 z-10 !mt-auto -mx-4 border-t border-line bg-surface px-4 py-3; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+@media (min-width: 640px) { .form-footer { @apply mx-0 rounded-2xl border px-5; } }
+@media (min-width: 1024px) { .form-footer { position: sticky; top: 5.5rem; bottom: auto; margin-top: 0 !important; padding: 1.25rem; box-shadow: var(--shadow-soft); } }
+.text-ink-2 { color: var(--ink-2); }
 @media (max-width: 640px) {
-    .calendar-panel { margin-inline: -10px; }
+    
     .calendar-grid { gap: 4px; }
     .calendar-day { min-height: 68px; }
     .calendar-day .day-number { font-size: 16px; }
+    .calendar-day::after { display: none; }
     .calendar-panel .legend-dot { width: 8px; height: 8px; }
     .calendar-panel > div:nth-last-child(1) { column-gap: 10px; font-size: 10px; }
 }

@@ -26,34 +26,23 @@ function addGroup(items, id, label, icon, children) {
 	if (unique.length) items.push({ id, label, icon, children: unique });
 }
 
+// Intent first: the places people go every day sit at the top; role
+// workspaces follow; the full module catalogue stays one click away under
+// "Browse everything" so every permitted action remains in the sidebar.
 export function buildSidebarItems(payload) {
 	const actions = payload?.actions || {};
 	const nav = payload?.nav || {};
 	const money = actions.money || [];
 	const items = [
 		{ to: "/home", label: "Home", icon: "home" },
-		{ to: "/todos", label: "My Work", icon: "check", badge: payload?.waiting_count || 0 },
-		{ to: "/profile", label: "Profile", icon: "user" },
+		{ to: "/todos", label: "Waiting", icon: "check", badge: payload?.waiting_count || 0 },
 	];
+	if (buildRecordKinds(payload).length) items.push({ to: "/records", label: "Records", icon: "document-history" });
 
-	const work = [];
-	addGroup(work, "collaboration", "Collaboration", "chat", actionLinks(actions.collaboration || []));
-	const projects = actionLinks(actions.projects || []);
-	if (nav.projects && !projects.length) projects.push({ href: "/volunteering/projects?view=approved", label: "Approved projects", icon: "folder-check" });
-	addGroup(work, "projects", "Projects", "folder", projects);
-	// Any future money action remains discoverable even before Home chooses to highlight it.
-	addGroup(work, "expenses", "Expenses & invoices", "receipt", actionLinks(money.filter((action) => action.id !== "advance")));
-	const advances = actionLinks(money, ["advance"]);
-	if (nav.advances && !advances.length) advances.push({ href: "/volunteering/advances", label: "Advance requests", icon: "wallet" });
-	addGroup(work, "advances", "Advances", "wallet", advances);
-	addGroup(work, "purchasing", "Purchasing", "invoice", actionLinks(actions.purchasing || []));
-	addGroup(work, "time", "Time & leave", "clock", actionLinks(actions.time || []));
+	const workspaces = [];
 	const team = actionLinks(actions.team || []);
 	if (nav.team && !team.length) team.push({ href: "/volunteering/team", label: "My team", icon: "people" });
-	addGroup(work, "team", "My team", "people", team);
-	if (work.length) items.push({ section: "Your work" }, ...work);
-
-	const management = [];
+	addGroup(workspaces, "team", "My team", "people", team);
 	const accounts = actionLinks(actions.accounts || []);
 	if (actions.accounts?.length) {
 		accounts.unshift({ href: "/volunteering/expense-claim-workflow?view=reimbursement", label: "Settle expense claims", icon: "money-out" });
@@ -62,14 +51,26 @@ export function buildSidebarItems(payload) {
 	}
 	if (nav.budget_health) accounts.push({ href: "/volunteering/budget-health", label: "Budget health", icon: "chart" });
 	for (const link of payload?.admin || []) accounts.push({ href: link.route, label: link.label, icon: "chart" });
-	addGroup(management, "accounts", "Accounts", "bank", accounts);
-	addGroup(management, "hr", "HR management", "user-plus", [
+	addGroup(workspaces, "accounts", "Accounts", "bank", accounts);
+	addGroup(workspaces, "hr", "HR management", "user-plus", [
 		...actionLinks(actions.hr_management || []),
 		...(payload?.people || []).map((link) => ({ href: link.route, label: link.label, icon: "people" })),
 	]);
-	addGroup(management, "system", "System management", "user-shield", actionLinks(actions.system_management || []));
-	if (management.length) items.push({ section: "Management" }, ...management);
+	addGroup(workspaces, "system", "System management", "user-shield", actionLinks(actions.system_management || []));
+	if (workspaces.length) items.push({ section: "Workspaces" }, ...workspaces);
 
+	const browse = [];
+	const projects = actionLinks(actions.projects || []);
+	if (nav.projects && !projects.length) projects.push({ href: "/volunteering/projects?view=approved", label: "Approved projects", icon: "folder-check" });
+	addGroup(browse, "projects", "Projects", "folder", projects);
+	// Any future money action remains discoverable even before Home chooses to highlight it.
+	addGroup(browse, "expenses", "Expenses & invoices", "receipt", actionLinks(money.filter((action) => action.id !== "advance")));
+	const advances = actionLinks(money, ["advance"]);
+	if (nav.advances && !advances.length) advances.push({ href: "/volunteering/advances", label: "Advance requests", icon: "wallet" });
+	addGroup(browse, "advances", "Advances", "wallet", advances);
+	addGroup(browse, "purchasing", "Purchasing", "invoice", actionLinks(actions.purchasing || []));
+	addGroup(browse, "time", "Time & leave", "clock", actionLinks(actions.time || []));
+	addGroup(browse, "collaboration", "Collaboration", "chat", actionLinks(actions.collaboration || []));
 	const organisation = actionLinks(actions.organisation || []);
 	if (payload?.programs) {
 		organisation.push({ href: payload.programs.workspace_route, label: "Campaign dashboard", icon: "people" });
@@ -77,9 +78,58 @@ export function buildSidebarItems(payload) {
 	} else if (nav.volunteering) {
 		organisation.push({ href: "/desk/volunteering", label: "Volunteering", icon: "people" });
 	}
-	if (organisation.length) items.push({ section: "Organisation" });
-	addGroup(items, "organisation", "Organisation resources", "map-pin", organisation);
+	addGroup(browse, "organisation", "Organisation resources", "map-pin", organisation);
+	if (browse.length) items.push({ section: "Browse everything" }, ...browse);
+
+	if (items.some((item) => item.section)) items.push({ section: "You" });
+	items.push({ to: "/profile", label: "Profile", icon: "user" });
 	return items;
+}
+
+// "+ New": every request a person can start, grouped by what it is for.
+const NEW_GROUPS = [
+	["Money", [["claim", "Submit an expense", "receipt"], ["claim_multiple", "Submit several invoices", "invoice-claim"], ["invoice_expense_claim", "Invoice and expense together", "invoice-claim"], ["invoice_generator", "Prepare an invoice", "invoice"], ["advance", "Request an advance", "coins"]]],
+	["Time", [["log_work", "Log work", "clock"], ["leave", "Apply for leave", "calendar-away"], ["wfh", "Work from home", "home"], ["fix_attendance", "Fix attendance", "calendar-check"]]],
+	["Projects and purchasing", [["create_project", "Propose a project", "document-plus"], ["my_purchase_requests", "Raise a purchase request", "vendor"]]],
+];
+
+export function buildNewActions(payload) {
+	const all = Object.values(payload?.actions || {}).flat();
+	const byId = new Map(all.map((action) => [action.id, action]));
+	const claim = byId.get("claim");
+	if (claim) byId.set("claim_multiple", { id: "claim_multiple", route: "/volunteering/expense-claim/multiple", hint: "For bills with different dates." });
+	return NEW_GROUPS.map(([title, entries]) => ({
+		title,
+		items: entries.flatMap(([id, label, icon]) => {
+			const action = byId.get(id);
+			return action?.route ? [{ id, label, icon, href: action.route, hint: action.hint || "" }] : [];
+		}),
+	})).filter((group) => group.items.length);
+}
+
+// "Records": everything the person has raised, one list per kind.
+const RECORD_KINDS = [
+	["claim", "Expense claims", "receipt", "Receipts, approvals and payments"],
+	["advance", "Advances", "coins", "Money received before spending"],
+	["my_purchase_requests", "Purchase requests", "vendor", "Orders you raised"],
+	["leave", "Time and leave", "calendar-away", "Leave, WFH and attendance fixes"],
+	["log_work", "Work logs", "clock", "Daily logs and reviews"],
+	["my_project_requests", "Project proposals", "document-history", "Proposals you prepared"],
+	["approved_projects", "Projects", "folder-check", "Projects you belong to"],
+	["bank_account", "Reimbursement bank account", "bank", "Where your reimbursements go"],
+];
+
+export function buildRecordKinds(payload) {
+	const personal = [...(payload?.actions?.money || []), ...(payload?.actions?.time || []), ...(payload?.actions?.projects || []), ...(payload?.actions?.purchasing || [])];
+	const byId = new Map(personal.map((action) => [action.id, action]));
+	const seen = new Set();
+	return RECORD_KINDS.flatMap(([id, label, icon, hint]) => {
+		const action = byId.get(id);
+		const href = action?.list_route || action?.route;
+		if (!href || seen.has(href)) return [];
+		seen.add(href);
+		return [{ id, label, icon, hint, href, open: Number(action.pending || 0) }];
+	});
 }
 
 function pick(actions, ids) {

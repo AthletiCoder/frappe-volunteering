@@ -1,12 +1,15 @@
 {% extends "templates/web.html" %}
 
-{% block title %}Volunteering{% endblock %}
+{% block title %}Sevamrita{% endblock %}
 
 {# SPA has its own chrome — hide Frappe website navbar/footer (logo toggle was confusing). #}
 {% block navbar %}{% endblock %}
 {% block footer %}{% endblock %}
 
 {% block head_include %}
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/volunteering/brand/icon-32.png">
+<link rel="apple-touch-icon" href="/assets/volunteering/brand/icon-180.png">
+<meta name="theme-color" content="#ffffff">
 <script>
 	(function () {
 		try {

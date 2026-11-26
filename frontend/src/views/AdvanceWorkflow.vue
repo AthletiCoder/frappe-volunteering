@@ -13,7 +13,7 @@
 				<button v-if="selected" type="button" class="btn-secondary" @click="closeDetail">
 					Back to queue
 				</button>
-				<RouterLink to="/home" class="btn-secondary">Home</RouterLink>
+				<RouterLink to="/home" class="btn-back">Home</RouterLink>
 			</template>
 		</PageHeader>
 
@@ -22,55 +22,64 @@
 		<p v-if="loading" class="text-muted" role="status">Loading advances…</p>
 
 		<template v-if="!loading && !selected">
-			<div class="flex flex-wrap gap-2 mb-5">
-				<button
-					v-for="option in visibleTabs"
-					:key="option.key"
-					type="button"
-					:class="['queue-tab', tab === option.key ? 'queue-tab-active' : '']"
-					@click="tab = option.key"
-				>
-					{{ option.label }} <span>{{ counts[option.key] || 0 }}</span>
-				</button>
-			</div>
-
-			<section v-if="!currentQueue.length" class="form-card text-center py-10">
-				<h2 class="text-lg font-semibold">Nothing waiting here</h2>
-				<p class="text-sm text-muted mt-2">This queue is clear.</p>
-			</section>
-			<div v-else class="space-y-3">
-				<button
-					v-for="advance in currentQueue"
-					:key="advance.name"
-					type="button"
-					class="advance-card w-full text-left"
-					@click="openDetail(advance.name)"
-				>
-					<div class="flex flex-wrap justify-between gap-3">
-						<div>
-							<strong>{{ advance.employee_name }}</strong>
-							<p class="text-sm text-muted mt-1">
-								{{ advance.name }} · {{ advance.project || "No project" }}
-							</p>
-						</div>
-						<div class="sm:text-right">
-							<strong>{{ money(advance.amount, advance.currency) }}</strong>
-							<p v-if="advance.paid_amount" class="text-xs text-muted mt-1">
-								Paid {{ money(advance.paid_amount, advance.currency) }}
-							</p>
-							<p v-if="advance.kind === 'return'" class="text-xs text-muted mt-1">
-								Unused {{ money(advance.residual_amount, advance.currency) }}
-							</p>
-							<p class="text-xs text-muted mt-1">
-								Required {{ date(advance.required_by_date) }}
-							</p>
-						</div>
+			<div class="list-board">
+				<aside class="min-w-0">
+					<div class="filter-rail kit-panel" role="group" aria-label="Queues">
+						<button
+							v-for="option in visibleTabs"
+							:key="option.key"
+							type="button"
+							:class="['filter-btn', tab === option.key ? 'filter-btn--active' : '']"
+							:aria-pressed="tab === option.key"
+							@click="tab = option.key"
+						>
+							<span class="min-w-0 flex-1 truncate text-left">{{ option.label }}</span> <span class="filter-btn__count">{{ counts[option.key] || 0 }}</span>
+						</button>
 					</div>
-				</button>
+				</aside>
+				<section class="min-w-0" aria-label="Queue">
+					<div v-if="!currentQueue.length" class="kit-panel flex flex-col items-center px-6 py-12 text-center">
+						<span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-ok-soft text-ok"><Icon name="check" /></span>
+						<h2 class="mt-3 text-base font-semibold">Nothing waiting here</h2>
+						<p class="mt-1 text-sm text-muted">This queue is clear.</p>
+					</div>
+					<div v-else class="kit-panel overflow-hidden">
+						<button
+							v-for="advance in currentQueue"
+							:key="advance.name"
+							type="button"
+							class="queue-row group"
+							@click="openDetail(advance.name)"
+						>
+							<Avatar :name="advance.employee_name" />
+							<span class="min-w-0 flex-1">
+								<strong class="block truncate text-sm text-ink">{{ advance.employee_name }}</strong>
+								<span class="block truncate text-xs text-muted">{{ advance.name }} · {{ advance.project || "No project" }}</span>
+							</span>
+							<span class="shrink-0 text-right">
+								<strong class="block tabular-nums text-ink">{{ money(advance.amount, advance.currency) }}</strong>
+								<span v-if="advance.paid_amount" class="block text-xs text-muted">Paid {{ money(advance.paid_amount, advance.currency) }}</span>
+								<span v-if="advance.kind === 'return'" class="block text-xs text-muted">Unused {{ money(advance.residual_amount, advance.currency) }}</span>
+								<span class="block text-xs text-muted">Required {{ date(advance.required_by_date) }}</span>
+							</span>
+							<Icon name="arrow-right" size="sm" class="hidden shrink-0 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-navy-900 sm:block" />
+						</button>
+					</div>
+				</section>
 			</div>
 		</template>
 
 		<template v-if="!loading && selected">
+			<div class="triage">
+				<QueueRail
+					class="triage__rail hidden xl:flex"
+					:items="railItems"
+					:active-key="selected.name"
+					:label="railLabel"
+					@open="openDetail"
+					@close="closeDetail"
+				/>
+				<div class="min-w-0">
 			<section class="form-card mb-5">
 				<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 					<Summary label="Employee" :value="selected.employee_name" />
@@ -383,6 +392,8 @@
 					<strong>{{ money(claim.allocated_amount, selected.currency) }}</strong>
 				</a>
 			</section>
+				</div>
+			</div>
 		</template>
 	</div>
 </template>
@@ -391,6 +402,9 @@
 import { computed, defineComponent, h, onMounted, reactive, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import PageHeader from "../components/PageHeader.vue";
+import Icon from "../components/Icon.vue";
+import QueueRail from "../components/QueueRail.vue";
+import Avatar from "../components/Avatar.vue";
 import { call } from "../lib/frappe";
 
 const API = "volunteering.volunteering.advance_workflow_portal.";
@@ -430,6 +444,23 @@ const visibleTabs = computed(() =>
 	allTabs.filter((option) => option.key === "approval" || queuePayload.value.can_disburse),
 );
 const currentQueue = computed(() => queuePayload.value.queues?.[tab.value] || []);
+// Show the queue that contains the open advance beside its detail.
+const railKey = computed(() => {
+	const queues = queuePayload.value.queues || {};
+	const name = selected.value?.name;
+	if ((queues[tab.value] || []).some((row) => row.name === name)) return tab.value;
+	return Object.keys(queues).find((key) => (queues[key] || []).some((row) => row.name === name)) || tab.value;
+});
+const railLabel = computed(() => visibleTabs.value.find((item) => item.key === railKey.value)?.label || "Queue");
+const railItems = computed(() =>
+	(queuePayload.value.queues?.[railKey.value] || []).map((advance) => ({
+		key: advance.name,
+		person: advance.employee_name,
+		subtitle: `${advance.name} · ${advance.project || "No project"}`,
+		amount: money(advance.amount, advance.currency),
+		href: `/volunteering/advance-workflow?advance=${encodeURIComponent(advance.name)}`,
+	})),
+);
 const selectedPaymentAccount = computed(() =>
 	selected.value?.payment?.accounts?.find((account) => account.value === payment.paid_from),
 );
@@ -591,21 +622,16 @@ onMounted(load);
 </script>
 
 <style scoped>
-.form-card {
-	@apply rounded-2xl border border-line bg-surface p-4 sm:p-5 shadow-soft;
+.triage { display: block; }
+@media (min-width: 1280px) {
+	.triage { display: grid; grid-template-columns: 18rem minmax(0, 1fr); gap: 1.5rem; align-items: start; }
+	.triage__rail { position: sticky; top: 5.5rem; }
 }
-.form-title {
-	@apply text-lg font-semibold text-ink mb-2;
-}
-.form-hint {
-	@apply text-sm text-muted mb-4;
-}
-.field-label {
-	@apply block text-sm font-medium text-ink;
-}
-.field-input {
-	@apply mt-1 block w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-ink;
-}
+.queue-row { display: flex; width: 100%; align-items: center; gap: 0.875rem; padding: 0.875rem 1rem; text-align: left; transition: background-color var(--dur-fast) ease; }
+@media (min-width: 640px) { .queue-row { padding: 0.875rem 1.25rem; } }
+.queue-row + .queue-row { border-top: 1px solid var(--line); }
+.queue-row:hover { background: color-mix(in srgb, var(--navy-50) 70%, transparent); }
+
 .queue-tab {
 	@apply rounded-full border border-line bg-surface px-3 py-2 text-sm font-medium text-muted;
 }
@@ -614,18 +640,6 @@ onMounted(load);
 }
 .advance-card {
 	@apply rounded-2xl border border-line bg-surface p-4 shadow-soft hover:shadow-lift;
-}
-.error-box {
-	@apply rounded-xl border border-bad bg-bad-soft p-4 text-sm text-bad;
-}
-.success-box {
-	@apply rounded-xl border border-ok bg-ok-soft p-4 text-sm text-ok;
-}
-.warning-box {
-	@apply rounded-xl border border-warn bg-warn-soft p-3 text-sm text-ink;
-}
-.info-box {
-	@apply rounded-xl border border-line bg-soft p-3 text-sm text-ink;
 }
 .btn-danger {
 	@apply rounded-xl bg-bad px-4 py-2 text-sm font-semibold text-white disabled:opacity-50;

@@ -31,16 +31,16 @@ function choose(event) {
 function remove(index) {error.value='';emit('update:modelValue', props.modelValue.filter((_, i) => i !== index));}
 </script>
 <style scoped>
-.tracker-picker { display: grid; gap: 10px; min-width: 0; padding: 14px; border: 1px solid #dce5e2; border-radius: 12px; }
+.tracker-picker { display: grid; gap: 10px; min-width: 0; padding: 14px; border: 1px solid var(--line-strong); border-radius: 12px; }
 .tracker-picker legend { padding: 0 5px; font-size: 14px; line-height: 1.5; font-weight: 600; }
-.tracker-picker p { margin: 0; font-size: 12px; line-height: 1.6; color: #637378; }
+.tracker-picker p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--muted); }
 .tracker-choose { display: grid; gap: 7px; font-size: 14px; }
 .tracker-choose input { width: 100%; min-width: 0; font-size: 12px; }
-.tracker-choose input::file-selector-button { margin-right: 9px; border: 1px solid #c9ddd6; border-radius: 8px; padding: 8px 11px; background: #edf6f2; color: #146b58; font: inherit; font-weight: 600; cursor: pointer; }
+.tracker-choose input::file-selector-button { margin-right: 9px; border: 1px solid var(--line-strong); border-radius: 8px; padding: 8px 11px; background: var(--accent-soft); color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
 .tracker-picker ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 9px; }
 .tracker-picker li { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 8px; background: #fff; }
 .tracker-picker li > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.tracker-picker small { display: block; color: #637378; margin-top: 4px; }
-.tracker-picker button { color: #a52e42; font-size: 12px; padding: 8px 0; }
-.tracker-picker .tracker-error { color: #a52e42; }
+.tracker-picker small { display: block; color: var(--muted); margin-top: 4px; }
+.tracker-picker button { color: var(--bad); font-size: 12px; padding: 8px 0; }
+.tracker-picker .tracker-error { color: var(--bad); }
 </style>

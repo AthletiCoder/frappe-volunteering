@@ -50,7 +50,8 @@ website_route_rules = [
 ]
 
 # include js, css files in header of web template
-# web_include_css = "/assets/volunteering/css/volunteering.css"
+# Brand styling for Frappe's own web pages (login). Rules are scoped to those pages.
+web_include_css = "/assets/volunteering/css/brand_web.css"
 # web_include_js = "/assets/volunteering/js/volunteering.js"
 
 # include custom scss in every website theme (without file extension ".scss")

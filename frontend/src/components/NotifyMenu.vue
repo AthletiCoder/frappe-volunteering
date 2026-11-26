@@ -13,7 +13,7 @@
 		</button>
 		<div
 			v-if="open"
-			class="absolute right-0 mt-2 w-72 rounded-2xl border border-line bg-surface shadow-lift p-3 z-30"
+			class="anim-dialog absolute right-0 z-30 mt-2 w-72 rounded-2xl border border-line bg-surface p-4 shadow-pop"
 			role="dialog"
 			aria-label="Notification settings"
 			@click.stop

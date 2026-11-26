@@ -646,21 +646,30 @@ def backfill_project_expense_accounts(*, seed_empty_projects=False):
 		accounts = legacy_by_company.get(project.company) or []
 		if not accounts:
 			continue
-		project_doc = frappe.get_doc("Project", project.name)
+		# Insert the seeded rows directly. Saving the Project would run the
+		# workspace approval validator, which rejects any configuration change
+		# made outside an approved proposal, so the one-time patch could never
+		# finish on a site with legacy Projects.
+		seen_labels = set()
 		for account in accounts:
-			project_doc.append(
-				"account_budgets",
+			label = account_label(account)
+			if label.casefold() in seen_labels:
+				continue
+			seen_labels.add(label.casefold())
+			frappe.get_doc(
 				{
-					"employee_label": account_label(account),
+					"doctype": "Project Account Budget",
+					"parent": project.name,
+					"parenttype": "Project",
+					"parentfield": "account_budgets",
+					"idx": len(seen_labels),
+					"employee_label": label,
+					"budget_key": frappe.generate_hash(length=20),
 					"expense_account": account,
 					"approved_amount": 0,
 					"is_active": 1,
-				},
-			)
-		from volunteering.volunteering.project_account_mapping import mapping_context
-
-		with mapping_context(project_doc.name):
-			project_doc.save(ignore_permissions=True)
+				}
+			).db_insert()
 
 	# Preserve the visible choice on historical rows. Any future save still
 	# validates it against the Project's current active allow-list.

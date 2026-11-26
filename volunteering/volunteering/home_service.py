@@ -490,6 +490,20 @@ def _compose_todos(inbox, accounts_queues, status=None, employee=None):
 	return todos
 
 
+RESUMABLE_STATES = ("Draft", "Receipt Correction Required")
+
+
+def _date_label(value):
+	return formatdate(value, "d MMM yyyy") if value else ""
+
+
+def _date_range(start, end):
+	"""'15 Sep 2026' for one day, '15 Sep 2026 – 17 Sep 2026' for a span."""
+	if not end or str(end) == str(start):
+		return _date_label(start)
+	return f"{_date_label(start)} – {_date_label(end)}"
+
+
 def _employee_draft_todos(employee):
 	"""Individual draft advances / claims with raised-on timestamp."""
 	if not employee:
@@ -503,21 +517,31 @@ def _employee_draft_todos(employee):
 			continue
 		fields = ["name", "creation", "modified", amount_field]
 		fields.append("intended_project" if doctype == "Employee Advance" else "project")
-		if frappe.db.has_column(doctype, "workflow_state"):
+		has_workflow = frappe.db.has_column(doctype, "workflow_state")
+		if has_workflow:
 			fields.append("workflow_state")
 		rows = frappe.get_all(
 			doctype,
 			filters={
 				"employee": employee, "docstatus": 0,
-				**({"workflow_state": ["!=", "Withdrawn"]} if doctype == "Expense Claim" else {}),
 				**home_project_filter("intended_project" if doctype == "Employee Advance" else "project"),
 			},
+			# docstatus 0 also covers records already in review; only the ones
+			# waiting on the employee belong in "Resume drafts".
+			or_filters=(
+				[
+					[doctype, "workflow_state", "in", RESUMABLE_STATES],
+					[doctype, "workflow_state", "is", "not set"],
+				]
+				if has_workflow
+				else None
+			),
 			fields=fields,
 			order_by="modified desc",
 			limit=8,
 		)
 		for row in rows:
-			if doctype == "Expense Claim" and row.get("workflow_state") == "Withdrawn":
+			if row.get("workflow_state") not in (None, "", *RESUMABLE_STATES):
 				continue
 			if not (
 				is_home_advance(row)
@@ -735,7 +759,7 @@ def _approver_inbox(user, employee):
 		if employee: filters["employee"] = ["!=", employee]
 		for row in frappe.get_all("Staff Time Request", filters=filters, fields=["name", "employee_name", "request_type", "from_date", "modified"], limit=INBOX_CAP):
 			items.append({"id": f"Staff Time Request::{row.name}", "kind": _("Time and leave"), "title": row.employee_name,
-				"subtitle": f"{row.request_type} · {formatdate(row.from_date)}", "route": "/volunteering/time-leave?view=team", "modified": str(row.modified)})
+				"subtitle": f"{row.request_type} · {_date_label(row.from_date)}", "route": "/volunteering/time-leave?view=team", "modified": str(row.modified)})
 	items.extend(_wfh_inbox(employee))
 	items.extend(_pending_approver_inbox("Expense Claim", _("Claim"), user))
 	items.extend(_pending_approver_inbox("Employee Advance", _("Advance"), user))
@@ -803,7 +827,7 @@ def _leave_inbox(user, employee):
 				"id": f"Leave Application::{row.name}",
 				"kind": "Leave",
 				"title": row.employee_name or row.name,
-				"subtitle": f"{row.leave_type or ''} · {formatdate(row.from_date)} - {formatdate(row.to_date)}",
+				"subtitle": " · ".join(filter(None, [row.leave_type, _date_range(row.from_date, row.to_date)])),
 				"route": "/volunteering/time-leave?view=team",
 				"modified": str(row.modified or ""),
 			}
@@ -835,7 +859,7 @@ def _wfh_inbox(employee):
 				"id": f"Attendance Request::{row.name}",
 				"kind": "WFH",
 				"title": row.employee_name or row.name,
-				"subtitle": f"{formatdate(row.from_date)} - {formatdate(row.to_date)}",
+				"subtitle": _date_range(row.from_date, row.to_date),
 				"route": f"/desk/attendance-request/{row.name}",
 				"modified": str(row.modified or ""),
 			}

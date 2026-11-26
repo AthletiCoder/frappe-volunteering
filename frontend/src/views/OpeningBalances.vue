@@ -1,5 +1,5 @@
 <template>
-	<div class="opening-page mx-auto max-w-5xl space-y-6 pb-10">
+	<div class="mx-auto max-w-6xl space-y-5 pb-10">
 		<PageHeader
 			title="Opening balances"
 			eyebrow="Accounts"
@@ -15,156 +15,179 @@
 		<p v-if="message" class="message-success" role="status">{{ message }}</p>
 		<p v-if="loading" class="text-muted">Loading opening balances…</p>
 		<template v-else-if="workspace">
-			<section class="form-card overview-card">
-				<div class="section-heading">
-					<div><p class="eyebrow">Starting point</p><h2 class="form-title">Begin with the opening position</h2></div>
-					<p class="form-hint">Enter April–September transactions separately with their actual dates. Do not include them in these starting amounts.</p>
-				</div>
-				<div class="summary-grid">
-					<div class="summary-tile"><span>Financial year opens</span><strong>{{ dateLabel(workspace.default_opening_date) }}</strong></div>
-					<div class="summary-tile"><span>Temporary Opening balance</span><strong>{{ money(Math.abs(workspace.temporary_balance)) }}</strong><small>{{ Number(workspace.temporary_balance) < 0 ? "Credit" : "Debit" }} remaining</small></div>
-				</div>
-				<details class="explanation"><summary>What is Temporary Opening?</summary><p>It balances each provisional starting amount and should reach zero once all verified opening balances are entered. It is not a donation or fund balance.</p></details>
-			</section>
-			<form class="form-card entry-card" @submit.prevent="record">
-				<div class="section-heading">
-					<div><p class="eyebrow">New entry</p><h2 class="form-title">Record a starting balance</h2></div>
-					<p class="form-hint">Enter one ledger at a time. For a payable or receivable, choose the employee, supplier or customer too.</p>
-				</div>
-				<div class="opening-fields">
-					<div class="account-field"><SearchSelect
-						v-model="form.account"
-						label="Ledger account *"
-						:options="accountOptions"
-						placeholder="Search bank, asset, payable or fund ledgers"
-						:required="true"
-						:disabled="saving"
-					/><span class="field-help">Only active balance-sheet ledgers are listed.</span></div>
-					<label class="field-label"
-						>Opening date *<input
-							v-model="form.opening_date"
-							type="date"
-							required
-							:max="workspace.today"
-							class="field-input"
-					/><span class="field-help">First day of the relevant financial year.</span></label>
-					<label class="field-label"
-						>Amount ({{ workspace.currency }}) *<input
-							v-model="form.amount"
-							type="number"
-							min="0.01"
-							step="0.01"
-							required
-							class="field-input"
-							placeholder="0.00"
-					/><span class="field-help">Enter a positive amount.</span></label>
-					<fieldset class="balance-field"><legend>Which side of the ledger? *</legend>
-						<div class="side-options">
-							<label class="side-option" :class="{ selected: form.side === 'Debit' }"><input v-model="form.side" type="radio" name="opening-side" value="Debit" required /><span><strong>Debit</strong><small>Usually bank balances and other assets</small></span></label>
-							<label class="side-option" :class="{ selected: form.side === 'Credit' }"><input v-model="form.side" type="radio" name="opening-side" value="Credit" required /><span><strong>Credit</strong><small>Usually amounts owed and fund balances</small></span></label>
+			<div class="grid gap-3 sm:grid-cols-2">
+				<StatTile label="Financial year opens" :value="dateLabel(workspace.default_opening_date)" icon="calendar-check" />
+				<StatTile
+					label="Temporary Opening balance"
+					:value="money(Math.abs(workspace.temporary_balance))"
+					:hint="`${Number(workspace.temporary_balance) < 0 ? 'Credit' : 'Debit'} remaining · should reach zero`"
+					icon="coins"
+					:attention="Math.abs(Number(workspace.temporary_balance)) > 0"
+				/>
+			</div>
+
+			<div class="form-layout">
+				<form class="kit-panel step-panel min-w-0" @submit.prevent="record">
+					<div class="border-b border-line px-5 py-4 sm:px-6">
+						<h2 class="font-display text-lg font-semibold text-ink">Record a starting balance</h2>
+						<p class="mt-1 text-sm text-muted">Enter one ledger at a time. For a payable or receivable, choose the employee, supplier or customer too.</p>
+					</div>
+					<fieldset class="form-step">
+						<legend class="form-step__title"><span aria-hidden="true" class="step-num" :class="{ 'step-num--done': form.account && Number(form.amount) > 0 && form.side }">1</span>Ledger and amount</legend>
+						<div class="form-step__grid">
+							<div class="min-w-0 sm:col-span-2"><SearchSelect
+								v-model="form.account"
+								label="Ledger account *"
+								:options="accountOptions"
+								placeholder="Search bank, asset, payable or fund ledgers"
+								:required="true"
+								:disabled="saving"
+							/><span class="field-help">Only active balance-sheet ledgers are listed.</span></div>
+							<label class="field-label"
+								>Opening date *<input
+									v-model="form.opening_date"
+									type="date"
+									required
+									:max="workspace.today"
+									class="field-input"
+							/><span class="field-help">First day of the relevant financial year.</span></label>
+							<label class="field-label"
+								>Amount ({{ workspace.currency }}) *<input
+									v-model="form.amount"
+									type="number"
+									min="0.01"
+									step="0.01"
+									required
+									class="field-input tabular-nums"
+									placeholder="0.00"
+							/><span class="field-help">Enter a positive amount.</span></label>
+							<fieldset class="min-w-0 sm:col-span-2"><legend class="field-label mb-2">Which side of the ledger? *</legend>
+								<div class="grid gap-3 sm:grid-cols-2">
+									<label class="check-card"><input v-model="form.side" type="radio" name="opening-side" value="Debit" required /><span><strong>Debit</strong><small>Usually bank balances and other assets</small></span></label>
+									<label class="check-card"><input v-model="form.side" type="radio" name="opening-side" value="Credit" required /><span><strong>Credit</strong><small>Usually amounts owed and fund balances</small></span></label>
+								</div>
+							</fieldset>
 						</div>
 					</fieldset>
-					<template v-if="partyRequired">
-						<label class="field-label"
-							>Party type *<select
-								v-model="form.party_type"
-								required
-								class="field-input"
-							>
-								<option value="">Choose a type</option>
-								<option
-									v-for="type in allowedPartyTypes"
-									:key="type"
-									:value="type"
+					<fieldset v-if="partyRequired" class="form-step">
+						<legend class="form-step__title"><span aria-hidden="true" class="step-num" :class="{ 'step-num--done': form.party_type && form.party }">2</span>Party</legend>
+						<div class="form-step__grid">
+							<label class="field-label"
+								>Party type *<select
+									v-model="form.party_type"
+									required
+									class="field-input"
 								>
-									{{ type }}
-								</option>
-							</select></label
+									<option value="">Choose a type</option>
+									<option
+										v-for="type in allowedPartyTypes"
+										:key="type"
+										:value="type"
+									>
+										{{ type }}
+									</option>
+								</select></label
+							>
+							<SearchSelect
+								v-model="form.party"
+								:label="`${form.party_type || 'Party'} *`"
+								:options="partyOptions"
+								:required="true"
+								:disabled="saving || !form.party_type"
+								placeholder="Type to find an existing party"
+								empty-text="No party found. Create their record first."
+							/>
+						</div>
+					</fieldset>
+					<fieldset class="form-step">
+						<legend class="form-step__title"><span aria-hidden="true" class="step-num" :class="{ 'step-num--done': form.source_reference }">{{ partyRequired ? 3 : 2 }}</span>Evidence</legend>
+						<label class="field-label"
+							>Source reference *<input
+								v-model.trim="form.source_reference"
+								required
+								maxlength="240"
+								class="field-input"
+								placeholder="For example, Axis statement opening balance on 1 April"
+							/><span class="field-help"
+								>Identify the statement or approved closing records supporting this
+								amount.</span
+							></label
 						>
-						<SearchSelect
-							v-model="form.party"
-							:label="`${form.party_type || 'Party'} *`"
-							:options="partyOptions"
-							:required="true"
-							:disabled="saving || !form.party_type"
-							placeholder="Type to find an existing party"
-							empty-text="No party found. Create their record first."
-						/>
-					</template>
-					<label class="field-label source-field"
-						>Source reference *<input
-							v-model.trim="form.source_reference"
-							required
-							maxlength="240"
-							class="field-input"
-							placeholder="For example, Axis statement opening balance on 1 April"
-						/><span class="field-help"
-							>Identify the statement or approved closing records supporting this
-							amount.</span
-						></label
-					>
-				</div>
-				<div class="proof-section">
-					<label class="field-label" for="opening-proof">Proof documents (optional)</label>
-					<p class="field-help">Attach up to three files, 5 MB each. PDF, PNG, JPEG, DOCX, XLSX or CSV. They are stored privately with the opening entry.</p>
-					<input id="opening-proof" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx,.csv" class="proof-input" :disabled="saving" @change="chooseProof" />
-					<ul v-if="proofFiles.length" class="proof-list">
-						<li v-for="(file, index) in proofFiles" :key="`${file.name}-${index}`">
-							<span>{{ file.name }} <small>({{ (file.size / 1024 / 1024).toFixed(2) }} MB)</small></span>
-							<button type="button" class="proof-remove" :disabled="saving" :aria-label="`Remove ${file.name}`" @click="removeProof(index)">Remove</button>
-						</li>
-					</ul>
-				</div>
-				<div v-if="selectedAccount && Number(form.amount) > 0" class="posting-preview" aria-live="polite">
-					<div class="preview-heading"><strong>Posting preview</strong><span>This is the entry that will be created</span></div>
-					<div class="preview-row"><span>{{ form.side }}</span><span>{{ selectedAccount.account_name }}</span><strong>{{ money(form.amount) }}</strong></div>
-					<div class="preview-row"><span>{{ form.side === "Debit" ? "Credit" : "Debit" }}</span><span>Temporary Opening</span><strong>{{ money(form.amount) }}</strong></div>
-				</div>
-				<div class="submit-area"><label class="checkbox-row"><input v-model="confirmed" type="checkbox" required /><span>I checked the amount and date against the source record. I understand posting changes the ledger.</span></label>
-					<button type="submit" class="btn-primary" :disabled="saving">
-						{{ saving ? "Posting…" : "Post opening balance" }}
-					</button>
-				</div>
-			</form>
-			<section class="form-card">
-				<h2 class="form-title">Opening amounts recorded here</h2>
-				<p class="form-hint">
-					To correct a submitted amount, make a traceable accounting correction; do not
-					enter it a second time.
-				</p>
-				<p v-if="!workspace.history.length" class="text-muted mt-4">
+						<div class="mt-4">
+							<label class="field-label" for="opening-proof">Proof documents (optional)</label>
+							<p class="field-help">Attach up to three files, 5 MB each. PDF, PNG, JPEG, DOCX, XLSX or CSV. They are stored privately with the opening entry.</p>
+							<input id="opening-proof" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx,.csv" class="mt-2 block w-full" :disabled="saving" @change="chooseProof" />
+							<ul v-if="proofFiles.length" class="mt-3 grid gap-2">
+								<li v-for="(file, index) in proofFiles" :key="`${file.name}-${index}`" class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line px-3 py-2 text-sm [overflow-wrap:anywhere]">
+									<span>{{ file.name }} <small class="text-muted">({{ (file.size / 1024 / 1024).toFixed(2) }} MB)</small></span>
+									<button type="button" class="link-arrow" :disabled="saving" :aria-label="`Remove ${file.name}`" @click="removeProof(index)">Remove</button>
+								</li>
+							</ul>
+						</div>
+					</fieldset>
+					<div class="form-step__foot">
+						<label class="flex min-w-0 flex-1 basis-72 cursor-pointer items-start gap-2.5 text-[13px] leading-relaxed text-ink"><input v-model="confirmed" type="checkbox" required class="mt-0.5" /><span>I checked the amount and date against the source record. I understand posting changes the ledger.</span></label>
+						<button type="submit" class="btn-primary" :disabled="saving">
+							{{ saving ? "Posting…" : "Post opening balance" }}
+						</button>
+					</div>
+				</form>
+
+				<aside class="form-rail min-w-0 space-y-4">
+					<div class="summary-card">
+						<p class="eyebrow">Posting preview</p>
+						<div v-if="selectedAccount && Number(form.amount) > 0" class="posting-preview mt-3" aria-live="polite">
+							<p class="text-xs text-muted">This is the entry that will be created</p>
+							<div class="preview-row"><span class="pill pill--info">{{ form.side }}</span><span>{{ selectedAccount.account_name }}</span><strong>{{ money(form.amount) }}</strong></div>
+							<div class="preview-row"><span class="pill pill--muted">{{ form.side === "Debit" ? "Credit" : "Debit" }}</span><span>Temporary Opening</span><strong>{{ money(form.amount) }}</strong></div>
+						</div>
+						<p v-else class="mt-2 text-sm text-muted">Choose a ledger and enter an amount to see the two lines that will be posted.</p>
+					</div>
+					<div class="rounded-2xl bg-accent-soft p-4 text-sm leading-relaxed text-muted">
+						<strong class="block text-ink">Begin with the opening position</strong>
+						Enter April–September transactions separately with their actual dates. Do not include them in these starting amounts.
+						<details class="mt-3 border-t border-line pt-3"><summary class="cursor-pointer font-semibold text-navy-900">What is Temporary Opening?</summary><p class="mt-2">It balances each provisional starting amount and should reach zero once all verified opening balances are entered. It is not a donation or fund balance.</p></details>
+					</div>
+				</aside>
+			</div>
+
+			<section class="kit-panel overflow-hidden" aria-labelledby="opening-history-title">
+				<header class="border-b border-line px-5 py-4 sm:px-6">
+					<h2 id="opening-history-title" class="font-display text-base font-semibold text-ink">Opening amounts recorded here</h2>
+					<p class="mt-1 text-sm text-muted">
+						To correct a submitted amount, make a traceable accounting correction; do not
+						enter it a second time.
+					</p>
+				</header>
+				<p v-if="!workspace.history.length" class="px-5 py-8 text-center text-sm text-muted">
 					No opening amounts have been entered through Home yet.
 				</p>
 				<div
 					v-for="entry in workspace.history"
 					:key="entry.name"
-					class="mt-3 rounded-xl border border-line p-4"
+					class="history-row"
 				>
-					<div class="flex flex-wrap items-start justify-between gap-2">
-						<div>
-							<strong>{{ entry.rows?.[0]?.account || entry.name }}</strong>
-							<p v-if="entry.rows?.[0]?.party" class="text-sm text-muted">
-								{{ entry.rows[0].party_type }} · {{ entry.rows[0].party }}
-							</p>
+					<div class="min-w-0">
+						<strong class="block truncate text-sm text-ink">{{ entry.rows?.[0]?.account || entry.name }}</strong>
+						<p v-if="entry.rows?.[0]?.party" class="truncate text-xs text-muted">
+							{{ entry.rows[0].party_type }} · {{ entry.rows[0].party }}
+						</p>
+						<p class="text-xs text-muted">{{ dateLabel(entry.posting_date) }} · {{ entry.name }}</p>
+						<div v-if="entry.attachments?.length" class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+							<span class="text-muted">Proof documents</span>
+							<a v-for="file in entry.attachments" :key="file.file_url" :href="file.file_url" target="_blank" rel="noopener noreferrer" class="text-navy-900 underline [overflow-wrap:anywhere]">{{ file.file_name }}</a>
 						</div>
-						<span class="text-sm text-muted"
-							>{{ dateLabel(entry.posting_date) }} · {{ entry.name }}</span
-						>
 					</div>
-					<p class="mt-2 text-sm">
-						{{ entry.rows?.[0]?.debit_in_account_currency ? "Debit" : "Credit" }}
-						{{
+					<p class="shrink-0 text-right text-sm">
+						<span :class="pillClass(entry.rows?.[0]?.debit_in_account_currency ? 'info' : 'muted')">{{ entry.rows?.[0]?.debit_in_account_currency ? "Debit" : "Credit" }}</span>
+						<strong class="mt-1 block tabular-nums text-ink">{{
 							money(
 								entry.rows?.[0]?.debit_in_account_currency ||
 									entry.rows?.[0]?.credit_in_account_currency ||
 									0,
 							)
-						}}
+						}}</strong>
 					</p>
-					<div v-if="entry.attachments?.length" class="history-proof">
-						<span>Proof documents</span>
-						<a v-for="file in entry.attachments" :key="file.file_url" :href="file.file_url" target="_blank" rel="noopener noreferrer">{{ file.file_name }}</a>
-					</div>
 				</div>
 			</section>
 		</template>
@@ -175,6 +198,8 @@
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import PageHeader from "../components/PageHeader.vue";
+import StatTile from "../components/StatTile.vue";
+import { pillClass } from "../lib/tones.js";
 import SearchSelect from "../components/SearchSelect.vue";
 import { call } from "../lib/frappe";
 
@@ -321,77 +346,11 @@ onMounted(load);
 </script>
 
 <style scoped>
-.opening-page { min-width: 0; }
-.form-card { padding: 1.75rem; border: 1px solid var(--line); border-radius: 1.25rem; background: var(--surface); box-shadow: var(--shadow-soft); }
-.section-heading { display: flex; align-items: start; justify-content: space-between; gap: 1.5rem; margin-bottom: 1.5rem; }
-.section-heading > div { min-width: 0; flex: 1 1 auto; }
-.section-heading > .form-hint { flex: 0 1 21rem; }
-.eyebrow { margin: 0 0 .35rem; color: var(--accent); font-size: .7rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.form-title { margin: 0; color: var(--ink); font-size: 1.25rem; font-weight: 700; line-height: 1.3; }
-.form-hint { margin: 0; color: var(--muted); font-size: .875rem; line-height: 1.55; }
-.summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
-.summary-tile { display: flex; flex-direction: column; gap: .25rem; min-width: 0; padding: 1.1rem 1.25rem; border-radius: .9rem; background: var(--soft); }
-.summary-tile span { color: var(--muted); font-size: .8rem; }
-.summary-tile strong { color: var(--ink); font-size: 1.2rem; line-height: 1.35; }
-.summary-tile small { color: var(--muted); font-size: .75rem; }
-.explanation { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .83rem; line-height: 1.55; }
-.explanation summary { width: fit-content; color: var(--accent); font-weight: 600; cursor: pointer; }
-.explanation p { max-width: 46rem; margin: .65rem 0 0; }
-.opening-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.35rem 1.25rem; min-width: 0; padding: 0; border: 0; background: transparent; }
-.account-field, .source-field, .balance-field { grid-column: 1 / -1; min-width: 0; }
-.field-label { display: flex; flex-direction: column; align-items: stretch; min-width: 0; color: var(--ink); font-size: .875rem; font-weight: 600; line-height: 1.4; }
-.field-input, .opening-page :deep(.search-input) { display: block; width: 100%; min-width: 0; min-height: 3rem; margin-top: .55rem; padding: .7rem .85rem; border: 1px solid var(--line); border-radius: .75rem; background: var(--surface); color: var(--ink); font-size: .925rem; font-weight: 400; line-height: 1.4; }
-.opening-page :deep(.search-input) { margin-top: 0; }
-.field-input:focus-visible, .opening-page :deep(.search-input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
-.field-help { display: block; margin-top: .45rem; color: var(--muted); font-size: .76rem; font-weight: 400; line-height: 1.45; }
-.opening-page :deep(.search-select > label) { display: block; color: var(--ink); font-size: .875rem; font-weight: 600; }
-.opening-page :deep(.search-select > div) { margin-top: .55rem; }
-.balance-field { margin: 0; padding: 0; border: 0; }
-.balance-field legend { margin-bottom: .7rem; padding: 0; color: var(--ink); font-size: .875rem; font-weight: 600; }
-.side-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
-.side-option { display: flex; align-items: start; gap: .75rem; min-width: 0; padding: .95rem 1rem; border: 1px solid var(--line); border-radius: .875rem; background: var(--surface); cursor: pointer; }
-.side-option.selected { border-color: var(--accent); background: var(--accent-soft); }
-.side-option input { width: 1rem; height: 1rem; margin: .18rem 0 0; flex: none; accent-color: var(--accent); }
-.side-option span { display: flex; flex-direction: column; gap: .2rem; min-width: 0; }
-.side-option strong { color: var(--ink); font-size: .9rem; }
-.side-option small { color: var(--muted); font-size: .76rem; line-height: 1.4; }
-.proof-section { margin-top: 1.5rem; padding-top: 1.4rem; border-top: 1px solid var(--line); }
-.proof-section .field-help { margin: .4rem 0 .8rem; }
-.proof-input { display: block; width: 100%; padding: .8rem; border: 1px dashed var(--line); border-radius: .8rem; color: var(--ink); background: var(--soft); font-size: .85rem; }
-.proof-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.proof-list { display: grid; gap: .5rem; margin: .8rem 0 0; padding: 0; list-style: none; }
-.proof-list li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .5rem 1rem; padding: .6rem .8rem; border: 1px solid var(--line); border-radius: .65rem; overflow-wrap: anywhere; font-size: .83rem; }
-.proof-list small { color: var(--muted); }
-.proof-remove { color: var(--accent); font-weight: 600; }
-.proof-remove:disabled { opacity: .5; }
-.history-proof { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem .9rem; margin-top: .8rem; font-size: .8rem; }
-.history-proof span { color: var(--muted); }
-.history-proof a { color: var(--accent); text-decoration: underline; overflow-wrap: anywhere; }
-.posting-preview { overflow: hidden; margin-top: 1.5rem; border: 1px solid var(--line); border-radius: .875rem; background: var(--soft); }
-.preview-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .25rem 1rem; padding: .85rem 1rem; border-bottom: 1px solid var(--line); }
-.preview-heading strong { font-size: .875rem; }
-.preview-heading span { color: var(--muted); font-size: .76rem; }
-.preview-row { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) auto; align-items: baseline; gap: .75rem; padding: .7rem 1rem; font-size: .85rem; }
-.preview-row + .preview-row { border-top: 1px solid var(--line); }
-.preview-row span:first-child { color: var(--muted); font-weight: 600; }
-.preview-row span:nth-child(2) { overflow-wrap: anywhere; }
-.preview-row strong { white-space: nowrap; font-size: .9rem; }
-.submit-area { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1.25rem; margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
-.checkbox-row { display: flex; align-items: start; gap: .7rem; max-width: 35rem; color: var(--ink); font-size: .8rem; font-weight: 400; line-height: 1.5; cursor: pointer; }
-.checkbox-row input { width: 1rem; height: 1rem; margin-top: .13rem; flex: none; accent-color: var(--accent); }
-.submit-area .btn-primary { min-height: 2.8rem; padding: .7rem 1.15rem; white-space: nowrap; }
-.submit-area .btn-primary:disabled { opacity: .6; cursor: wait; }
-.message-error, .message-success { margin: 0; padding: .9rem 1rem; border: 1px solid; border-radius: .85rem; font-size: .875rem; }
-.message-error { border-color: var(--bad); background: var(--bad-soft); color: var(--bad); }
-.message-success { border-color: var(--ok); background: var(--ok-soft); color: var(--ink); }
-@media (max-width: 640px) {
-	.form-card { padding: 1.2rem; }
-	.section-heading { display: block; margin-bottom: 1.2rem; }
-	.section-heading > .form-hint { margin-top: .5rem; }
-	.summary-grid, .opening-fields, .side-options { grid-template-columns: minmax(0, 1fr); }
-	.account-field, .source-field, .balance-field { grid-column: auto; }
-	.preview-row { grid-template-columns: 3.5rem minmax(0, 1fr); gap: .25rem .5rem; }
-	.preview-row strong { grid-column: 2; }
-	.submit-area .btn-primary { width: 100%; }
-}
+.posting-preview { display: grid; gap: 0.5rem; }
+.preview-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.625rem; border-radius: 12px; background: var(--soft); padding: 0.625rem 0.75rem; font-size: 0.8125rem; }
+.preview-row span:nth-child(2) { overflow-wrap: anywhere; color: var(--ink); }
+.preview-row strong { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--ink); }
+.history-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 0.875rem 1.25rem; }
+@media (min-width: 640px) { .history-row { padding: 0.875rem 1.5rem; } }
+.history-row + .history-row { border-top: 1px solid var(--line); }
 </style>

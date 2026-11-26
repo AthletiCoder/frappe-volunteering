@@ -1,5 +1,5 @@
 <template>
-	<div class="max-w-5xl mx-auto">
+	<div class="mx-auto max-w-6xl">
 		<PageHeader
 			:title="
 				isCorrection
@@ -20,7 +20,7 @@
 			<template #actions>
 				<RouterLink v-if="!isCorrection" :to="{ path: '/expense-claim/multiple', query: { project: form.project || route.query.project } }" class="btn-secondary">Submit multiple invoices</RouterLink>
 				<RouterLink to="/expense-claims" class="btn-secondary">My claims</RouterLink>
-				<RouterLink to="/home" class="btn-secondary">Back to Home</RouterLink>
+				<RouterLink to="/home" class="btn-back">Back to Home</RouterLink>
 			</template>
 		</PageHeader>
 
@@ -75,7 +75,8 @@
 				</div>
 			</section>
 		</div>
-		<form v-else class="space-y-5" @submit.prevent="submitClaim">
+		<form v-else class="form-layout" @submit.prevent="submitClaim">
+			<div class="min-w-0 space-y-5">
 			<div v-if="error" class="error-box" role="alert">{{ error }}</div>
             <div v-if="submissionStatus" class="warning-box" role="status"><p>{{ submissionStatus }}</p><button v-if="!submitting && submission?.pending?.args" type="button" class="btn-secondary mt-3" @click="retrySavedSubmission">Retry saved submission</button></div>
 			<div v-if="isCorrection && correctionDetail?.receipt_review_notes" class="warning-box">
@@ -84,20 +85,12 @@
 			</div>
 
 			<section class="form-card">
-				<h2 class="form-title">Claim context</h2>
+				<h2 class="step-title"><span class="step-num" :class="{ 'step-num--done': isCorrection || form.project }" aria-hidden="true">{{ stepNo.context }}</span>Claim context</h2>
+				<div class="mb-4 flex flex-wrap gap-2">
+					<span class="person-chip"><Avatar :name="defaults.employee_name" size="sm" /><span class="min-w-0"><span class="block text-[11px] text-muted">Employee</span><span class="block truncate text-sm font-semibold text-ink">{{ defaults.employee_name || "—" }}</span></span></span>
+					<span class="person-chip"><Avatar :name="defaults.approver?.name || '?'" size="sm" tone="slate" /><span class="min-w-0"><span class="block text-[11px] text-muted">Reporting manager</span><span class="block truncate text-sm font-semibold text-ink">{{ defaults.approver?.name || "Not configured" }}</span></span></span>
+				</div>
 				<div class="expense-portal-grid">
-					<label class="field-label"
-						>Employee<input
-							:value="defaults.employee_name"
-							readonly
-							class="field-input"
-					/></label>
-					<label class="field-label"
-						>Reporting manager<input
-							:value="defaults.approver?.name || 'Not configured'"
-							readonly
-							class="field-input"
-					/></label>
 					<label v-if="!isCorrection" class="field-label sm:col-span-2"
 						>Project *<select
 							v-model="form.project"
@@ -129,17 +122,15 @@
 			</section>
 
 			<section v-if="!isCorrection" class="form-card">
-				<h2 class="form-title">How was this paid?</h2>
+				<h2 class="step-title"><span class="step-num step-num--done" aria-hidden="true">{{ stepNo.paid }}</span>How was this paid?</h2>
 				<div class="grid sm:grid-cols-3 gap-3">
 					<button
 						v-for="source in sourceChoices"
 						:key="source.value"
 						type="button"
 						:disabled="source.disabled"
-						:class="[
-							'choice-card',
-							form.reimbursement_source === source.value ? 'choice-card-active' : '',
-						]"
+						:class="['option-card', form.reimbursement_source === source.value ? 'option-card--on' : '']"
+						:aria-pressed="form.reimbursement_source === source.value"
 						@click="form.reimbursement_source = source.value"
 					>
 						<span class="font-semibold">{{ source.label }}</span>
@@ -181,14 +172,11 @@
 			</section>
 
 			<section v-if="isIntegrated && !isCorrection" class="form-card">
-				<h2 class="form-title">Do you already have a proper invoice?</h2>
+				<h2 class="step-title"><span class="step-num" :class="{ 'step-num--done': invoicePath }" aria-hidden="true">{{ stepNo.invoice }}</span>Do you already have a proper invoice?</h2>
 				<div class="grid sm:grid-cols-2 gap-3">
 					<button
 						type="button"
-						:class="[
-							'choice-card',
-							invoicePath === 'EXISTING' ? 'choice-card-active' : '',
-						]"
+						:class="['option-card', invoicePath === 'EXISTING' ? 'option-card--on' : '']"
 						@click="invoicePath = 'EXISTING'"
 					>
 						<span class="font-semibold">Yes, I have an invoice</span>
@@ -198,10 +186,7 @@
 					</button>
 					<button
 						type="button"
-						:class="[
-							'choice-card',
-							invoicePath === 'GENERATE' ? 'choice-card-active' : '',
-						]"
+						:class="['option-card', invoicePath === 'GENERATE' ? 'option-card--on' : '']"
 						@click="invoicePath = 'GENERATE'"
 					>
 						<span class="font-semibold">No, prepare one now</span>
@@ -213,7 +198,7 @@
 				</div>
 			</section>
 
-			<section v-if="!isCorrection && (!isIntegrated || invoicePath)" class="form-card">
+			<section v-if="!isCorrection && (!isIntegrated || invoicePath)" class="form-card emergency-card" :class="{ 'emergency-card--on': form.is_emergency }">
 				<label class="flex items-start gap-3 cursor-pointer">
 					<input v-model="form.is_emergency" type="checkbox" class="mt-1" />
 					<span>
@@ -249,7 +234,7 @@
 			<section v-if="!isIntegrated || invoicePath" class="space-y-3">
 				<div class="flex flex-wrap items-end justify-between gap-2">
 					<div>
-						<h2 class="text-xl font-semibold text-ink">Expense items</h2>
+						<h2 class="step-title !mb-0"><span class="step-num" :class="{ 'step-num--done': itemsComplete }" aria-hidden="true">{{ stepNo.items }}</span>Expense items</h2>
 						<p class="text-sm text-muted mt-1">
 							<template v-if="generatesInvoice">
 								Enter the project category and business purpose. The signed invoice
@@ -273,9 +258,10 @@
 					</button>
 				</div>
 
-				<article v-for="(item, index) in form.expenses" :key="item.key" class="form-card">
+				<article v-for="(item, index) in form.expenses" :key="item.key" class="form-card item-card">
 					<div class="flex items-center justify-between gap-3 mb-4">
-						<h3 class="font-semibold text-ink">Expense item {{ index + 1 }}</h3>
+						<h3 class="flex items-center gap-2.5 font-semibold text-ink"><span class="item-badge" aria-hidden="true">{{ index + 1 }}</span>Expense item {{ index + 1 }}</h3>
+						<span v-if="!generatesInvoice && Number(item.amount) > 0" class="ml-auto text-sm font-semibold tabular-nums text-ink">{{ money(item.amount) }}</span>
 						<button
 							v-if="!isCorrection && !generatesInvoice && form.expenses.length > 1"
 							type="button"
@@ -353,8 +339,8 @@
 						The signed invoice prepared below will be used as this item's private
 						receipt evidence. Its grand total becomes the expense amount.
 					</p>
-					<p v-if="item.receipt_filename" class="text-xs text-muted mt-2">
-						Ready to upload privately: {{ item.receipt_filename }}
+					<p v-if="item.receipt_filename" class="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-ok">
+						<Icon name="check" size="sm" />Ready to upload privately: {{ item.receipt_filename }}
 					</p>
 					<a
 						v-else-if="item.receipt_attachment"
@@ -396,25 +382,25 @@
 				</label>
 			</section>
 
-			<section class="form-card">
-				<div class="flex flex-wrap items-center justify-between gap-4">
-					<div>
-						<p class="text-sm text-muted">Total claimed</p>
-						<p class="text-2xl font-semibold text-ink">{{ money(total) }}</p>
-					</div>
-					<div class="text-sm text-muted sm:text-right">
-						<p>Next: independent receipt review</p>
-						<p>Then: reporting-manager approval</p>
-					</div>
-				</div>
-				<p v-if="managerFundingShortfall" class="warning-box mt-4">
-					The manager’s current advance does not cover this total. Choose another payment
-					source or ask the manager to obtain additional advance funding.
-				</p>
-				<div class="flex justify-end mt-5">
+			</div>
+
+			<aside class="form-rail space-y-4">
+				<section class="summary-card" aria-label="Claim summary">
+					<p class="eyebrow">Total claimed</p>
+					<p class="summary-total">{{ money(total) }}</p>
+					<dl class="summary-list">
+						<div><dt>Items</dt><dd>{{ form.expenses.length }}</dd></div>
+						<div v-if="!generatesInvoice"><dt>Receipts attached</dt><dd :class="receiptsReady === form.expenses.length ? 'text-ok' : ''">{{ receiptsReady }} of {{ form.expenses.length }}</dd></div>
+						<div v-if="projectLabel"><dt>Project</dt><dd>{{ projectLabel }}</dd></div>
+						<div v-if="!isCorrection"><dt>Paid via</dt><dd>{{ sourceLabel }}</dd></div>
+					</dl>
+					<p v-if="managerFundingShortfall" class="warning-box mt-4">
+						The manager’s current advance does not cover this total. Choose another payment
+						source or ask the manager to obtain additional advance funding.
+					</p>
 					<button
 						type="submit"
-						class="btn-primary px-5 py-2.5"
+						class="btn-primary mt-4 min-h-11 w-full"
 						:disabled="
 							submitting ||
 							readingFiles ||
@@ -434,8 +420,16 @@
 										: "Submit for receipt review"
 						}}
 					</button>
-				</div>
-			</section>
+				</section>
+				<section class="summary-card">
+					<p class="text-sm font-semibold text-ink">What happens next</p>
+					<ol class="next-steps mt-3">
+						<li><span class="next-steps__dot">1</span><span>Next: independent receipt review</span></li>
+						<li><span class="next-steps__dot">2</span><span>Then: reporting-manager approval<template v-if="defaults.approver?.name"> by {{ defaults.approver.name }}</template></span></li>
+						<li><span class="next-steps__dot">3</span><span>{{ form.reimbursement_source === "PERSONAL" ? "Reimbursed to your approved bank account" : "Settled against the selected advance" }}</span></li>
+					</ol>
+				</section>
+			</aside>
 		</form>
 	</div>
 </template>
@@ -444,6 +438,8 @@
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import PageHeader from "../components/PageHeader.vue";
+import Avatar from "../components/Avatar.vue";
+import Icon from "../components/Icon.vue";
 import SearchSelect from "../components/SearchSelect.vue";
 import InvoiceGenerator from "./InvoiceGenerator.vue";
 import { call } from "../lib/frappe";
@@ -491,6 +487,18 @@ const form = reactive({
 	expenses: [blankExpense()],
 });
 const accountOptions = ref([]);
+const stepNo = computed(() => {
+	let n = 0;
+	const steps = { context: ++n };
+	if (!isCorrection.value) steps.paid = ++n;
+	if (isIntegrated.value && !isCorrection.value) steps.invoice = ++n;
+	steps.items = ++n;
+	return steps;
+});
+const receiptsReady = computed(() => form.expenses.filter((item) => item.receipt_filename || item.receipt_content || item.receipt_attachment).length);
+const itemsComplete = computed(() => form.expenses.every((item) => item.account && item.description && (generatesInvoice.value || (Number(item.amount) > 0 && (item.receipt_filename || item.receipt_content || item.receipt_attachment)))));
+const projectLabel = computed(() => isCorrection.value ? correctionDetail.value?.project_name || correctionDetail.value?.project || "" : defaults.value.projects.find((project) => project.value === form.project)?.label || "");
+const sourceLabel = computed(() => sourceChoices.value?.find?.((source) => source.value === form.reimbursement_source)?.label || "Personal funds");
 const loading = ref(true);
 const loadingAccounts = ref(false);
 const readingFiles = ref(false);
@@ -810,43 +818,14 @@ function plainText(value) {
 </script>
 
 <style scoped>
-.form-card {
-	@apply rounded-2xl border border-line bg-surface p-4 sm:p-5 shadow-soft;
-}
-.form-title {
-	@apply text-lg font-semibold text-ink mb-3;
-}
-.form-hint {
-	@apply text-sm text-muted mb-3;
-}
 .expense-portal-grid {
 	@apply grid sm:grid-cols-2 gap-4;
 }
-.field-label {
-	@apply block text-sm font-medium text-ink;
-}
-.field-input {
-	@apply mt-1 block w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-ink;
-}
-.field-input:focus {
-	outline: 2px solid var(--accent);
-	outline-offset: 2px;
-}
-.choice-card {
-	@apply flex min-h-24 flex-col items-start gap-1 rounded-xl border border-line bg-bg p-4 text-left text-ink transition-colors;
-}
-.choice-card-active {
-	@apply border-accent bg-accent-soft;
-}
-.choice-card:disabled {
-	@apply cursor-not-allowed opacity-50;
-}
-.error-box {
-	@apply rounded-xl border border-bad bg-bad-soft p-4 text-sm text-bad;
-}
-.warning-box {
-	@apply rounded-xl border border-warn bg-warn-soft p-3 text-sm text-ink;
-}
+.person-chip { @apply flex min-w-0 max-w-full items-center gap-2.5 rounded-xl border border-line bg-soft py-1.5 pl-1.5 pr-3.5; }
+.item-badge { @apply inline-flex h-6 w-6 items-center justify-center rounded-full bg-navy-900 text-[11px] font-bold text-white; }
+.item-card { border-left: 3px solid var(--navy-100); }
+.emergency-card { transition: border-color var(--dur) ease, background-color var(--dur) ease; }
+.emergency-card--on { border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); background: linear-gradient(180deg, var(--warn-soft), var(--surface) 60%); }
 .success-mark {
 	@apply mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-ok-soft text-2xl font-bold text-ok;
 }

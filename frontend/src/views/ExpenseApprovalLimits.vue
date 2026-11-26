@@ -6,7 +6,7 @@
 			subtitle="Set the largest individual claim each employee grade may approve."
 		>
 			<template #actions>
-				<RouterLink to="/home" class="btn-secondary">Back to Home</RouterLink>
+				<RouterLink to="/home" class="btn-back">Back to Home</RouterLink>
 			</template>
 		</PageHeader>
 
@@ -148,25 +148,4 @@ onMounted(load);
 </script>
 
 <style scoped>
-.form-card {
-	@apply rounded-2xl border border-line bg-surface p-5 md:p-6 shadow-soft;
-}
-.form-title {
-	@apply text-lg font-semibold text-ink mb-3;
-}
-.form-hint {
-	@apply text-sm text-muted mb-4 leading-relaxed;
-}
-.field-label {
-	@apply block text-sm font-medium text-ink;
-}
-.field-input {
-	@apply mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-ink outline-none;
-}
-.message-error {
-	@apply rounded-xl border border-bad bg-bad-soft p-4 text-sm text-bad;
-}
-.message-success {
-	@apply rounded-xl border border-ok bg-ok-soft p-4 text-sm text-ink;
-}
 </style>

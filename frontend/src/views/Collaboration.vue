@@ -1845,7 +1845,7 @@ const CalendarView = defineComponent({
 .collaboration {
 	max-width: 1500px;
 	margin: auto;
-	color: #20343d;
+	color: var(--ink);
 }
 .collab-heading {
 	display: flex;
@@ -1861,7 +1861,7 @@ const CalendarView = defineComponent({
 .eyebrow {
 	font-size: 10px;
 	letter-spacing: 0.12em;
-	color: #61808c;
+	color: var(--muted);
 	font-weight: 700;
 }
 .collab-layout {
@@ -1869,7 +1869,7 @@ const CalendarView = defineComponent({
 	grid-template-columns: 290px minmax(0, 1fr);
 	height: calc(100dvh - 215px);
 	min-height: 600px;
-	border: 1px solid #dde5e9;
+	border: 1px solid var(--line);
 	border-radius: 20px;
 	overflow: hidden;
 	background: #fff;
@@ -1879,18 +1879,18 @@ const CalendarView = defineComponent({
 	display: block;
 	width: 100%;
 	padding: 11px 12px;
-	border: 1px solid #dce5e9;
+	border: 1px solid var(--navy-50);
 	border-radius: 10px;
 	background: #fff;
 	font-size: 13px;
 }
 .collaboration .btn-primary {
-	background: #08745e;
+	background: var(--accent);
 	color: #fff;
 }
 .spaces-pane {
-	background: #f8fafb;
-	border-right: 1px solid #e3eaed;
+	background: var(--navy-50);
+	border-right: 1px solid var(--line);
 	padding: 16px;
 	overflow: auto;
 }
@@ -1902,14 +1902,14 @@ const CalendarView = defineComponent({
 	width: 100%;
 	padding: 12px;
 	border-radius: 12px;
-	background: #eaf1fb;
-	color: #355b86;
+	background: var(--navy-50);
+	color: var(--navy-600);
 }
 .space-group h2 {
 	font-size: 10px;
 	font-weight: 750;
 	letter-spacing: 0.1em;
-	color: #7a8b93;
+	color: var(--muted);
 	margin: 24px 4px 9px;
 }
 .space-nav-row {
@@ -1926,10 +1926,10 @@ const CalendarView = defineComponent({
 	border-radius: 12px;
 }
 .space-link:hover {
-	background: #edf3f4;
+	background: var(--accent-soft);
 }
 .space-link.selected {
-	background: #dcefe9;
+	background: var(--accent-soft);
 }
 .space-link strong {
 	font-size: 13px;
@@ -1940,7 +1940,7 @@ const CalendarView = defineComponent({
 }
 .space-link small {
 	font-size: 11px;
-	color: #74848b;
+	color: var(--muted);
 	display: block;
 	white-space: nowrap;
 	overflow: hidden;
@@ -1954,14 +1954,14 @@ const CalendarView = defineComponent({
 	width: 34px;
 	height: 34px;
 	border-radius: 11px;
-	background: #e2e9f5;
-	color: #45618c;
+	background: var(--navy-50);
+	color: var(--navy-600);
 	font-size: 11px;
 	font-weight: 750;
 	flex-shrink: 0;
 }
 .unread {
-	background: #127761;
+	background: var(--accent);
 	color: white;
 	font-size: 10px;
 	border-radius: 20px;
@@ -1985,7 +1985,7 @@ const CalendarView = defineComponent({
 	display: flex;
 	align-items: center;
 	gap: 12px;
-	border-bottom: 1px solid #e4eaed;
+	border-bottom: 1px solid var(--line);
 	flex-wrap: wrap;
 }
 .room-header h2 {
@@ -1998,7 +1998,7 @@ const CalendarView = defineComponent({
 	gap: 4px;
 	align-items: center;
 	padding: 8px 20px;
-	border-bottom: 1px solid #e4eaed;
+	border-bottom: 1px solid var(--line);
 	overflow-x: auto;
 	flex-shrink: 0;
 }
@@ -2007,23 +2007,23 @@ const CalendarView = defineComponent({
 	padding: 9px 12px;
 	border-radius: 9px;
 	font-size: 13px;
-	color: #6b7f87;
+	color: var(--muted);
 }
 .room-tabs .active {
-	color: #0b725d;
-	background: #e3f2ec;
+	color: var(--accent);
+	background: var(--accent-soft);
 	font-weight: 700;
 }
 .room-tabs .new-work {
 	margin-left: auto;
-	color: #0b725d;
+	color: var(--accent);
 	font-weight: 700;
 }
 .message-thread {
 	flex: 1;
 	overflow-y: auto;
 	padding: 24px;
-	background: #f5f8fa;
+	background: var(--navy-50);
 	display: flex;
 	flex-direction: column;
 	gap: 20px;
@@ -2033,7 +2033,7 @@ const CalendarView = defineComponent({
 	align-self: flex-start;
 	max-width: min(85%, 680px);
 	padding: 15px 18px;
-	border: 1px solid #e4eaee;
+	border: 1px solid var(--navy-50);
 	border-radius: 16px 16px 16px 4px;
 	background: white;
 	overflow-wrap: anywhere;
@@ -2041,11 +2041,11 @@ const CalendarView = defineComponent({
 .message.mine {
 	align-self: flex-end;
 	border-radius: 16px 16px 4px 16px;
-	background: #e8f4ef;
-	border-color: #d6eae0;
+	background: var(--accent-soft);
+	border-color: var(--accent-soft);
 }
 .message.system {
-	background: #f0f3f7;
+	background: var(--navy-50);
 	font-size: 13px;
 }
 .message-meta {
@@ -2054,12 +2054,12 @@ const CalendarView = defineComponent({
 	flex-wrap: wrap;
 	gap: 8px;
 	font-size: 10px;
-	color: #7c8b93;
+	color: var(--muted);
 	margin-bottom: 7px;
 }
 .message-meta strong {
 	font-size: 12px;
-	color: #455d6b;
+	color: var(--ink);
 }
 .message-text {
 	white-space: pre-wrap;
@@ -2068,15 +2068,15 @@ const CalendarView = defineComponent({
 }
 .reply-label {
 	font-size: 11px;
-	border-left: 3px solid #8eb3ab;
+	border-left: 3px solid var(--muted);
 	padding-left: 8px;
-	color: #6b8286;
+	color: var(--muted);
 	margin-bottom: 8px;
 }
 .message-options {
 	margin-top: 10px;
 	font-size: 11px;
-	color: #648078;
+	color: var(--muted);
 }
 .message-options summary {
 	cursor: pointer;
@@ -2090,12 +2090,12 @@ const CalendarView = defineComponent({
 	font-size: 12px;
 	display: flex;
 	flex-direction: column;
-	color: #5d748a;
+	color: var(--muted);
 	gap: 4px;
 }
 .file-link {
 	display: block;
-	color: #1c705e;
+	color: var(--accent);
 	text-decoration: underline;
 	font-size: 12px;
 	margin-top: 10px;
@@ -2108,22 +2108,22 @@ const CalendarView = defineComponent({
 	margin: 4px 0 10px;
 	padding: 10px 12px;
 	border-radius: 9px;
-	background: #e4f1ed;
-	color: #176a57;
+	background: var(--accent-soft);
+	color: var(--accent);
 	text-align: left;
 	overflow-wrap: anywhere;
 }
 .tracker-file-context span { font-size: 11px; }
 .tracker-file-context strong { font-size: 14px; }
-.tracker-file-context:focus-visible { outline: 2px solid #176a57; outline-offset: 2px; }
+.tracker-file-context:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .composer {
 	padding: 16px 24px;
-	border-top: 1px solid #e3eaed;
+	border-top: 1px solid var(--line);
 	background: #fff;
 }
 .composer textarea {
 	width: 100%;
-	border: 1px solid #dce5e9;
+	border: 1px solid var(--navy-50);
 	border-radius: 12px;
 	padding: 12px;
 	font-size: 16px;
@@ -2139,11 +2139,11 @@ const CalendarView = defineComponent({
 }
 .composer-top select {
 	font-size: 12px;
-	color: #5e737b;
+	color: var(--muted);
 }
 .attachment-picker {
 	font-size: 12px;
-	color: #426d65;
+	color: var(--accent);
 	cursor: pointer;
 }
 .attachment-picker input {
@@ -2151,9 +2151,9 @@ const CalendarView = defineComponent({
 }
 .reply-preview {
 	padding: 9px;
-	background: #f2f7f6;
+	background: var(--accent-soft);
 	font-size: 12px;
-	color: #4b6b64;
+	color: var(--ink);
 	display: flex;
 	justify-content: space-between;
 }
@@ -2163,14 +2163,14 @@ const CalendarView = defineComponent({
 	flex: 1;
 }
 .work-card {
-	border: 1px solid #e1e8eb;
+	border: 1px solid var(--line);
 	border-radius: 15px;
 	padding: 18px;
 	margin-bottom: 14px;
 }
 .linked-item {
 	background: #ffffffb0;
-	border: 1px solid #d8e7df;
+	border: 1px solid var(--accent-soft);
 	border-radius: 12px;
 	margin-top: 12px;
 	padding: 13px;
@@ -2178,9 +2178,9 @@ const CalendarView = defineComponent({
 .read-only {
 	padding: 15px;
 	text-align: center;
-	color: #788890;
+	color: var(--muted);
 	font-size: 13px;
-	background: #f5f7f9;
+	background: var(--navy-50);
 }
 .welcome-panel {
 	margin: auto;
@@ -2194,16 +2194,16 @@ const CalendarView = defineComponent({
 	margin: 15px 0;
 }
 .welcome-panel p {
-	color: #82939b;
+	color: var(--muted);
 	line-height: 1.8;
 	margin-bottom: 24px;
 }
 .welcome-symbol {
 	font-size: 50px;
-	color: #6aaa9b;
+	color: var(--navy-600);
 }
 .empty-state {
-	color: #8a9aa3;
+	color: var(--muted);
 	text-align: center;
 	font-size: 14px;
 	padding: 40px 15px;
@@ -2214,16 +2214,16 @@ const CalendarView = defineComponent({
 	border-radius: 12px;
 	margin-bottom: 14px;
 	font-size: 13px;
-	background: #fff0ed;
-	color: #993b2c;
+	background: var(--bad-soft);
+	color: var(--bad);
 	overflow-wrap: anywhere;
 }
 .error-banner button {
 	float: right;
 }
 .notice-banner {
-	background: #e8f5ee;
-	color: #186449;
+	background: var(--accent-soft);
+	color: var(--accent);
 }
 .mobile-back {
 	display: none;
@@ -2256,7 +2256,7 @@ const CalendarView = defineComponent({
 	align-items: center;
 	justify-content: space-between;
 	padding: 20px 24px;
-	border-bottom: 1px solid #e4eaed;
+	border-bottom: 1px solid var(--line);
 	position: sticky;
 	top: 0;
 	background: white;
@@ -2270,7 +2270,7 @@ const CalendarView = defineComponent({
 	font-size: 25px;
 }
 .dialog-footer {
-	border-top: 1px solid #e4eaed;
+	border-top: 1px solid var(--line);
 	border-bottom: 0;
 	position: sticky;
 	bottom: 0;
@@ -2292,19 +2292,19 @@ const CalendarView = defineComponent({
 .collab-dialog input:not([type="checkbox"]),
 .collab-dialog select,
 .collab-dialog textarea {
-	border: 1px solid #d9e3e8;
+	border: 1px solid var(--navy-50);
 	border-radius: 10px;
 	padding: 11px 12px;
 	width: 100%;
 	font-size: 16px;
 	font-weight: 400;
 	min-width: 0;
-	background: #fcfdfd;
+	background: var(--soft);
 }
 .collab-dialog small {
 	font-size: 11px;
 	font-weight: 400;
-	color: #7f8e97;
+	color: var(--muted);
 }
 .field-grid {
 	display: grid;
@@ -2343,7 +2343,7 @@ const CalendarView = defineComponent({
 }
 .list-edit-row {
 	padding: 13px;
-	border: 1px solid #dde6e9;
+	border: 1px solid var(--line);
 	border-radius: 12px;
 	display: flex;
 	flex-direction: column;
@@ -2363,15 +2363,15 @@ const CalendarView = defineComponent({
 	gap: 10px;
 	padding: 12px;
 	text-align: left;
-	border: 1px solid #e1e8ed;
+	border: 1px solid var(--navy-50);
 	border-radius: 10px;
 }
 .stage-timeline .chosen {
-	background: #e3f2ec;
-	border-color: #63a392;
+	background: var(--accent-soft);
+	border-color: var(--navy-600);
 }
 .history-row {
-	border-bottom: 1px solid #e3e9ed;
+	border-bottom: 1px solid var(--line);
 	padding: 14px 0;
 	white-space: pre-wrap;
 }
@@ -2389,18 +2389,18 @@ const CalendarView = defineComponent({
 	font-size: 10px;
 	letter-spacing: 0.06em;
 	text-transform: uppercase;
-	color: #7d9098;
+	color: var(--muted);
 }
 .collaboration :deep(.item-status) {
 	font-size: 10px;
 	border-radius: 8px;
-	background: #f0f4f6;
-	color: #5a737e;
+	background: var(--navy-50);
+	color: var(--muted);
 	padding: 3px 7px;
 }
 .collaboration :deep(.item-status.failed) {
-	background: #fce9e5;
-	color: #9f4739;
+	background: var(--bad-soft);
+	color: var(--bad);
 }
 .collaboration :deep(.item-title) {
 	display: block;
@@ -2413,13 +2413,13 @@ const CalendarView = defineComponent({
 .collaboration :deep(.item-description) {
 	white-space: pre-wrap;
 	font-size: 13px;
-	color: #6c818c;
+	color: var(--muted);
 	margin-bottom: 8px;
 }
 .collaboration :deep(.item-meta) {
 	display: block;
 	font-size: 11px;
-	color: #81939c;
+	color: var(--muted);
 	line-height: 1.8;
 	margin-top: 8px;
 }
@@ -2428,7 +2428,7 @@ const CalendarView = defineComponent({
 	flex-wrap: wrap;
 	gap: 10px;
 	font-size: 11px;
-	color: #176a59;
+	color: var(--accent);
 	margin-top: 10px;
 }
 .collaboration :deep(.item-actions button) {
@@ -2436,7 +2436,7 @@ const CalendarView = defineComponent({
 	text-decoration: underline;
 }
 .collaboration :deep(.tracker-value) {
-	color: #176a59;
+	color: var(--accent);
 	font-size: 18px;
 	display: block;
 	margin: 8px 0;
@@ -2444,7 +2444,7 @@ const CalendarView = defineComponent({
 .collaboration :deep(progress) {
 	width: 100%;
 	height: 9px;
-	accent-color: #167c68;
+	accent-color: var(--accent);
 }
 .collaboration :deep(.stage-chips) {
 	display: flex;
@@ -2455,12 +2455,12 @@ const CalendarView = defineComponent({
 	font-size: 10px;
 	padding: 5px;
 	border-radius: 7px;
-	background: #edf1f5;
-	color: #7b8b97;
+	background: var(--navy-50);
+	color: var(--muted);
 }
 .collaboration :deep(.stage-chips .chosen) {
-	background: #d7eee4;
-	color: #17634e;
+	background: var(--accent-soft);
+	color: var(--accent);
 }
 .collaboration :deep(.checklist-preview) {
 	font-size: 13px;
@@ -2485,14 +2485,14 @@ const CalendarView = defineComponent({
 }
 .collaboration :deep(.calendar-grid > small) {
 	text-align: center;
-	color: #8796a0;
+	color: var(--muted);
 	font-size: 10px;
 }
 .collaboration :deep(.calendar-grid button) {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	border: 1px solid #e3eaee;
+	border: 1px solid var(--navy-50);
 	border-radius: 10px;
 	padding: 12px 3px;
 	min-height: 64px;
@@ -2500,18 +2500,18 @@ const CalendarView = defineComponent({
 	gap: 5px;
 }
 .collaboration :deep(.calendar-grid .chosen) {
-	background: #e0f1e9;
-	border-color: #72a695;
+	background: var(--accent-soft);
+	border-color: var(--navy-600);
 }
 .collaboration :deep(.calendar-grid small) {
 	font-size: 9px;
-	color: #39816c;
+	color: var(--accent);
 }
 .collaboration :deep(.calendar-event) {
 	display: block;
 	text-align: left;
 	padding: 14px;
-	background: #f1f6f8;
+	background: var(--navy-50);
 	border-radius: 10px;
 	margin-top: 10px;
 	font-size: 13px;
@@ -2572,7 +2572,7 @@ const CalendarView = defineComponent({
 	}
 	.mobile-back {
 		display: block;
-		color: #1d7664;
+		color: var(--accent);
 		font-size: 12px;
 		width: 100%;
 		text-align: left;
@@ -2637,12 +2637,12 @@ const CalendarView = defineComponent({
 </style>
 
 <style scoped>
-.assignment-choice {display:grid;gap:12px;padding:16px;border:1px solid #d9e5e1;border-radius:14px}.assignment-choice label{display:flex;align-items:center;gap:12px;background:#f0f7f4;border-radius:10px;padding:14px}.assignment-choice input{width:auto}.assignment-choice small{display:block;margin-top:4px;color:#637378}.stage-row{display:flex;flex-wrap:wrap;padding:12px;background:#f4f8f6;border-radius:12px}.stage-row input:first-child{min-width:140px;flex:1}.stage-row select{min-width:180px;flex:1}.sharing-row{display:grid;gap:10px;padding:14px;border:1px solid #d9e5e1;border-radius:12px}
+.assignment-choice {display:grid;gap:12px;padding:16px;border:1px solid var(--line-strong);border-radius:14px}.assignment-choice label{display:flex;align-items:center;gap:12px;background:var(--accent-soft);border-radius:10px;padding:14px}.assignment-choice input{width:auto}.assignment-choice small{display:block;margin-top:4px;color:var(--muted)}.stage-row{display:flex;flex-wrap:wrap;padding:12px;background:var(--accent-soft);border-radius:12px}.stage-row input:first-child{min-width:140px;flex:1}.stage-row select{min-width:180px;flex:1}.sharing-row{display:grid;gap:10px;padding:14px;border:1px solid var(--line-strong);border-radius:12px}
 .tracker-files-panel { display: grid; gap: 16px; }
-.tracker-file-upload { display: grid; gap: 12px; padding: 16px; border: 1px solid #dfe8e5; border-radius: 14px; background: #f8fbfa; }
-.tracker-file-link { display: flex; gap: 12px; padding: 14px; border: 1px solid #e1e7e9; border-radius: 12px; color: #146b58; overflow-wrap: anywhere; }
+.tracker-file-upload { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--accent-soft); }
+.tracker-file-link { display: flex; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; color: var(--accent); overflow-wrap: anywhere; }
 .tracker-file-link > span { display: grid; gap: 5px; min-width: 0; }
-.tracker-file-link small { color: #68777d; }
+.tracker-file-link small { color: var(--muted); }
 .tracker-file-upload button:disabled, .dialog-header button:disabled { opacity: .45; cursor: not-allowed; }
-.tracker-history-file { display: block; margin: 8px 0; color: #146b58; overflow-wrap: anywhere; }
+.tracker-history-file { display: block; margin: 8px 0; color: var(--accent); overflow-wrap: anywhere; }
 </style>

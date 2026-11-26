@@ -27,7 +27,7 @@
 			</p>
 		</section>
 
-		<section v-if="showForm" class="space-y-5 mb-8">
+		<section v-if="showForm" class="mx-auto mb-8 max-w-6xl space-y-5">
 			<div class="form-card">
 				<div class="flex flex-wrap items-start justify-between gap-3">
 					<div>
@@ -64,9 +64,10 @@
 				</p>
 			</div>
 
-			<form class="space-y-5" @submit.prevent="save(true)">
+			<form class="form-layout" @submit.prevent="save(true)">
+				<div class="min-w-0 space-y-5">
 				<section class="form-card">
-					<h3 class="form-title">Request details</h3>
+					<h3 class="step-title"><span class="step-num" :class="{ 'step-num--done': form.intended_project && form.amount > 0 && form.purpose }" aria-hidden="true">1</span>Request details</h3>
 					<div class="grid gap-4 sm:grid-cols-2 mt-4">
 						<SearchSelect
 							v-model="form.intended_project"
@@ -127,7 +128,7 @@
 				</section>
 
 				<section class="form-card">
-					<h3 class="form-title">Who will use the advance?</h3>
+					<h3 class="step-title"><span class="step-num step-num--done" aria-hidden="true">2</span>Who will use the advance?</h3>
 					<div class="grid gap-3 sm:grid-cols-2 mt-4">
 						<label
 							class="choice-card"
@@ -166,7 +167,7 @@
 				</section>
 
 				<section class="form-card">
-					<h3 class="form-title">Payment and support</h3>
+					<h3 class="step-title"><span class="step-num" :class="{ 'step-num--done': defaults.approved_bank }" aria-hidden="true">3</span>Payment and support</h3>
 					<div
 						v-if="defaults.approved_bank"
 						class="rounded-xl border border-line bg-soft p-3 text-sm mt-4"
@@ -200,38 +201,26 @@
 							></textarea>
 						</label>
 					</div>
-					<p v-if="form.support_filename" class="text-xs text-muted mt-2">
-						Ready to upload privately: {{ form.support_filename }}
+					<p v-if="form.support_filename" class="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-ok">
+						<Icon name="check" size="sm" />Ready to upload privately: {{ form.support_filename }}
 					</p>
 				</section>
 
-				<section class="form-card flex flex-wrap justify-between gap-3 items-center">
-					<div class="text-sm text-muted">
-						<p>
-							Reporting manager:
-							{{
-								defaults.approver?.name ||
-								defaults.approver?.user ||
-								"Not configured"
-							}}
-						</p>
-						<p>
-							Every request starts with your reporting manager. Each reviewer
-							escalates to the next person when the live total of this request and
-							your other outstanding advances exceeds their approval authority; no
-							linked approver is skipped.
-						</p>
-						<p v-if="defaults.open_advances.length">
-							You have
-							{{ defaults.open_advances.length }} advance(s) with an open balance.
-							You can submit another request; each balance remains tracked until
-							settled.
-						</p>
-					</div>
-					<div class="flex flex-wrap gap-2">
+				</div>
+				<aside class="form-rail space-y-4">
+					<section class="summary-card" aria-label="Advance summary">
+						<p class="eyebrow">Amount requested</p>
+						<p class="summary-total">{{ formatMoney(form.amount || 0) }}</p>
+						<dl class="summary-list">
+							<div><dt>Project</dt><dd>{{ selectedProjectLabel || "Not chosen" }}</dd></div>
+							<div><dt>Needed by</dt><dd>{{ shortDate(form.required_by_date) || "—" }}</dd></div>
+							<div><dt>Settle by</dt><dd>{{ shortDate(form.expected_settlement_date) || "—" }}</dd></div>
+							<div><dt>For</dt><dd>{{ form.advance_use }}</dd></div>
+						</dl>
+						<div class="mt-4 flex flex-col-reverse gap-2">
 						<button
 							type="button"
-							class="btn-secondary"
+							class="btn-secondary min-h-11 w-full"
 							:disabled="!canSave || saving || readingFile"
 							@click="save(false)"
 						>
@@ -239,51 +228,80 @@
 						</button>
 						<button
 							type="submit"
-							class="btn-primary"
+							class="btn-primary min-h-11 w-full"
 							:disabled="!canSave || saving || readingFile"
 						>
 							{{ saving ? "Saving…" : "Submit for approval" }}
 						</button>
 					</div>
-				</section>
+					</section>
+					<section class="summary-card text-sm text-muted">
+						<p class="font-semibold text-ink">Who approves</p>
+						<p class="mt-2">
+							Reporting manager:
+							{{
+								defaults.approver?.name ||
+								defaults.approver?.user ||
+								"Not configured"
+							}}
+						</p>
+						<p class="mt-2 text-xs leading-relaxed">
+							Every request starts with your reporting manager. Each reviewer
+							escalates to the next person when the live total of this request and
+							your other outstanding advances exceeds their approval authority; no
+							linked approver is skipped.
+						</p>
+						<p v-if="defaults.open_advances.length" class="mt-2 text-xs leading-relaxed">
+							You have
+							{{ defaults.open_advances.length }} advance(s) with an open balance.
+							You can submit another request; each balance remains tracked until
+							settled.
+						</p>
+					</section>
+				</aside>
 			</form>
 		</section>
 
 		<ManagerFloatPanel />
 		<TeamFloatRequests />
 
-		<h2 class="text-lg font-semibold text-ink mb-3 mt-7">My advances</h2>
+		<div class="mb-3 mt-8 flex items-end justify-between gap-3"><h2 class="text-lg font-semibold text-ink">My advances</h2><p v-if="advances.length" class="text-sm text-muted">{{ advances.length }} {{ advances.length === 1 ? "advance" : "advances" }}</p></div>
+		<div class="grid gap-4 xl:grid-cols-2">
 		<div
 			v-for="adv in advances"
 			:key="adv.name"
 			:id="`advance-${adv.name}`"
-			class="rounded-2xl border border-line bg-surface shadow-soft p-4 mb-4"
+			class="advance-card"
 		>
-			<div class="flex justify-between gap-3 flex-wrap">
-				<div>
-					<p class="font-semibold text-ink">{{ adv.name }}</p>
-					<div class="text-sm text-muted">
-						{{ adv.purpose || "—" }} ·
-						{{ adv.workflow_state || adv.status }}
-					</div>
-					<div v-if="adv.intended_project" class="text-xs text-muted mt-1">
-						Project: {{ adv.intended_project }}
+			<div class="flex flex-wrap items-start justify-between gap-3">
+				<div class="flex min-w-0 items-start gap-3">
+					<span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-navy-50 text-navy-900"><Icon name="coins" /></span>
+					<div class="min-w-0">
+						<p class="flex flex-wrap items-center gap-2 font-semibold text-ink">{{ adv.name }}<span class="chip" :class="workflowTone(adv.workflow_state || adv.status)">{{ adv.workflow_state || adv.status }}</span></p>
+						<p class="mt-0.5 text-sm text-ink-2">{{ adv.purpose || "—" }}</p>
+						<p v-if="adv.intended_project" class="text-xs text-muted">Project: {{ adv.intended_project }}</p>
 					</div>
 				</div>
-				<span
-					class="px-2 py-0.5 rounded-full text-xs font-semibold h-fit"
-					:class="residualClass(adv.residual_pct)"
-				>
-					Residual {{ Math.round(adv.residual_pct || 0) }}%
-				</span>
+				<div class="text-right">
+					<p class="font-display text-xl font-semibold tabular-nums text-ink">{{ formatMoney(adv.advance_amount) }}</p>
+					<span class="mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold" :class="residualClass(adv.residual_pct)">Residual {{ Math.round(adv.residual_pct || 0) }}%</span>
+				</div>
 			</div>
 
-			<div class="grid grid-cols-2 md:grid-cols-5 gap-2 mt-3">
-				<div v-for="stat in stats(adv)" :key="stat.label" class="rounded-xl bg-soft p-2">
-					<div class="text-xs text-muted">{{ stat.label }}</div>
-					<div class="font-semibold text-ink">{{ stat.value }}</div>
+			<div v-if="Number(adv.paid_amount || 0) > 0" class="mt-4" aria-hidden="true">
+				<div class="flex h-2 overflow-hidden rounded-full bg-soft">
+					<span class="bg-ok" :style="{ width: usagePct(adv, 'claimed_amount') + '%' }"></span>
+					<span class="bg-navy-600" :style="{ width: usagePct(adv, 'return_amount') + '%' }"></span>
 				</div>
+				<div class="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted"><span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-ok"></span>Claimed</span><span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-navy-600"></span>Returned</span><span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-line-strong"></span>Still to settle</span></div>
 			</div>
+
+			<dl class="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-line pt-3 text-sm sm:grid-cols-5">
+				<div v-for="stat in stats(adv)" :key="stat.label" class="min-w-0">
+					<dt class="text-xs text-muted">{{ stat.label }}</dt>
+					<dd class="font-semibold tabular-nums text-ink">{{ stat.value }}</dd>
+				</div>
+			</dl>
 			<p
 				v-if="adv.required_by_date || adv.expected_settlement_date"
 				class="text-xs text-muted mt-3"
@@ -350,8 +368,10 @@
 				will then update.
 			</p>
 		</div>
+		</div>
 
-		<div v-if="!advances.length && !loading" class="text-center text-muted py-10">
+		<div v-if="!advances.length && !loading" class="kit-panel flex flex-col items-center px-6 py-12 text-center text-sm text-muted">
+			<span class="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-navy-50 text-navy-900"><Icon name="coins" /></span>
 			No advances yet.
 		</div>
 	</div>
@@ -363,6 +383,7 @@ import { RouterLink, useRoute, useRouter } from "vue-router";
 import { call } from "../lib/frappe";
 import { formatMoney } from "../lib/money";
 import PageHeader from "../components/PageHeader.vue";
+import Icon from "../components/Icon.vue";
 import SearchSelect from "../components/SearchSelect.vue";
 import ManagerFloatPanel from "../components/ManagerFloatPanel.vue";
 import TeamFloatRequests from "../components/TeamFloatRequests.vue";
@@ -400,6 +421,12 @@ const blankForm = () => ({
 	support_content: "",
 });
 const form = reactive(blankForm());
+const selectedProjectLabel = computed(() => (defaults.value?.projects || []).find((project) => project.value === form.intended_project)?.label || "");
+function shortDate(value) {
+	if (!value) return "";
+	const date = new Date(`${String(value).slice(0, 10)}T12:00:00`);
+	return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(date);
+}
 const canSave = computed(
 	() =>
 		!defaults.value.freeze?.frozen &&
@@ -430,6 +457,16 @@ function closeForm() {
 	router.replace({ path: "/advances" });
 }
 
+function usagePct(adv, field) {
+	const paid = Number(adv.paid_amount || 0);
+	return paid > 0 ? Math.min(100, (Number(adv[field] || 0) / paid) * 100) : 0;
+}
+function workflowTone(state) {
+	if (["Paid", "Approved", "Claimed"].includes(state)) return "bg-ok-soft text-ok";
+	if (["Rejected", "Cancelled"].includes(state)) return "bg-bad-soft text-bad";
+	if (state === "Draft") return "bg-soft text-muted";
+	return "bg-warn-soft text-warn";
+}
 function residualClass(pct) {
 	if ((pct || 0) > 10) return "bg-bad-soft text-bad";
 	if ((pct || 0) > 0) return "bg-warn-soft text-warn";
@@ -554,31 +591,20 @@ onMounted(loadAll);
 </script>
 
 <style scoped>
-.form-card {
-	@apply rounded-2xl border border-line bg-surface p-4 sm:p-5 shadow-soft;
-}
-.form-title {
-	@apply text-lg font-semibold text-ink;
-}
-.field-label {
-	@apply block text-sm font-medium text-ink;
-}
-.field-input {
-	@apply mt-1 block w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-ink;
-}
+.advance-card { @apply rounded-2xl border border-line bg-surface p-4 sm:p-5; box-shadow: var(--shadow-soft); }
+.text-ink-2 { color: var(--ink-2); }
 .field-hint {
 	@apply mt-1 block text-xs text-muted;
-}
-.field-input:focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: 2px;
 }
 .choice-card {
 	@apply flex cursor-pointer gap-3 rounded-xl border border-line bg-surface p-4;
 }
-.choice-card.selected {
+.choice-card { transition: border-color var(--dur-fast) ease, background-color var(--dur-fast) ease, box-shadow var(--dur-fast) ease; }
+.choice-card:hover:not(.disabled) { border-color: var(--navy-200); background: var(--navy-50); }
+.choice-card.selected, .choice-card.selected:hover {
 	background: var(--accent-soft);
-	border-color: var(--accent);
+	border-color: var(--navy-900);
+	box-shadow: inset 0 0 0 1px var(--navy-900);
 }
 .choice-card.disabled {
 	@apply cursor-not-allowed opacity-50;
@@ -596,8 +622,5 @@ onMounted(loadAll);
 }
 .message-error {
 	@apply bg-bad-soft text-bad mb-5;
-}
-.message-success {
-	@apply bg-ok-soft text-ok;
 }
 </style>

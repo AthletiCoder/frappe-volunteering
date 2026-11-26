@@ -1,6 +1,6 @@
 <template>
  <div class="people-centre space-y-5">
-  <div class="flex flex-wrap items-center justify-between gap-3"><div><h2 class="text-xl font-bold text-ink">People centre</h2><p class="text-sm text-muted">Policies, holidays, reporting and payroll.</p></div><div class="flex gap-2"><button v-for="item in sections" :key="item.id" :class="section===item.id?'btn-primary':'btn-secondary'" @click="section=item.id">{{ item.label }}</button></div></div>
+  <div class="flex flex-wrap items-center justify-between gap-3"><div><h2 class="text-xl font-bold text-ink">People centre</h2><p class="text-sm text-muted">Policies, holidays, reporting and payroll.</p></div><div class="segmented"><button v-for="item in sections" :key="item.id" :class="section===item.id?'btn-primary':'btn-secondary'" @click="section=item.id">{{ item.label }}</button></div></div>
   <p v-if="error" role="alert" class="alert-error">{{error}}</p><p v-if="notice" role="status" class="alert-ok">{{notice}}</p>
   <template v-if="data">
    <template v-if="section==='guide'">

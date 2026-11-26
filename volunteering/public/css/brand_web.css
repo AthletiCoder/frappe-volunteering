@@ -1,0 +1,177 @@
+/* Sevamrita brand for Frappe's sign-in pages.
+   Loaded on every website page through `web_include_css`, so every rule is
+   scoped to the login and password pages and leaves other pages untouched. */
+
+html body:is([data-path="login"], [data-path="update-password"]) {
+	--sv-navy: #05224d;
+	--sv-navy-800: #0b2f66;
+	--sv-navy-600: #1b3f78;
+	--sv-ink: #0e1b2e;
+	--sv-muted: #5b6779;
+	--sv-line: #e5e9f0;
+	--sv-line-strong: #c5cdd9;
+	background:
+		radial-gradient(1200px 520px at 50% -10%, #e8eef8 0%, rgb(232 238 248 / 0) 70%),
+		#f6f7f9 !important;
+	color: var(--sv-ink);
+	font-family: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+
+html body:is([data-path="login"], [data-path="update-password"]) .navbar,
+html body:is([data-path="login"], [data-path="update-password"]) .web-footer {
+	display: none !important;
+}
+
+html body:is([data-path="login"], [data-path="update-password"]) .page-content-wrapper,
+html body:is([data-path="login"], [data-path="update-password"]) main {
+	background: transparent !important;
+}
+
+html body:is([data-path="login"], [data-path="update-password"]) .page-card {
+	max-width: 420px;
+	margin-top: clamp(2.5rem, 10vh, 7rem);
+	padding: 2.25rem 2rem 2rem;
+	border: 1px solid var(--sv-line);
+	border-radius: 20px;
+	background: #ffffff;
+	box-shadow: 0 2px 4px rgb(14 27 46 / 0.04), 0 28px 64px -24px rgb(5 34 77 / 0.28);
+	animation: sv-card-in 380ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+html body:is([data-path="login"], [data-path="update-password"]) .page-card-head {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+	margin-bottom: 1.75rem;
+}
+
+html body:is([data-path="login"], [data-path="update-password"]) .page-card-head .app-logo {
+	width: auto !important;
+	max-width: 220px;
+	height: 52px !important;
+	max-height: 52px !important;
+	margin: 0 auto 1.5rem;
+	border-radius: 0 !important;
+	object-fit: contain;
+	/* Swap the image here rather than in Website Settings: Desk's navbar reads
+	   Website Settings' app_logo, so setting it there would rebrand Desk too. */
+	content: url("/assets/volunteering/brand/logo-horizontal.png");
+}
+
+html body:is([data-path="login"], [data-path="update-password"]) .page-card-head h4,
+html body:is([data-path="login"], [data-path="update-password"]) .page-card-head .page-card-title {
+	font-family: "Poppins", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+	font-size: 1.375rem;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+	color: var(--sv-ink);
+}
+
+html body:is([data-path="login"], [data-path="update-password"]) .page-card-subtitle {
+	color: var(--sv-muted);
+	font-size: 0.9rem;
+}
+
+html body:is([data-path="login"], [data-path="update-password"]) .form-label {
+	color: var(--sv-ink);
+	font-weight: 500;
+	font-size: 0.8125rem;
+}
+
+html body:is([data-path="login"], [data-path="update-password"]) .form-control {
+	height: 2.75rem;
+	border: 1px solid var(--sv-line-strong);
+	border-radius: 10px;
+	background: #ffffff;
+	color: var(--sv-ink);
+	font-size: 0.9375rem;
+	transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+html body:is([data-path="login"], [data-path="update-password"]) .form-control:hover {
+	border-color: #c3d1e8;
+}
+
+html body:is([data-path="login"], [data-path="update-password"]) .form-control:focus {
+	border-color: var(--sv-navy-600);
+	box-shadow: 0 0 0 3px rgb(5 34 77 / 0.14);
+	outline: none;
+}
+
+html body:is([data-path="login"], [data-path="update-password"]) .field-icon {
+	top: 50% !important;
+	transform: translateY(-50%);
+}
+
+html body:is([data-path="login"], [data-path="update-password"]) .btn-login:not(.btn-login-option),
+html body:is([data-path="login"], [data-path="update-password"]) .btn-primary {
+	height: 2.75rem;
+	border: 0;
+	border-radius: 10px;
+	background: var(--sv-navy) !important;
+	color: #ffffff !important;
+	font-weight: 600;
+	font-size: 0.9375rem;
+	box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 1px 2px rgb(5 34 77 / 0.2);
+	transition: background-color 140ms ease, transform 100ms ease;
+}
+
+html body:is([data-path="login"], [data-path="update-password"]) .btn-login:not(.btn-login-option):hover,
+html body:is([data-path="login"], [data-path="update-password"]) .btn-primary:hover {
+	background: var(--sv-navy-800) !important;
+}
+
+html body:is([data-path="login"], [data-path="update-password"]) .btn-login:not(.btn-login-option):active {
+	transform: scale(0.98);
+}
+
+html body:is([data-path="login"], [data-path="update-password"]) .btn-login-option {
+	height: 2.75rem;
+	border: 1px solid var(--sv-line-strong);
+	border-radius: 10px;
+	background: #ffffff;
+	color: var(--sv-ink);
+	font-weight: 500;
+}
+
+html body:is([data-path="login"], [data-path="update-password"]) .btn-login-option:hover {
+	background: #eef2f9;
+	border-color: #c3d1e8;
+}
+
+html body:is([data-path="login"], [data-path="update-password"]) a,
+html body:is([data-path="login"], [data-path="update-password"]) .forgot-password-message a {
+	color: var(--sv-navy-600);
+}
+
+html body:is([data-path="login"], [data-path="update-password"]) .login-content.page-card::after {
+	content: "Sevamrita Foundation";
+	display: block;
+	margin-top: 1.75rem;
+	text-align: center;
+	font-size: 0.75rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: #8a95a6;
+}
+
+@keyframes sv-card-in {
+	from { transform: translateY(10px); }
+	to { transform: none; }
+}
+
+@media (max-width: 480px) {
+	body:is([data-path="login"], [data-path="update-password"]) .page-card {
+		margin: 1.25rem 1rem;
+		padding: 1.75rem 1.25rem 1.5rem;
+		border-radius: 16px;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	body:is([data-path="login"], [data-path="update-password"]) .page-card {
+		animation: none;
+	}
+}
