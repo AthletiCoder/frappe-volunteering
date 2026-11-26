@@ -5,6 +5,7 @@ import { initTheme } from "./lib/theme";
 import App from "./App.vue";
 import Home from "./views/Home.vue";
 const Todos = () => import("./views/Todos.vue");
+const Records = () => import("./views/Records.vue");
 const BudgetHealth = () => import("./views/BudgetHealth.vue");
 const Advances = () => import("./views/Advances.vue");
 const AdvanceWorkflow = () => import("./views/AdvanceWorkflow.vue");
@@ -50,6 +51,7 @@ const router = createRouter({
 		{ path: "/time-leave", component: TimeLeave, name: "TimeLeave" },
 		{ path: "/profile", component: Profile, name: "Profile" },
 		{ path: "/todos", component: Todos, name: "Todos" },
+		{ path: "/records", component: Records, name: "Records" },
 		{ path: "/budget-health", component: BudgetHealth, name: "BudgetHealth" },
 		{ path: "/advances", component: Advances, name: "Advances" },
 		{ path: "/advances/:name", component: Advances, name: "AdvanceDetail" },

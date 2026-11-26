@@ -18,6 +18,16 @@
 					</a>
 				</div>
 			</details>
+			<button
+				v-else-if="item.button"
+				type="button"
+				:aria-label="item.label"
+				:class="layout === 'bottom' ? 'nav-fab-slot' : linkClass(item, false)"
+				@click="emit('action', item.button)"
+			>
+				<span :class="layout === 'bottom' ? 'nav-fab' : iconWrapClass(item, false)"><Icon :name="item.icon" :size="layout === 'bottom' ? 'md' : 'sm'" /></span>
+				<span :class="layout === 'bottom' ? 'sr-only' : null">{{ item.label }}</span>
+			</button>
 			<a
 				v-else-if="item.href"
 				:href="item.href"
@@ -63,7 +73,7 @@ const props = defineProps({
 	layout: { type: String, default: "top" },
 	ariaLabel: { type: String, default: "Primary" },
 });
-const emit = defineEmits(["navigate"]);
+const emit = defineEmits(["navigate", "action"]);
 
 const route = useRoute();
 
@@ -114,6 +124,24 @@ function isActive(to) {
 
 <style scoped>
 .record-summary::-webkit-details-marker { display: none; }
+.nav-fab-slot { display: flex; flex: 1 1 0; min-width: 0; align-items: center; justify-content: center; }
+.nav-fab {
+	display: inline-flex;
+	width: 3rem;
+	height: 3rem;
+	margin-top: -1.25rem;
+	align-items: center;
+	justify-content: center;
+	border-radius: 999px;
+	background: var(--navy-900);
+	color: #fff;
+	box-shadow: 0 0 0 4px var(--surface), 0 10px 22px -8px rgb(5 34 77 / 0.55);
+	transition: transform var(--dur) var(--ease-out), background-color var(--dur-fast) ease;
+}
+.nav-fab-slot:hover .nav-fab { background: var(--navy-800, #0b2f66); }
+.nav-fab-slot:active .nav-fab { transform: scale(0.94); }
+.nav-fab-slot:focus-visible { outline: none; }
+.nav-fab-slot:focus-visible .nav-fab { box-shadow: 0 0 0 4px var(--surface), 0 0 0 6px var(--navy-900); }
 .text-ink-2 { color: var(--ink-2); }
 .nav-child-active::before {
 	content: "";

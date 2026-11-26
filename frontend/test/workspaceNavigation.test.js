@@ -83,7 +83,7 @@ test("accounts users get settlement and read-only ledgers but not manager-only c
 
 test("unassigned users see no role-specific links", () => {
 	const items = buildSidebarItems({ actions: {}, nav: {}, waiting_count: 0 });
-	assert.deepEqual(items.map((item) => item.label), ["Home", "My Work", "Profile"]);
+	assert.deepEqual(items.map((item) => item.label), ["Home", "Waiting", "Profile"]);
 	assert.deepEqual(homeFocus({ actions: {}, flags: {} }), { roleActions: [], projectActions: [], personalActions: [] });
 });
 
@@ -109,3 +109,24 @@ test("app chat access alone preserves the ERP sidebar and Home focus", () => {
     assert.deepEqual(buildSidebarItems(appOnly), buildSidebarItems(previous));
     assert.deepEqual(homeFocus(appOnly), homeFocus(previous));
 });
+
+test("+ New and Records are built only from the person's permitted actions", async () => {
+	const { buildNewActions, buildRecordKinds } = await import("../src/lib/workspaceNavigation.js");
+	assert.deepEqual(buildNewActions({ actions: {} }), []);
+	assert.deepEqual(buildRecordKinds({ actions: {} }), []);
+	const payload = { actions: {
+		money: [{ ...action("claim", "money"), pending: 3 }, action("advance", "money")],
+		time: [action("log_work", "time"), { ...action("leave", "time"), list_route: "/volunteering/time-leave" }, { ...action("wfh", "time"), list_route: "/volunteering/time-leave" }],
+		accounts: [action("donations", "accounts")],
+	} };
+	const groups = buildNewActions(payload);
+	assert.deepEqual(groups.map((group) => group.title), ["Money", "Time"]);
+	assert.deepEqual(groups[0].items.map((item) => item.id), ["claim", "claim_multiple", "advance"]);
+	assert.ok(!groups.flatMap((group) => group.items).some((item) => item.id === "donations"));
+	const kinds = buildRecordKinds(payload);
+	assert.deepEqual(kinds.map((kind) => kind.id), ["claim", "advance", "leave", "log_work"]);
+	assert.equal(kinds[0].open, 3);
+	assert.equal(kinds[0].href, "/volunteering/money/claim/history");
+	assert.ok(buildSidebarItems(payload).some((item) => item.to === "/records"));
+});
+

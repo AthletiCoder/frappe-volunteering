@@ -1,6 +1,6 @@
 <template>
 	<div class="min-h-screen bg-bg text-ink lg:pl-[17rem] lg:pb-0" :class="route.path === '/work-logs' ? 'pb-0' : 'pb-24'">
-		<PortalSidebar :items="sidebarItems" :full-name="fullName" :initials="initials" :role-label="roleLabel" :open="drawerOpen" :logging-out="loggingOut" @close="drawerOpen = false" @logout="logout" />
+		<PortalSidebar :items="sidebarItems" :full-name="fullName" :initials="initials" :role-label="roleLabel" :open="drawerOpen" :logging-out="loggingOut" :can-create="newGroups.length > 0" @close="drawerOpen = false" @logout="logout" @new="openNew" />
 		<header class="app-header sticky top-0 z-20 w-full border-b border-line/80">
 			<div class="mx-auto flex h-16 max-w-[1440px] items-center gap-2 px-3 sm:gap-3 sm:px-5 lg:px-8">
 				<button type="button" class="btn-ghost -ml-1 lg:hidden" aria-label="Open menu" @click="drawerOpen = true"><Icon name="menu" /></button>
@@ -30,10 +30,11 @@
 		</main>
 		<div v-if="route.path !== '/work-logs'" class="app-header fixed inset-x-0 bottom-0 z-20 w-full border-t border-line pb-[env(safe-area-inset-bottom)] lg:hidden">
 			<div class="mx-auto flex max-w-lg items-stretch px-1.5 pt-1">
-				<AppNav class="min-w-0 flex-1" layout="bottom" :items="mobileItems" aria-label="Mobile" />
+				<AppNav class="min-w-0 flex-1" layout="bottom" :items="mobileItems" aria-label="Mobile" @action="openNew" />
 				<button type="button" class="flex w-[4.25rem] shrink-0 flex-col items-center gap-0.5 rounded-xl px-1 pb-1.5 pt-1 text-[11px] font-medium text-muted transition-colors hover:text-ink" aria-label="More sections" @click="drawerOpen = true"><span class="flex h-8 w-10 items-center justify-center rounded-full"><Icon name="menu" /></span><span>More</span></button>
 			</div>
 		</div>
+		<NewSheet :open="newOpen" :groups="newGroups" @close="newOpen = false" />
 		<div v-if="searchOpen" class="app-scrim anim-fade fixed inset-0 z-50 flex items-start justify-center px-4 pt-[12vh]" @click.self="searchOpen = false">
 			<div class="anim-dialog w-full max-w-xl overflow-hidden rounded-2xl border border-line bg-surface shadow-pop" role="dialog" aria-modal="true" aria-label="Search pages and actions">
 				<div class="flex items-center gap-3 border-b border-line px-4 py-3.5"><Icon name="search" class="text-muted" /><input ref="searchInput" v-model="searchQuery" type="search" class="search-input min-w-0 flex-1 border-0 bg-transparent p-0 text-base text-ink shadow-none outline-none" placeholder="Search your pages and actions" aria-label="Search your pages and actions" @keydown.down.prevent="moveActive(1)" @keydown.up.prevent="moveActive(-1)" @keydown.enter="openActive" /><button type="button" class="rounded-md border border-line px-1.5 py-0.5 text-[11px] text-muted hover:text-ink" @click="searchOpen = false">Esc</button></div>
@@ -51,12 +52,13 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, RouterView, useRoute } from "vue-router";
 import { homePayload, loadHomePayload, startHomePoll, stopHomePoll } from "./lib/home";
-import { buildSidebarItems } from "./lib/workspaceNavigation";
+import { buildNewActions, buildRecordKinds, buildSidebarItems } from "./lib/workspaceNavigation";
 import { call } from "./lib/frappe";
 import AppNav from "./components/AppNav.vue";
 import Icon from "./components/Icon.vue";
 import NotifyMenu from "./components/NotifyMenu.vue";
 import PortalSidebar from "./components/PortalSidebar.vue";
+import NewSheet from "./components/NewSheet.vue";
 
 const route = useRoute();
 const drawerOpen = ref(false);
@@ -82,12 +84,22 @@ const roleLabel = computed(() => {
 	return "Employee";
 });
 const sidebarItems = computed(() => buildSidebarItems(payload.value));
+const newGroups = computed(() => buildNewActions(payload.value));
+const newOpen = ref(false);
+// Phone bar: the two daily places, "+ New" in the thumb's reach, then Records.
+// Projects and Advances stay one tap away in the More menu.
 const mobileItems = computed(() => {
-	const items = [{ to: "/home", label: "Home", icon: "home" }, { to: "/todos", label: "My Work", icon: "check", badge: todoCount.value }];
-	if (payload.value?.nav?.projects) items.push({ to: "/projects", label: "Projects", icon: "folder" });
-	if (payload.value?.nav?.advances) items.push({ to: "/advances", label: "Advances", icon: "wallet" });
+	const items = [{ to: "/home", label: "Home", icon: "home" }, { to: "/todos", label: "Waiting", icon: "check", badge: todoCount.value }];
+	if (newGroups.value.length) items.push({ button: "new", label: "New", icon: "plus" });
+	if (buildRecordKinds(payload.value).length) items.push({ to: "/records", label: "Records", icon: "document-history" });
+	else if (payload.value?.nav?.projects) items.push({ to: "/projects", label: "Projects", icon: "folder" });
 	return items;
 });
+function openNew() {
+	searchOpen.value = false;
+	drawerOpen.value = false;
+	newOpen.value = true;
+}
 const searchCatalog = computed(() => {
 	const entries = sidebarItems.value.flatMap((item) => item.children || (item.to || item.href ? [item] : []))
 		.map((item) => ({ label: item.label, route: item.href || `/volunteering${item.to}`, icon: item.icon || "document-history" }));
@@ -131,9 +143,13 @@ async function logout() {
 		loggingOut.value = false;
 	}
 }
+function isTyping(target) {
+	return target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+}
 function onKeydown(event) {
 	if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); openSearch(); }
-	else if (event.key === "Escape") { searchOpen.value = false; drawerOpen.value = false; }
+	else if (event.key === "Escape") { searchOpen.value = false; drawerOpen.value = false; newOpen.value = false; }
+	else if (event.key.toLowerCase() === "n" && !event.metaKey && !event.ctrlKey && !event.altKey && !isTyping(event.target) && !searchOpen.value && newGroups.value.length) { event.preventDefault(); openNew(); }
 }
 // Replay a short entrance on each page change without remounting the view,
 // so views that share a component across routes keep their state.
@@ -144,7 +160,7 @@ watch(() => route.path, () => {
 	void el.offsetWidth;
 	el.classList.add("page-enter");
 });
-watch(() => route.fullPath, () => { drawerOpen.value = false; searchOpen.value = false; });
+watch(() => route.fullPath, () => { drawerOpen.value = false; searchOpen.value = false; newOpen.value = false; });
 onMounted(() => {
 	if (!homePayload.value) loadHomePayload().catch(() => {});
 	startHomePoll();

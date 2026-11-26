@@ -3,7 +3,12 @@
 		<RouterLink to="/home" class="flex h-16 shrink-0 items-center px-5" aria-label="Sevamrita Home">
 			<img :src="'/assets/volunteering/brand/logo-horizontal.png'" alt="" class="h-9 w-auto" width="155" height="36" />
 		</RouterLink>
-		<div class="sidebar-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-2"><AppNav layout="sidebar" :items="items" aria-label="Sections" /></div>
+		<div v-if="canCreate" class="px-3 pb-2">
+			<button type="button" class="sidebar-new group" @click="$emit('new')">
+				<Icon name="plus" size="sm" /><span class="flex-1 text-left">New</span><span class="sidebar-new__kbd" aria-hidden="true">N</span>
+			</button>
+		</div>
+		<div class="sidebar-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-1"><AppNav layout="sidebar" :items="items" aria-label="Sections" /></div>
 		<div class="border-t border-line p-3">
 			<RouterLink to="/profile" class="flex items-center gap-3 rounded-xl p-2 transition-colors duration-150 hover:bg-soft">
 				<span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-navy-900 text-xs font-semibold tracking-wide text-white">{{ initials }}</span>
@@ -42,6 +47,28 @@ defineProps({
 	roleLabel: { type: String, default: "Employee" },
 	open: { type: Boolean, default: false },
 	loggingOut: { type: Boolean, default: false },
+	canCreate: { type: Boolean, default: false },
 });
-defineEmits(["close", "logout"]);
+defineEmits(["close", "logout", "new"]);
 </script>
+
+<style scoped>
+.sidebar-new {
+	display: flex;
+	width: 100%;
+	align-items: center;
+	gap: 0.625rem;
+	border-radius: 12px;
+	background: var(--navy-900);
+	padding: 0.625rem 0.875rem;
+	font-size: 0.875rem;
+	font-weight: 600;
+	color: #fff;
+	box-shadow: 0 8px 18px -10px rgb(5 34 77 / 0.6);
+	transition: background-color var(--dur-fast) ease, transform var(--dur) var(--ease-out);
+}
+.sidebar-new:hover { background: var(--navy-800); }
+.sidebar-new:active { transform: scale(0.98); }
+.sidebar-new:focus-visible { outline: 2px solid var(--navy-900); outline-offset: 2px; }
+.sidebar-new__kbd { border-radius: 6px; border: 1px solid rgb(255 255 255 / 0.25); padding: 0 0.375rem; font-family: inherit; font-size: 0.6875rem; color: rgb(255 255 255 / 0.75); }
+</style>
