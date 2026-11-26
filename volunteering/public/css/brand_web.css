@@ -55,6 +55,9 @@ html body:is([data-path="login"], [data-path="update-password"]) .page-card-head
 	margin: 0 auto 1.5rem;
 	border-radius: 0 !important;
 	object-fit: contain;
+	/* Swap the image here rather than in Website Settings: Desk's navbar reads
+	   Website Settings' app_logo, so setting it there would rebrand Desk too. */
+	content: url("/assets/volunteering/brand/logo-horizontal.png");
 }
 
 html body:is([data-path="login"], [data-path="update-password"]) .page-card-head h4,

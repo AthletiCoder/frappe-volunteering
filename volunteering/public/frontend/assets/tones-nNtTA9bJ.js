@@ -1,0 +1,1 @@
+const o={ok:"pill pill--ok",warn:"pill pill--warn",bad:"pill pill--bad",info:"pill pill--info",muted:"pill pill--muted"},d={ok:"dot--ok",warn:"dot--warn",bad:"dot--bad",info:"dot--info",muted:"dot--muted"},t=l=>o[l]||o.muted,i=l=>d[l]||d.muted;export{i as d,t as p};

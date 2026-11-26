@@ -1,5 +1,5 @@
 <template>
-	<div class="max-w-5xl mx-auto space-y-5">
+	<div class="mx-auto max-w-6xl space-y-5">
 		<PageHeader
 			title="Chart of Accounts"
 			eyebrow="Accounts"
@@ -23,7 +23,7 @@
 		<p v-if="loading" class="text-muted">Loading Chart of Accounts…</p>
 
 		<template v-else-if="authorized">
-			<section v-if="ledgerAccount" class="form-card ledger-panel">
+			<section v-if="ledgerAccount" class="kit-panel ledger-panel">
 				<div class="ledger-heading">
 					<div>
 						<p class="ledger-kicker">Account ledger · {{ ledgerAccount.root_type }}</p>
@@ -89,7 +89,7 @@
 				transition.
 			</section>
 
-			<section v-if="showForm" class="form-card" aria-labelledby="account-form-heading">
+			<section v-if="showForm" class="kit-panel p-5 sm:p-6" aria-labelledby="account-form-heading">
 				<div class="flex flex-wrap items-start justify-between gap-3 mb-5">
 					<div>
 						<h2 id="account-form-heading" class="form-title mb-0">
@@ -323,47 +323,55 @@
 			</section>
 
 			<template v-else>
-				<section class="form-card space-y-4">
-					<div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_12rem_12rem]">
-						<label class="field-label">
-							Find an account
-							<input
-								v-model.trim="search"
-								class="field-input"
-								placeholder="Name, number or type"
-							/>
-						</label>
-						<label class="field-label">
-							Root
-							<select v-model="rootFilter" class="field-input">
-								<option value="All">All roots</option>
-								<option v-for="root in rootTypes" :key="root" :value="root">
-									{{ root }}
-								</option>
-							</select>
-						</label>
-						<label class="field-label">
-							Show
-							<select v-model="kindFilter" class="field-input">
-								<option value="All">Groups and ledgers</option>
-								<option value="Groups">Groups only</option>
-								<option value="Ledgers">Ledgers only</option>
-								<option value="Disabled">Disabled only</option>
-							</select>
-						</label>
-					</div>
-					<p class="text-sm text-muted">
-						{{ visibleAccounts.length }} of {{ workspace.accounts.length }} accounts
-					</p>
-				</section>
+				<div class="list-board">
+					<aside class="min-w-0">
+						<div class="filter-rail kit-panel" role="group" aria-label="Filter accounts by root">
+							<button
+								v-for="option in ['All', ...rootTypes]"
+								:key="option"
+								type="button"
+								class="filter-btn"
+								:class="{ 'filter-btn--active': rootFilter === option }"
+								:aria-pressed="rootFilter === option"
+								@click="rootFilter = option"
+							>
+								<span class="filter-btn__dot" :class="dotClass(rootTone(option))"></span>
+								<span class="min-w-0 flex-1 truncate text-left">{{ option === "All" ? "All roots" : option }}</span>
+								<span class="filter-btn__count">{{ rootCounts[option] || 0 }}</span>
+							</button>
+						</div>
+					</aside>
+					<div class="min-w-0 space-y-4">
+						<div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_13rem]">
+							<label class="field-label relative block"
+								><span class="sr-only">Find an account</span
+								><Icon name="search" size="sm" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" /><input
+									v-model.trim="search"
+									class="field-input !mt-0 pl-9"
+									aria-label="Find an account"
+									placeholder="Name, number or type"
+							/></label>
+							<label class="field-label"
+								><span class="sr-only">Show</span
+								><select v-model="kindFilter" class="field-input !mt-0" aria-label="Show">
+									<option value="All">Groups and ledgers</option>
+									<option value="Groups">Groups only</option>
+									<option value="Ledgers">Ledgers only</option>
+									<option value="Disabled">Disabled only</option>
+								</select></label
+							>
+						</div>
+						<p class="text-sm text-muted">
+							{{ visibleAccounts.length }} of {{ workspace.accounts.length }} accounts
+						</p>
 
-				<section v-if="!visibleAccounts.length" class="form-card text-center text-muted">
+				<section v-if="!visibleAccounts.length" class="kit-panel px-6 py-12 text-center text-muted">
 					No accounts match these filters.
 				</section>
-				<section v-for="group in groupedAccounts" :key="group.root" class="form-card">
-					<div class="flex items-center justify-between gap-3 mb-3">
-						<h2 class="form-title mb-0">{{ group.root }}</h2>
-						<span class="text-sm text-muted">{{ group.rows.length }}</span>
+				<section v-for="group in groupedAccounts" :key="group.root" class="kit-panel overflow-hidden">
+					<div class="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
+						<h2 class="flex items-center gap-2 font-display text-base font-semibold text-ink"><span class="filter-btn__dot" :class="dotClass(rootTone(group.root))"></span>{{ group.root }}</h2>
+						<span class="filter-btn__count">{{ group.rows.length }}</span>
 					</div>
 					<div class="account-list">
 						<div
@@ -420,7 +428,7 @@
 									</span>
 								</span>
 								<span
-									:class="['status-pill', account.disabled && 'status-disabled']"
+									:class="pillClass(account.disabled ? 'muted' : 'ok')"
 									>{{ account.disabled ? "Disabled" : "Active" }}</span
 								>
 							</button>
@@ -428,6 +436,8 @@
 						</div>
 					</div>
 				</section>
+					</div>
+				</div>
 			</template>
 			</template>
 		</template>
@@ -438,6 +448,8 @@
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import PageHeader from "../components/PageHeader.vue";
+import Icon from "../components/Icon.vue";
+import { dotClass, pillClass } from "../lib/tones.js";
 import SearchSelect from "../components/SearchSelect.vue";
 import { call } from "../lib/frappe";
 
@@ -661,6 +673,14 @@ const visibleAccounts = computed(() => {
 		return true;
 	});
 });
+const rootCounts = computed(() => {
+	const counts = { All: workspace.accounts.length };
+	for (const row of workspace.accounts) counts[row.root_type] = (counts[row.root_type] || 0) + 1;
+	return counts;
+});
+function rootTone(root) {
+	return { Asset: "ok", Liability: "warn", Equity: "info", Income: "ok", Expense: "bad" }[root] || "info";
+}
 const groupedAccounts = computed(() =>
 	rootTypes.value
 		.map((root) => ({
@@ -767,7 +787,11 @@ onMounted(async () => {
 	@apply grid gap-3 sm:grid-cols-2;
 }
 .choice-card {
-	@apply flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-bg p-3;
+	@apply flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-surface p-3 transition-colors;
+}
+.choice-card-active {
+	border-color: var(--navy-900);
+	background: var(--accent-soft);
 }
 .choice-card span,
 .choice-card strong,
@@ -785,22 +809,30 @@ button:disabled {
 }
 .account-list {
 	display: grid;
-	gap: 0.4rem;
 }
 .account-row {
+	position: relative;
 	display: flex;
-	min-height: 3.5rem;
+	min-height: 3.25rem;
 	width: 100%;
 	align-items: center;
 	justify-content: flex-start;
-	gap: 0.75rem;
-	border: 1px solid var(--line);
-	border-radius: 0.75rem;
-	background: var(--surface);
-	padding: 0.65rem 0.75rem 0.65rem calc(0.75rem + var(--account-depth) * 1rem);
+	gap: 0.625rem;
+	padding: 0.5rem 1rem 0.5rem calc(0.75rem + var(--account-depth) * 1.25rem);
+	transition: background-color var(--dur-fast) ease;
+}
+.account-row + .account-row { border-top: 1px solid var(--line); }
+.account-row[data-account-depth="0"] { background: color-mix(in srgb, var(--soft) 60%, transparent); }
+.account-row:not([data-account-depth="0"])::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: calc(1.75rem + (var(--account-depth) - 1) * 1.25rem);
+	border-left: 1px dashed var(--line-strong);
 }
 .account-row:hover {
-	background: var(--accent-soft);
+	background: var(--navy-50);
 }
 .account-toggle,
 .account-leaf {
@@ -879,17 +911,18 @@ button:disabled {
 .ledger-open {
 	flex: none;
 	border: 1px solid var(--line);
-	border-radius: 0.65rem;
-	padding: 0.4rem 0.7rem;
-	color: var(--accent);
+	border-radius: 999px;
+	background: var(--surface);
+	padding: 0.3rem 0.75rem;
+	color: var(--navy-900);
 	font-size: 0.8rem;
 	font-weight: 650;
 }
 .ledger-open:hover, .ledger-open:focus-visible { background: var(--accent-soft); outline-offset: 2px; }
 .ledger-panel { padding: 0; overflow: hidden; }
 .ledger-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; padding: 1.5rem; border-bottom: 1px solid var(--line); }
-.ledger-kicker { color: var(--accent); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
-.ledger-title { margin: 0.3rem 0; color: var(--ink); font-size: 1.65rem; font-weight: 700; line-height: 1.25; }
+.ledger-kicker { color: var(--muted); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.ledger-title { margin: 0.3rem 0; color: var(--ink); font-family: theme("fontFamily.display"); font-size: 1.5rem; font-weight: 600; line-height: 1.25; }
 .ledger-heading-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .ledger-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; gap: 0.8rem; align-items: end; padding: 1.25rem 1.5rem 0; }
 .ledger-filters button { min-height: 2.65rem; }
@@ -899,8 +932,10 @@ button:disabled {
 .ledger-summary > div { min-width: 0; padding: 0.95rem; border: 1px solid var(--line); border-radius: 0.85rem; background: var(--bg); }
 .ledger-summary span, .ledger-summary strong { display: block; }
 .ledger-summary span { color: var(--muted); font-size: 0.75rem; }
-.ledger-summary strong { margin-top: 0.4rem; color: var(--ink); font-size: 1.05rem; overflow-wrap: anywhere; }
-.ledger-summary .ledger-closing { border-color: var(--accent); background: var(--accent-soft); }
+.ledger-summary strong { margin-top: 0.4rem; color: var(--ink); font-family: theme("fontFamily.display"); font-size: 1.125rem; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.ledger-summary .ledger-closing { border-color: var(--navy-900); background: var(--navy-900); }
+.ledger-summary .ledger-closing span { color: rgb(255 255 255 / 0.7); }
+.ledger-summary .ledger-closing strong { color: #fff; }
 .ledger-list-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: 1.1rem 1.5rem; border-top: 1px solid var(--line); }
 .ledger-list-heading h3 { font-size: 1.05rem; font-weight: 700; }
 .ledger-list-heading span { color: var(--muted); font-size: 0.85rem; }
