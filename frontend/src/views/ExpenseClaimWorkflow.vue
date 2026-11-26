@@ -22,43 +22,48 @@
 		<p v-if="loading" class="text-muted" role="status">Loading expense claims…</p>
 
 		<template v-if="!loading && !selected">
-			<div class="flex flex-wrap gap-2 mb-5">
-				<button
-					v-for="option in visibleTabs"
-					:key="option.key"
-					type="button"
-					:class="['queue-tab', tab === option.key ? 'queue-tab-active' : '']"
-					@click="tab = option.key"
-				>
-					{{ option.label }} <span>{{ counts[option.key] || 0 }}</span>
-				</button>
-			</div>
-
-			<section v-if="!currentQueue.length" class="form-card text-center py-10">
-				<h2 class="text-lg font-semibold">Nothing waiting here</h2>
-				<p class="text-sm text-muted mt-2">This queue is clear.</p>
-			</section>
-			<div v-else class="space-y-3">
-				<button
-					v-for="claim in currentQueue"
-					:key="claim.name"
-					type="button"
-					class="claim-card w-full text-left"
-					@click="openDetail(claim.name)"
-				>
-					<div class="flex flex-wrap justify-between gap-3">
-						<div>
-							<strong>{{ claim.employee_name }}</strong>
-							<p class="text-sm text-muted mt-1">
-								{{ claim.name }} · {{ claim.project || "No project" }}
-							</p>
-						</div>
-						<div class="sm:text-right">
-							<strong>{{ money(claim.amount, claim.currency) }}</strong>
-							<p class="text-xs text-muted mt-1">{{ date(claim.posting_date) }}</p>
-						</div>
+			<div class="list-board">
+				<aside class="min-w-0">
+					<div class="filter-rail kit-panel" role="group" aria-label="Queues">
+						<button
+							v-for="option in visibleTabs"
+							:key="option.key"
+							type="button"
+							:class="['filter-btn', tab === option.key ? 'filter-btn--active' : '']"
+							:aria-pressed="tab === option.key"
+							@click="tab = option.key"
+						>
+							<span class="min-w-0 flex-1 truncate text-left">{{ option.label }}</span> <span class="filter-btn__count">{{ counts[option.key] || 0 }}</span>
+						</button>
 					</div>
-				</button>
+				</aside>
+				<section class="min-w-0" aria-label="Queue">
+					<div v-if="!currentQueue.length" class="kit-panel flex flex-col items-center px-6 py-12 text-center">
+						<span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-ok-soft text-ok"><Icon name="check" /></span>
+						<h2 class="mt-3 text-base font-semibold">Nothing waiting here</h2>
+						<p class="mt-1 text-sm text-muted">This queue is clear.</p>
+					</div>
+					<div v-else class="kit-panel overflow-hidden">
+						<button
+							v-for="claim in currentQueue"
+							:key="claim.name"
+							type="button"
+							class="queue-row group"
+							@click="openDetail(claim.name)"
+						>
+							<Avatar :name="claim.employee_name" />
+							<span class="min-w-0 flex-1">
+								<strong class="block truncate text-sm text-ink">{{ claim.employee_name }}</strong>
+								<span class="block truncate text-xs text-muted">{{ claim.name }} · {{ claim.project || "No project" }}</span>
+							</span>
+							<span class="shrink-0 text-right">
+								<strong class="block tabular-nums text-ink">{{ money(claim.amount, claim.currency) }}</strong>
+								<span class="block text-xs text-muted">{{ date(claim.posting_date) }}</span>
+							</span>
+							<Icon name="arrow-right" size="sm" class="hidden shrink-0 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-navy-900 sm:block" />
+						</button>
+					</div>
+				</section>
 			</div>
 		</template>
 
@@ -386,6 +391,8 @@
 import { computed, defineComponent, h, onMounted, reactive, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import PageHeader from "../components/PageHeader.vue";
+import Icon from "../components/Icon.vue";
+import Avatar from "../components/Avatar.vue";
 import SearchSelect from "../components/SearchSelect.vue";
 import { call } from "../lib/frappe";
 
@@ -666,6 +673,11 @@ onMounted(load);
 </script>
 
 <style scoped>
+.queue-row { display: flex; width: 100%; align-items: center; gap: 0.875rem; padding: 0.875rem 1rem; text-align: left; transition: background-color var(--dur-fast) ease; }
+@media (min-width: 640px) { .queue-row { padding: 0.875rem 1.25rem; } }
+.queue-row + .queue-row { border-top: 1px solid var(--line); }
+.queue-row:hover { background: color-mix(in srgb, var(--navy-50) 70%, transparent); }
+
 .queue-tab {
 	@apply rounded-full border border-line bg-surface px-3 py-2 text-sm font-medium text-muted;
 }

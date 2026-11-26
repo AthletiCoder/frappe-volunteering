@@ -7,22 +7,33 @@
 		<p v-if="message" role="status" class="message-success">{{ message }}</p>
 		<p v-if="loading" role="status" class="text-muted">Loading work logs…</p>
 		<template v-else-if="workspace">
+        <nav v-if="!editing && workspace.can_review_team" class="view-tabs" aria-label="Work log views">
+            <button v-if="workspace.can_create" :class="{ selected: listView === 'mine' }" :aria-current="listView === 'mine' ? 'page' : undefined" :disabled="busy" @click="changeView('mine')">My logs</button>
+            <button :class="{ selected: listView === 'team' }" :aria-current="listView === 'team' ? 'page' : undefined" :disabled="busy" @click="changeView('team')">Team review</button>
+        </nav>
 			<template v-if="!editing">
                 <template v-if="listView === 'team' && !route.query.employee">
-                    <section class="card space-y-4">
-                        <div><h2 class="text-xl font-semibold text-ink">Your team</h2><p class="mt-2 text-sm text-muted">Select a person to view their monthly calendar and review their work.</p><p v-if="workspace.month" class="mt-2 text-sm font-medium text-ink">{{ monthLabel(workspace.month) }}</p></div>
-                        <form class="flex gap-3" @submit.prevent="searchPeople"><input v-model="peopleQuery" type="search" class="input !mt-0" aria-label="Search team" placeholder="Search by name" /><button class="btn-secondary" :disabled="busy">Search</button></form>
+                    <section class="kit-panel overflow-hidden">
+                        <div class="flex flex-wrap items-end justify-between gap-3 border-b border-line px-4 py-4 sm:px-5">
+                            <div><h2 class="text-base font-semibold text-ink">Your team</h2><p class="mt-1 text-sm text-muted">Select a person to view their monthly calendar and review their work.<template v-if="workspace.month"> · <span class="font-medium text-ink">{{ monthLabel(workspace.month) }}</span></template></p></div>
+                            <form class="flex w-full gap-2 sm:w-auto" @submit.prevent="searchPeople"><input v-model="peopleQuery" type="search" class="field-input !mt-0 min-w-0 sm:w-64" aria-label="Search team" placeholder="Search by name" /><button class="btn-secondary" :disabled="busy">Search</button></form>
+                        </div>
+                        <p v-if="!workspace.people?.length" class="px-5 py-10 text-center text-sm text-muted">No employees match this view.</p>
+                        <button v-for="person in workspace.people" :key="person.name" class="person-card group" :disabled="busy" @click="openPerson(person)">
+                            <Avatar :name="person.employee_name" />
+                            <span class="min-w-0 flex-1 text-left"><strong class="block truncate text-sm text-ink">{{ person.employee_name }}</strong><span class="block truncate text-xs text-muted">{{ person.designation || person.name }}</span></span>
+                            <span class="hidden w-40 shrink-0 sm:block"><span class="flex justify-between text-[11px] text-muted"><span>{{ hoursLabel(person.total_hours) }} h recorded</span></span><span class="mt-1 block h-1.5 overflow-hidden rounded-full bg-soft"><span class="block h-full rounded-full bg-navy-600" :style="{ width: Math.min(100, (Number(person.total_hours || 0) / 176) * 100) + '%' }"></span></span></span>
+                            <span v-if="person.submitted" class="chip shrink-0 bg-marigold-soft text-[#7a4a00]">{{ person.submitted }} awaiting review</span>
+                            <span v-else class="chip shrink-0 bg-ok-soft text-ok">Up to date</span>
+                            <Icon name="arrow-right" size="sm" class="hidden shrink-0 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-navy-900 sm:block" />
+                        </button>
                     </section>
-                    <p v-if="!workspace.people?.length" class="card text-muted">No employees match this view.</p>
-                    <button v-for="person in workspace.people" :key="person.name" class="person-card" :disabled="busy" @click="openPerson(person)">
-                        <span class="person-avatar">{{ person.employee_name.slice(0, 1) }}</span>
-                        <span class="min-w-0 flex-1 text-left"><strong class="block text-ink">{{ person.employee_name }}</strong><span class="mt-1 block text-sm text-muted">{{ person.designation || person.name }}</span><span class="mt-2 block text-sm text-muted">{{ hoursLabel(person.total_hours) }} h recorded<span v-if="person.submitted"> · {{ person.submitted }} awaiting review</span></span></span><span class="text-accent" aria-hidden="true">→</span>
-                    </button>
                     <div v-if="workspace.page > 1 || workspace.has_more" class="flex items-center justify-between"><button class="btn-secondary" :disabled="busy || workspace.page === 1" @click="peoplePage(workspace.page - 1)">Previous</button><span>Page {{ workspace.page }}</span><button class="btn-secondary" :disabled="busy || !workspace.has_more" @click="peoplePage(workspace.page + 1)">Next</button></div>
                 </template>
                 <template v-else-if="workspace.days">
                     <div v-if="listView === 'team'" class="flex flex-wrap items-center justify-between gap-3"><h2 class="text-xl font-semibold text-ink">{{ workspace.calendar_employee.employee_name }}</h2><button class="btn-secondary" @click="changeView('team')">Back to team</button></div>
-                    <section class="calendar-panel space-y-3" aria-label="Work log calendar">
+                    <div class="calendar-layout">
+                    <section class="calendar-panel kit-panel space-y-4 p-4 sm:p-5" aria-label="Work log calendar">
                         <div class="flex items-center justify-between gap-2">
                             <button class="month-arrow" aria-label="Previous month" :disabled="busy" @click="changeMonth(offsetMonth(workspace.month, -1))">‹</button>
                             <div class="flex items-center gap-3"><label class="sr-only" for="log-month">Month</label><input id="log-month" type="month" :value="workspace.month" :max="workspace.today.slice(0, 7)" class="month-input" :disabled="busy" @change="changeMonth($event.target.value)" /><button class="text-xs text-accent" :disabled="busy" @click="changeMonth(workspace.today.slice(0, 7))">This month</button></div>
@@ -35,9 +46,19 @@
                                 <span v-else class="calendar-empty" aria-hidden="true"></span>
                             </template>
                         </div>
-                        <div class="flex flex-wrap gap-x-5 gap-y-3 text-xs"><span v-for="status in statuses" :key="status" class="inline-flex items-center gap-2"><span :class="['legend-dot', dayClass(status)]"></span>{{ status }}</span></div>
+                        <div class="flex flex-wrap gap-x-4 gap-y-2 border-t border-line pt-3 text-xs text-muted"><span v-for="status in statuses" :key="status" class="inline-flex items-center gap-2"><span :class="['legend-dot', dayClass(status)]"></span>{{ status }}</span></div>
                     </section>
-                    <section class="summary-row" aria-label="Monthly summary"><div><strong>{{ durationLabel(workspace.summary.total_hours) }}</strong><span>Total time</span></div><div><strong>{{ workspace.summary.submitted_total ?? workspace.summary.Submitted + workspace.summary.Reviewed }}</strong><span>Submitted</span></div><div><strong>{{ workspace.summary.awaiting_review ?? workspace.summary.Submitted }}</strong><span>Awaiting review</span></div><div><strong>{{ workspace.summary.Reviewed }}</strong><span>Reviewed</span></div></section>
+                    <aside class="space-y-4">
+                        <section class="summary-row" aria-label="Monthly summary">
+                            <div class="summary-row__total"><span>Total time</span><strong>{{ durationLabel(workspace.summary.total_hours) }}</strong></div>
+                            <div><span>Submitted</span><strong>{{ workspace.summary.submitted_total ?? workspace.summary.Submitted + workspace.summary.Reviewed }}</strong></div>
+                            <div><span>Awaiting review</span><strong>{{ workspace.summary.awaiting_review ?? workspace.summary.Submitted }}</strong></div>
+                            <div><span>Reviewed</span><strong>{{ workspace.summary.Reviewed }}</strong></div>
+                        </section>
+                        <div v-if="missingDays && listView !== 'team'" class="kit-panel flex items-start gap-3 p-4 text-sm"><span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-bad-soft text-bad"><Icon name="clock" size="sm" /></span><span><strong class="block text-ink">{{ missingDays }} {{ missingDays === 1 ? "day" : "days" }} you can still log</strong><span class="text-xs text-muted">Older unfilled days are past the logging window.</span></span></div>
+                    </aside>
+                    </div>
+
                 </template>
 			</template>
             <template v-else-if="log">
@@ -101,10 +122,6 @@
                     </footer>
                 </div>
             </template>
-        <nav v-if="!editing && workspace.can_review_team" class="view-tabs" aria-label="Work log views">
-            <button v-if="workspace.can_create" :class="{ selected: listView === 'mine' }" :aria-current="listView === 'mine' ? 'page' : undefined" :disabled="busy" @click="changeView('mine')">My logs</button>
-            <button :class="{ selected: listView === 'team' }" :aria-current="listView === 'team' ? 'page' : undefined" :disabled="busy" @click="changeView('team')">Team review</button>
-        </nav>
 		</template>
 	</div>
 </template>
@@ -114,6 +131,7 @@ import { uid } from "../lib/uid";
 import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { RouterLink, onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from "vue-router";
 import PageHeader from "../components/PageHeader.vue";
+import Avatar from "../components/Avatar.vue";
 import Icon from "../components/Icon.vue";
 import { call } from "../lib/frappe";
 import { monthDates, offsetMonth, hoursLabel, durationMinutes, durationHours, durationLabel, workLogDetails } from "../lib/workLogCalendar";
@@ -132,6 +150,7 @@ const listView = computed(() => route.query.view === "team" ? "team" : "mine");
 const calendarQuery = computed(() => ({ view: listView.value, month: route.query.month || workspace.value?.month || form.date.slice(0, 7) || undefined, employee: listView.value === "team" ? route.query.employee : undefined }));
 const dates = computed(() => monthDates(workspace.value?.month || ""));
 const dayMap = computed(() => Object.fromEntries((workspace.value?.days || []).map(day => [day.date, day])));
+const missingDays = computed(() => (workspace.value?.days || []).filter(day => day.status === "Not filled" && day.can_open && day.date < workspace.value.today).length);
 const statuses = ["Not filled", "Draft", "Submitted", "Reviewed", "Holiday", "On leave"];
 const dayClass = status => ({ "Not filled": "day-missing", Draft: "day-draft", Submitted: "day-submitted", Reviewed: "day-reviewed" })[status] || "day-unavailable";
 const dayLabel = day => day ? `${dateLabel(day.date)}, ${day.status}${day.total_hours != null ? ', ' + hoursLabel(day.total_hours) + ' hours' : ''}${day.day_note ? ', ' + day.day_note : ''}${day.cancelled ? ', cancelled log' : ''}` : "";
@@ -229,29 +248,36 @@ watch(() => route.fullPath, load, { immediate: true });
 <style scoped>
 .card { @apply rounded-2xl border border-line bg-surface p-5 shadow-soft sm:p-6; }
 .work-log-page { min-height: calc(100dvh - 10rem); display: flex; flex-direction: column; }
-.person-card { @apply flex w-full items-center gap-4 rounded-2xl border border-line bg-surface p-5 hover:border-accent; }
+.person-card { @apply flex w-full items-center gap-4 px-4 py-3.5 text-left transition-colors sm:px-5; }
+.person-card + .person-card, p + .person-card { border-top: 1px solid var(--line); }
+.person-card:hover:not(:disabled) { background: color-mix(in srgb, var(--navy-50) 70%, transparent); }
 .person-avatar { @apply flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-accent-soft text-lg font-semibold text-accent; }
 .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: clamp(4px, 1vw, 10px); }
 .weekday { @apply py-2 text-center text-xs font-medium text-muted; }
-.calendar-day { @apply flex min-w-0 flex-col items-center justify-center gap-2 rounded-xl border border-transparent py-3 transition-shadow focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent; min-height: 72px; }
-.calendar-day:not(:disabled):hover { @apply border-accent shadow-soft; }
-.calendar-day.today { @apply border-accent; box-shadow: 0 0 0 1px var(--accent); }
-.day-number { @apply text-sm font-semibold; }
-.day-hours { @apply text-xs; }
-.day-missing { background: var(--bad-soft); color: var(--bad); }
-.day-draft { background: var(--warn-soft); color: var(--warn); }
-.day-submitted { background: var(--navy-50); color: var(--navy-600); }
-.day-reviewed { background: var(--accent-soft); color: var(--accent); }
-.day-unavailable { @apply bg-soft text-muted; }
-.legend-dot { @apply inline-block h-3 w-3 rounded-full border border-current; }
-.month-arrow { @apply flex h-11 w-11 items-center justify-center rounded-xl border border-line text-2xl text-ink disabled:opacity-30; }
+.calendar-day { @apply relative flex min-w-0 flex-col items-start justify-between gap-1 rounded-xl border border-line p-2 text-left transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent sm:p-2.5; min-height: 72px; }
+.calendar-day::after { content: ""; position: absolute; top: 0.5rem; right: 0.5rem; width: 0.4375rem; height: 0.4375rem; border-radius: 999px; background: currentColor; opacity: 0.85; }
+.calendar-day.day-unavailable::after { display: none; }
+.calendar-day:not(:disabled):hover { border-color: var(--navy-200); box-shadow: var(--shadow-lift); transform: translateY(-1px); }
+.calendar-day.today { border-color: var(--navy-900); box-shadow: inset 0 0 0 1px var(--navy-900); }
+.day-number { @apply text-sm font-semibold text-ink; }
+.day-hours { @apply text-xs font-semibold; }
+.day-missing { background: var(--surface); color: var(--bad); border-style: dashed; border-color: color-mix(in srgb, var(--bad) 35%, var(--line)); }
+.day-draft { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.day-submitted { background: var(--navy-50); color: var(--navy-600); border-color: transparent; }
+.day-reviewed { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.day-unavailable { @apply bg-soft text-muted; border-color: transparent; }
+.day-unavailable .day-number { color: var(--muted); }
+.legend-dot { @apply inline-block h-2 w-2 rounded-full; background: currentColor; }
+.legend-dot.day-unavailable { background: var(--line-strong); }
+.legend-dot.day-missing { border: 0; }
+.month-arrow { @apply flex h-10 w-10 items-center justify-center rounded-xl border border-line-strong bg-surface text-xl text-ink transition-colors hover:bg-navy-50 disabled:opacity-30; }
 .month-input { @apply max-w-full border-none bg-transparent text-center text-base font-semibold text-ink; }
 .summary-card { @apply flex flex-col gap-2 rounded-2xl border border-line bg-surface p-4; }
 .summary-card strong { @apply text-lg text-ink; }
 .summary-card span { @apply text-xs text-muted; }
-.view-tabs { @apply sticky bottom-0 z-10 !mt-auto flex gap-2 rounded-2xl border border-line bg-surface p-2 shadow-soft; }
-.view-tabs button { @apply flex-1 rounded-xl px-4 py-3 text-sm font-medium text-muted; }
-.view-tabs button.selected { @apply bg-accent-soft text-accent; }
+.view-tabs { @apply inline-flex max-w-full gap-1 self-start rounded-xl bg-soft p-1; }
+.view-tabs button { @apply min-h-9 rounded-lg px-4 py-1.5 text-sm font-semibold text-muted transition-colors hover:text-ink; }
+.view-tabs button.selected { @apply bg-surface text-navy-900 shadow-soft; box-shadow: 0 0 0 1px var(--line), var(--shadow-soft); }
 @media (max-width: 420px) { .calendar-day { min-height: 62px; padding: 8px 0; } .card { padding: 16px; } }
 .label { @apply block text-sm font-medium text-ink; }
 .input { @apply mt-2 block w-full rounded-xl border border-line bg-surface px-3 py-3 text-ink outline-none focus:border-accent disabled:bg-soft; }
@@ -259,11 +285,15 @@ watch(() => route.fullPath, load, { immediate: true });
 </style>
 
 <style scoped>
-.calendar-panel { margin-inline: -10px; }
-.summary-row { @apply grid grid-cols-4 gap-2 border-t border-line pt-3; }
-.summary-row div { @apply flex flex-col gap-1; }
-.summary-row strong { @apply text-sm font-semibold text-ink; }
-.summary-row span { @apply text-xs text-muted; }
+.calendar-layout { display: grid; gap: 1.25rem; align-items: start; }
+@media (min-width: 1024px) { .calendar-layout { grid-template-columns: minmax(0, 1fr) 17rem; gap: 1.5rem; } .calendar-layout > aside { position: sticky; top: 5.5rem; } }
+.summary-row { @apply grid grid-cols-3 gap-2.5 sm:grid-cols-4 lg:grid-cols-3; }
+.summary-row div { @apply flex min-w-0 flex-col gap-1 rounded-2xl border border-line bg-surface px-2.5 py-3; box-shadow: var(--shadow-soft); }
+.summary-row .summary-row__total { @apply col-span-3 sm:col-span-1 lg:col-span-3; background: linear-gradient(135deg, var(--navy-900), var(--navy-600)); border-color: transparent; }
+.summary-row .summary-row__total span { color: rgb(255 255 255 / 0.7); }
+.summary-row .summary-row__total strong { color: #fff; font-size: 1.5rem; }
+.summary-row strong { @apply font-display text-xl font-semibold tabular-nums text-ink; }
+.summary-row span { @apply text-[11px] font-medium leading-tight text-muted; }
 .activity-card { @apply rounded-2xl border border-line bg-surface p-4 sm:p-5; box-shadow: var(--shadow-soft); }
 .activity-num { @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy-900 text-xs font-semibold text-white; }
 .worklog-time-picker { @apply flex shrink-0 items-center gap-0.5 rounded-xl border border-line-strong bg-surface p-0.5; }
@@ -290,10 +320,11 @@ watch(() => route.fullPath, load, { immediate: true });
 @media (min-width: 1024px) { .form-footer { position: sticky; top: 5.5rem; bottom: auto; margin-top: 0 !important; padding: 1.25rem; box-shadow: var(--shadow-soft); } }
 .text-ink-2 { color: var(--ink-2); }
 @media (max-width: 640px) {
-    .calendar-panel { margin-inline: -10px; }
+    
     .calendar-grid { gap: 4px; }
     .calendar-day { min-height: 68px; }
     .calendar-day .day-number { font-size: 16px; }
+    .calendar-day::after { display: none; }
     .calendar-panel .legend-dot { width: 8px; height: 8px; }
     .calendar-panel > div:nth-last-child(1) { column-gap: 10px; font-size: 10px; }
 }
